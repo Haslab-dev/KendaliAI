@@ -20,15 +20,15 @@ KendaliAI is a self-hosted AI automation platform that unified AI access, enable
 - [x] **Phase 3: Workflow Automation**
   - [x] Workflow engine (node engine, triggers, scheduler) (`src/workflow`)
 
-- [ ] **Phase 4: Dashboard UI**
-  - [ ] System monitoring (`src/dashboard/pages/Overview`)
-  - [ ] Workflow editor (`src/dashboard/pages/Workflows`)
+- [x] **Phase 4: Dashboard UI**
+  - [x] System monitoring (`src/dashboard/pages/Overview`)
+  - [x] Workflow editor (`src/dashboard/pages/Workflows`)
 
-- [ ] **Phase 5: Plugin SDK**
-  - [ ] Tool extensions, workflow nodes, UI widgets SDK (`src/sdk`)
+- [x] **Phase 5: Plugin SDK**
+  - [x] Tool extensions, workflow nodes, UI widgets SDK (`src/sdk`)
 
-- [ ] **Phase 6: Messaging Integration**
-  - [ ] Messaging adapters (Telegram, Discord, WhatsApp) (`src/adapters`)
+- [x] **Phase 6: Messaging Integration**
+  - [x] Messaging adapters (Telegram, Discord, WhatsApp) (`src/adapters`)
 
 ## Quickstart
 

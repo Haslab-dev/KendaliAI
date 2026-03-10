@@ -6,11 +6,29 @@ import { intentRouter } from "./router";
 import { gateway, OpenAIProvider } from "./gateway";
 import { agentManager, Planner, Executor } from "./agents";
 import { workflowEngine, triggerSystem, scheduler } from "./workflow";
+import { pluginManager } from "./plugins";
+import { definePlugin } from "./sdk";
+import { MessagingAdapter } from "./adapters";
+
+// Mock Telegram Adapter for bootstrap demo
+class TelegramAdapter extends MessagingAdapter {
+  name = "telegram";
+  async connect() {
+    log.info("[Telegram] Connected successfully.");
+    // Simulate an incoming message to demonstrate Phase 6 integration
+    setTimeout(() => {
+      this.emitMessageReceived("user123", "ping");
+    }, 1000);
+  }
+  async sendMessage(to: string, message: string) {
+    log.info(`[Telegram] Sending message to ${to}: ${message}`);
+  }
+}
 
 async function bootstrap() {
   log.info("Starting KendaliAI Server...");
 
-  // Initialize Core Runtime
+  // Phase 1: Initialize Core Runtime
   await runtime.initialize();
 
   // Init Database
@@ -41,6 +59,33 @@ async function bootstrap() {
     await workflowEngine.runFlow({});
   });
 
+  // Phase 5: Plugin Registration
+  const demoPlugin = definePlugin({
+    id: "github",
+    version: "1.0.0",
+    setup: (plugin) => {
+      plugin.defineTool({
+        name: "fetchCommits",
+        description: "Fetches recent github commits",
+        schema: { repo: "string" },
+        execute: async () => "Retrieved latest commits.",
+      });
+    },
+  });
+  pluginManager.load(demoPlugin);
+
+  // Phase 6: Messaging Integration
+  const tgAdapter = new TelegramAdapter();
+  await tgAdapter.connect();
+
+  // Listen to adapter messages on eventBus
+  eventBus.on("MESSAGE_RECEIVED", async (payload: any) => {
+    log.info(
+      `EventBus routed message over ${payload.adapter}: ${payload.text}`,
+    );
+    await intentRouter.process(payload.text);
+  });
+
   // Register a dummy tool
   toolRegistry.register({
     name: "ping",
@@ -56,10 +101,14 @@ async function bootstrap() {
     log.info(`Handled process intent. Result: ${result}`);
   });
 
-  log.info("KendaliAI Server Phase 3 Bootstrapped Successfully.");
+  intentRouter.register(/^ping$/i, async () => {
+    const result = await toolRegistry.execute("ping", {});
+    if (result === "pong") {
+      tgAdapter.sendMessage("user123", "pong");
+    }
+  });
 
-  // Simulated test
-  await triggerSystem.fire("webhook", {});
+  log.info("KendaliAI Server All Phases Bootstrapped Successfully.");
 }
 
 bootstrap().catch((err) => {
