@@ -1,26 +1,41 @@
 {
-    "name": "@kendaliai/dashboard",
+    "name": "@kendaliai/app",
     "private": true,
-    "version": "0.0.0",
+    "version": "0.1.0",
     "type": "module",
+    "bin": {
+        "kendaliai": "./src/cli.tsx"
+    },
     "scripts": {
+        "start": "bun run src/cli.tsx",
+        "tui": "bun run src/cli.tsx",
         "dev": "concurrently \"bun run dev:frontend\" \"bun run dev:backend\"",
         "dev:frontend": "vite",
-        "dev:backend": "bun run src/server/index.ts",
+        "dev:backend": "bun --watch src/server/index.ts",
         "build": "tsc -b && vite build",
         "lint": "eslint .",
         "preview": "vite preview",
-        "test": "bun test"
+        "test": "bun test",
+        "db:push": "drizzle-kit push"
     },
     "dependencies": {
+        "@ai-sdk/openai": "^3.0.41",
+        "@inquirer/prompts": "^8.3.0",
+        "@libsql/client": "^0.17.0",
         "@tailwindcss/vite": "^4.2.1",
         "@tanstack/react-query": "^5.90.21",
         "@tanstack/react-router": "^1.166.6",
         "@xyflow/react": "^12.10.1",
+        "ai": "^6.0.116",
+        "drizzle-orm": "^0.45.1",
         "framer-motion": "^12.35.2",
+        "grammy": "^1.41.1",
+        "hono": "^4.12.6",
+        "ink": "^6.8.0",
         "lucide-react": "^0.577.0",
         "react": "^19.2.0",
         "react-dom": "^19.2.0",
+        "sqlite-vss": "^0.1.2",
         "tailwindcss": "^4.2.1"
     },
     "devDependencies": {
@@ -33,6 +48,7 @@
         "@vitejs/plugin-react": "^5.1.1",
         "babel-plugin-react-compiler": "^1.0.0",
         "concurrently": "^9.2.1",
+        "drizzle-kit": "^0.31.9",
         "eslint": "^9.39.1",
         "eslint-plugin-react-hooks": "^7.0.1",
         "eslint-plugin-react-refresh": "^0.4.24",

@@ -1,25 +1,30 @@
 import { Handle, Position } from '@xyflow/react';
-import { Settings } from 'lucide-react';
+import { Settings, Settings2 } from 'lucide-react';
 
 export function ToolNode({ data }: any) {
   return (
-    <div className="bg-slate-800/90 backdrop-blur-sm border border-cyan-500/50 shadow-xl rounded-2xl w-64 overflow-hidden relative group">
-      <Handle type="target" position={Position.Left} className="w-3 h-3 bg-cyan-500 border-2 border-slate-900" />
-      <div className="bg-cyan-500/10 px-4 py-3 border-b border-cyan-500/20 flex items-center gap-3">
-        <div className="p-2 bg-cyan-500/20 rounded-lg text-cyan-400">
-           <Settings className="w-5 h-5" />
+    <div className="bg-slate-800/90 backdrop-blur-sm border border-cyan-500/50 shadow-xl rounded-xl w-52 overflow-hidden relative group transition-all hover:border-cyan-400">
+      <Handle type="target" position={Position.Left} className="w-2.5 h-2.5 bg-cyan-500 border-2 border-slate-900" />
+      <div className="bg-cyan-500/10 px-3 py-2 border-b border-cyan-500/20 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-cyan-500/20 rounded-md text-cyan-400">
+            <Settings className="w-4 h-4" />
+            </div>
+            <div>
+            <h3 className="text-slate-200 font-bold text-xs tracking-tight leading-tight">{data.label || 'Action Tool'}</h3>
+            <p className="text-cyan-400 text-[9px] uppercase font-bold tracking-wider leading-none mt-0.5">Execution</p>
+            </div>
         </div>
-        <div>
-          <h3 className="text-slate-200 font-bold text-sm tracking-tight">{data.label || 'Action Tool'}</h3>
-          <p className="text-cyan-400 text-[10px] uppercase font-bold tracking-wider">Execution</p>
+        <button className="text-slate-500 hover:text-cyan-400 transition-colors p-1" onClick={(e) => { e.stopPropagation(); data.onConfigure?.(data); }}>
+            <Settings2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      <div className="p-3 bg-slate-900/40">
+        <div className="text-[10px] text-slate-400 leading-snug">
+           {data.config?.toolId ? `Linked: ${data.config.toolId}` : 'Unconfigured Tool - Click gear to setup.'}
         </div>
       </div>
-      <div className="p-4 bg-slate-900/40">
-        <div className="text-xs text-slate-400">
-          Executes external integration logic.
-        </div>
-      </div>
-      <Handle type="source" position={Position.Right} className="w-3 h-3 bg-cyan-500 border-2 border-slate-900" />
+      <Handle type="source" position={Position.Right} className="w-2.5 h-2.5 bg-cyan-500 border-2 border-slate-900" />
     </div>
   );
 }

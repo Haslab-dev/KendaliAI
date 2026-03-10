@@ -1,16 +1,18 @@
-import { Database } from "bun:sqlite";
+import { createClient, Client } from "@libsql/client";
 import { log } from "../core";
-import { initSchema } from "./schema";
+import { drizzle } from "drizzle-orm/libsql";
+import * as schema from "./schema";
 
 export class DatabaseManager {
-  public db: Database;
+  public client: Client;
+  public db: ReturnType<typeof drizzle>;
 
   constructor() {
-    log.info("[Database] Initializing SQLite...");
-    this.db = new Database("src/server/database/kendaliai.sqlite", {
-      create: true,
+    log.info("[Database] Initializing SQLite with LibSQL and Drizzle ORM...");
+    this.client = createClient({
+      url: "file:src/server/database/kendaliai.sqlite",
     });
-    initSchema(this.db);
+    this.db = drizzle(this.client, { schema });
   }
 }
 

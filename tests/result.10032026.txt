@@ -1,0 +1,139 @@
+hy4-mac-002@HY4-MAC-4 kendaliAI % bun test
+bun test v1.3.1-canary.22 (db7bcd79)
+
+tests/auth.test.ts:
+[INFO] [Database] Initializing SQLite with LibSQL and Drizzle ORM... 
+✓ Auth Manager > hasPermission returns false for unauthenticated context [0.66ms]
+✓ Auth Manager > hasPermission returns true for admin user
+✓ Auth Manager > hasPermission checks user permissions [0.23ms]
+✓ Auth Manager > hasPermission checks API key permissions [0.04ms]
+
+tests/features.test.ts:
+[INFO] [Auth] Created user: test_admin_1773148284367 
+[INFO] [Auth] Created API key: test_admin_key for user user_d980b656-1c7f-4eb4-9bd7-3233f7919203 
+✓ End-to-End Feature Tests > 1. Create gateway (DeepSeek) [7.30ms]
+✓ End-to-End Feature Tests > 2. Create Workflow [2.04ms]
+✓ End-to-End Feature Tests > 3. Run Workflow [1.62ms]
+{
+  id: "test-agent-1773148284443",
+  name: "Test DeepSeek Agent",
+  description: null,
+  status: "active",
+  gatewayId: "test-gateway-deepseek-1773148284432",
+  systemPrompt: "You are a helpful assistant.",
+  model: "deepseek-chat",
+  capabilities: null,
+  tools: null,
+  temperature: "0.7",
+  maxTokens: 4096,
+  createdAt: "2026-03-10 13:11:24",
+  updatedAt: "2026-03-10 13:11:24",
+}
+✓ End-to-End Feature Tests > 4. Create Agent [2.05ms]
+✓ End-to-End Feature Tests > 5. Test Get Agents (Ingest Agent) [0.67ms]
+{
+  response: "Hello! I'm doing great, thank you for asking! 😊 How are you today? Is there anything I can help you with?",
+}
+✓ End-to-End Feature Tests > 6. Test Call Agent [1961.43ms]
+✓ End-to-End Feature Tests > 7. Test Get Messages [2.71ms]
+✓ End-to-End Feature Tests > 8. Create and test call webhook [0.58ms]
+
+tests/tools.test.ts:
+[INFO] [ToolRegistry] Registering tool: test_tool 
+✓ Tool Registry > registers a tool correctly [1.01ms]
+[INFO] [ToolRegistry] Registering tool: tool1 
+[INFO] [ToolRegistry] Registering tool: tool2 
+✓ Tool Registry > lists all registered tools [0.11ms]
+[INFO] [ToolRegistry] Registering tool: echo 
+[INFO] [ToolRegistry] Executing tool: echo 
+✓ Tool Registry > executes a tool with parameters [0.19ms]
+✓ Tool Registry > throws error for non-existent tool [0.54ms]
+[INFO] [ToolRegistry] Registering tool: existing_tool 
+✓ Tool Registry > checks if tool exists [0.04ms]
+[INFO] [ToolRegistry] Registering tool: temp_tool 
+[INFO] [ToolRegistry] Unregistering tool: temp_tool 
+✓ Tool Registry > unregisters a tool [0.03ms]
+[INFO] [ToolRegistry] Registering tool: test_tool 
+✓ Tool Validator > validates correct parameters [0.91ms]
+[INFO] [ToolRegistry] Registering tool: test_tool 
+✓ Tool Validator > catches missing required fields [0.61ms]
+[INFO] [ToolRegistry] Registering tool: test_tool 
+✓ Tool Validator > catches type mismatches [0.08ms]
+[INFO] [ToolRegistry] Registering tool: test_tool 
+✓ Tool Validator > returns error for non-existent tool [0.04ms]
+[INFO] [ToolRegistry] Registering tool: test_tool 
+✓ Tool Validator > validates and sanitizes parameters [0.13ms]
+[INFO] [ToolRegistry] Registering tool: test_tool 
+[INFO] [ToolRegistry] Registering tool: sanitize_test 
+✓ Tool Validator > sanitize removes unknown fields [0.30ms]
+[INFO] [Permissions] Cache cleared 
+✓ Permission Manager > getPermissionLevel returns allowed by default [0.12ms]
+[INFO] [Permissions] Cache cleared 
+✓ Permission Manager > canExecute returns allowed for default tools [0.26ms]
+[INFO] [Permissions] Cache cleared 
+✓ Permission Manager > clearCache works correctly [0.07ms]
+✓ Permission Manager > listToolPermissions returns array [0.98ms]
+
+tests/gateway.test.ts:
+[INFO] [AIGateway] Registered provider: openai (4 models) 
+[INFO] [AIGateway] Registered provider: anthropic (3 models) 
+[INFO] [AIGateway] Registered provider: ollama (5 models) 
+[INFO] [AIGateway] Registered provider: openai (8 models) 
+✓ Gateway > gateway registers OpenAI provider correctly [0.06ms]
+[INFO] [AIGateway] Registered provider: anthropic (5 models) 
+✓ Gateway > gateway registers Anthropic provider correctly [0.04ms]
+[INFO] [AIGateway] Registered provider: ollama (7 models) 
+✓ Gateway > gateway registers Ollama provider correctly [0.03ms]
+[INFO] [AIGateway] Registered provider: ollama (7 models) 
+✓ Gateway > gateway lists models from registered providers [0.17ms]
+[INFO] [AIGateway] Registered provider: ollama (7 models) 
+✓ Gateway > gateway routes to correct provider [0.09ms]
+✓ OpenAI Provider > creates provider with config [0.03ms]
+✓ OpenAI Provider > creates provider without config
+✓ OpenAI Provider > returns available models [0.27ms]
+✓ OpenAI Provider > throws error when API key not configured [0.17ms]
+✓ Anthropic Provider > creates provider with config [0.03ms]
+✓ Anthropic Provider > returns available models [0.08ms]
+✓ Ollama Provider > creates provider with config [0.09ms]
+✓ Ollama Provider > returns available models [0.08ms]
+✓ Ollama Provider > checkAvailability returns boolean [0.75ms]
+✓ Ollama Provider > fetchAvailableModels returns array [0.49ms]
+
+tests/workflow.test.ts:
+✓ Workflow Engine > creates workflow engine instance [0.05ms]
+✓ Workflow Engine > listWorkflows returns array [1.67ms]
+[INFO] [WorkflowEngine] Saved workflow flow_1773148286437 
+✓ Workflow Engine > saveWorkflow creates new workflow [1.25ms]
+✓ Workflow Engine > getWorkflow returns null for non-existent workflow [0.64ms]
+[INFO] [WorkflowEngine] Deleted workflow non_existent_id 
+✓ Workflow Engine > deleteWorkflow returns boolean [0.36ms]
+✓ Node Engine > creates node engine instance [0.01ms]
+[INFO] [NodeEngine] Executing node trigger_1 (trigger) 
+[INFO] [NodeEngine] Trigger node: manual 
+✓ Node Engine > executeNode handles trigger node [0.22ms]
+[INFO] [NodeEngine] Executing node output_1 (output) 
+✓ Node Engine > executeNode handles output node [0.13ms]
+[INFO] [NodeEngine] Executing node logic_1 (logic) 
+✓ Node Engine > executeNode handles logic node [0.22ms]
+✓ Workflow Graph > validates workflow graph structure [0.04ms]
+
+tests/config.test.ts:
+[INFO] [Config] Loading configuration from /Users/hy4-mac-002/hasdev/kendaliAI/kendaliai.config.ts 
+[INFO] [Config] Configuration loaded successfully 
+✓ Config Loader > loads default configuration [1.53ms]
+✓ Config Loader > returns default server port [0.02ms]
+✓ Config Loader > returns provider config
+✓ Config Loader > returns default tool permission [0.01ms]
+✓ Default Config > has server defaults [0.01ms]
+✓ Default Config > has database defaults [0.01ms]
+✓ Default Config > has logging defaults
+✓ Default Config > has security defaults [0.01ms]
+✓ defineConfig > merges with defaults [0.02ms]
+✓ defineConfig > accepts provider config
+✓ defineConfig > accepts tool permissions [0.02ms]
+✓ defineConfig > accepts workflow config
+
+ 65 pass
+ 0 fail
+ 104 expect() calls
+Ran 65 tests across 6 files. [2.19s]

@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useRef, useEffect } from 'react';
 import {
   ReactFlow,
   useNodesState,
@@ -21,28 +21,16 @@ const nodeTypes = {
   toolNode: ToolNode,
 };
 
-const initialNodes: Node[] = [
-  {
-    id: '1',
-    type: 'triggerNode',
-    position: { x: 50, y: 150 },
-    data: { label: 'Webhook Trigger' },
-  },
-  {
-    id: '2',
-    type: 'agentNode',
-    position: { x: 400, y: 150 },
-    data: { label: 'Core Agent' },
-  },
-];
-
-const initialEdges: Edge[] = [{ id: 'e1-2', source: '1', target: '2', animated: true }];
-
-export function FlowEditor() {
+export function FlowEditor({ initialNodes = [], initialEdges = [] }: { initialNodes?: Node[], initialEdges?: Edge[] }) {
   const reactFlowWrapper = useRef(null);
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const { screenToFlowPosition } = useReactFlow();
+
+  useEffect(() => {
+     setNodes(initialNodes);
+     setEdges(initialEdges);
+  }, [initialNodes, initialEdges, setNodes, setEdges]);
 
   const onConnect = useCallback(
     (params: Connection | Edge) => setEdges((eds) => addEdge({ ...params, animated: true }, eds)),
@@ -94,10 +82,11 @@ export function FlowEditor() {
         onDragOver={onDragOver}
         nodeTypes={nodeTypes}
         fitView
+        colorMode="dark"
         className="bg-slate-900/40"
       >
         <Background gap={24} size={2} color="#475569" className="opacity-20" />
-        <Controls className="bg-slate-800 border-slate-700 fill-slate-300" />
+        <Controls className="bg-slate-800 border-slate-700 fill-slate-300 [&>button]:bg-slate-800 [&>button]:border-slate-700 [&>button]:text-slate-300" />
       </ReactFlow>
     </div>
   );

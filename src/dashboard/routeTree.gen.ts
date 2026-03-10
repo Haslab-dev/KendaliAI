@@ -10,8 +10,12 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WorkflowsRouteImport } from './routes/workflows'
+import { Route as ToolsRouteImport } from './routes/tools'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as PluginsRouteImport } from './routes/plugins'
 import { Route as MessagesRouteImport } from './routes/messages'
+import { Route as LogsRouteImport } from './routes/logs'
+import { Route as GatewayRouteImport } from './routes/gateway'
 import { Route as AgentsRouteImport } from './routes/agents'
 import { Route as IndexRouteImport } from './routes/index'
 
@@ -20,14 +24,34 @@ const WorkflowsRoute = WorkflowsRouteImport.update({
   path: '/workflows',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ToolsRoute = ToolsRouteImport.update({
+  id: '/tools',
+  path: '/tools',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PluginsRoute = PluginsRouteImport.update({
+  id: '/plugins',
+  path: '/plugins',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MessagesRoute = MessagesRouteImport.update({
   id: '/messages',
   path: '/messages',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LogsRoute = LogsRouteImport.update({
+  id: '/logs',
+  path: '/logs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GatewayRoute = GatewayRouteImport.update({
+  id: '/gateway',
+  path: '/gateway',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AgentsRoute = AgentsRouteImport.update({
@@ -44,38 +68,82 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/agents': typeof AgentsRoute
+  '/gateway': typeof GatewayRoute
+  '/logs': typeof LogsRoute
   '/messages': typeof MessagesRoute
+  '/plugins': typeof PluginsRoute
   '/settings': typeof SettingsRoute
+  '/tools': typeof ToolsRoute
   '/workflows': typeof WorkflowsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/agents': typeof AgentsRoute
+  '/gateway': typeof GatewayRoute
+  '/logs': typeof LogsRoute
   '/messages': typeof MessagesRoute
+  '/plugins': typeof PluginsRoute
   '/settings': typeof SettingsRoute
+  '/tools': typeof ToolsRoute
   '/workflows': typeof WorkflowsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/agents': typeof AgentsRoute
+  '/gateway': typeof GatewayRoute
+  '/logs': typeof LogsRoute
   '/messages': typeof MessagesRoute
+  '/plugins': typeof PluginsRoute
   '/settings': typeof SettingsRoute
+  '/tools': typeof ToolsRoute
   '/workflows': typeof WorkflowsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/agents' | '/messages' | '/settings' | '/workflows'
+  fullPaths:
+    | '/'
+    | '/agents'
+    | '/gateway'
+    | '/logs'
+    | '/messages'
+    | '/plugins'
+    | '/settings'
+    | '/tools'
+    | '/workflows'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/agents' | '/messages' | '/settings' | '/workflows'
-  id: '__root__' | '/' | '/agents' | '/messages' | '/settings' | '/workflows'
+  to:
+    | '/'
+    | '/agents'
+    | '/gateway'
+    | '/logs'
+    | '/messages'
+    | '/plugins'
+    | '/settings'
+    | '/tools'
+    | '/workflows'
+  id:
+    | '__root__'
+    | '/'
+    | '/agents'
+    | '/gateway'
+    | '/logs'
+    | '/messages'
+    | '/plugins'
+    | '/settings'
+    | '/tools'
+    | '/workflows'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AgentsRoute: typeof AgentsRoute
+  GatewayRoute: typeof GatewayRoute
+  LogsRoute: typeof LogsRoute
   MessagesRoute: typeof MessagesRoute
+  PluginsRoute: typeof PluginsRoute
   SettingsRoute: typeof SettingsRoute
+  ToolsRoute: typeof ToolsRoute
   WorkflowsRoute: typeof WorkflowsRoute
 }
 
@@ -88,6 +156,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WorkflowsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/tools': {
+      id: '/tools'
+      path: '/tools'
+      fullPath: '/tools'
+      preLoaderRoute: typeof ToolsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings': {
       id: '/settings'
       path: '/settings'
@@ -95,11 +170,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/plugins': {
+      id: '/plugins'
+      path: '/plugins'
+      fullPath: '/plugins'
+      preLoaderRoute: typeof PluginsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/messages': {
       id: '/messages'
       path: '/messages'
       fullPath: '/messages'
       preLoaderRoute: typeof MessagesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/logs': {
+      id: '/logs'
+      path: '/logs'
+      fullPath: '/logs'
+      preLoaderRoute: typeof LogsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/gateway': {
+      id: '/gateway'
+      path: '/gateway'
+      fullPath: '/gateway'
+      preLoaderRoute: typeof GatewayRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/agents': {
@@ -122,8 +218,12 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AgentsRoute: AgentsRoute,
+  GatewayRoute: GatewayRoute,
+  LogsRoute: LogsRoute,
   MessagesRoute: MessagesRoute,
+  PluginsRoute: PluginsRoute,
   SettingsRoute: SettingsRoute,
+  ToolsRoute: ToolsRoute,
   WorkflowsRoute: WorkflowsRoute,
 }
 export const routeTree = rootRouteImport

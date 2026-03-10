@@ -10,8 +10,10 @@ lerna-debug.log*
 node_modules
 dist
 docs
+plans
 dist-ssr
 *.local
+.tanstack
 
 # Editor directories and files
 .vscode/*

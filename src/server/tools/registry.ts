@@ -10,9 +10,26 @@ export interface ToolDefinition {
 export class ToolRegistry {
   private tools: Map<string, ToolDefinition> = new Map();
 
-  register(tool: ToolDefinition) {
+  register(tool: ToolDefinition): void {
     log.info(`[ToolRegistry] Registering tool: ${tool.name}`);
     this.tools.set(tool.name, tool);
+  }
+
+  unregister(toolName: string): void {
+    log.info(`[ToolRegistry] Unregistering tool: ${toolName}`);
+    this.tools.delete(toolName);
+  }
+
+  get(toolName: string): ToolDefinition | undefined {
+    return this.tools.get(toolName);
+  }
+
+  listTools(): ToolDefinition[] {
+    return Array.from(this.tools.values());
+  }
+
+  has(toolName: string): boolean {
+    return this.tools.has(toolName);
   }
 
   async execute(toolName: string, params: any): Promise<any> {
