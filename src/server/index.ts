@@ -3,6 +3,9 @@ import { dbManager } from "./database";
 import { eventBus } from "./eventbus";
 import { toolRegistry } from "./tools";
 import { intentRouter } from "./router";
+import { gateway, OpenAIProvider } from "./gateway";
+import { agentManager, Planner, Executor } from "./agents";
+import { workflowEngine, triggerSystem, scheduler } from "./workflow";
 
 async function bootstrap() {
   log.info("Starting KendaliAI Server...");
@@ -10,10 +13,33 @@ async function bootstrap() {
   // Initialize Core Runtime
   await runtime.initialize();
 
-  // Init Database (already initialized in constructor, but can add async checks here)
+  // Init Database
   if (dbManager.db) {
     log.info("Database initialized successfully.");
   }
+
+  // Phase 2: Gateway Registration
+  gateway.register(new OpenAIProvider());
+
+  // Phase 2: Agent Registration
+  agentManager.register("core_agent", {
+    run: async (task: string) => {
+      log.info(`[CoreAgent] Received task: ${task}`);
+      const planner = new Planner();
+      const executor = new Executor();
+
+      const plan = await planner.createPlan(task);
+      await executor.executePlan(plan);
+
+      return await gateway.chatCompletion("openai", `Summarize: ${task}`);
+    },
+  });
+
+  // Phase 3: Workflow Trigger System
+  triggerSystem.register("webhook", async (payload: any) => {
+    log.info("[Webhook Trigger] Firing workflow engine...");
+    await workflowEngine.runFlow({});
+  });
 
   // Register a dummy tool
   toolRegistry.register({
@@ -23,17 +49,17 @@ async function bootstrap() {
     execute: async () => "pong",
   });
 
-  // Register simple intent
-  intentRouter.register(/^ping$/i, async () => {
-    const result = await toolRegistry.execute("ping", {});
-    log.info(`Handled ping intent. Result: ${result}`);
+  // Register intent mapping to agent delegates
+  intentRouter.register(/^process\s+(.+)$/i, async (matches) => {
+    const task = matches[1];
+    const result = await agentManager.delegate("core_agent", task);
+    log.info(`Handled process intent. Result: ${result}`);
   });
 
-  // Listen on a port if this is an API
-  log.info("KendaliAI Server Phase 1 Bootstrapped Successfully.");
+  log.info("KendaliAI Server Phase 3 Bootstrapped Successfully.");
 
   // Simulated test
-  await intentRouter.process("ping");
+  await triggerSystem.fire("webhook", {});
 }
 
 bootstrap().catch((err) => {

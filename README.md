@@ -13,12 +13,12 @@ KendaliAI is a self-hosted AI automation platform that unified AI access, enable
   - [x] Intent Router (`src/router`)
   - [x] Database Layer (`src/database`)
 
-- [ ] **Phase 2: AI Gateway & Agents**
-  - [ ] AI Gateway (model routing, provider adapters, caching) (`src/gateway`)
-  - [ ] Agent Runtime (planner, executor, memory) (`src/agents`)
+- [x] **Phase 2: AI Gateway & Agents**
+  - [x] AI Gateway (model routing, provider adapters, caching) (`src/gateway`)
+  - [x] Agent Runtime (planner, executor, memory) (`src/agents`)
 
-- [ ] **Phase 3: Workflow Automation**
-  - [ ] Workflow engine (node engine, triggers, scheduler) (`src/workflow`)
+- [x] **Phase 3: Workflow Automation**
+  - [x] Workflow engine (node engine, triggers, scheduler) (`src/workflow`)
 
 - [ ] **Phase 4: Dashboard UI**
   - [ ] System monitoring (`src/dashboard/pages/Overview`)
@@ -32,9 +32,25 @@ KendaliAI is a self-hosted AI automation platform that unified AI access, enable
 
 ## Quickstart
 
+### Frontend Dashboard
+
 ```bash
 bun install
 bun run dev
 ```
 
 The frontend application runs on top of Vite and React. The backend API is entirely unified under `src/server` (or run concurrently) to avoid monorepo setups.
+
+### Backend Server
+
+```bash
+bun run src/server/index.ts
+```
+
+## Testing
+
+Unit tests run natively via `bun test`. Test files are stored under the `tests/` directory.
+
+```bash
+bun test
+```
