@@ -15,11 +15,11 @@ export const Route = createRootRoute({
         <nav className="mt-8 flex flex-col gap-1 px-4 flex-1">
             <NavItem to="/" icon={<LayoutDashboard className="w-5 h-5" />} label="Overview" />
             <NavItem to="/workflows" icon={<GitMerge className="w-5 h-5" />} label="Workflows" />
-            <NavItem to="/#agents" icon={<Bot className="w-5 h-5" />} label="Agents" />
-            <NavItem to="/#messages" icon={<MessageSquare className="w-5 h-5" />} label="Messages" />
+            <NavItem to="/agents" icon={<Bot className="w-5 h-5" />} label="Agents" />
+            <NavItem to="/messages" icon={<MessageSquare className="w-5 h-5" />} label="Messages" />
         </nav>
         <div className="p-4 mt-auto">
-             <NavItem to="/#settings" icon={<Settings className="w-5 h-5" />} label="Settings" />
+             <NavItem to="/settings" icon={<Settings className="w-5 h-5" />} label="Settings" />
         </div>
       </aside>
       <main className="flex-1 overflow-auto relative">

@@ -1,7 +1,13 @@
 import { motion } from 'framer-motion';
 import { Activity, GitMerge, CheckCircle, Clock } from 'lucide-react';
+import { useStats } from '../../hooks/useApi';
 
 export default function Overview() {
+    const { data: stats, isLoading, isError } = useStats();
+
+    if (isLoading || !stats) return <div className="p-8 text-slate-400">Loading metrics...</div>;
+    if (isError) return <div className="p-8 text-red-400">Failed to load metrics</div>;
+
     return (
         <motion.div 
             initial={{ opacity: 0, y: 10 }} 
@@ -15,28 +21,28 @@ export default function Overview() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
                 <StatCard 
                     title="AI Requests" 
-                    value="12,402" 
+                    value={stats.requests.toLocaleString()} 
                     change="+14.5%" 
                     icon={<Activity className="text-emerald-400" />} 
                     delay={0.1} 
                 />
                 <StatCard 
                     title="Active Workflows" 
-                    value="34" 
+                    value={stats.activeWorkflows} 
                     change="+2" 
                     icon={<GitMerge className="text-indigo-400" />} 
                     delay={0.2} 
                 />
                 <StatCard 
                     title="Agent Tasks" 
-                    value="84" 
+                    value={stats.agentTasks} 
                     change="+12" 
                     icon={<CheckCircle className="text-cyan-400" />} 
                     delay={0.3} 
                 />
                 <StatCard 
                     title="System Latency" 
-                    value="42ms" 
+                    value={`${stats.systemLatency}ms`} 
                     change="-5ms" 
                     icon={<Clock className="text-purple-400" />} 
                     delay={0.4} 
@@ -55,17 +61,19 @@ export default function Overview() {
                 className="bg-slate-900/40 backdrop-blur-md rounded-2xl border border-slate-800/60 shadow-xl overflow-hidden"
             >
                 <div className="divide-y divide-slate-800/60">
-                    {[1, 2, 3, 4, 5].map((item) => (
-                        <div key={item} className="p-4 hover:bg-slate-800/30 transition-colors flex items-center gap-4">
+                    {stats.recentActivity.map((item: any) => (
+                        <div key={item.id} className="p-4 hover:bg-slate-800/30 transition-colors flex items-center gap-4">
                             <div className="h-10 w-10 rounded-full bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30">
                                 <Activity className="w-5 h-5 text-indigo-400" />
                             </div>
                             <div className="flex-1">
-                                <p className="font-medium text-slate-200">Task Execution #{2340 + item}</p>
-                                <p className="text-sm text-slate-500">Core Agent handled intent process hello_world...</p>
+                                <p className="font-medium text-slate-200">
+                                    {item.type === 'agent' ? 'Agent Task' : item.type === 'workflow' ? 'Workflow Event' : 'System Event'} #{2340 + item.id}
+                                </p>
+                                <p className="text-sm text-slate-500">{item.text}</p>
                             </div>
                             <span className="text-sm text-slate-500 bg-slate-900/50 px-3 py-1 rounded-full border border-slate-800">
-                                {item * 2} mins ago
+                                {item.time}
                             </span>
                         </div>
                     ))}

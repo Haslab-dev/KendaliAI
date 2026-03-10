@@ -109,6 +109,130 @@ async function bootstrap() {
   });
 
   log.info("KendaliAI Server All Phases Bootstrapped Successfully.");
+
+  Bun.serve({
+    port: 3000,
+    async fetch(req) {
+      const url = new URL(req.url);
+
+      // Handle CORS
+      if (req.method === "OPTIONS") {
+        return new Response("Departed", {
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+          },
+        });
+      }
+
+      const headers = {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*",
+      };
+
+      if (req.method === "POST" && url.pathname === "/api/workflows/run") {
+        const body = await req.json();
+        log.info(`API: Running workflow from UI`, body);
+        await triggerSystem.fire("webhook", body);
+        return new Response(JSON.stringify({ status: "success" }), { headers });
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/workflows/save") {
+        const body = await req.json();
+        log.info(`API: Saved workflow graph`, body);
+        return new Response(JSON.stringify({ status: "success" }), { headers });
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/stats") {
+        return new Response(
+          JSON.stringify({
+            requests: 12402,
+            activeWorkflows: 34,
+            agentTasks: 84,
+            systemLatency: 42,
+            recentActivity: [
+              {
+                id: 1,
+                type: "agent",
+                text: "Core Agent handled intent process hello_world...",
+                time: "2 mins ago",
+              },
+              {
+                id: 2,
+                type: "workflow",
+                text: "Workflow 'Message Analyzer' executed successfully.",
+                time: "5 mins ago",
+              },
+              {
+                id: 3,
+                type: "message",
+                text: "Telegram Adapter received ping from user123",
+                time: "12 mins ago",
+              },
+            ],
+          }),
+          { headers },
+        );
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/agents") {
+        return new Response(
+          JSON.stringify({
+            agents: [
+              {
+                id: "core_agent",
+                name: "Core Agent",
+                status: "active",
+                tasksCompleted: 142,
+              },
+              {
+                id: "planner_agent",
+                name: "Planner Agent",
+                status: "idle",
+                tasksCompleted: 89,
+              },
+            ],
+          }),
+          { headers },
+        );
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/messages") {
+        return new Response(
+          JSON.stringify({
+            messages: [
+              {
+                id: 1,
+                from: "user123",
+                text: "ping",
+                adapter: "telegram",
+                time: new Date().toISOString(),
+              },
+            ],
+          }),
+          { headers },
+        );
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/settings") {
+        return new Response(
+          JSON.stringify({
+            gatewayProvider: "openai",
+            webhookUrl: "https://api.kendali.ai/webhook",
+            telemetry: true,
+          }),
+          { headers },
+        );
+      }
+
+      return new Response(JSON.stringify({ message: "KendaliAI API" }), {
+        headers,
+      });
+    },
+  });
+
+  log.info("KendaliAI API Listening on http://localhost:3000");
 }
 
 bootstrap().catch((err) => {
