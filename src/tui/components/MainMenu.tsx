@@ -4,7 +4,7 @@
  * Displays the main menu with navigation options.
  */
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { Box, Text } from "ink";
 import { select } from "@inquirer/prompts";
 import type { Screen } from "../App";
@@ -15,14 +15,18 @@ interface MainMenuProps {
 }
 
 export function MainMenu({ onSelect, onInteractiveChange }: MainMenuProps) {
+  const [isComplete, setIsComplete] = useState(false);
   const [selectedAction, setSelectedAction] = useState<Screen | null>(null);
+  const menuStarted = useRef(false);
 
   useEffect(() => {
+    // Prevent multiple menu instances
+    if (menuStarted.current) return;
+    menuStarted.current = true;
+
     let isMounted = true;
 
     const showMenu = async () => {
-      onInteractiveChange(true);
-
       try {
         const answer = await select({
           message: "Select an action",
@@ -40,13 +44,13 @@ export function MainMenu({ onSelect, onInteractiveChange }: MainMenuProps) {
 
         if (isMounted) {
           setSelectedAction(answer as Screen);
-          onInteractiveChange(false);
+          setIsComplete(true);
           onSelect(answer as Screen);
         }
       } catch (error) {
         // User cancelled (Ctrl+C)
         if (isMounted) {
-          onInteractiveChange(false);
+          setIsComplete(true);
           onSelect("exit");
         }
       }
@@ -58,6 +62,11 @@ export function MainMenu({ onSelect, onInteractiveChange }: MainMenuProps) {
       isMounted = false;
     };
   }, [onSelect, onInteractiveChange]);
+
+  // Don't render anything while inquirer prompts are active
+  if (!isComplete) {
+    return null;
+  }
 
   return (
     <Box flexDirection="column">

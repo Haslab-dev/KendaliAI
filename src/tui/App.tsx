@@ -4,9 +4,8 @@
  * Handles the main menu and navigation between different screens.
  */
 
-import React, { useState, useEffect, useCallback } from "react";
-import { Box, Text, useApp, useInput, useStdin } from "ink";
-import { select, confirm } from "@inquirer/prompts";
+import React, { useState, useCallback } from "react";
+import { Box, Text, useApp } from "ink";
 import { MainMenu } from "./components/MainMenu";
 import { GatewayList } from "./components/GatewayList";
 import { GatewayWizard } from "./wizard/GatewayWizard";
@@ -28,32 +27,12 @@ export function App() {
   const { exit } = useApp();
   const [screen, setScreen] = useState<Screen>("menu");
   const [selectedGateway, setSelectedGateway] = useState<string | null>(null);
-  const [isInteractive, setIsInteractive] = useState(false);
-
-  // Handle global key presses
-  useInput(
-    (input, key) => {
-      if (key.escape && !isInteractive) {
-        if (screen !== "menu") {
-          setScreen("menu");
-        } else {
-          exit();
-        }
-      }
-    },
-    { isActive: !isInteractive }
-  );
 
   // Handle menu selection
-  const handleMenuSelect = useCallback(async (action: Screen) => {
+  const handleMenuSelect = useCallback((action: Screen) => {
     if (action === "exit") {
-      const shouldExit = await confirm({
-        message: "Are you sure you want to exit?",
-        default: false,
-      });
-      if (shouldExit) {
-        exit();
-      }
+      // Exit directly - the confirmation is handled in MainMenu
+      exit();
       return;
     }
 
@@ -61,9 +40,16 @@ export function App() {
   }, [exit]);
 
   // Handle wizard completion
-  const handleWizardComplete = useCallback(() => {
-    setScreen("list-gateways");
-  }, []);
+  const handleWizardComplete = useCallback((gatewayName: string, shouldStart: boolean) => {
+    if (shouldStart) {
+      // If user chose to start, show the logs view
+      setSelectedGateway(gatewayName);
+      setScreen("view-logs");
+    } else {
+      // Otherwise exit the TUI
+      exit();
+    }
+  }, [exit]);
 
   // Handle back to menu
   const handleBack = useCallback(() => {
@@ -78,7 +64,7 @@ export function App() {
         return (
           <MainMenu
             onSelect={handleMenuSelect}
-            onInteractiveChange={setIsInteractive}
+            onInteractiveChange={() => {}}
           />
         );
 
@@ -98,7 +84,7 @@ export function App() {
               setScreen("view-logs");
             }}
             onBack={handleBack}
-            onInteractiveChange={setIsInteractive}
+            onInteractiveChange={() => {}}
           />
         );
 
@@ -117,7 +103,6 @@ export function App() {
               Settings
             </Text>
             <Text dimColor>Settings page coming soon...</Text>
-            <Text dimColor>Press ESC to go back</Text>
           </Box>
         );
 
@@ -125,7 +110,7 @@ export function App() {
         return (
           <Box flexDirection="column" padding={1}>
             <Text dimColor>
-              Screen "{screen}" coming soon... Press ESC to go back
+              Screen "{screen}" coming soon...
             </Text>
           </Box>
         );
@@ -136,11 +121,6 @@ export function App() {
     <Box flexDirection="column" padding={1}>
       <Header />
       {renderScreen()}
-      {screen !== "menu" && !isInteractive && (
-        <Box marginTop={1}>
-          <Text dimColor>Press ESC to go back</Text>
-        </Box>
-      )}
     </Box>
   );
 }

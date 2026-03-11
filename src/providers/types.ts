@@ -4,6 +4,8 @@
  * Type definitions for AI providers using AI SDK.
  */
 
+import type { LanguageModel } from "ai";
+
 export type ProviderType = "zai" | "deepseek" | "openai" | "anthropic";
 
 export interface ModelInfo {
@@ -48,7 +50,7 @@ export interface ProviderInstance {
   name: string;
   type: ProviderType;
   isConfigured(): boolean;
-  getModel(modelId?: string): unknown;
+  getModel(modelId?: string): LanguageModel;
   listModels(): ModelInfo[];
   chat(prompt: string, options?: { systemPrompt?: string }): Promise<string>;
   chatCompletion(

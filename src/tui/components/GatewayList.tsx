@@ -4,7 +4,7 @@
  * Displays a list of all configured gateways.
  */
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { Box, Text } from "ink";
 import { select } from "@inquirer/prompts";
 import { listGatewayInfo } from "../../gateway/storage";
@@ -21,43 +21,35 @@ export function GatewayList({
   onBack,
   onInteractiveChange,
 }: GatewayListProps) {
-  const [gateways, setGateways] = useState<GatewayInfo[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [isComplete, setIsComplete] = useState(false);
+  const listStarted = useRef(false);
 
   useEffect(() => {
-    let isMounted = true;
-
-    const loadGateways = async () => {
-      setLoading(true);
-      try {
-        const list = await listGatewayInfo();
-        if (isMounted) {
-          setGateways(list);
-          setLoading(false);
-        }
-      } catch (error) {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    };
-
-    loadGateways();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (loading || gateways.length === 0) return;
+    // Prevent multiple instances
+    if (listStarted.current) return;
+    listStarted.current = true;
 
     let isMounted = true;
 
-    const showGatewaySelect = async () => {
-      onInteractiveChange(true);
-
+    const showGatewayList = async () => {
       try {
+        // Load gateways first
+        const gateways = await listGatewayInfo();
+
+        if (!isMounted) return;
+
+        // Handle empty gateways case
+        if (gateways.length === 0) {
+          // Wait a moment then go back to menu
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          if (isMounted) {
+            setIsComplete(true);
+            onBack();
+          }
+          return;
+        }
+
+        // Show selection prompt
         const choices = [
           ...gateways.map((g) => ({
             name: `${g.name} (${g.provider}/${g.channel}) - ${g.status}`,
@@ -71,53 +63,33 @@ export function GatewayList({
           choices,
         });
 
-        if (isMounted) {
-          onInteractiveChange(false);
-          if (answer === "__back__") {
-            onBack();
-          } else {
-            onSelect(answer);
-          }
+        if (!isMounted) return;
+
+        setIsComplete(true);
+        if (answer === "__back__") {
+          onBack();
+        } else {
+          onSelect(answer);
         }
       } catch (error) {
+        // User cancelled (Ctrl+C)
         if (isMounted) {
-          onInteractiveChange(false);
+          setIsComplete(true);
           onBack();
         }
       }
     };
 
-    showGatewaySelect();
+    showGatewayList();
 
     return () => {
       isMounted = false;
     };
-  }, [loading, gateways, onSelect, onBack, onInteractiveChange]);
+  }, [onSelect, onBack, onInteractiveChange]);
 
-  if (loading) {
-    return (
-      <Box flexDirection="column">
-        <Text bold>Loading gateways...</Text>
-      </Box>
-    );
-  }
-
-  if (gateways.length === 0) {
-    return (
-      <Box flexDirection="column" padding={1}>
-        <Text bold color="yellow">
-          No gateways configured
-        </Text>
-        <Box marginTop={1}>
-          <Text dimColor>
-            Create a new gateway to get started.
-          </Text>
-        </Box>
-        <Box marginTop={1}>
-          <Text dimColor>Press ESC to go back</Text>
-        </Box>
-      </Box>
-    );
+  // Don't render anything while inquirer prompts are active
+  if (!isComplete) {
+    return null;
   }
 
   return (
@@ -125,24 +97,7 @@ export function GatewayList({
       <Box marginBottom={1}>
         <Text bold>Your Gateways</Text>
       </Box>
-      {gateways.map((g) => (
-        <Box key={g.name}>
-          <Text>
-            {"  "}
-            <Text bold>{g.name}</Text>
-            {" - "}
-            <Text color="cyan">{g.provider}</Text>
-            {"/"}
-            <Text color="green">{g.channel}</Text>
-            {" - "}
-            <Text
-              color={g.status === "running" ? "green" : "yellow"}
-            >
-              {g.status}
-            </Text>
-          </Text>
-        </Box>
-      ))}
+      <Text dimColor>Returning to menu...</Text>
     </Box>
   );
 }

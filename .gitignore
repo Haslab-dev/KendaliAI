@@ -27,3 +27,6 @@ dist-ssr
 *.sw?
 
 src/server/database/kendaliai.sqlite
+
+# Gateway configurations (contain sensitive credentials)
+gateways/

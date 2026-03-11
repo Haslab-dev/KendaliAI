@@ -1,10 +1,10 @@
 /**
  * KendaliAI DeepSeek Provider
  *
- * DeepSeek provider implementation using AI SDK (OpenAI-compatible).
+ * DeepSeek provider implementation using AI SDK with OpenAI-compatible mode.
  */
 
-import { createOpenAI } from "@ai-sdk/openai";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { generateText, embedMany } from "ai";
 import type {
   ProviderInstance,
@@ -46,7 +46,7 @@ export interface DeepSeekConfig {
 }
 
 /**
- * Create a DeepSeek provider instance
+ * Create a DeepSeek provider instance using OpenAI-compatible mode
  */
 export function createDeepSeekProvider(
   config: DeepSeekConfig,
@@ -55,8 +55,9 @@ export function createDeepSeekProvider(
   const baseURL = config.baseURL || "https://api.deepseek.com/v1";
   const defaultModel = config.defaultModel || "deepseek-chat";
 
-  // Create OpenAI-compatible client
-  const openai = createOpenAI({
+  // Create OpenAI-compatible client for DeepSeek
+  const deepseek = createOpenAICompatible({
+    name: "deepseek",
     apiKey,
     baseURL,
   });
@@ -70,7 +71,7 @@ export function createDeepSeekProvider(
     },
 
     getModel(modelId?: string) {
-      return openai(modelId || defaultModel);
+      return deepseek(modelId || defaultModel);
     },
 
     listModels(): ModelInfo[] {
@@ -81,7 +82,7 @@ export function createDeepSeekProvider(
       prompt: string,
       options?: { systemPrompt?: string },
     ): Promise<string> {
-      const model = openai(defaultModel);
+      const model = deepseek(defaultModel);
       const messages: Array<{
         role: "system" | "user" | "assistant";
         content: string;
@@ -102,13 +103,14 @@ export function createDeepSeekProvider(
 
     async chatCompletion(
       messages: ChatMessage[],
-      _options?: { temperature?: number; maxTokens?: number },
+      options?: { temperature?: number; maxTokens?: number },
     ): Promise<ChatCompletionResponse> {
-      const model = openai(defaultModel);
+      const model = deepseek(defaultModel);
 
       const result = await generateText({
         model,
         messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        temperature: options?.temperature,
       });
 
       return {
@@ -126,7 +128,10 @@ export function createDeepSeekProvider(
     },
 
     async embeddings(input: string): Promise<EmbeddingResponse> {
-      const embeddingModel = openai.embedding("text-embedding-3-small");
+      // DeepSeek doesn't have embedding models, use a fallback
+      const embeddingModel = deepseek.textEmbeddingModel(
+        "text-embedding-3-small",
+      );
 
       const result = await embedMany({
         model: embeddingModel,

@@ -36,6 +36,7 @@ export interface GatewayChannelConfig {
 export interface GatewayConfig {
   id: string;
   name: string;
+  agentName?: string; // Custom name for the AI agent (e.g., "Anita")
   provider: GatewayProviderConfig;
   channel: GatewayChannelConfig;
   skills: string[];

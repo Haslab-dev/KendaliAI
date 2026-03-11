@@ -11,6 +11,14 @@ import { App } from "./App";
 
 // Start the TUI application
 export function startTUI() {
+  // Check if running in an interactive terminal
+  if (!process.stdin.isTTY) {
+    console.error("Error: KendaliAI TUI requires an interactive terminal.");
+    console.error("Please run this command directly in your terminal.");
+    console.error("\nUsage: bun run start");
+    return Promise.resolve();
+  }
+
   const { waitUntilExit } = render(<App />);
   
   return waitUntilExit();

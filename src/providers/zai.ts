@@ -1,10 +1,10 @@
 /**
- * KendaliAI zai Provider
+ * KendaliAI ZAI (Zhipu AI) Provider
  *
- * zai provider implementation using AI SDK (OpenAI-compatible).
+ * ZAI provider implementation using AI SDK with OpenAI-compatible mode.
  */
 
-import { createOpenAI } from "@ai-sdk/openai";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { generateText, embedMany } from "ai";
 import type {
   ProviderInstance,
@@ -14,7 +14,7 @@ import type {
   EmbeddingResponse,
 } from "./types";
 
-// zai models
+// ZAI (Zhipu AI) models
 const ZAI_MODELS: ModelInfo[] = [
   {
     id: "glm-5",
@@ -53,15 +53,16 @@ export interface ZaiConfig {
 }
 
 /**
- * Create a zai provider instance
+ * Create a ZAI provider instance using OpenAI-compatible mode
  */
 export function createZaiProvider(config: ZaiConfig): ProviderInstance {
   const apiKey = config.apiKey;
-  const baseURL = config.baseURL || "https://api.zai.ai/v1";
+  const baseURL = config.baseURL || "https://api.z.ai/api/paas/v4";
   const defaultModel = config.defaultModel || "glm-4.7-flashx";
 
-  // Create OpenAI-compatible client
-  const openai = createOpenAI({
+  // Create OpenAI-compatible client for ZAI
+  const zai = createOpenAICompatible({
+    name: "zai",
     apiKey,
     baseURL,
   });
@@ -75,7 +76,7 @@ export function createZaiProvider(config: ZaiConfig): ProviderInstance {
     },
 
     getModel(modelId?: string) {
-      return openai(modelId || defaultModel);
+      return zai(modelId || defaultModel);
     },
 
     listModels(): ModelInfo[] {
@@ -86,7 +87,7 @@ export function createZaiProvider(config: ZaiConfig): ProviderInstance {
       prompt: string,
       options?: { systemPrompt?: string },
     ): Promise<string> {
-      const model = openai(defaultModel);
+      const model = zai(defaultModel);
       const messages: Array<{
         role: "system" | "user" | "assistant";
         content: string;
@@ -107,13 +108,14 @@ export function createZaiProvider(config: ZaiConfig): ProviderInstance {
 
     async chatCompletion(
       messages: ChatMessage[],
-      _options?: { temperature?: number; maxTokens?: number },
+      options?: { temperature?: number; maxTokens?: number },
     ): Promise<ChatCompletionResponse> {
-      const model = openai(defaultModel);
+      const model = zai(defaultModel);
 
       const result = await generateText({
         model,
         messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        temperature: options?.temperature,
       });
 
       return {
@@ -131,7 +133,7 @@ export function createZaiProvider(config: ZaiConfig): ProviderInstance {
     },
 
     async embeddings(input: string): Promise<EmbeddingResponse> {
-      const embeddingModel = openai.embedding("text-embedding-3-small");
+      const embeddingModel = zai.textEmbeddingModel("text-embedding-3-small");
 
       const result = await embedMany({
         model: embeddingModel,
@@ -149,7 +151,7 @@ export function createZaiProvider(config: ZaiConfig): ProviderInstance {
 }
 
 /**
- * Default zai provider (unconfigured)
+ * Default ZAI provider (unconfigured)
  */
 export const zaiProvider: ProviderInstance = {
   name: "zai",
@@ -160,7 +162,7 @@ export const zaiProvider: ProviderInstance = {
   },
 
   getModel(): never {
-    throw new Error("zai provider not configured. Please set ZAI_API_KEY.");
+    throw new Error("ZAI provider not configured. Please set ZAI_API_KEY.");
   },
 
   listModels(): ModelInfo[] {
@@ -168,14 +170,14 @@ export const zaiProvider: ProviderInstance = {
   },
 
   async chat(): Promise<never> {
-    throw new Error("zai provider not configured. Please set ZAI_API_KEY.");
+    throw new Error("ZAI provider not configured. Please set ZAI_API_KEY.");
   },
 
   async chatCompletion(): Promise<never> {
-    throw new Error("zai provider not configured. Please set ZAI_API_KEY.");
+    throw new Error("ZAI provider not configured. Please set ZAI_API_KEY.");
   },
 
   async embeddings(): Promise<never> {
-    throw new Error("zai provider not configured. Please set ZAI_API_KEY.");
+    throw new Error("ZAI provider not configured. Please set ZAI_API_KEY.");
   },
 };
