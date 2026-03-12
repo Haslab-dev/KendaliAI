@@ -8,12 +8,26 @@
  * Usage:
  *   bun run src/cli-minimal.ts [command] [options]
  *   bun build --compile --minify src/cli-minimal.ts --outfile kendaliai
+ * 
+ * Multi-Gateway Commands:
+ *   kendaliai gateway create <name>     Create new gateway
+ *   kendaliai gateway start <name>      Start gateway
+ *   kendaliai gateway stop <name>       Stop gateway
+ *   kendaliai gateway restart <name>    Restart gateway
+ *   kendaliai gateway list               List all gateways
+ *   kendaliai gateway show <name>        Show gateway details
+ *   kendaliai gateway delete <name>     Delete gateway
+ *   kendaliai gateway logs <name>       View gateway logs
+ *   kendaliai status                     Show all gateway status
  */
 
-import { parseArgs } from "util";
-import { randomUUID } from "crypto";
 import { Database } from "bun:sqlite";
+import { randomUUID } from "crypto";
+import { existsSync, mkdirSync } from "fs";
+import { join } from "path";
+import { parseArgs } from "util";
 import { securityManager } from "./server/security";
+import { encrypt, decrypt } from "./server/security/encryption";
 
 // ============================================
 // CLI Version
@@ -27,6 +41,22 @@ const VERSION = "0.2.0";
 
 let db: Database | null = null;
 
+// Directory paths
+const KENDALIAI_DIR = join(process.env.HOME || "", ".kendaliai");
+const GATEWAYS_DIR = join(KENDALIAI_DIR, "gateways");
+const RUN_DIR = join(KENDALIAI_DIR, "run");
+const LOGS_DIR = join(KENDALIAI_DIR, "logs");
+const DATA_DIR = join(KENDALIAI_DIR, "data");
+
+// Ensure directories exist
+function ensureDirectories(): void {
+  [KENDALIAI_DIR, GATEWAYS_DIR, RUN_DIR, LOGS_DIR, DATA_DIR].forEach(dir => {
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
+  });
+}
+
 // ============================================
 // Database Helper
 // ============================================
@@ -39,16 +69,20 @@ function ensureDirectory(filePath: string): void {
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
-    } catch {
-      // Ignore errors
-    }
+    } catch (error) {
+    // Log directory creation errors but continue
+    console.error(`Failed to create directory: ${error}`);
+  }
   }
 }
 
 function getDb(dbPath: string = ".kendaliai/data.db"): Database {
   if (db) return db;
-  ensureDirectory(dbPath);
-  db = new Database(dbPath);
+  ensureDirectories();
+  // Use DATA_DIR if path is default
+  const actualPath = dbPath === ".kendaliai/data.db" ? join(DATA_DIR, "kendaliai.db") : dbPath;
+  ensureDirectory(actualPath);
+  db = new Database(actualPath);
   db.run("PRAGMA journal_mode = WAL");
   db.run("PRAGMA synchronous = NORMAL");
   return db;
@@ -105,6 +139,12 @@ const { values, positionals } = parseArgs({
     
     // Message options
     message: { type: "string", short: "m" },
+    
+    // Gateway options for multi-gateway support
+    gateway: { type: "string", short: "g" },
+    daemon: { type: "boolean", short: "d", default: false },
+    force: { type: "boolean", short: "f", default: false },
+    follow: { type: "boolean", short: "F", default: false },
   },
   strict: false,
 });
@@ -123,27 +163,56 @@ function getString(key: string, defaultValue: string = ""): string {
 
 async function handleHelp(): Promise<void> {
   console.log(`
-KendaliAI CLI v${VERSION} - ZeroClaw-Inspired AI Gateway
+KendaliAI CLI v${VERSION} - Multi-Gateway AI Orchestration Platform
 
 USAGE:
   kendaliai <command> [options]
 
 COMMANDS:
   onboard              Quick setup wizard
-  gateway              Start the gateway server
-  daemon               Start Telegram bot with AI
+  gateway              Start the gateway server (legacy)
+  daemon               Start Telegram bot with AI (legacy)
   agent                Chat with AI agent
   pairing              Manage pairing codes
   channel              Manage messaging channels
+  skills               Manage skills (install, list, audit)
   status               Show system status
   doctor               Run diagnostics
   reset                Reset database
+
+GATEWAY MANAGEMENT (Multi-Gateway):
+  gateway create <name>     Create new gateway
+  gateway start <name>      Start gateway
+  gateway start <name> -d   Start as daemon
+  gateway stop <name>       Stop gateway
+  gateway stop <name> -f    Force stop
+  gateway restart <name>    Restart gateway
+  gateway list              List all gateways
+  gateway show <name>       Show gateway details
+  gateway delete <name>     Delete gateway
+  gateway logs <name>       View gateway logs
+  gateway logs <name> -f    Follow logs
+
+DAEMON MANAGEMENT:
+  daemon status             Show daemon status
+  daemon stop-all           Stop all daemons
+  daemon restart-all        Restart all daemons
+  daemon health <name>      Check daemon health
+
+SKILLS MANAGEMENT:
+  skills list                List installed skills
+  skills install <source>   Install a skill
+  skills audit <name>       Audit a skill for security
+  skills new <name>         Scaffold a new skill
+  skills remove <name>      Remove a skill
 
 GATEWAY OPTIONS:
   -p, --port <port>    Gateway port (default: 42617)
   --host <host>        Gateway host (default: 127.0.0.1)
   --require-pairing    Require pairing code (default: true)
   --allow-public       Allow public binding (default: false)
+  -d, --daemon         Run as background daemon
+  -f, --force          Force stop
 
 PROVIDER OPTIONS:
   --provider <name>    AI provider (openai, anthropic, ollama, zai, deepseek)
@@ -167,8 +236,17 @@ EXAMPLES:
   # Quick setup
   kendaliai onboard --provider openai --api-key sk-...
 
-  # Start gateway
-  kendaliai gateway --port 42617
+  # Create and manage multiple gateways
+  kendaliai gateway create dev-assistant --provider zai --model zai-1
+  kendaliai gateway create support-bot --provider deepseek
+  kendaliai gateway start dev-assistant --daemon
+  kendaliai gateway list
+  kendaliai status
+
+  # Manage skills
+  kendaliai skills list
+  kendaliai skills new my-skill
+  kendaliai skills install namespace/name
 
   # Chat with agent
   kendaliai agent -m "Hello, KendaliAI!"
@@ -266,7 +344,7 @@ async function handleOnboard(): Promise<void> {
       provider,
       apiUrl || null,
       model,
-      apiKey, // TODO: Encrypt this
+      encrypt(apiKey), // Encrypt API key before storing
       values["require-pairing"] ? 1 : 0,
       values["allow-public"] ? 1 : 0,
       values["workspace-only"] ? 1 : 0,
@@ -302,7 +380,7 @@ async function handleOnboard(): Promise<void> {
     provider,
     apiUrl || null,
     model,
-    apiKey, // TODO: Encrypt this
+    encrypt(apiKey), // Encrypt API key
     values["require-pairing"] ? 1 : 0,
     values["allow-public"] ? 1 : 0,
     values["workspace-only"] ? 1 : 0,
@@ -351,6 +429,15 @@ async function handleGateway(): Promise<void> {
   if (!gateway) {
     console.log("⚠️  No gateway found. Run 'kendaliai onboard' first.");
     return;
+  }
+  
+  // Decrypt API key for use (with fallback for plain text)
+  let apiKey: string;
+  try {
+    apiKey = gateway.api_key_encrypted ? decrypt(gateway.api_key_encrypted) : "";
+  } catch {
+    // Backward compatibility: try plain text if decryption fails
+    apiKey = gateway.api_key_encrypted || "";
   }
   
   // Update gateway status to running
@@ -414,7 +501,7 @@ async function handleGateway(): Promise<void> {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${gateway!.api_key_encrypted}`,
+          "Authorization": `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
           model: gateway!.default_model,
@@ -603,7 +690,7 @@ async function handleGateway(): Promise<void> {
   // Start Telegram bot if configured
   if (botToken && channel) {
     console.log(`\n📱 Starting Telegram bot...`);
-    await startTelegramBot(botToken, channel.id, gateway, apiUrl, allowedUsers, database);
+    await startTelegramBot(botToken, channel.id, gateway, apiUrl, apiKey, allowedUsers, database);
   } else {
     console.log(`\n⚠️  No Telegram bot configured.`);
     console.log(`   Run: kendaliai channel add-telegram --bot-token <token>`);
@@ -648,6 +735,15 @@ async function handleAgent(): Promise<void> {
     return;
   }
   
+  // Decrypt API key
+  let apiKey: string;
+  try {
+    apiKey = decrypt(gateway.api_key_encrypted);
+  } catch {
+    // Backward compatibility
+    apiKey = gateway.api_key_encrypted;
+  }
+  
   // Determine API endpoint based on provider
   let apiUrl = gateway.endpoint;
   if (!apiUrl) {
@@ -670,7 +766,7 @@ async function handleAgent(): Promise<void> {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${gateway.api_key_encrypted}`,
+        "Authorization": `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         model: gateway.default_model,
@@ -864,42 +960,57 @@ async function handleStatus(): Promise<void> {
   
   console.log("📊 KendaliAI Status\n");
   
-  // Gateway status
-  const gateway = database.query<{ 
+  // Get all gateways
+  const gateways = database.query<{ 
     id: string; 
     name: string; 
     provider: string; 
     default_model: string; 
     status: string;
+    daemon_enabled: number;
+    daemon_pid: number | null;
+    daemon_port: number;
     require_pairing: number;
   }, []>(`
-    SELECT id, name, provider, default_model, status, require_pairing 
-    FROM gateways LIMIT 1
-  `).get();
+    SELECT id, name, provider, default_model, status, daemon_enabled, daemon_pid, daemon_port, require_pairing 
+    FROM gateways ORDER BY name
+  `).all();
   
-  if (gateway) {
-    console.log("Gateway:");
-    console.log(`  Name: ${gateway.name}`);
-    console.log(`  Provider: ${gateway.provider}`);
-    console.log(`  Model: ${gateway.default_model}`);
-    console.log(`  Status: ${gateway.status}`);
-    console.log(`  Pairing Required: ${gateway.require_pairing ? "Yes" : "No"}`);
+  if (gateways.length > 0) {
+    console.log("╔══════════════════════════════════════════════════════════════════════════╗");
+    console.log("║                        KendaliAI Gateways                              ║");
+    console.log("╠══════════════════════════════════════════════════════════════════════════╣");
+    console.log("║ Name          Status    PID      Provider    Model           Port      ║");
+    console.log("╠══════════════════════════════════════════════════════════════════════════╣");
     
-    // Pairing status
-    const pairingStatus = await securityManager.getPairingStatus(gateway.id);
-    console.log(`  Paired: ${pairingStatus.isPaired ? "Yes" : "No"}`);
+    let runningCount = 0;
+    
+    for (const gw of gateways) {
+      const status = gw.status === "running" ? "● Running" : "○ Stopped";
+      const pid = gw.daemon_pid ? String(gw.daemon_pid) : "-";
+      const model = gw.default_model || "-";
+      const port = gw.daemon_port || "-";
+      
+      if (gw.status === "running") runningCount++;
+      
+      console.log(`║ ${gw.name.padEnd(14)} ${status.padEnd(9)} ${pid.padEnd(7)} ${gw.provider.padEnd(10)} ${model.padEnd(16)} ${String(port).padEnd(9)}║`);
+    }
+    
+    console.log("╚══════════════════════════════════════════════════════════════════════════╝");
+    console.log(`Total: ${gateways.length} gateway(s), ${runningCount} running\n`);
   } else {
-    console.log("Gateway: Not configured");
+    console.log("No gateways configured. Run 'kendaliai onboard' or 'kendaliai gateway create' to get started.\n");
   }
   
-  // Check if daemon is running
-  console.log(`\nDaemon:`);
+  // Check if any daemon is running
+  console.log("Daemon Status:");
   try {
-    const result = Bun.spawnSync(["pgrep", "-f", "bun.*cli-minimal.*daemon|bun.*cli-minimal.*gateway"]);
+    const result = Bun.spawnSync(["pgrep", "-f", "bun.*cli.*gateway"]);
     if (result.stdout.toString().trim()) {
-      console.log(`  Status: Running (PID: ${result.stdout.toString().trim().split("\n")[0]})`);
+      const pids = result.stdout.toString().trim().split("\n");
+      console.log(`  Status: Running (${pids.length} process(es))`);
     } else {
-      console.log(`  Status: Stopped`);
+      console.log(`  Status: No daemons running`);
     }
   } catch {
     console.log(`  Status: Unknown`);
@@ -1038,6 +1149,7 @@ async function startTelegramBot(
   channelId: string,
   gateway: GatewayConfig,
   apiUrl: string,
+  apiKey: string,
   allowedUsers: string[],
   database: Database
 ): Promise<void> {
@@ -1065,7 +1177,7 @@ async function startTelegramBot(
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${gateway.api_key_encrypted}`,
+          "Authorization": `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
           model: gateway.default_model,
@@ -1294,8 +1406,17 @@ async function handleDaemon(): Promise<void> {
   // Update gateway status
   database.run(`UPDATE gateways SET status = 'running', updated_at = ? WHERE id = ?`, [Date.now(), gateway.id]);
   
+  // Decrypt API key
+  let apiKey: string;
+  try {
+    apiKey = gateway.api_key_encrypted ? decrypt(gateway.api_key_encrypted) : "";
+  } catch {
+    // Backward compatibility
+    apiKey = gateway.api_key_encrypted || "";
+  }
+  
   // Start the bot
-  await startTelegramBot(botToken, channel.id, gateway, apiUrl, allowedUsers, database);
+  await startTelegramBot(botToken, channel.id, gateway, apiUrl, apiKey, allowedUsers, database);
 }
 
 // ============================================
@@ -1304,10 +1425,11 @@ async function handleDaemon(): Promise<void> {
 
 async function initTables(db: Database): Promise<void> {
   const createTablesSQL = `
-    -- Gateways
+    -- Gateways (Enhanced for Multi-Gateway Support)
     CREATE TABLE IF NOT EXISTS gateways (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL UNIQUE,
+      description TEXT,
       provider TEXT NOT NULL,
       endpoint TEXT,
       api_key_encrypted TEXT,
@@ -1316,9 +1438,28 @@ async function initTables(db: Database): Promise<void> {
       require_pairing INTEGER DEFAULT 1,
       allow_public_bind INTEGER DEFAULT 0,
       workspace_only INTEGER DEFAULT 1,
+      
+      -- Agent configuration (JSON)
+      agent_config TEXT,
+      
+      -- Skills and tools (JSON arrays)
+      skills TEXT,
+      tools TEXT,
+      
+      -- Daemon configuration
+      daemon_enabled INTEGER DEFAULT 0,
+      daemon_pid INTEGER,
+      daemon_auto_restart INTEGER DEFAULT 1,
+      daemon_port INTEGER DEFAULT 0,
+      
+      -- Routing configuration
+      routing_config TEXT,
+      
+      -- Status and metadata
       config TEXT,
       status TEXT DEFAULT 'stopped',
       last_error TEXT,
+      started_at INTEGER,
       created_at INTEGER,
       updated_at INTEGER
     );
@@ -1508,8 +1649,58 @@ async function main(): Promise<void> {
       await handleOnboard();
       break;
     case "gateway":
-    case "gw":
-      await handleGateway();
+    case "gw": {
+      // Multi-gateway management
+      const subCommand = positionals[1];
+      const subArgs = positionals.slice(2);
+      const database = getDb(getString("db-path", ".kendaliai/data.db"));
+      await initTables(database);
+      
+      // Get options from values object
+      const provider = getString("provider");
+      const model = getString("model");
+      const apiKey = getString("api-key");
+      const apiUrl = getString("api-url");
+      
+      // Build combined args array that includes both positional args and options
+      const fullArgs = [...subArgs];
+      if (provider) {
+        fullArgs.push("--provider", provider);
+      }
+      if (model) {
+        fullArgs.push("--model", model);
+      }
+      if (apiKey) {
+        fullArgs.push("--api-key", apiKey);
+      }
+      if (apiUrl) {
+        fullArgs.push("--api-url", apiUrl);
+      }
+      
+      const { handleGatewayCommand } = await import("./cli/gateway");
+      await handleGatewayCommand(database, subCommand || "list", fullArgs);
+      break;
+    }
+    case "daemon": {
+      // Daemon management
+      const subCommand = positionals[1];
+      const subArgs = positionals.slice(2);
+      const database = getDb(getString("db-path", ".kendaliai/data.db"));
+      await initTables(database);
+      
+      const { handleDaemonCommand } = await import("./cli/daemon");
+      await handleDaemonCommand(database, subCommand || "status", subArgs);
+      break;
+    }
+    case "skills": {
+      // Skills management
+      const subArgs = positionals.slice(1);
+      const { handleSkillsCommand } = await import("./cli/skills");
+      await handleSkillsCommand(subArgs);
+      break;
+    }
+    case "status":
+      await handleStatus();
       break;
     case "agent":
       await handleAgent();
@@ -1520,17 +1711,11 @@ async function main(): Promise<void> {
     case "channel":
       await handleChannel();
       break;
-    case "status":
-      await handleStatus();
-      break;
     case "doctor":
       await handleDoctor();
       break;
     case "reset":
       await handleReset();
-      break;
-    case "daemon":
-      await handleDaemon();
       break;
     default:
       console.error(`Unknown command: ${command}`);
