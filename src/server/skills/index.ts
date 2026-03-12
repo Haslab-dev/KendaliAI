@@ -243,7 +243,7 @@ export class SkillsManager {
 
   constructor(db: Database, skillsDir?: string) {
     this.db = db;
-    this.skillsDir = skillsDir || join(process.env.HOME || "", ".kendaliai", "skills");
+    this.skillsDir = skillsDir || join(process.cwd(), ".kendaliai", "skills");
     this.ensureSkillsDir();
   }
 

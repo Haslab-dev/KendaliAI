@@ -319,7 +319,7 @@ export const DEFAULT_RAG_CONFIG: RAGConfig = {
   },
   embedding: {
     provider: 'openai',
-    model: 'text-embedding-3-small',
+    model: 'openai/text-embedding-3-small',
     dimensions: 1536,
     batchSize: 100,
     useCache: true,

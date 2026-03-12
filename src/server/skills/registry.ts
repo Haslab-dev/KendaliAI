@@ -21,7 +21,7 @@ import { spawn } from "child_process";
 // Types
 // ============================================
 
-export type SkillSource = "zeromarket" | "clawhub" | "git" | "local" | "url";
+export type SkillSource = "zeromarket" | "clawhub" | "git" | "local" | "url" | "directory";
 export type SkillFormat = "toml" | "wasm" | "zip";
 
 export interface SkillManifest {
@@ -109,7 +109,7 @@ export class SkillRegistry {
 
   constructor(db: Database, skillsDir?: string) {
     this.db = db;
-    this.skillsDir = skillsDir || join(process.env.HOME || "", ".kendaliai", "skills");
+    this.skillsDir = skillsDir || join(process.cwd(), ".kendaliai", "skills");
     this.openSkillsEnabled = true;
     this.ensureSkillsDir();
   }
@@ -170,6 +170,12 @@ export class SkillRegistry {
       return { type: "git", url: source, name };
     }
 
+    // Local directory (absolute or relative)
+    if (source.startsWith("/") || source.startsWith("./") || source.startsWith("../")) {
+      const name = basename(source);
+      return { type: "directory", url: source, name };
+    }
+
     throw new Error(`Unknown skill source format: ${source}`);
   }
 
@@ -188,12 +194,18 @@ export class SkillRegistry {
       throw new Error(`Skill '${name}' already installed. Use --force to reinstall.`);
     }
 
-    // Remove existing if force
-    if (existing) {
-      await this.uninstall(name);
+    const skillPath = join(this.skillsDir, name);
+
+    // Remove existing if force, but ONLY if they are not the same path
+    if (existing && options.force) {
+      if (existing.path !== url || type !== 'directory') {
+        await this.uninstall(name);
+      } else {
+        // Just remove from DB so we can re-save
+        this.db.run(`DELETE FROM installed_skills WHERE name = ?`, [name]);
+      }
     }
 
-    const skillPath = join(this.skillsDir, name);
     let manifest: SkillManifest;
 
     try {
@@ -208,6 +220,9 @@ export class SkillRegistry {
           break;
         case "git":
           manifest = await this.installFromGit(url, skillPath, name);
+          break;
+        case "directory":
+          manifest = await this.installFromDirectory(url, skillPath, name);
           break;
         default:
           throw new Error(`Unsupported source type: ${type}`);
@@ -291,6 +306,33 @@ export class SkillRegistry {
     const result = await this.runCommand("git", ["clone", "--depth", "1", url, targetPath]);
     if (!result.success) {
       throw new Error(`Failed to clone skill: ${result.error}`);
+    }
+
+    return this.loadManifest(targetPath, name);
+  }
+
+  /**
+   * Install from a local directory
+   */
+  private async installFromDirectory(sourcePath: string, targetPath: string, name: string): Promise<SkillManifest> {
+    // If it's already in the target path, just load manifest
+    if (sourcePath === targetPath) {
+      return this.loadManifest(targetPath, name);
+    }
+
+    console.log(`📂 Registering skill from directory: ${sourcePath}...`);
+    
+    // Create target directory
+    if (!existsSync(targetPath)) {
+      mkdirSync(targetPath, { recursive: true });
+    }
+
+    // Simple copy for now (recursive)
+    const { execSync } = require("child_process");
+    try {
+      execSync(`cp -R "${sourcePath}/"* "${targetPath}/"`);
+    } catch (err) {
+      throw new Error(`Failed to copy skill directory: ${err instanceof Error ? err.message : String(err)}`);
     }
 
     return this.loadManifest(targetPath, name);
@@ -747,7 +789,7 @@ license = "MIT"
 # network = "read"
 
 [tools]
-# example_tool = "Description of the tool"
+calculate_area = "Calculate the area of a rectangle"
 `;
 
     writeFileSync(join(skillPath, "SKILL.toml"), toml);
@@ -808,8 +850,9 @@ export default {
   
   async execute(tool, params) {
     switch (tool) {
-      case "example_tool":
-        return { result: "Example response" };
+      case "calculate_area":
+        const { width, height } = params;
+        return { area: (width || 0) * (height || 0), unit: "sq units" };
       default:
         throw new Error(\`Unknown tool: \${tool}\`);
     }

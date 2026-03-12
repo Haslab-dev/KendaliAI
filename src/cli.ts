@@ -1928,8 +1928,9 @@ async function main(): Promise<void> {
     case "skills": {
       // Skills management
       const subArgs = positionals.slice(1);
+      const database = getDb(getString("db-path", ".kendaliai/data/kendaliai.db"));
       const { handleSkillsCommand } = await import("./cli/skills");
-      await handleSkillsCommand(subArgs);
+      await handleSkillsCommand(database, subArgs);
       break;
     }
     case "status":

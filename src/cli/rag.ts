@@ -41,7 +41,7 @@ function color(text: string, colorName: keyof typeof colors): string {
 // Global State
 // ============================================
 
-const KENDALIAI_DIR = join(process.env.HOME || "", ".kendaliai");
+const KENDALIAI_DIR = join(process.cwd(), ".kendaliai");
 const DATA_DIR = join(KENDALIAI_DIR, "data");
 const DB_PATH = join(DATA_DIR, "kendaliai.db");
 
@@ -85,6 +85,23 @@ async function initializeRAG(configPath?: string): Promise<RAGEngine> {
     }
   }
   
+  // Auto-configure embedding from environment variables
+  const embeddingsApiKey = process.env.EMBEDDINGS_API_KEY;
+  const embeddingsModel = process.env.EMBEDDINGS_MODEL;
+  
+  if (embeddingsApiKey && !config.embedding) {
+    // Use Maia Router / OpenAI-compatible embeddings from env
+    process.env.OPENAI_API_KEY = embeddingsApiKey;
+    config.embedding = {
+      provider: "openai",
+      model: embeddingsModel || "text-embedding-3-small",
+      dimensions: 1536,
+      batchSize: 100,
+      useCache: true,
+      cacheTTL: 7 * 24 * 60 * 60 * 1000,
+    };
+  }
+  
   const database = getDb();
   return createRAGEngine(database, config);
 }
@@ -113,12 +130,15 @@ async function ingestCommand(source: string, options: Record<string, string>): P
     // Determine source type
     if (source.startsWith("http://") || source.startsWith("https://")) {
       console.log(color("Fetching from URL...", "dim"));
+      metadata.source = "url";
       doc = await rag.ingestUrl(source, metadata as any);
     } else if (existsSync(resolve(source))) {
       console.log(color("Reading file...", "dim"));
+      metadata.source = "file";
       doc = await rag.ingestFile(resolve(source), metadata as any);
     } else {
-      // Treat as text content
+      // Treat as text content - always set source to 'text'
+      metadata.source = "text";
       doc = await rag.ingestDocument(source, metadata as any);
     }
     

@@ -10,6 +10,9 @@
 import { configLoader } from "./config";
 import { getDatabase, initDatabase, dbManager } from "./database";
 import { eventBus } from "./eventbus";
+import { Database } from "bun:sqlite";
+import os from "os";
+import { join } from "path";
 import { log } from "./core";
 
 // Database schema
@@ -32,10 +35,11 @@ import {
   ZAIProvider,
   CustomProvider,
 } from "./providers";
-import type { AIProvider, GenerateOptions, StreamChunk } from "./providers";
+import type { AIProvider, GenerateOptions, StreamChunk, ChatMessage } from "./providers";
 
 // Tools
 import { toolRegistry } from "./tools/registry";
+import { getSkillRegistry } from "./skills/registry";
 
 // Routing
 import { RoutingManager } from "./routing";
@@ -43,6 +47,13 @@ import { RoutingManager } from "./routing";
 // RAG
 import { createRAGEngine } from "./rag";
 import type { RAGEngine } from "./rag";
+
+// Security & Encryption
+import { securityManager } from "./security";
+import { decrypt } from "./security/encryption";
+
+// Channels
+import { channelManager, type SendMessageOptions, type ChannelMessage } from "./channels";
 
 // ============================================
 // Types
@@ -156,8 +167,13 @@ async function bootstrap() {
   log.info("Configuration loaded.");
 
   // Register built-in tools
-  registerBuiltinTools();
+  registerBuiltinTools(db);
   log.info("Built-in tools registered.");
+
+  // Load and register skill-based tools
+  if (rawDb) {
+    await loadSkillTools(rawDb);
+  }
 
   // Initialize RAG engine
   try {
@@ -169,7 +185,232 @@ async function bootstrap() {
     log.warn("RAG engine initialization skipped:", err);
   }
 
+  // Load gateways and channels
+  const cmdArgs = parseArgs();
+  await loadGatewayAndChannels(db, cmdArgs.gateway);
+
   // Set up event handlers
+  setupChannelEvents(db);
+
+  log.info("KendaliAI Server bootstrapped successfully.");
+}
+
+/**
+ * Handle events coming from messaging channels
+ */
+function setupChannelEvents(db: any) {
+  channelManager.onEvent(async (event) => {
+    if (event.type === 'message_received' && event.data) {
+      const message = event.data as ChannelMessage;
+      const channelId = event.channel; // This is now the ID (e.g. ch_...)
+      const text = message.text.trim();
+      const chatId = message.chatId;
+      const userId = message.userId;
+      const userName = message.displayName || message.username || "User";
+
+      log.info(`📩 [${channelId}/${userName}] ${text}`);
+
+      // 1. Handle pairing commands (/init, /start)
+      if (text === "/init" || text === "/start") {
+        // Find gateway for this channel - use first one or default
+        const gatewayId = gatewayInstances.keys().next().value || "default";
+        
+        try {
+          const result = await securityManager.createPairing(gatewayId);
+          if (result.success && result.pairingCode) {
+            const reply = `🔐 *Pairing Required*\n\nYour User ID: \`${userId}\`\n\nEnter the pairing code to continue.\n\nPairing Code: \`${result.pairingCode}\`\n\n_Type the 6-digit code to pair your account._`;
+            
+            const channel = channelManager.get(event.channel);
+            if (channel) {
+                await channel.sendMessage(reply, { chatId, parseMode: 'markdown' } as SendMessageOptions);
+            }
+          }
+        } catch (err) {
+          log.error("Failed to handle pairing command:", err);
+        }
+        return;
+      }
+
+      // 2. Handle pairing code (6 digits)
+      if (/^\d{6}$/.test(text)) {
+          // Try to pair for all gateways (multi-gateway support)
+          for (const [gatewayId, instance] of gatewayInstances.entries()) {
+              const pairingStatus = await securityManager.getPairingStatus(gatewayId);
+              if (pairingStatus.pairingCode === text) {
+                  const result = await securityManager.completePairing(gatewayId, text, {
+                      ip: event.channelType || "unknown",
+                      userAgent: `channel:${event.channel}:${userId}`
+                  });
+                  
+                  if (result.success) {
+                      await securityManager.addToAllowlist(event.channel, userId);
+                      
+                      const reply = `✅ *Pairing Successful!*\n\nYour account is now paired with gateway: **${instance.config.name}**.\n\nYou can now chat with me!`;
+                      const channel = channelManager.get(event.channel);
+                      if (channel) {
+                          await channel.sendMessage(reply, { chatId, parseMode: 'markdown' } as SendMessageOptions);
+                      }
+                      log.info(`✅ User ${userId} paired successfully with gateway ${gatewayId}`);
+                      return;
+                  }
+              }
+          }
+      }
+
+      // 3. Check if user is allowed
+      const allowCheck = await securityManager.checkAllowlist(channelId, userId);
+      if (!allowCheck.allowed) {
+          log.warn(`⛔ Unauthorized access attempt from user ${userId} on channel ${channelId}: ${allowCheck.reason}`);
+          const channel = channelManager.get(channelId);
+          if (channel) {
+              await channel.sendMessage(`⛔ *Unauthorized Access*\n\nYour User ID (\`${userId}\`) is not on the allowlist for this channel.\n\nUse \`/init\` to pair your account.`, { chatId, parseMode: 'markdown' } as SendMessageOptions);
+          }
+          return;
+      }
+
+      // 4. Route message and call AI
+      if (routingManager) {
+        const route = routingManager.routeMessage(channelId, text, userId);
+        
+        if (route.matched && route.gatewayId) {
+            const instance = gatewayInstances.get(route.gatewayId);
+            const channel = channelManager.get(channelId);
+            
+            if (instance && channel) {
+                try {
+                    // Show typing indicator
+                    await channel.setTyping(chatId);
+                    
+                    const queryText = route.strippedMessage || text;
+                    let finalPrompt = queryText;
+                    let useRag = false;
+
+                    // 1. Handle Explicit RAG Commands
+                    if (queryText.startsWith('/ingest ')) {
+                        if (!ragEngineInstance) {
+                            await channel.sendMessage("⚠️ RAG engine is not initialized.", { chatId } as SendMessageOptions);
+                            return;
+                        }
+                        const content = queryText.slice(8).trim();
+                        if (!content) {
+                            await channel.sendMessage("ℹ️ Please provide content to ingest. Usage: `/ingest <text>`", { chatId, parseMode: 'markdown' } as SendMessageOptions);
+                            return;
+                        }
+                        const doc = await ragEngineInstance.ingestDocument(content, { 
+                            source: 'text', 
+                            gatewayId: route.gatewayId,
+                            title: `Chat Ingest - ${new Date().toISOString()}`
+                        });
+                        await channel.sendMessage(`✅ *Content Ingested*\n\nID: \`${doc.id}\`\nStatus: ${doc.status}`, { chatId, parseMode: 'markdown' } as SendMessageOptions);
+                        return;
+                    }
+
+                    if (queryText.startsWith('/ask ') || queryText.startsWith('/rag ')) {
+                        if (!ragEngineInstance) {
+                            await channel.sendMessage("⚠️ RAG engine is not initialized.", { chatId } as SendMessageOptions);
+                            return;
+                        }
+                        const actualQuery = queryText.startsWith('/ask ') ? queryText.slice(5).trim() : queryText.slice(5).trim();
+                        if (!actualQuery) {
+                            await channel.sendMessage("ℹ️ Please provide a question. Usage: `/ask <your question>`", { chatId, parseMode: 'markdown' } as SendMessageOptions);
+                            return;
+                        }
+                        
+                        const context = await ragEngineInstance.buildContext(actualQuery);
+                        if (context) {
+                            finalPrompt = `You are a helpful assistant. Use the following context to answer the user's question. If the answer is not in the context, use your general knowledge but mention that it wasn't in the provided documents.\n\n${context}\n\nUser Question: ${actualQuery}`;
+                            log.info(`📚 RAG context added for explicit /ask command (${context.length} chars)`);
+                            useRag = true;
+                        } else {
+                            await channel.sendMessage("🔍 No relevant context found in RAG for your question.", { chatId } as SendMessageOptions);
+                            // Fallback to normal chat or stop? Let's continue with normal for better UX
+                            finalPrompt = actualQuery;
+                        }
+                    }
+
+                    // 2. Generate response (Normal Chat or Augmented /ask)
+                    log.info(`🔄 Generating response for ${instance.config.name} (RAG: ${useRag})`);
+                    
+                    const tools = toolRegistry.list();
+                    let aiHistory: ChatMessage[] = [
+                        { role: 'user', content: finalPrompt }
+                    ];
+
+                    let result = await instance.provider.generate({
+                        messages: aiHistory,
+                        model: instance.config.provider.model,
+                        tools: tools.map(t => ({
+                            type: 'function',
+                            function: {
+                                name: t.name,
+                                description: t.description,
+                                parameters: t.parameters
+                            }
+                        }))
+                    });
+
+                    // 3. Handle Tool Calls
+                    let loopCount = 0;
+                    while (result.toolCalls && result.toolCalls.length > 0 && loopCount < 5) {
+                        loopCount++;
+                        aiHistory.push({
+                            role: 'assistant',
+                            content: result.text,
+                            toolCalls: result.toolCalls
+                        });
+
+                        for (const toolCall of result.toolCalls) {
+                            try {
+                                log.info(`🛠️ Executing tool: ${toolCall.function.name}`);
+                                const params = typeof toolCall.function.arguments === 'string' 
+                                    ? JSON.parse(toolCall.function.arguments) 
+                                    : toolCall.function.arguments;
+                                
+                                const toolResult = await toolRegistry.execute(toolCall.function.name, params);
+                                
+                                aiHistory.push({
+                                    role: 'tool',
+                                    content: typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult),
+                                    toolCallId: toolCall.id
+                                });
+                            } catch (toolErr) {
+                                log.error(`Tool execution failed (${toolCall.function.name}):`, toolErr);
+                                aiHistory.push({
+                                    role: 'tool',
+                                    content: `Error: ${toolErr instanceof Error ? toolErr.message : String(toolErr)}`,
+                                    toolCallId: toolCall.id
+                                });
+                            }
+                        }
+
+                        // Get next response from AI with tool results
+                        result = await instance.provider.generate({
+                            messages: aiHistory,
+                            model: instance.config.provider.model,
+                            tools: tools.map(t => ({
+                                type: 'function',
+                                function: {
+                                    name: t.name,
+                                    description: t.description,
+                                    parameters: t.parameters
+                                }
+                            }))
+                        });
+                    }
+                    
+                    // 4. Send final response
+                    await channel.sendMessage(result.text, { chatId } as SendMessageOptions);
+                } catch (err) {
+                    log.error(`AI call failed for gateway ${route.gatewayId}:`, err);
+                    await channel.sendMessage("⚠️ Sorry, I encountered an error while processing your request.", { chatId } as SendMessageOptions);
+                }
+            }
+        }
+      }
+    }
+  });
+
+  // Also bridge MESSAGE_RECEIVED from eventBus if needed
   eventBus.on("MESSAGE_RECEIVED", async (payload: {
     adapter?: string;
     from?: string;
@@ -192,15 +433,82 @@ async function bootstrap() {
       log.error("Failed to save message:", err);
     }
   });
+}
 
-  log.info("KendaliAI Server bootstrapped successfully.");
+/**
+ * Load tools from installed skills and register them
+ */
+async function loadSkillTools(rawDb: any) {
+  try {
+    const skillRegistry = getSkillRegistry(rawDb);
+    const installedSkills = skillRegistry.listInstalled();
+    
+    for (const skill of installedSkills) {
+      if (!skill.enabled) continue;
+      
+      log.info(`📦 Loading tools from skill: ${skill.name}`);
+      
+      if (skill.tools && Array.isArray(skill.tools)) {
+        for (const toolDef of skill.tools) {
+          log.info(`  - Registering tool: ${toolDef.name}`);
+          
+          toolRegistry.register({
+            name: toolDef.name,
+            description: toolDef.description,
+            parameters: (toolDef.parameters && (toolDef.parameters as any).type) 
+              ? toolDef.parameters 
+              : { type: 'object', properties: {}, required: [] },
+            handler: async (params) => {
+              // Dynamic import of skill execution logic
+              try {
+                // Try src/index.ts first, fallback to src/main.ts or root index.ts
+                const possiblePaths = [
+                  join(skill.path, "src", "index.ts"),
+                  join(skill.path, "src", "main.ts"),
+                  join(skill.path, "index.ts")
+                ];
+                
+                let entryPath = "";
+                const fs = require("fs");
+                for (const p of possiblePaths) {
+                  if (fs.existsSync(p)) {
+                    entryPath = p;
+                    break;
+                  }
+                }
+
+                if (!entryPath) {
+                  throw new Error(`Execution entry point not found for skill: ${skill.name}`);
+                }
+
+                log.info(`🚀 Executing skill tool ${skill.name}/${toolDef.name}`);
+                const module = await import(entryPath);
+                const skillInstance = module.default || module;
+                
+                if (typeof skillInstance.execute !== 'function') {
+                  throw new Error(`Skill ${skill.name} does not export an execute function`);
+                }
+
+                return await skillInstance.execute(toolDef.name, params);
+              } catch (err) {
+                log.error(`Failed to execute skill tool ${toolDef.name}:`, err);
+                throw err;
+              }
+            }
+          });
+        }
+      }
+    }
+  } catch (err) {
+    log.error("Failed to load skill tools:", err);
+  }
 }
 
 // ============================================
 // Register Built-in Tools
 // ============================================
 
-function registerBuiltinTools() {
+function registerBuiltinTools(db?: any) {
   // Ping tool
   toolRegistry.register({
     name: "ping",
@@ -232,6 +540,29 @@ function registerBuiltinTools() {
     handler: async () => new Date().toISOString(),
   });
 
+  // System info tool
+  toolRegistry.register({
+    name: "get_system_info",
+    description: "Returns detailed information about the host system",
+    parameters: { type: "object", properties: {} },
+    handler: async () => {
+      const stats = {
+        platform: os.platform(),
+        release: os.release(),
+        arch: os.arch(),
+        cpu: os.cpus()[0].model,
+        cores: os.cpus().length,
+        memory: {
+          total: Math.round(os.totalmem() / (1024 * 1024 * 1024)) + " GB",
+          free: Math.round(os.freemem() / (1024 * 1024 * 1024)) + " GB",
+        },
+        uptime: Math.round(os.uptime() / 3600) + " hours",
+        dbStatus: db ? "Connected" : "Not Connected",
+      };
+      return stats;
+    },
+  });
+
   // Random tool
   toolRegistry.register({
     name: "random",
@@ -249,6 +580,108 @@ function registerBuiltinTools() {
       return Math.floor(Math.random() * (max - min + 1)) + min;
     },
   });
+}
+
+/**
+ * Load gateways and their associated channels from the database
+ */
+async function loadGatewayAndChannels(db: any, gatewayName?: string) {
+  try {
+    // 1. Load Gateway(s)
+    let dbGateways;
+    if (gatewayName) {
+      dbGateways = await db.select().from(gateways).where(eq(gateways.name, gatewayName));
+    } else {
+      dbGateways = await db.select().from(gateways);
+    }
+
+    if (dbGateways.length === 0) {
+      if (gatewayName) {
+        log.warn(`Gateway '${gatewayName}' not found in database.`);
+      }
+      return;
+    }
+
+    for (const gw of dbGateways) {
+      log.info(`Loading gateway: ${gw.name} (${gw.id})`);
+      
+      // Decrypt API key
+      let apiKey = "";
+      if (gw.apiKeyEncrypted) {
+        try {
+          apiKey = decrypt(gw.apiKeyEncrypted);
+        } catch (e) {
+          log.warn(`Failed to decrypt API key for gateway ${gw.name}, using as-is`);
+          apiKey = gw.apiKeyEncrypted;
+        }
+      }
+
+      const config: GatewayConfig = {
+        id: gw.id,
+        name: gw.name,
+        description: gw.description || undefined,
+        provider: {
+          type: gw.provider as any,
+          apiKey,
+          model: gw.defaultModel || undefined,
+          endpoint: gw.endpoint || undefined,
+        },
+        agent: {
+          name: gw.name,
+        },
+        status: "running",
+        createdAt: gw.createdAt?.toISOString() || new Date().toISOString(),
+      };
+
+      // Initialize provider
+      const provider = createProvider(config.provider);
+      await provider.initialize();
+      
+      // Register in registry and memory
+      providerRegistry.register(gw.name, provider);
+      gatewayInstances.set(gw.id, {
+        config,
+        provider,
+        status: "running",
+      });
+
+      // 2. Load associated channels
+      const dbChannels = await db.select().from(channels).where(eq(channels.gatewayId, gw.id));
+      
+      for (const ch of dbChannels) {
+        if (!ch.enabled) continue;
+        
+        log.info(`  Starting channel: ${ch.name} (${ch.type})`);
+        
+        try {
+          const chConfig = ch.config ? JSON.parse(ch.config) : {};
+          
+          const channel = channelManager.create(ch.type as any, {
+            type: ch.type as any,
+            name: ch.id, // Use ID as the internal name for identification in events
+            token: chConfig.botToken,
+            ...chConfig,
+          });
+          
+          await channel.initialize();
+          await channel.connect();
+          
+          channelManager.register(ch.id, channel);
+          
+          // Update status in database
+          await db.update(channels)
+            .set({ status: 'running', updatedAt: new Date() })
+            .where(eq(channels.id, ch.id));
+            
+          log.info(`  ✅ Channel ${ch.name} connected.`);
+        } catch (err) {
+          log.error(`  ❌ Failed to start channel ${ch.name}:`, err);
+        }
+      }
+    }
+  } catch (err) {
+    log.error("Failed to load gateways and channels:", err);
+  }
 }
 
 // ============================================
@@ -748,9 +1181,9 @@ async function handleRequest(req: Request): Promise<Response> {
 // Parse Command Line Arguments
 // ============================================
 
-function parseArgs(): { port?: number; host?: string } {
+function parseArgs(): { port?: number; host?: string; gateway?: string } {
   const args = process.argv.slice(2);
-  const result: { port?: number; host?: string } = {};
+  const result: { port?: number; host?: string; gateway?: string } = {};
   
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--port" && args[i + 1]) {
@@ -758,6 +1191,9 @@ function parseArgs(): { port?: number; host?: string } {
       i++;
     } else if (args[i] === "--host" && args[i + 1]) {
       result.host = args[i + 1];
+      i++;
+    } else if (args[i] === "--gateway" && args[i + 1]) {
+      result.gateway = args[i + 1];
       i++;
     }
   }

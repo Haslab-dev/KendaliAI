@@ -210,7 +210,7 @@ export class RAGEngineImpl implements RAGEngine {
     const doc: Document = {
       id,
       content,
-      metadata: metadata || { source: "text" },
+      metadata: metadata ? { ...metadata, source: (metadata.source ?? "text") } : { source: "text" as const },
       contentHash,
       ingestedAt: new Date(),
       status: "pending",
@@ -222,7 +222,7 @@ export class RAGEngineImpl implements RAGEngine {
         id: doc.id,
         content: doc.content,
         contentHash: doc.contentHash,
-        source: doc.metadata.source,
+        source: doc.metadata.source || "text",
         sourcePath: doc.metadata.sourcePath,
         title: doc.metadata.title,
         metadata: doc.metadata.custom,
@@ -470,7 +470,7 @@ export class RAGEngineImpl implements RAGEngine {
         chunks = await this.storage.vectorSearch(queryEmbedding, options);
         break;
       case "keyword":
-        chunks = await this.storage.keywordSearch(query, options);
+        chunks = await this.storage.hybridSearch(queryEmbedding, query, options);
         break;
       case "hybrid":
       case "reranked":
@@ -515,7 +515,7 @@ export class RAGEngineImpl implements RAGEngine {
     options?: Partial<RetrievalConfig>
   ): Promise<VectorSearchResult[]> {
     this.ensureInitialized();
-    return this.storage.keywordSearch(query, options);
+    return this.storage.hybridSearch([], query, options);
   }
   
   // ============================================
@@ -579,12 +579,12 @@ export class RAGEngineImpl implements RAGEngine {
     const cacheStats = this.embeddingGenerator.getCacheStats();
     
     return {
-      totalDocuments: storageStats.totalDocuments,
-      totalChunks: storageStats.totalChunks,
-      totalEmbeddings: storageStats.totalEmbeddings,
+      totalDocuments: storageStats.documents,
+      totalChunks: storageStats.chunks,
+      totalEmbeddings: storageStats.embeddedChunks,
       cacheSize: cacheStats.size,
-      avgChunkSize: storageStats.avgChunkSize,
-      storageSize: storageStats.storageSize,
+      avgChunkSize: 0, // Not tracked per document
+      storageSize: storageStats.vectorIndexSize,
     };
   }
   
@@ -600,7 +600,6 @@ export class RAGEngineImpl implements RAGEngine {
    * Dispose resources
    */
   async dispose(): Promise<void> {
-    await this.storage.dispose();
     await this.embeddingGenerator.dispose();
     this.initialized = false;
   }

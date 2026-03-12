@@ -312,8 +312,8 @@ export function chunkText(
   text: string,
   config: ChunkingConfig
 ): string[] {
-  // Normalize whitespace
-  const normalizedText = text.trim().replace(/\s+/g, " ");
+  // Normalize whitespace but preserve newlines
+  const normalizedText = text.trim().replace(/[ \t]+/g, " ");
   
   // Select chunking strategy
   const strategy = config.strategy || "semantic";

@@ -270,7 +270,7 @@ export async function startGateway(
     
     // Start the process using Bun.spawn - run the server directly
     const child = Bun.spawn(
-      ["bun", "run", "src/server/index.ts", "--port", port.toString(), "--host", host],
+      ["bun", "run", "src/server/index.ts", "--port", port.toString(), "--host", host, "--gateway", name],
       {
         stdout: "inherit",
         stderr: "inherit",
@@ -308,7 +308,7 @@ export async function startGateway(
     
     // Start the process using Bun.spawn
     const child = Bun.spawn(
-      ["bun", "run", "src/server/index.ts", "--port", port.toString(), "--host", host],
+      ["bun", "run", "src/server/index.ts", "--port", port.toString(), "--host", host, "--gateway", name],
       {
         stdout: "inherit",
         stderr: "inherit",

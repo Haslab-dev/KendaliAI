@@ -137,12 +137,26 @@ export class EmbeddingGenerator {
     this.provider = providerRegistry.get(providerType) || null;
     
     if (!this.provider) {
+      // Resolve API key from config or environment
+      const apiKey = 
+        process.env.EMBEDDINGS_API_KEY || 
+        process.env.OPENAI_API_KEY || 
+        process.env.ZAI_API_KEY || 
+        "";
+      
+      // Resolve base URL from environment (for custom/compatible endpoints)
+      const baseURL = process.env.EMBEDDINGS_ENDPOINT 
+        ? process.env.EMBEDDINGS_ENDPOINT.replace("/embeddings", "")  // strip /embeddings path
+        : undefined;
+      
       // Create provider if not exists
       this.provider = await createProvider(
         providerType,
         providerType as any,
         {
           type: providerType as any,
+          apiKey: apiKey || undefined,
+          baseURL: baseURL || undefined,
         }
       );
     }
