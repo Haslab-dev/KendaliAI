@@ -21,7 +21,6 @@
     "test": "bun test",
     "db:push": "drizzle-kit push",
     "db:reset": "bun src/cli-minimal.ts reset",
-    
     "build:binary": "bun build --compile --minify --sourcemap=none src/cli-minimal.ts --outfile dist/kendaliai",
     "build:binary:macos": "bun build --compile --minify --sourcemap=none --target=darwin-arm64 src/cli-minimal.ts --outfile dist/kendaliai-darwin-arm64",
     "build:binary:macos-x64": "bun build --compile --minify --sourcemap=none --target=darwin-x64 src/cli-minimal.ts --outfile dist/kendaliai-darwin-x64",
@@ -29,7 +28,6 @@
     "build:binary:linux-arm": "bun build --compile --minify --sourcemap=none --target=linux-arm64 src/cli-minimal.ts --outfile dist/kendaliai-linux-arm64",
     "build:binary:windows": "bun build --compile --minify --sourcemap=none --target=windows-x64 src/cli-minimal.ts --outfile dist/kendaliai-windows-x64.exe",
     "build:binary:all": "bun run build:binary:macos && bun run build:binary:linux && bun run build:binary:windows",
-    
     "onboard": "bun src/cli-minimal.ts onboard",
     "status": "bun src/cli-minimal.ts status",
     "doctor": "bun src/cli-minimal.ts doctor",

@@ -175,6 +175,7 @@ COMMANDS:
   agent                Chat with AI agent
   pairing              Manage pairing codes
   channel              Manage messaging channels
+  routing              Manage channel-to-gateway routing
   skills               Manage skills (install, list, audit)
   status               Show system status
   doctor               Run diagnostics
@@ -198,6 +199,15 @@ DAEMON MANAGEMENT:
   daemon stop-all           Stop all daemons
   daemon restart-all        Restart all daemons
   daemon health <name>      Check daemon health
+
+ROUTING MANAGEMENT:
+  routing list                     List all channel bindings
+  routing bind <ch> <gw>           Bind channel to gateway
+  routing unbind <ch> <gw>         Unbind channel from gateway
+  routing show <channel-id>        Show routing config for channel
+  routing set-mode <gw> <mode>     Set routing mode for gateway
+  routing set-prefix <gw> <prefix> Set prefix for prefix routing
+  routing set-keywords <gw> <kw>   Set keywords for keyword routing
 
 SKILLS MANAGEMENT:
   skills list                List installed skills
@@ -1155,6 +1165,10 @@ async function startTelegramBot(
 ): Promise<void> {
   const telegramApi = `https://api.telegram.org/bot${botToken}`;
   
+  // Initialize routing manager
+  const { getRoutingManager } = await import("./server/routing");
+  const routingManager = getRoutingManager(database);
+  
   async function sendMessage(chatId: number, text: string): Promise<void> {
     try {
       await fetch(`${telegramApi}/sendMessage`, {
@@ -1171,16 +1185,18 @@ async function startTelegramBot(
     }
   }
   
-  async function callAI(userMessage: string): Promise<string> {
+  async function callAI(userMessage: string, targetGateway?: GatewayConfig, targetApiKey?: string): Promise<string> {
+    const gw = targetGateway || gateway;
+    const authKey = targetApiKey || apiKey;
     try {
       const response = await fetch(`${apiUrl}/chat/completions`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiKey}`,
+          "Authorization": `Bearer ${authKey}`,
         },
         body: JSON.stringify({
-          model: gateway.default_model,
+          model: gw.default_model,
           messages: [{ role: "user", content: userMessage }],
           stream: false,
         }),
@@ -1196,6 +1212,32 @@ async function startTelegramBot(
     } catch (error) {
       return `❌ Error: ${error}`;
     }
+  }
+  
+  // Get gateway config by ID with decrypted API key
+  function getGatewayById(gatewayId: string): { gateway: GatewayConfig; apiKey: string } | null {
+    const gw = database.query<{
+      id: string;
+      provider: string;
+      default_model: string;
+      endpoint: string | null;
+      api_key_encrypted: string | null;
+    }, [string]>(`
+      SELECT id, provider, default_model, endpoint, api_key_encrypted FROM gateways WHERE id = ?
+    `).get(gatewayId);
+    
+    if (!gw) return null;
+    
+    // Decrypt API key
+    let decryptedKey = "";
+    try {
+      decryptedKey = gw.api_key_encrypted ? decrypt(gw.api_key_encrypted) : "";
+    } catch {
+      // Backward compatibility: try plain text if decryption fails
+      decryptedKey = gw.api_key_encrypted || "";
+    }
+    
+    return { gateway: gw, apiKey: decryptedKey };
   }
   
   // Update channel status
@@ -1296,9 +1338,62 @@ async function startTelegramBot(
           continue;
         }
         
-        // Call AI
-        console.log(`   🔄 Calling AI...`);
-        const aiResponse = await callAI(text);
+        // Handle /gateways command - show available gateways
+        if (text === "/gateways") {
+          const availableGateways = database.query<{ name: string; description: string | null; status: string }, []>(`
+            SELECT name, description, status FROM gateways ORDER BY name
+          `).all();
+          
+          let gwList = "🤖 *Available Gateways:*\n\n";
+          for (const gw of availableGateways) {
+            const status = gw.status === "running" ? "●" : "○";
+            const desc = gw.description ? ` - ${gw.description}` : "";
+            gwList += `${status} ${gw.name}${desc}\n`;
+          }
+          gwList += "\n_Use prefix commands like /dev, /support to route to specific gateways._";
+          await sendMessage(chatId, gwList);
+          continue;
+        }
+        
+        // Route message to appropriate gateway
+        const routingResult = routingManager.routeMessage(channelId, text, userId);
+        
+        // Handle interactive mode - show gateway selection
+        if (routingResult.matchType === "interactive" && routingResult.interactiveOptions) {
+          const interactiveMsg = routingManager.generateInteractiveMessage(routingResult.interactiveOptions);
+          await sendMessage(chatId, interactiveMsg);
+          continue;
+        }
+        
+        // No gateway matched
+        if (!routingResult.matched || !routingResult.gatewayId) {
+          await sendMessage(chatId, "❌ No gateway available to handle your message.\n\nUse /gateways to see available gateways.");
+          continue;
+        }
+        
+        // Get the target gateway and its API key
+        let targetGw: GatewayConfig;
+        let targetApiKey: string;
+        
+        if (routingResult.gatewayId === gateway.id) {
+          targetGw = gateway;
+          targetApiKey = apiKey;
+        } else {
+          const gwResult = getGatewayById(routingResult.gatewayId);
+          if (!gwResult) {
+            await sendMessage(chatId, `❌ Gateway '${routingResult.gatewayName}' not found.`);
+            continue;
+          }
+          targetGw = gwResult.gateway;
+          targetApiKey = gwResult.apiKey;
+        }
+        
+        // Use stripped message for prefix-based routing
+        const messageToProcess = routingResult.strippedMessage || text;
+        
+        // Call AI with routed gateway
+        console.log(`   🔄 Routing to ${routingResult.gatewayName} (${routingResult.matchType})...`);
+        const aiResponse = await callAI(messageToProcess, targetGw, targetApiKey);
         console.log(`   🤖 Response sent`);
         
         // Send response
@@ -1310,12 +1405,12 @@ async function startTelegramBot(
         database.run(`
           INSERT INTO messages (gateway_id, channel_id, role, content, sender_id, sender_name, created_at)
           VALUES (?, ?, 'user', ?, ?, ?, ?)
-        `, [gateway.id, channelId, text, userId, userName, Date.now()]);
+        `, [targetGw.id, channelId, text, userId, userName, Date.now()]);
         
         database.run(`
           INSERT INTO messages (gateway_id, channel_id, role, content, created_at)
           VALUES (?, ?, 'assistant', ?, ?)
-        `, [gateway.id, channelId, aiResponse, Date.now()]);
+        `, [targetGw.id, channelId, aiResponse, Date.now()]);
       }
       
       // Clean up expired pending pairings
@@ -1711,6 +1806,17 @@ async function main(): Promise<void> {
     case "channel":
       await handleChannel();
       break;
+    case "routing": {
+      // Channel routing management
+      const subCommand = positionals[1] || "help";
+      const subArgs = positionals.slice(2);
+      const database = getDb(getString("db-path", ".kendaliai/data.db"));
+      await initTables(database);
+      
+      const { handleRoutingCommand } = await import("./cli/routing");
+      await handleRoutingCommand(database, subCommand, subArgs);
+      break;
+    }
     case "doctor":
       await handleDoctor();
       break;
