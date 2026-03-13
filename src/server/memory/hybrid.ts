@@ -1,6 +1,6 @@
 /**
  * KendaliAI Hybrid Memory System - ZeroClaw Style
- * 
+ *
  * Features:
  * - SQLite storage with BLOB embeddings
  * - FTS5 full-text search with BM25 scoring
@@ -12,7 +12,12 @@
 import { randomUUID } from "crypto";
 import { createHash } from "crypto";
 import { Database } from "bun:sqlite";
-import type { Memory, MemoryEntry, MemorySearchResult, MemoryConfig } from "../traits";
+import type {
+  Memory,
+  MemoryEntry,
+  MemorySearchResult,
+  MemoryConfig,
+} from "../traits";
 
 // ============================================
 // Types
@@ -58,17 +63,17 @@ interface CacheRow {
 
 function cosineSimilarity(a: number[], b: number[]): number {
   if (a.length !== b.length) return 0;
-  
+
   let dotProduct = 0;
   let normA = 0;
   let normB = 0;
-  
+
   for (let i = 0; i < a.length; i++) {
     dotProduct += a[i] * b[i];
     normA += a[i] * a[i];
     normB += b[i] * b[i];
   }
-  
+
   const denominator = Math.sqrt(normA) * Math.sqrt(normB);
   return denominator === 0 ? 0 : dotProduct / denominator;
 }
@@ -96,12 +101,12 @@ export class HybridMemory implements Memory {
   private config: MemoryConfig;
   private gatewayId: string | null;
   private embeddingFn: ((text: string) => Promise<number[]>) | null;
-  
+
   constructor(
     db: Database,
     config: MemoryConfig,
     gatewayId?: string,
-    embeddingFn?: (text: string) => Promise<number[]>
+    embeddingFn?: (text: string) => Promise<number[]>,
   ) {
     this.id = `memory-${gatewayId || "default"}`;
     this.db = db;
@@ -109,39 +114,49 @@ export class HybridMemory implements Memory {
     this.gatewayId = gatewayId || null;
     this.embeddingFn = embeddingFn || null;
   }
-  
+
   async init(): Promise<void> {
     // Tables are created by database initialization
     // This method can be used for additional setup if needed
   }
-  
-  async store(content: string, metadata?: Record<string, unknown>): Promise<string> {
+
+  async store(
+    content: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<string> {
     const id = randomUUID();
     const now = Date.now();
     const contentHash = hashContent(content);
-    
+
     // Check for duplicates
-    const existing = this.db.query<MemoryRow, [string]>(`
+    const existing = this.db
+      .query<MemoryRow, [string]>(
+        `
       SELECT * FROM memories WHERE content_hash = ? LIMIT 1
-    `).get(contentHash);
-    
+    `,
+      )
+      .get(contentHash);
+
     if (existing) {
       // Update access count
-      this.db.run(`
+      this.db.run(
+        `
         UPDATE memories 
         SET access_count = access_count + 1, last_accessed_at = ?
         WHERE id = ?
-      `, [now, existing.id]);
+      `,
+        [now, existing.id],
+      );
       return existing.id;
     }
-    
+
     // Generate embedding if provider available
     let embedding: number[] | null = null;
     if (this.embeddingFn && this.config.embeddingProvider !== "none") {
       // Check cache first
       const cacheKey = hashContent(content);
       const cached = await this.getCachedEmbedding(cacheKey);
-      
+
       if (cached) {
         embedding = cached;
       } else {
@@ -153,53 +168,64 @@ export class HybridMemory implements Memory {
         }
       }
     }
-    
+
     // Insert memory
-    this.db.run(`
+    this.db.run(
+      `
       INSERT INTO memories (
         id, gateway_id, content, content_hash, source, source_id,
         embedding, embedding_model, importance, access_count,
         created_at, updated_at, last_accessed_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      id,
-      this.gatewayId,
-      content,
-      contentHash,
-      (metadata?.source as string) || null,
-      (metadata?.sourceId as string) || null,
-      embedding ? JSON.stringify(embedding) : null,
-      this.config.embeddingProvider !== "none" ? this.config.embeddingProvider : null,
-      (metadata?.importance as number) || 0.5,
-      1,
-      now,
-      now,
-      now,
-    ]);
-    
+    `,
+      [
+        id,
+        this.gatewayId,
+        content,
+        contentHash,
+        (metadata?.source as string) || null,
+        (metadata?.sourceId as string) || null,
+        embedding ? JSON.stringify(embedding) : null,
+        this.config.embeddingProvider !== "none"
+          ? this.config.embeddingProvider
+          : null,
+        (metadata?.importance as number) || 0.5,
+        1,
+        now,
+        now,
+        now,
+      ],
+    );
+
     // Update FTS index
-    this.db.run(`
+    this.db.run(
+      `
       INSERT INTO memories_fts (rowid, content)
       VALUES ((SELECT rowid FROM memories WHERE id = ?), ?)
-    `, [id, content]);
-    
+    `,
+      [id, content],
+    );
+
     return id;
   }
-  
-  async recall(query: string, limit: number = 10): Promise<MemorySearchResult[]> {
+
+  async recall(
+    query: string,
+    limit: number = 10,
+  ): Promise<MemorySearchResult[]> {
     const vectorWeight = this.config.vectorWeight || 0.7;
     const keywordWeight = this.config.keywordWeight || 0.3;
     const maxResults = limit * 3; // Get more for merging
-    
+
     // Run both searches in parallel
     const [vectorResults, keywordResults] = await Promise.all([
       this.embeddingFn ? this.searchVectorInternal(query, maxResults) : [],
       this.searchKeywordInternal(query, maxResults),
     ]);
-    
+
     // Merge results with weighted scoring
     const merged = new Map<string, MemorySearchResult>();
-    
+
     // Add vector results
     for (const result of vectorResults) {
       merged.set(result.entry.id, {
@@ -208,7 +234,7 @@ export class HybridMemory implements Memory {
         searchType: "hybrid",
       });
     }
-    
+
     // Add/merge keyword results
     for (const result of keywordResults) {
       const existing = merged.get(result.entry.id);
@@ -222,36 +248,46 @@ export class HybridMemory implements Memory {
         });
       }
     }
-    
+
     // Sort by score and return top results
     const sorted = Array.from(merged.values())
       .sort((a, b) => b.score - a.score)
       .slice(0, limit);
-    
+
     // Update access counts
     for (const result of sorted) {
-      this.db.run(`
+      this.db.run(
+        `
         UPDATE memories 
         SET access_count = access_count + 1, last_accessed_at = ?
         WHERE id = ?
-      `, [Date.now(), result.entry.id]);
+      `,
+        [Date.now(), result.entry.id],
+      );
     }
-    
+
     return sorted;
   }
-  
-  async searchVector(embedding: number[], limit: number = 10): Promise<MemorySearchResult[]> {
+
+  async searchVector(
+    embedding: number[],
+    limit: number = 10,
+  ): Promise<MemorySearchResult[]> {
     const results: MemorySearchResult[] = [];
-    
+
     // Get all memories with embeddings
-    const rows = this.db.query<MemoryRow, [string | null, string | null]>(`
+    const rows = this.db
+      .query<MemoryRow, [string | null, string | null]>(
+        `
       SELECT * FROM memories
       WHERE embedding IS NOT NULL
         AND (gateway_id = ? OR ? IS NULL)
       ORDER BY importance DESC, access_count DESC
       LIMIT 1000
-    `).all(this.gatewayId, this.gatewayId);
-    
+    `,
+      )
+      .all(this.gatewayId, this.gatewayId);
+
     // Calculate similarities
     for (const row of rows) {
       const rowEmbedding = parseEmbedding(row.embedding);
@@ -264,16 +300,17 @@ export class HybridMemory implements Memory {
         });
       }
     }
-    
+
     // Sort by similarity and return top results
-    return results
-      .sort((a, b) => b.score - a.score)
-      .slice(0, limit);
+    return results.sort((a, b) => b.score - a.score).slice(0, limit);
   }
-  
-  private async searchVectorInternal(query: string, limit: number): Promise<MemorySearchResult[]> {
+
+  private async searchVectorInternal(
+    query: string,
+    limit: number,
+  ): Promise<MemorySearchResult[]> {
     if (!this.embeddingFn) return [];
-    
+
     try {
       const embedding = await this.embeddingFn(query);
       return this.searchVector(embedding, limit);
@@ -281,14 +318,22 @@ export class HybridMemory implements Memory {
       return [];
     }
   }
-  
-  async searchKeyword(query: string, limit: number = 10): Promise<MemorySearchResult[]> {
+
+  async searchKeyword(
+    query: string,
+    limit: number = 10,
+  ): Promise<MemorySearchResult[]> {
     return this.searchKeywordInternal(query, limit);
   }
-  
-  private searchKeywordInternal(query: string, limit: number): MemorySearchResult[] {
+
+  private searchKeywordInternal(
+    query: string,
+    limit: number,
+  ): MemorySearchResult[] {
     // Use FTS5 with BM25 scoring
-    const rows = this.db.query<FTSSearchRow, [string, string | null, string | null, number]>(`
+    const rows = this.db
+      .query<FTSSearchRow, [string, string | null, string | null, number]>(
+        `
       SELECT m.id, m.content, fts.rank
       FROM memories_fts fts
       JOIN memories m ON m.rowid = fts.rowid
@@ -296,8 +341,10 @@ export class HybridMemory implements Memory {
         AND (m.gateway_id = ? OR ? IS NULL)
       ORDER BY fts.rank
       LIMIT ?
-    `).all(query, this.gatewayId, this.gatewayId, limit);
-    
+    `,
+      )
+      .all(query, this.gatewayId, this.gatewayId, limit);
+
     return rows.map((row, index) => ({
       entry: {
         id: row.id,
@@ -309,58 +356,77 @@ export class HybridMemory implements Memory {
       searchType: "keyword" as const,
     }));
   }
-  
+
   async get(id: string): Promise<MemoryEntry | null> {
-    const row = this.db.query<MemoryRow, [string]>(`
+    const row = this.db
+      .query<MemoryRow, [string]>(
+        `
       SELECT * FROM memories WHERE id = ? LIMIT 1
-    `).get(id);
-    
+    `,
+      )
+      .get(id);
+
     if (!row) return null;
-    
+
     // Update access count
-    this.db.run(`
+    this.db.run(
+      `
       UPDATE memories 
       SET access_count = access_count + 1, last_accessed_at = ?
       WHERE id = ?
-    `, [Date.now(), id]);
-    
+    `,
+      [Date.now(), id],
+    );
+
     return this.rowToEntry(row);
   }
-  
+
   async delete(id: string): Promise<void> {
     // Delete from FTS first
-    this.db.run(`
+    this.db.run(
+      `
       DELETE FROM memories_fts WHERE rowid = (SELECT rowid FROM memories WHERE id = ?)
-    `, [id]);
-    
+    `,
+      [id],
+    );
+
     // Delete from memories
     this.db.run(`DELETE FROM memories WHERE id = ?`, [id]);
   }
-  
+
   async clear(): Promise<void> {
     if (this.gatewayId) {
       // Clear only for this gateway
-      this.db.run(`
+      this.db.run(
+        `
         DELETE FROM memories_fts 
         WHERE rowid IN (SELECT rowid FROM memories WHERE gateway_id = ?)
-      `, [this.gatewayId]);
-      this.db.run(`DELETE FROM memories WHERE gateway_id = ?`, [this.gatewayId]);
+      `,
+        [this.gatewayId],
+      );
+      this.db.run(`DELETE FROM memories WHERE gateway_id = ?`, [
+        this.gatewayId,
+      ]);
     } else {
       // Clear all
       this.db.run(`DELETE FROM memories_fts`);
       this.db.run(`DELETE FROM memories`);
     }
   }
-  
+
   async count(): Promise<number> {
-    const row = this.db.query<{ count: number }, [string | null, string | null]>(`
+    const row = this.db
+      .query<{ count: number }, [string | null, string | null]>(
+        `
       SELECT COUNT(*) as count FROM memories
       WHERE gateway_id = ? OR ? IS NULL
-    `).get(this.gatewayId, this.gatewayId);
-    
+    `,
+      )
+      .get(this.gatewayId, this.gatewayId);
+
     return row?.count || 0;
   }
-  
+
   private rowToEntry(row: MemoryRow): MemoryEntry {
     return {
       id: row.id,
@@ -372,64 +438,77 @@ export class HybridMemory implements Memory {
       updatedAt: new Date(row.updated_at),
     };
   }
-  
+
   // ============================================
   // Embedding Cache
   // ============================================
-  
+
   private async getCachedEmbedding(cacheKey: string): Promise<number[] | null> {
-    const row = this.db.query<CacheRow, [string, number]>(`
+    const row = this.db
+      .query<CacheRow, [string, number]>(
+        `
       SELECT * FROM embedding_cache
       WHERE cache_key = ?
         AND (expires_at IS NULL OR expires_at > ?)
       LIMIT 1
-    `).get(cacheKey, Date.now());
-    
+    `,
+      )
+      .get(cacheKey, Date.now());
+
     if (!row) return null;
-    
+
     // Update access count
-    this.db.run(`
+    this.db.run(
+      `
       UPDATE embedding_cache 
       SET access_count = access_count + 1, last_accessed_at = ?
       WHERE id = ?
-    `, [Date.now(), row.id]);
-    
+    `,
+      [Date.now(), row.id],
+    );
+
     return parseEmbedding(row.embedding);
   }
-  
+
   private async cacheEmbedding(
     cacheKey: string,
     inputText: string,
     embedding: number[],
-    ttlMs: number = 7 * 24 * 60 * 60 * 1000 // 7 days
+    ttlMs: number = 7 * 24 * 60 * 60 * 1000, // 7 days
   ): Promise<void> {
     const now = Date.now();
     const expiresAt = now + ttlMs;
-    
-    this.db.run(`
+
+    this.db.run(
+      `
       INSERT OR REPLACE INTO embedding_cache 
       (cache_key, input_text, embedding, model, access_count, last_accessed_at, created_at, expires_at)
       VALUES (?, ?, ?, ?, 1, ?, ?, ?)
-    `, [
-      cacheKey,
-      inputText,
-      JSON.stringify(embedding),
-      this.config.embeddingProvider,
-      now,
-      now,
-      expiresAt,
-    ]);
-    
+    `,
+      [
+        cacheKey,
+        inputText,
+        JSON.stringify(embedding),
+        this.config.embeddingProvider,
+        now,
+        now,
+        expiresAt,
+      ],
+    );
+
     // LRU eviction - remove old entries if cache is too large
     this.evictOldCacheEntries();
   }
-  
+
   private evictOldCacheEntries(): void {
     // Remove expired entries
-    this.db.run(`
+    this.db.run(
+      `
       DELETE FROM embedding_cache WHERE expires_at IS NOT NULL AND expires_at < ?
-    `, [Date.now()]);
-    
+    `,
+      [Date.now()],
+    );
+
     // Keep only top 1000 most recently accessed
     this.db.run(`
       DELETE FROM embedding_cache 
@@ -448,16 +527,28 @@ export class HybridMemory implements Memory {
 
 export class NoopMemory implements Memory {
   readonly id = "memory-none";
-  
+
   async init(): Promise<void> {}
-  async store(): Promise<string> { return ""; }
-  async recall(): Promise<MemorySearchResult[]> { return []; }
-  async searchVector(): Promise<MemorySearchResult[]> { return []; }
-  async searchKeyword(): Promise<MemorySearchResult[]> { return []; }
-  async get(): Promise<MemoryEntry | null> { return null; }
+  async store(): Promise<string> {
+    return "";
+  }
+  async recall(): Promise<MemorySearchResult[]> {
+    return [];
+  }
+  async searchVector(): Promise<MemorySearchResult[]> {
+    return [];
+  }
+  async searchKeyword(): Promise<MemorySearchResult[]> {
+    return [];
+  }
+  async get(): Promise<MemoryEntry | null> {
+    return null;
+  }
   async delete(): Promise<void> {}
   async clear(): Promise<void> {}
-  async count(): Promise<number> { return 0; }
+  async count(): Promise<number> {
+    return 0;
+  }
 }
 
 // ============================================
@@ -468,7 +559,7 @@ export function createMemory(
   db: Database,
   config: MemoryConfig,
   gatewayId?: string,
-  embeddingFn?: (text: string) => Promise<number[]>
+  embeddingFn?: (text: string) => Promise<number[]>,
 ): Memory {
   switch (config.backend) {
     case "sqlite":

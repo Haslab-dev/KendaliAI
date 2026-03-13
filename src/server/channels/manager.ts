@@ -1,6 +1,6 @@
 /**
  * KendaliAI Channel Manager
- * 
+ *
  * Manages channel instances and provides factory methods.
  */
 
@@ -13,11 +13,11 @@ import type {
   ChannelEvent,
   ChannelBinding,
   ChannelMessage,
-} from './types';
-import { TelegramChannel } from './telegram';
-import { DiscordChannel } from './discord';
-import { SlackChannel } from './slack';
-import { WebhookChannel } from './webhook';
+} from "./types";
+import { TelegramChannel } from "./telegram";
+import { DiscordChannel } from "./discord";
+import { SlackChannel } from "./slack";
+import { WebhookChannel } from "./webhook";
 
 // ============================================
 // Channel Manager
@@ -32,26 +32,26 @@ class ChannelManager {
   constructor() {
     // Register built-in channel factories
     this.registerFactory({
-      type: 'telegram',
-      name: 'Telegram',
+      type: "telegram",
+      name: "Telegram",
       create: (config) => new TelegramChannel(config),
     });
 
     this.registerFactory({
-      type: 'discord',
-      name: 'Discord',
+      type: "discord",
+      name: "Discord",
       create: (config) => new DiscordChannel(config),
     });
 
     this.registerFactory({
-      type: 'slack',
-      name: 'Slack',
+      type: "slack",
+      name: "Slack",
       create: (config) => new SlackChannel(config),
     });
 
     this.registerFactory({
-      type: 'webhook',
-      name: 'Webhook',
+      type: "webhook",
+      name: "Webhook",
       create: (config) => new WebhookChannel(config),
     });
   }
@@ -68,7 +68,7 @@ class ChannelManager {
    */
   create(type: ChannelType, config: ChannelConfig): Channel {
     const factory = this.factories.get(type);
-    
+
     if (!factory) {
       throw new Error(`Unknown channel type: ${type}`);
     }
@@ -81,14 +81,14 @@ class ChannelManager {
    */
   register(name: string, channel: Channel): void {
     this.channels.set(name, channel);
-    
+
     // Forward channel events
     channel.addEventHandler((event) => {
       this.emitEvent(event);
     });
-    
+
     this.emitEvent({
-      type: 'connected',
+      type: "connected",
       channel: name,
       channelType: channel.type,
       timestamp: new Date(),
@@ -118,7 +118,7 @@ class ChannelManager {
       await channel.dispose();
       this.channels.delete(name);
       this.emitEvent({
-        type: 'disconnected',
+        type: "disconnected",
         channel: name,
         channelType: channel.type,
         timestamp: new Date(),
@@ -164,14 +164,14 @@ class ChannelManager {
           await channel.initialize();
         } catch (error) {
           this.emitEvent({
-            type: 'error',
+            type: "error",
             channel: name,
             channelType: channel.type,
             timestamp: new Date(),
             data: error,
           });
         }
-      }
+      },
     );
     await Promise.all(promises);
   }
@@ -186,14 +186,14 @@ class ChannelManager {
           await channel.connect();
         } catch (error) {
           this.emitEvent({
-            type: 'error',
+            type: "error",
             channel: name,
             channelType: channel.type,
             timestamp: new Date(),
             data: error,
           });
         }
-      }
+      },
     );
     await Promise.all(promises);
   }
@@ -209,7 +209,7 @@ class ChannelManager {
         } catch (error) {
           console.error(`[ChannelManager] Error disconnecting ${name}:`, error);
         }
-      }
+      },
     );
     await Promise.all(promises);
   }
@@ -219,7 +219,7 @@ class ChannelManager {
    */
   async healthCheckAll(): Promise<Record<string, boolean>> {
     const results: Record<string, boolean> = {};
-    
+
     for (const [name, channel] of this.channels) {
       try {
         results[name] = await channel.healthCheck();
@@ -227,7 +227,7 @@ class ChannelManager {
         results[name] = false;
       }
     }
-    
+
     return results;
   }
 
@@ -236,7 +236,7 @@ class ChannelManager {
    */
   async disposeAll(): Promise<void> {
     const promises = Array.from(this.channels.keys()).map((name) =>
-      this.remove(name)
+      this.remove(name),
     );
     await Promise.all(promises);
   }
@@ -251,7 +251,7 @@ class ChannelManager {
   bindChannel(binding: ChannelBinding): void {
     // Remove existing binding for same gateway/channel
     this.bindings = this.bindings.filter(
-      (b) => !(b.gateway === binding.gateway && b.channel === binding.channel)
+      (b) => !(b.gateway === binding.gateway && b.channel === binding.channel),
     );
     this.bindings.push(binding);
   }
@@ -261,7 +261,7 @@ class ChannelManager {
    */
   unbindChannel(gateway: string, channel: string): void {
     this.bindings = this.bindings.filter(
-      (b) => !(b.gateway === gateway && b.channel === channel)
+      (b) => !(b.gateway === gateway && b.channel === channel),
     );
   }
 
@@ -291,14 +291,14 @@ class ChannelManager {
    */
   routeMessage(message: ChannelMessage): string | null {
     const bindings = this.getBindingsForChannel(message.chatId);
-    
+
     if (bindings.length === 0) {
       return null;
     }
 
     // Try prefix-based routing first
     for (const binding of bindings) {
-      if (binding.routingMode === 'prefix' && binding.prefix) {
+      if (binding.routingMode === "prefix" && binding.prefix) {
         if (message.text.startsWith(binding.prefix)) {
           return binding.gateway;
         }
@@ -307,7 +307,7 @@ class ChannelManager {
 
     // Try keyword-based routing
     for (const binding of bindings) {
-      if (binding.routingMode === 'keyword' && binding.keywords) {
+      if (binding.routingMode === "keyword" && binding.keywords) {
         const text = message.text.toLowerCase();
         if (binding.keywords.some((kw) => text.includes(kw.toLowerCase()))) {
           return binding.gateway;
@@ -354,7 +354,7 @@ class ChannelManager {
       try {
         handler(event);
       } catch (error) {
-        console.error('[ChannelManager] Error in event handler:', error);
+        console.error("[ChannelManager] Error in event handler:", error);
       }
     }
   }
@@ -376,7 +376,7 @@ export const channelManager = new ChannelManager();
 export async function createChannel(
   name: string,
   type: ChannelType,
-  config: ChannelConfig
+  config: ChannelConfig,
 ): Promise<Channel> {
   const channel = channelManager.create(type, config);
   await channel.initialize();

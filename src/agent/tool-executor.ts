@@ -11,26 +11,34 @@ export async function executeToolAction(
   actionName: string,
   command: string,
   gatewayId: string,
-  db: Database
+  db: Database,
 ): Promise<string> {
   const skillsManager = getSkillsManager(db);
   const enabledTools = skillsManager.getEnabledTools(gatewayId);
   const enabledSkills = skillsManager.getEnabledSkills(gatewayId);
 
   // 1. Identify type
-  const isSkill = enabledSkills.some(s => s.name === actionName);
-  const isTool = enabledTools.some(t => t.name === actionName);
-  const typeLabel = isSkill ? "skill" : (isTool ? "tool" : "action");
+  const isSkill = enabledSkills.some((s) => s.name === actionName);
+  const isTool = enabledTools.some((t) => t.name === actionName);
+  const typeLabel = isSkill ? "skill" : isTool ? "tool" : "action";
 
   if (!isSkill && !isTool) {
-    throw new Error(`${typeLabel} '${actionName}' is not enabled for this gateway.`);
+    throw new Error(
+      `${typeLabel} '${actionName}' is not enabled for this gateway.`,
+    );
   }
 
   // 2. Validate security policy
   const validation = skillsManager.validateOperation(gatewayId, {
-    type: actionName === "shell" ? "shell" : (actionName === "read_file" || actionName === "file" ? "file" : "shell"),
+    type:
+      actionName === "shell"
+        ? "shell"
+        : actionName === "read_file" || actionName === "file"
+          ? "file"
+          : "shell",
     action: command,
-    target: (actionName === "read_file" || actionName === "file") ? command : undefined
+    target:
+      actionName === "read_file" || actionName === "file" ? command : undefined,
   });
 
   if (!validation.allowed) {
@@ -39,7 +47,7 @@ export async function executeToolAction(
 
   // 3. Execute
   console.log(`\n⚙️  Processing ${typeLabel}: ${actionName}...`);
-  
+
   try {
     if (actionName === "shell") {
       console.log(`🚀 Executing: ${command}`);
@@ -48,7 +56,9 @@ export async function executeToolAction(
       if (existsSync(command)) {
         console.log(`📖 Reading: ${command}`);
         const output = readFileSync(command, "utf8");
-        return output.length > 5000 ? output.slice(0, 5000) + "\n...(truncated)" : output;
+        return output.length > 5000
+          ? output.slice(0, 5000) + "\n...(truncated)"
+          : output;
       } else {
         throw new Error(`File not found: ${command}`);
       }

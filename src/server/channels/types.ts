@@ -1,6 +1,6 @@
 /**
  * KendaliAI Channel Types
- * 
+ *
  * Defines the interface and types for messaging channels.
  * Supports Telegram, Discord, Slack, and Webhook channels.
  */
@@ -9,9 +9,18 @@
 // Core Types
 // ============================================
 
-export type ChannelType = 'telegram' | 'discord' | 'slack' | 'webhook' | 'whatsapp';
+export type ChannelType =
+  | "telegram"
+  | "discord"
+  | "slack"
+  | "webhook"
+  | "whatsapp";
 
-export type ChannelStatus = 'connected' | 'disconnected' | 'connecting' | 'error';
+export type ChannelStatus =
+  | "connected"
+  | "disconnected"
+  | "connecting"
+  | "error";
 
 export interface ChannelConfig {
   /** Channel type identifier */
@@ -67,7 +76,14 @@ export interface ChannelMessage {
 
 export interface MessageAttachment {
   /** Attachment type */
-  type: 'image' | 'video' | 'audio' | 'document' | 'sticker' | 'location' | 'contact';
+  type:
+    | "image"
+    | "video"
+    | "audio"
+    | "document"
+    | "sticker"
+    | "location"
+    | "contact";
   /** File URL */
   url?: string;
   /** File path (for local files) */
@@ -92,7 +108,7 @@ export interface SendMessageOptions {
   /** Reply to message ID */
   replyTo?: string;
   /** Parse mode */
-  parseMode?: 'text' | 'markdown' | 'html';
+  parseMode?: "text" | "markdown" | "html";
   /** Disable notification */
   silent?: boolean;
   /** Attachments */
@@ -125,7 +141,7 @@ export interface EditMessageOptions {
   /** New text */
   text: string;
   /** Parse mode */
-  parseMode?: 'text' | 'markdown' | 'html';
+  parseMode?: "text" | "markdown" | "html";
   /** Inline keyboard */
   keyboard?: InlineKeyboard;
 }
@@ -153,17 +169,17 @@ export interface ChannelEvent {
 }
 
 export type ChannelEventType =
-  | 'connected'
-  | 'disconnected'
-  | 'error'
-  | 'message_received'
-  | 'message_sent'
-  | 'message_edited'
-  | 'message_deleted'
-  | 'user_joined'
-  | 'user_left'
-  | 'callback_query'
-  | 'command';
+  | "connected"
+  | "disconnected"
+  | "error"
+  | "message_received"
+  | "message_sent"
+  | "message_edited"
+  | "message_deleted"
+  | "user_joined"
+  | "user_left"
+  | "callback_query"
+  | "command";
 
 export interface CallbackQuery {
   /** Query ID */
@@ -204,7 +220,7 @@ export interface Channel {
   readonly status: ChannelStatus;
   /** Channel config */
   readonly config: ChannelConfig;
-  
+
   /** Initialize the channel */
   initialize(): Promise<void>;
   /** Connect to the channel */
@@ -214,11 +230,20 @@ export interface Channel {
   /** Check if channel is healthy */
   healthCheck(): Promise<boolean>;
   /** Send a message */
-  sendMessage(text: string, options?: SendMessageOptions): Promise<ChannelMessage>;
+  sendMessage(
+    text: string,
+    options?: SendMessageOptions,
+  ): Promise<ChannelMessage>;
   /** Edit a message */
-  editMessage(messageId: string, options: EditMessageOptions): Promise<ChannelMessage>;
+  editMessage(
+    messageId: string,
+    options: EditMessageOptions,
+  ): Promise<ChannelMessage>;
   /** Delete a message */
-  deleteMessage(messageId: string, options?: DeleteMessageOptions): Promise<boolean>;
+  deleteMessage(
+    messageId: string,
+    options?: DeleteMessageOptions,
+  ): Promise<boolean>;
   /** Get chat info */
   getChatInfo(chatId: string): Promise<ChatInfo>;
   /** Get user info */
@@ -226,9 +251,14 @@ export interface Channel {
   /** Set typing indicator */
   setTyping(chatId: string): Promise<void>;
   /** Register command handler */
-  onCommand(command: string, handler: (ctx: CommandContext) => Promise<void>): void;
+  onCommand(
+    command: string,
+    handler: (ctx: CommandContext) => Promise<void>,
+  ): void;
   /** Set channel commands (for UI display) */
-  setCommands(commands: Array<{ command: string; description: string }>): Promise<void>;
+  setCommands(
+    commands: Array<{ command: string; description: string }>,
+  ): Promise<void>;
   /** Register message handler */
   onMessage(handler: (message: ChannelMessage) => Promise<void>): void;
   /** Register callback handler */
@@ -249,7 +279,7 @@ export interface ChatInfo {
   /** Chat ID */
   id: string;
   /** Chat type */
-  type: 'private' | 'group' | 'supergroup' | 'channel';
+  type: "private" | "group" | "supergroup" | "channel";
   /** Chat title */
   title?: string;
   /** Chat username */
@@ -306,7 +336,12 @@ export interface ChannelBinding {
   /** Channel name */
   channel: string;
   /** Routing mode */
-  routingMode: 'prefix' | 'keyword' | 'interactive' | 'broadcast' | 'round-robin';
+  routingMode:
+    | "prefix"
+    | "keyword"
+    | "interactive"
+    | "broadcast"
+    | "round-robin";
   /** Routing prefix (for prefix mode) */
   prefix?: string;
   /** Routing keywords (for keyword mode) */

@@ -14,9 +14,8 @@ import { join } from "path";
 import {
   getGatewayByName,
   listGateways,
+  getGatewayPaths,
   type Gateway,
-  RUN_DIR,
-  LOGS_DIR,
 } from "./gateway";
 
 // Check if process is running
@@ -131,7 +130,8 @@ export function stopAllDaemons(db: Database): void {
         stopped++;
 
         // Clean up PID file
-        const pidFile = join(RUN_DIR, `${status.gateway.name}.pid`);
+        const paths = getGatewayPaths(status.gateway.name);
+        const pidFile = paths.pidFile;
         try {
           if (existsSync(pidFile)) unlinkSync(pidFile);
         } catch {}
@@ -232,7 +232,8 @@ export function healthCheck(db: Database, name: string): void {
   }
 
   // Check log file
-  const logFile = join(LOGS_DIR, `${name}.log`);
+  const paths = getGatewayPaths(name);
+  const logFile = paths.logFile;
   if (existsSync(logFile)) {
     const stats = require("fs").statSync(logFile);
     console.log(`Log file: ${Math.round(stats.size / 1024)} KB`);

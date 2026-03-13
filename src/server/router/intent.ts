@@ -10,7 +10,10 @@ export interface IntentHandler {
 export class IntentRouter {
   private handlers: IntentHandler[] = [];
 
-  register(regex: RegExp, handler: (matches: RegExpMatchArray) => Promise<void>) {
+  register(
+    regex: RegExp,
+    handler: (matches: RegExpMatchArray) => Promise<void>,
+  ) {
     this.handlers.push({ regex, handler });
   }
 

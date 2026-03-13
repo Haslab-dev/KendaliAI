@@ -11,11 +11,11 @@ export async function agentExecutor(
   db: Database,
   gatewayId: string,
   model?: string,
-  systemPrompt?: string
+  systemPrompt?: string,
 ): Promise<string> {
   return agentLoop(message, provider, db, gatewayId, {
     model,
     systemPrompt,
-    maxSteps: 5
+    maxSteps: 5,
   });
 }

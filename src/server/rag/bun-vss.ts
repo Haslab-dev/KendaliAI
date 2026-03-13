@@ -1,6 +1,6 @@
 /**
  * KendaliAI Bun-Native Vector Storage
- * 
+ *
  * A pure TypeScript vector storage solution for Bun's SQLite.
  * Since sqlite-vss doesn't work with Bun (can't load extensions),
  * this implements vector storage and search natively.
@@ -114,7 +114,11 @@ export class BunVSS {
   private tableName: string;
   private initialized: boolean = false;
 
-  constructor(db: Database, config: VectorConfig, tableName: string = "vectors") {
+  constructor(
+    db: Database,
+    config: VectorConfig,
+    tableName: string = "vectors",
+  ) {
     this.db = db;
     this.config = config;
     this.tableName = tableName;
@@ -151,11 +155,17 @@ export class BunVSS {
   /**
    * Insert a vector
    */
-  insert(id: string, vector: number[], metadata?: Record<string, unknown>): void {
+  insert(
+    id: string,
+    vector: number[],
+    metadata?: Record<string, unknown>,
+  ): void {
     if (!this.initialized) this.init();
 
     if (vector.length !== this.config.dimension) {
-      throw new Error(`Vector dimension mismatch: expected ${this.config.dimension}, got ${vector.length}`);
+      throw new Error(
+        `Vector dimension mismatch: expected ${this.config.dimension}, got ${vector.length}`,
+      );
     }
 
     const blob = vectorToBlob(vector);
@@ -163,7 +173,7 @@ export class BunVSS {
 
     this.db.run(
       `INSERT OR REPLACE INTO ${this.tableName} (id, vector, metadata, created_at) VALUES (?, ?, ?, ?)`,
-      [id, blob, metadataJson, Date.now()]
+      [id, blob, metadataJson, Date.now()],
     );
   }
 
@@ -174,7 +184,7 @@ export class BunVSS {
     if (!this.initialized) this.init();
 
     const insert = this.db.prepare(
-      `INSERT OR REPLACE INTO ${this.tableName} (id, vector, metadata, created_at) VALUES (?, ?, ?, ?)`
+      `INSERT OR REPLACE INTO ${this.tableName} (id, vector, metadata, created_at) VALUES (?, ?, ?, ?)`,
     );
 
     const transaction = this.db.transaction((items: VectorEntry[]) => {
@@ -183,7 +193,9 @@ export class BunVSS {
           throw new Error(`Vector dimension mismatch for ${entry.id}`);
         }
         const blob = vectorToBlob(entry.vector);
-        const metadataJson = entry.metadata ? JSON.stringify(entry.metadata) : null;
+        const metadataJson = entry.metadata
+          ? JSON.stringify(entry.metadata)
+          : null;
         insert.run(entry.id, blob, metadataJson, entry.createdAt || Date.now());
       }
     });
@@ -197,9 +209,18 @@ export class BunVSS {
   get(id: string): VectorEntry | null {
     if (!this.initialized) this.init();
 
-    const row = this.db.prepare(
-      `SELECT id, vector, metadata, created_at FROM ${this.tableName} WHERE id = ?`
-    ).get(id) as { id: string; vector: Uint8Array; metadata: string | null; created_at: number } | undefined;
+    const row = this.db
+      .prepare(
+        `SELECT id, vector, metadata, created_at FROM ${this.tableName} WHERE id = ?`,
+      )
+      .get(id) as
+      | {
+          id: string;
+          vector: Uint8Array;
+          metadata: string | null;
+          created_at: number;
+        }
+      | undefined;
 
     if (!row) return null;
 
@@ -225,7 +246,9 @@ export class BunVSS {
   getAllIds(): string[] {
     if (!this.initialized) this.init();
 
-    const rows = this.db.prepare(`SELECT id FROM ${this.tableName}`).all() as { id: string }[];
+    const rows = this.db.prepare(`SELECT id FROM ${this.tableName}`).all() as {
+      id: string;
+    }[];
     return rows.map((r) => r.id);
   }
 
@@ -235,7 +258,9 @@ export class BunVSS {
   count(): number {
     if (!this.initialized) this.init();
 
-    const row = this.db.prepare(`SELECT COUNT(*) as count FROM ${this.tableName}`).get() as { count: number };
+    const row = this.db
+      .prepare(`SELECT COUNT(*) as count FROM ${this.tableName}`)
+      .get() as { count: number };
     return row.count;
   }
 
@@ -247,16 +272,22 @@ export class BunVSS {
     if (!this.initialized) this.init();
 
     if (query.length !== this.config.dimension) {
-      throw new Error(`Query dimension mismatch: expected ${this.config.dimension}, got ${query.length}`);
+      throw new Error(
+        `Query dimension mismatch: expected ${this.config.dimension}, got ${query.length}`,
+      );
     }
 
     // Load all vectors (this is the brute-force part)
-    const rows = this.db.prepare(
-      `SELECT id, vector, metadata FROM ${this.tableName}`
-    ).all() as { id: string; vector: Uint8Array; metadata: string | null }[];
+    const rows = this.db
+      .prepare(`SELECT id, vector, metadata FROM ${this.tableName}`)
+      .all() as { id: string; vector: Uint8Array; metadata: string | null }[];
 
     // Compute similarities
-    const results: Array<{ id: string; score: number; metadata?: Record<string, unknown> }> = [];
+    const results: Array<{
+      id: string;
+      score: number;
+      metadata?: Record<string, unknown>;
+    }> = [];
 
     for (const row of rows) {
       const vector = blobToVector(row.vector, this.config.dimension);
@@ -294,19 +325,23 @@ export class BunVSS {
   searchWithFilter(
     query: number[],
     filter: (metadata: Record<string, unknown>) => boolean,
-    topK: number = 5
+    topK: number = 5,
   ): SearchResult[] {
     if (!this.initialized) this.init();
 
-    const rows = this.db.prepare(
-      `SELECT id, vector, metadata FROM ${this.tableName}`
-    ).all() as { id: string; vector: Uint8Array; metadata: string | null }[];
+    const rows = this.db
+      .prepare(`SELECT id, vector, metadata FROM ${this.tableName}`)
+      .all() as { id: string; vector: Uint8Array; metadata: string | null }[];
 
-    const results: Array<{ id: string; score: number; metadata?: Record<string, unknown> }> = [];
+    const results: Array<{
+      id: string;
+      score: number;
+      metadata?: Record<string, unknown>;
+    }> = [];
 
     for (const row of rows) {
       const metadata = row.metadata ? JSON.parse(row.metadata) : undefined;
-      
+
       // Apply filter
       if (metadata && !filter(metadata)) continue;
 
@@ -371,7 +406,7 @@ export class HNSWIndex {
   private nodes: Map<string, HNSWNode> = new Map();
   private entryPoint: string | null = null;
   private maxLayer: number = 0;
-  
+
   // HNSW parameters
   private mL: number = 1 / Math.log(16); // Level multiplier
   private efConstruction: number = 200;
@@ -393,9 +428,13 @@ export class HNSWIndex {
   /**
    * Insert a vector into the index
    */
-  insert(id: string, vector: number[], metadata?: Record<string, unknown>): void {
+  insert(
+    id: string,
+    vector: number[],
+    metadata?: Record<string, unknown>,
+  ): void {
     const layer = this.getRandomLayer();
-    
+
     const node: HNSWNode = {
       id,
       vector,
@@ -426,21 +465,29 @@ export class HNSWIndex {
 
     // For layers 0 to layer, find neighbors and connect
     for (let l = Math.min(layer, this.maxLayer); l >= 0; l--) {
-      const neighbors = this.searchLayer(current, vector, this.efConstruction, l);
-      
+      const neighbors = this.searchLayer(
+        current,
+        vector,
+        this.efConstruction,
+        l,
+      );
+
       // Select best neighbors
-      const selectedNeighbors = this.selectNeighbors(neighbors, this.maxConnections);
-      
+      const selectedNeighbors = this.selectNeighbors(
+        neighbors,
+        this.maxConnections,
+      );
+
       // Connect bidirectionally
       node.neighbors.set(l, new Set(selectedNeighbors));
-      
+
       for (const neighborId of selectedNeighbors) {
         const neighbor = this.nodes.get(neighborId);
         if (neighbor) {
           const neighborLayer = neighbor.neighbors.get(l);
           if (neighborLayer) {
             neighborLayer.add(id);
-            
+
             // Prune if too many connections
             if (neighborLayer.size > this.maxConnections) {
               const pruned = this.selectNeighbors(
@@ -448,7 +495,7 @@ export class HNSWIndex {
                   id: nid,
                   score: this.similarity(vector, this.nodes.get(nid)!.vector),
                 })),
-                this.maxConnections
+                this.maxConnections,
               );
               neighbor.neighbors.set(l, new Set(pruned));
             }
@@ -469,23 +516,27 @@ export class HNSWIndex {
   /**
    * Greedy search in a single layer
    */
-  private greedySearch(entryId: string, query: number[], layer: number): string {
+  private greedySearch(
+    entryId: string,
+    query: number[],
+    layer: number,
+  ): string {
     let current = entryId;
     let currentScore = this.similarity(query, this.nodes.get(current)!.vector);
-    
+
     let improved = true;
     while (improved) {
       improved = false;
       const node = this.nodes.get(current);
       if (!node) break;
-      
+
       const neighbors = node.neighbors.get(layer);
       if (!neighbors) break;
-      
+
       for (const neighborId of neighbors) {
         const neighbor = this.nodes.get(neighborId);
         if (!neighbor) continue;
-        
+
         const score = this.similarity(query, neighbor.vector);
         if (score > currentScore) {
           current = neighborId;
@@ -494,7 +545,7 @@ export class HNSWIndex {
         }
       }
     }
-    
+
     return current;
   }
 
@@ -505,11 +556,14 @@ export class HNSWIndex {
     entryId: string,
     query: number[],
     ef: number,
-    layer: number
+    layer: number,
   ): Array<{ id: string; score: number }> {
     const visited = new Set<string>([entryId]);
     const candidates: Array<{ id: string; score: number }> = [
-      { id: entryId, score: this.similarity(query, this.nodes.get(entryId)!.vector) }
+      {
+        id: entryId,
+        score: this.similarity(query, this.nodes.get(entryId)!.vector),
+      },
     ];
     const results: Array<{ id: string; score: number }> = [...candidates];
 
@@ -539,11 +593,11 @@ export class HNSWIndex {
         if (!neighbor) continue;
 
         const score = this.similarity(query, neighbor.vector);
-        
+
         if (score > furthest.score || results.length < ef) {
           candidates.push({ id: neighborId, score });
           results.push({ id: neighborId, score });
-          
+
           if (results.length > ef) {
             results.sort((a, b) => b.score - a.score);
             results.pop();
@@ -560,7 +614,7 @@ export class HNSWIndex {
    */
   private selectNeighbors(
     candidates: Array<{ id: string; score: number }>,
-    maxCount: number
+    maxCount: number,
   ): string[] {
     candidates.sort((a, b) => b.score - a.score);
     return candidates.slice(0, maxCount).map((c) => c.id);
@@ -665,13 +719,20 @@ export class HNSWIndex {
   /**
    * Import index from exported data
    */
-  import(data: { nodes: HNSWNode[]; entryPoint: string | null; maxLayer: number }): void {
+  import(data: {
+    nodes: HNSWNode[];
+    entryPoint: string | null;
+    maxLayer: number;
+  }): void {
     this.nodes.clear();
     for (const node of data.nodes) {
       // Reconstruct Map from serialized data
       const neighbors = new Map<number, Set<string>>();
       for (const [layer, neighborSet] of Object.entries(node.neighbors)) {
-        neighbors.set(parseInt(layer), new Set(neighborSet as unknown as string[]));
+        neighbors.set(
+          parseInt(layer),
+          new Set(neighborSet as unknown as string[]),
+        );
       }
       node.neighbors = neighbors;
       this.nodes.set(node.id, node);

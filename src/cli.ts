@@ -1,14 +1,14 @@
 #!/usr/bin/env bun
 /**
  * KendaliAI Minimal CLI - Lightweight Binary Entry Point
- * 
+ *
  * ZeroClaw-inspired minimal binary for gateway + channel operations.
  * No React dashboard, no Vite - pure CLI for maximum performance.
- * 
+ *
  * Usage:
  *   bun run src/cli-minimal.ts [command] [options]
  *   bun build --compile --minify src/cli-minimal.ts --outfile kendaliai
- * 
+ *
  * Multi-Gateway Commands:
  *   kendaliai gateway create <name>     Create new gateway
  *   kendaliai gateway start <name>      Start gateway
@@ -65,7 +65,7 @@ interface KendaliAIConfig {
 // Initialize directory paths based on config-path option
 function initializePaths(): void {
   const configPath = getString("config-path");
-  
+
   if (configPath === ".kendaliai" || configPath === "~/.kendaliai") {
     // Use home directory (root system)
     KENDALIAI_DIR = join(HOME_DIR, ".kendaliai");
@@ -76,7 +76,7 @@ function initializePaths(): void {
     // Default: project-local directory
     KENDALIAI_DIR = join(PROJECT_DIR, ".kendaliai");
   }
-  
+
   CONFIG_FILE = join(KENDALIAI_DIR, "config.json");
 }
 
@@ -115,9 +115,9 @@ function ensureDirectory(filePath: string): void {
         fs.mkdirSync(dir, { recursive: true });
       }
     } catch (error) {
-    // Log directory creation errors but continue
-    console.error(`Failed to create directory: ${error}`);
-  }
+      // Log directory creation errors but continue
+      console.error(`Failed to create directory: ${error}`);
+    }
   }
 }
 
@@ -138,23 +138,23 @@ function getGatewayPaths(name: string) {
 
 function getDb(dbPath?: string, gatewayName?: string): Database {
   initializePaths();
-  
+
   if (db && !gatewayName) return db;
-  
+
   // If a gateway is specified, we ALWAYS want its local database
   if (gatewayName) {
-      const paths = getGatewayPaths(gatewayName);
-      ensureDirectory(paths.db);
-      return new Database(paths.db);
+    const paths = getGatewayPaths(gatewayName);
+    ensureDirectory(paths.db);
+    return new Database(paths.db);
   }
 
   if (db) return db;
   ensureDirectories();
-  
+
   // Priority: CLI arg > config file > default
   const config = loadConfig();
   let actualPath: string;
-  
+
   if (dbPath && dbPath !== ".kendaliai/kendaliai.db") {
     actualPath = dbPath;
   } else if (config.database?.path) {
@@ -162,7 +162,7 @@ function getDb(dbPath?: string, gatewayName?: string): Database {
   } else {
     actualPath = join(KENDALIAI_DIR, "kendaliai.db");
   }
-  
+
   ensureDirectory(actualPath);
   db = new Database(actualPath);
   db.run("PRAGMA journal_mode = WAL");
@@ -188,43 +188,43 @@ const { values, positionals } = parseArgs({
     help: { type: "boolean", short: "h", default: false },
     version: { type: "boolean", short: "v", default: false },
     config: { type: "string", short: "c", default: ".kendaliai/config.toml" },
-    
+
     // Gateway options
     port: { type: "string", short: "p", default: "42617" },
     host: { type: "string", default: "127.0.0.1" },
-    
+
     // Pairing options
     "pairing-code": { type: "string" },
-    
+
     // Provider options
     provider: { type: "string" },
     model: { type: "string" },
     "api-key": { type: "string" },
     "api-url": { type: "string" },
-    
+
     // Channel options
     channel: { type: "string" },
     "bot-token": { type: "string" },
     "allowed-users": { type: "string" },
-    
+
     // Memory options
     "embedding-provider": { type: "string", default: "none" },
-    
+
     // Security options
     "require-pairing": { type: "boolean", default: true },
     "allow-public": { type: "boolean", default: false },
     "workspace-only": { type: "boolean", default: true },
-    
+
     // Database options
     "db-path": { type: "string" },
     "reset-db": { type: "boolean", default: false },
-    
+
     // Config path option (for root system vs project local)
     "config-path": { type: "string" },
-    
+
     // Message options
     message: { type: "string", short: "m" },
-    
+
     // Gateway options for multi-gateway support
     gateway: { type: "string", short: "g" },
     daemon: { type: "boolean", short: "d", default: false },
@@ -377,37 +377,55 @@ async function handleVersion(): Promise<void> {
 
 async function handleOnboard(): Promise<void> {
   console.log("🚀 KendaliAI Onboarding\n");
-  
+
   const dbPath = getString("db-path", ".kendaliai/kendaliai.db");
-  
+
   // Initialize database
   console.log("📁 Initializing database...");
   const database = getDb(dbPath);
-  
+
   // Create tables if not exist
   await initTables(database);
-  
+
   // Create default gateway
   const gatewayId = `gw_${randomUUID().slice(0, 8)}`;
   let provider = getString("provider", "openai");
   let model = getString("model", "");
   const apiKey = getString("api-key");
   let apiUrl = getString("api-url", "");
-  
+
   if (!apiKey) {
     console.error("❌ Error: --api-key is required for onboarding");
     process.exit(1);
   }
-  
+
   // OpenAI-compatible provider auto-configuration
-  const openaiCompatibleProviders: Record<string, { endpoint: string; defaultModel: string }> = {
-    deepseek: { endpoint: "https://api.deepseek.com/v1", defaultModel: "deepseek-chat" },
-    zai: { endpoint: "https://api.z.ai/api/coding/paas/v4", defaultModel: "zai-1" },
-    openrouter: { endpoint: "https://openrouter.ai/api/v1", defaultModel: "openrouter/auto" },
-    together: { endpoint: "https://api.together.xyz/v1", defaultModel: "togethercomputer/CodeLlama-34b-Instruct" },
-    groq: { endpoint: "https://api.groq.com/openai/v1", defaultModel: "llama-3.1-70b-versatile" },
+  const openaiCompatibleProviders: Record<
+    string,
+    { endpoint: string; defaultModel: string }
+  > = {
+    deepseek: {
+      endpoint: "https://api.deepseek.com/v1",
+      defaultModel: "deepseek-chat",
+    },
+    zai: {
+      endpoint: "https://api.z.ai/api/coding/paas/v4",
+      defaultModel: "zai-1",
+    },
+    openrouter: {
+      endpoint: "https://openrouter.ai/api/v1",
+      defaultModel: "openrouter/auto",
+    },
+    together: {
+      endpoint: "https://api.together.xyz/v1",
+      defaultModel: "togethercomputer/CodeLlama-34b-Instruct",
+    },
+    groq: {
+      endpoint: "https://api.groq.com/openai/v1",
+      defaultModel: "llama-3.1-70b-versatile",
+    },
   };
-  
+
   // Auto-configure OpenAI-compatible providers
   if (provider in openaiCompatibleProviders) {
     const config = openaiCompatibleProviders[provider];
@@ -429,19 +447,24 @@ async function handleOnboard(): Promise<void> {
       else model = "default";
     }
   }
-  
+
   console.log(`🔧 Creating gateway with provider: ${provider}`);
-  
+
   const now = Date.now();
-  
+
   // Check if default gateway already exists
-  const existingGateway = database.query<{ id: string }, []>(`
+  const existingGateway = database
+    .query<{ id: string }, []>(
+      `
     SELECT id FROM gateways WHERE name = 'default'
-  `).get();
-  
+  `,
+    )
+    .get();
+
   if (existingGateway) {
     // Update existing gateway
-    database.run(`
+    database.run(
+      `
       UPDATE gateways SET
         provider = ?,
         endpoint = ?,
@@ -452,22 +475,24 @@ async function handleOnboard(): Promise<void> {
         workspace_only = ?,
         updated_at = ?
       WHERE id = ?
-    `, [
-      provider,
-      apiUrl || null,
-      model,
-      encrypt(apiKey), // Encrypt API key before storing
-      values["require-pairing"] ? 1 : 0,
-      values["allow-public"] ? 1 : 0,
-      values["workspace-only"] ? 1 : 0,
-      now,
-      existingGateway.id,
-    ]);
-    
+    `,
+      [
+        provider,
+        apiUrl || null,
+        model,
+        encrypt(apiKey), // Encrypt API key before storing
+        values["require-pairing"] ? 1 : 0,
+        values["allow-public"] ? 1 : 0,
+        values["workspace-only"] ? 1 : 0,
+        now,
+        existingGateway.id,
+      ],
+    );
+
     // Create pairing code
     console.log("🔐 Generating pairing code...");
     const result = await securityManager.createPairing(existingGateway.id);
-    
+
     if (result.success && result.pairingCode) {
       console.log(`\n✅ Gateway updated!`);
       console.log(`\n📋 Pairing Code: ${result.pairingCode}`);
@@ -478,33 +503,36 @@ async function handleOnboard(): Promise<void> {
     }
     return;
   }
-  
+
   // Insert new gateway
-  database.run(`
+  database.run(
+    `
     INSERT INTO gateways (
       id, name, provider, endpoint, default_model, api_key_encrypted,
       require_pairing, allow_public_bind, workspace_only, status,
       created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `, [
-    gatewayId,
-    "default",
-    provider,
-    apiUrl || null,
-    model,
-    encrypt(apiKey), // Encrypt API key
-    values["require-pairing"] ? 1 : 0,
-    values["allow-public"] ? 1 : 0,
-    values["workspace-only"] ? 1 : 0,
-    "stopped",
-    now,
-    now,
-  ]);
-  
+  `,
+    [
+      gatewayId,
+      "default",
+      provider,
+      apiUrl || null,
+      model,
+      encrypt(apiKey), // Encrypt API key
+      values["require-pairing"] ? 1 : 0,
+      values["allow-public"] ? 1 : 0,
+      values["workspace-only"] ? 1 : 0,
+      "stopped",
+      now,
+      now,
+    ],
+  );
+
   // Create pairing code
   console.log("🔐 Generating pairing code...");
   const result = await securityManager.createPairing(gatewayId);
-  
+
   if (result.success && result.pairingCode) {
     console.log(`\n✅ Onboarding complete!`);
     console.log(`\n📋 Pairing Code: ${result.pairingCode}`);
@@ -519,71 +547,92 @@ async function handleGateway(): Promise<void> {
   const port = parseInt(getString("port", "42617"));
   const host = getString("host", "127.0.0.1");
   const dbPath = getString("db-path", ".kendaliai/kendaliai.db");
-  
+
   console.log(`🚀 Starting KendaliAI Gateway on ${host}:${port}\n`);
-  
+
   // Initialize database
   const database = getDb(dbPath);
   await initTables(database);
-  
+
   // Get gateway with full config
-  const gateway = database.query<{ 
-    id: string; 
-    name: string; 
-    provider: string; 
-    default_model: string;
-    endpoint: string | null;
-    api_key_encrypted: string | null;
-  }, []>(`
+  const gateway = database
+    .query<
+      {
+        id: string;
+        name: string;
+        provider: string;
+        default_model: string;
+        endpoint: string | null;
+        api_key_encrypted: string | null;
+      },
+      []
+    >(
+      `
     SELECT id, name, provider, default_model, endpoint, api_key_encrypted FROM gateways LIMIT 1
-  `).get();
-  
+  `,
+    )
+    .get();
+
   if (!gateway) {
     console.log("⚠️  No gateway found. Run 'kendaliai onboard' first.");
     return;
   }
-  
+
   // Decrypt API key for use (with fallback for plain text)
   let apiKey: string;
   try {
-    apiKey = gateway.api_key_encrypted ? decrypt(gateway.api_key_encrypted) : "";
+    apiKey = gateway.api_key_encrypted
+      ? decrypt(gateway.api_key_encrypted)
+      : "";
   } catch {
     // Backward compatibility: try plain text if decryption fails
     apiKey = gateway.api_key_encrypted || "";
   }
-  
+
   // Update gateway status to running
-  database.run(`UPDATE gateways SET status = 'running', updated_at = ? WHERE id = ?`, [Date.now(), gateway.id]);
-  
+  database.run(
+    `UPDATE gateways SET status = 'running', updated_at = ? WHERE id = ?`,
+    [Date.now(), gateway.id],
+  );
+
   // Check pairing status
   const pairingStatus = await securityManager.getPairingStatus(gateway.id);
-  
+
   if (!pairingStatus.isPaired && pairingStatus.pairingCode) {
     console.log(`🔐 Gateway not paired.`);
     console.log(`   Pairing Code: ${pairingStatus.pairingCode}`);
     console.log(`   Expires in 5 minutes.\n`);
   }
-  
+
   // Check if public binding is allowed
   if (host === "0.0.0.0" && !values["allow-public"]) {
-    console.error("❌ Error: Public binding requires --allow-public or active tunnel");
+    console.error(
+      "❌ Error: Public binding requires --allow-public or active tunnel",
+    );
     console.log("   Use --host 127.0.0.1 for local-only binding");
     process.exit(1);
   }
-  
+
   // Get Telegram channel
-  const channel = database.query<{ 
-    id: string; 
-    config: string; 
-    allowed_users: string; 
-  }, []>(`
+  const channel = database
+    .query<
+      {
+        id: string;
+        config: string;
+        allowed_users: string;
+      },
+      []
+    >(
+      `
     SELECT id, config, allowed_users FROM channels WHERE type = 'telegram' AND enabled = 1 LIMIT 1
-  `).get();
-  
+  `,
+    )
+    .get();
+
   // Parse Telegram config
   let botToken: string | null = null;
   let allowedUsers: string[] = [];
-  
+
   if (channel) {
     try {
       const config = JSON.parse(channel.config);
@@ -593,7 +642,7 @@ async function handleGateway(): Promise<void> {
       allowedUsers = JSON.parse(channel.allowed_users || "[]");
     } catch {}
   }
-  
+
   // Determine API endpoint for AI calls
   let apiUrl = gateway.endpoint;
   if (!apiUrl) {
@@ -605,7 +654,7 @@ async function handleGateway(): Promise<void> {
     };
     apiUrl = defaultEndpoints[gateway.provider] || "https://api.openai.com/v1";
   }
-  
+
   // AI call helper
   async function callAI(userMessage: string): Promise<string> {
     try {
@@ -613,7 +662,7 @@ async function handleGateway(): Promise<void> {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiKey}`,
+          Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
           model: gateway!.default_model,
@@ -621,49 +670,58 @@ async function handleGateway(): Promise<void> {
           stream: false,
         }),
       });
-      
+
       if (!response.ok) return `❌ API Error: ${response.status}`;
-      
-      const data = await response.json() as {
+
+      const data = (await response.json()) as {
         choices?: Array<{ message?: { content?: string } }>;
       };
-      
+
       return data.choices?.[0]?.message?.content || "No response";
     } catch (error) {
       return `❌ Error: ${error}`;
     }
   }
-  
+
   // Start HTTP server
   const server = Bun.serve({
     port,
     hostname: host,
     async fetch(request) {
       const url = new URL(request.url);
-      
+
       // Health check (always public)
       if (url.pathname === "/health") {
-        return new Response(JSON.stringify({ status: "ok", version: VERSION }), {
-          headers: { "Content-Type": "application/json" },
-        });
+        return new Response(
+          JSON.stringify({ status: "ok", version: VERSION }),
+          {
+            headers: { "Content-Type": "application/json" },
+          },
+        );
       }
-      
+
       // Status endpoint
       if (url.pathname === "/status") {
-        return new Response(JSON.stringify({
-          gateway: gateway!.name,
-          provider: gateway!.provider,
-          model: gateway!.default_model,
-          paired: pairingStatus.isPaired,
-          telegram: channel ? "connected" : "not configured",
-          version: VERSION,
-        }), {
-          headers: { "Content-Type": "application/json" },
-        });
+        return new Response(
+          JSON.stringify({
+            gateway: gateway!.name,
+            provider: gateway!.provider,
+            model: gateway!.default_model,
+            paired: pairingStatus.isPaired,
+            telegram: channel ? "connected" : "not configured",
+            version: VERSION,
+          }),
+          {
+            headers: { "Content-Type": "application/json" },
+          },
+        );
       }
-      
+
       // OpenAI-compatible chat completions endpoint
-      if (url.pathname === "/v1/chat/completions" && request.method === "POST") {
+      if (
+        url.pathname === "/v1/chat/completions" &&
+        request.method === "POST"
+      ) {
         const auth = request.headers.get("Authorization");
         if (!auth?.startsWith("Bearer ")) {
           return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -671,49 +729,63 @@ async function handleGateway(): Promise<void> {
             headers: { "Content-Type": "application/json" },
           });
         }
-        
+
         const token = auth.slice(7);
-        const valid = await securityManager.verifyBearerToken(gateway!.id, token);
-        
+        const valid = await securityManager.verifyBearerToken(
+          gateway!.id,
+          token,
+        );
+
         if (!valid) {
           return new Response(JSON.stringify({ error: "Invalid token" }), {
             status: 401,
             headers: { "Content-Type": "application/json" },
           });
         }
-        
+
         try {
-          const body = await request.json() as {
+          const body = (await request.json()) as {
             messages?: Array<{ role: string; content: string }>;
             model?: string;
             stream?: boolean;
           };
-          
-          const lastMessage = body.messages?.filter(m => m.role === "user").pop();
+
+          const lastMessage = body.messages
+            ?.filter((m) => m.role === "user")
+            .pop();
           if (!lastMessage) {
             return new Response(JSON.stringify({ error: "No user message" }), {
               status: 400,
               headers: { "Content-Type": "application/json" },
             });
           }
-          
+
           const aiResponse = await callAI(lastMessage.content);
-          
+
           // OpenAI-compatible response
-          return new Response(JSON.stringify({
-            id: `chatcmpl-${randomUUID().slice(0, 8)}`,
-            object: "chat.completion",
-            created: Math.floor(Date.now() / 1000),
-            model: gateway!.default_model,
-            choices: [{
-              index: 0,
-              message: { role: "assistant", content: aiResponse },
-              finish_reason: "stop",
-            }],
-            usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-          }), {
-            headers: { "Content-Type": "application/json" },
-          });
+          return new Response(
+            JSON.stringify({
+              id: `chatcmpl-${randomUUID().slice(0, 8)}`,
+              object: "chat.completion",
+              created: Math.floor(Date.now() / 1000),
+              model: gateway!.default_model,
+              choices: [
+                {
+                  index: 0,
+                  message: { role: "assistant", content: aiResponse },
+                  finish_reason: "stop",
+                },
+              ],
+              usage: {
+                prompt_tokens: 0,
+                completion_tokens: 0,
+                total_tokens: 0,
+              },
+            }),
+            {
+              headers: { "Content-Type": "application/json" },
+            },
+          );
         } catch (error) {
           return new Response(JSON.stringify({ error: "Invalid request" }), {
             status: 400,
@@ -721,38 +793,44 @@ async function handleGateway(): Promise<void> {
           });
         }
       }
-      
+
       // Pairing endpoint
       if (url.pathname === "/pair" && request.method === "POST") {
         const pairingCode = request.headers.get("X-Pairing-Code");
         if (!pairingCode) {
-          return new Response(JSON.stringify({ error: "Missing pairing code" }), {
-            status: 400,
-            headers: { "Content-Type": "application/json" },
-          });
+          return new Response(
+            JSON.stringify({ error: "Missing pairing code" }),
+            {
+              status: 400,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
         }
-        
+
         const result = await securityManager.completePairing(
           gateway!.id,
           pairingCode,
-          { ip: request.headers.get("X-Forwarded-For") || "unknown" }
+          { ip: request.headers.get("X-Forwarded-For") || "unknown" },
         );
-        
+
         if (result.success) {
-          return new Response(JSON.stringify({ 
-            success: true, 
-            token: result.bearerToken 
-          }), {
-            headers: { "Content-Type": "application/json" },
-          });
+          return new Response(
+            JSON.stringify({
+              success: true,
+              token: result.bearerToken,
+            }),
+            {
+              headers: { "Content-Type": "application/json" },
+            },
+          );
         }
-        
+
         return new Response(JSON.stringify({ error: result.error }), {
           status: 400,
           headers: { "Content-Type": "application/json" },
         });
       }
-      
+
       // Webhook endpoint (requires auth)
       if (url.pathname === "/webhook" && request.method === "POST") {
         const auth = request.headers.get("Authorization");
@@ -762,28 +840,34 @@ async function handleGateway(): Promise<void> {
             headers: { "Content-Type": "application/json" },
           });
         }
-        
+
         const token = auth.slice(7);
-        const valid = await securityManager.verifyBearerToken(gateway!.id, token);
-        
+        const valid = await securityManager.verifyBearerToken(
+          gateway!.id,
+          token,
+        );
+
         if (!valid) {
           return new Response(JSON.stringify({ error: "Invalid token" }), {
             status: 401,
             headers: { "Content-Type": "application/json" },
           });
         }
-        
+
         // Process webhook
         const body = await request.json();
-        return new Response(JSON.stringify({ 
-          success: true, 
-          message: "Webhook received",
-          data: body 
-        }), {
-          headers: { "Content-Type": "application/json" },
-        });
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: "Webhook received",
+            data: body,
+          }),
+          {
+            headers: { "Content-Type": "application/json" },
+          },
+        );
       }
-      
+
       // 404 for unknown routes
       return new Response(JSON.stringify({ error: "Not found" }), {
         status: 404,
@@ -791,23 +875,31 @@ async function handleGateway(): Promise<void> {
       });
     },
   });
-  
+
   console.log(`✅ Gateway HTTP server running at http://${host}:${port}`);
   console.log(`   Health:    http://${host}:${port}/health`);
   console.log(`   Status:    http://${host}:${port}/status`);
   console.log(`   Chat:      POST http://${host}:${port}/v1/chat/completions`);
   console.log(`   Pair:      POST http://${host}:${port}/pair`);
   console.log(`   Webhook:   POST http://${host}:${port}/webhook`);
-  
+
   // Start Telegram bot if configured
   if (botToken && channel) {
     console.log(`\n📱 Starting Telegram bot...`);
-    await startTelegramBot(botToken, channel.id, gateway, apiUrl, apiKey, allowedUsers, database);
+    await startTelegramBot(
+      botToken,
+      channel.id,
+      gateway,
+      apiUrl,
+      apiKey,
+      allowedUsers,
+      database,
+    );
   } else {
     console.log(`\n⚠️  No Telegram bot configured.`);
     console.log(`   Run: kendaliai channel add-telegram --bot-token <token>`);
   }
-  
+
   console.log(`\nPress Ctrl+C to stop`);
 }
 
@@ -815,51 +907,69 @@ async function handleAgent(): Promise<void> {
   const message = getString("message", "");
   const gatewayName = getString("gateway", "");
   const dbPath = getString("db-path", ".kendaliai/kendaliai.db");
-  
+
   if (!message) {
     console.log("💬 Interactive mode (not implemented in minimal CLI)");
-    console.log("   Use -m \"your message\" for single message mode");
+    console.log('   Use -m "your message" for single message mode');
     return;
   }
-  
+
   // Initialize database
   const database = getDb(dbPath);
-  
+
   // Get gateway with full config
   let gateway;
   if (gatewayName) {
-    gateway = database.query<{ 
-      id: string; 
-      name: string;
-      provider: string; 
-      default_model: string; 
-      endpoint: string | null;
-      api_key_encrypted: string | null;
-    }, [string]>(`
+    gateway = database
+      .query<
+        {
+          id: string;
+          name: string;
+          provider: string;
+          default_model: string;
+          endpoint: string | null;
+          api_key_encrypted: string | null;
+        },
+        [string]
+      >(
+        `
       SELECT id, name, provider, default_model, endpoint, api_key_encrypted 
       FROM gateways 
       WHERE name = ?
-    `).get(gatewayName);
+    `,
+      )
+      .get(gatewayName);
   } else {
-    gateway = database.query<{ 
-      id: string; 
-      name: string;
-      provider: string; 
-      default_model: string; 
-      endpoint: string | null;
-      api_key_encrypted: string | null;
-    }, []>(`
+    gateway = database
+      .query<
+        {
+          id: string;
+          name: string;
+          provider: string;
+          default_model: string;
+          endpoint: string | null;
+          api_key_encrypted: string | null;
+        },
+        []
+      >(
+        `
       SELECT id, name, provider, default_model, endpoint, api_key_encrypted 
       FROM gateways 
       LIMIT 1
-    `).get();
+    `,
+      )
+      .get();
   }
-  
+
   if (!gateway) {
-    console.error(gatewayName ? `❌ Gateway '${gatewayName}' not found.` : "❌ No gateway found. Run 'kendaliai onboard' first.");
+    console.error(
+      gatewayName
+        ? `❌ Gateway '${gatewayName}' not found.`
+        : "❌ No gateway found. Run 'kendaliai onboard' first.",
+    );
     return;
   }
-  
+
   if (!gateway.api_key_encrypted) {
     console.error(`❌ No API key configured for gateway '${gateway.name}'.`);
     return;
@@ -872,31 +982,41 @@ async function handleAgent(): Promise<void> {
   const enabledTools = skillsManager.getEnabledTools(gateway.id);
 
   let systemPrompt = "You are KendaliAI, a powerful AI orchestrator.\n";
-  
+
   // Load gateway context from markdown files
   const gatewayContext = loadGatewayContext(gateway.name);
   if (gatewayContext) {
-      systemPrompt += "\n# Gateway Context (System Rules & Identity)\n" + gatewayContext + "\n";
+    systemPrompt +=
+      "\n# Gateway Context (System Rules & Identity)\n" + gatewayContext + "\n";
   }
 
   if (enabledSkills.length > 0) {
-    console.log(`⚡ Equipped Skills: ${enabledSkills.map(s => s.name).join(", ")}`);
+    console.log(
+      `⚡ Equipped Skills: ${enabledSkills.map((s) => s.name).join(", ")}`,
+    );
     systemPrompt += "\nYou have the following skills available:\n";
-    enabledSkills.forEach(s => {
-      const desc = s.description || BUILTIN_SKILLS[s.name]?.description || "No description";
+    enabledSkills.forEach((s) => {
+      const desc =
+        s.description ||
+        BUILTIN_SKILLS[s.name]?.description ||
+        "No description";
       systemPrompt += `- ${s.name}: ${desc}\n`;
       if (s.config) {
         systemPrompt += `  Config: ${JSON.stringify(s.config)}\n`;
       }
     });
-    systemPrompt += "\nWhen you use a skill or tool, please starting your response with '[ACTION: <name>]' immediately followed by a code block containing the command.\n";
+    systemPrompt +=
+      "\nWhen you use a skill or tool, please starting your response with '[ACTION: <name>]' immediately followed by a code block containing the command.\n";
     systemPrompt += "Example:\n[ACTION: shell]\n```bash\nls -la\n```\n";
   }
   if (enabledTools.length > 0) {
-    console.log(`🛠️  Equipped Tools: ${enabledTools.map(t => t.name).join(", ")}`);
+    console.log(
+      `🛠️  Equipped Tools: ${enabledTools.map((t) => t.name).join(", ")}`,
+    );
     systemPrompt += "\nYou have the following tools available:\n";
-    enabledTools.forEach(t => {
-      const desc = t.description || BUILTIN_TOOLS[t.name]?.description || "No description";
+    enabledTools.forEach((t) => {
+      const desc =
+        t.description || BUILTIN_TOOLS[t.name]?.description || "No description";
       systemPrompt += `- ${t.name}: ${desc} (${t.riskLevel} risk level)\n`;
     });
   }
@@ -904,7 +1024,7 @@ async function handleAgent(): Promise<void> {
   console.log(""); // Spacing
   console.log(`💬 Gateway: ${gateway.name} (${gateway.provider})`);
   console.log(`💬 Message: ${message}\n`);
-  
+
   // Decrypt API key
   let apiKey: string;
   try {
@@ -913,7 +1033,7 @@ async function handleAgent(): Promise<void> {
     // Backward compatibility
     apiKey = gateway.api_key_encrypted;
   }
-  
+
   // Determine API endpoint based on provider
   let apiUrl = gateway.endpoint;
   if (!apiUrl) {
@@ -935,13 +1055,17 @@ async function handleAgent(): Promise<void> {
 
   try {
     console.log(`\n🔍 Initializing AI Engine...`);
-    
+
     // 1. Initialize Provider
-    const provider = await createProvider(gateway.name, gateway.provider as any, {
-      type: gateway.provider as any,
-      apiKey,
-      baseURL: apiUrl || undefined,
-    });
+    const provider = await createProvider(
+      gateway.name,
+      gateway.provider as any,
+      {
+        type: gateway.provider as any,
+        apiKey,
+        baseURL: apiUrl || undefined,
+      },
+    );
 
     // 2. Initialize RAG Engine
     const ragEngine = await createRAGEngine(database);
@@ -958,13 +1082,12 @@ async function handleAgent(): Promise<void> {
       model: gateway.default_model,
       embedder,
       retriever,
-      agentSystemPrompt: systemPrompt
+      agentSystemPrompt: systemPrompt,
     });
 
     console.log(`\n✅ Processed as: ${result.intent.toUpperCase()}`);
     console.log(`🤖 Final Response:\n`);
     console.log(result.response);
-
   } catch (error: any) {
     console.error(`\n❌ Pipeline Error: ${error.message}`);
   }
@@ -973,37 +1096,47 @@ async function handleAgent(): Promise<void> {
 async function handlePairing(): Promise<void> {
   const dbPath = getString("db-path", ".kendaliai/kendaliai.db");
   const database = getDb(dbPath);
-  
+
   const subCommand = positionals[1];
-  
+
   if (subCommand === "create") {
-    const gateway = database.query<{ id: string }, []>(`
+    const gateway = database
+      .query<{ id: string }, []>(
+        `
       SELECT id FROM gateways LIMIT 1
-    `).get();
-    
+    `,
+      )
+      .get();
+
     if (!gateway) {
       console.error("❌ No gateway found. Run 'kendaliai onboard' first.");
       return;
     }
-    
+
     const result = await securityManager.createPairing(gateway.id);
-    
+
     if (result.success && result.pairingCode) {
       console.log(`🔐 Pairing Code: ${result.pairingCode}`);
       console.log(`   Expires in 5 minutes`);
       console.log(`\n   Use this code to pair your client:`);
-      console.log(`   POST /pair with header X-Pairing-Code: ${result.pairingCode}`);
+      console.log(
+        `   POST /pair with header X-Pairing-Code: ${result.pairingCode}`,
+      );
     }
   } else if (subCommand === "status") {
-    const gateway = database.query<{ id: string }, []>(`
+    const gateway = database
+      .query<{ id: string }, []>(
+        `
       SELECT id FROM gateways LIMIT 1
-    `).get();
-    
+    `,
+      )
+      .get();
+
     if (!gateway) {
       console.error("❌ No gateway found.");
       return;
     }
-    
+
     const status = await securityManager.getPairingStatus(gateway.id);
     console.log(`Paired: ${status.isPaired}`);
     if (status.pairingCode) {
@@ -1021,132 +1154,199 @@ async function handleChannel(): Promise<void> {
   const dbPath = getString("db-path", ".kendaliai/kendaliai.db");
   const database = getDb(dbPath);
   const gatewayName = getString("gateway", "");
-  
+
   const subCommand = positionals[1];
-  
+
   if (subCommand === "bind-telegram") {
     const userId = positionals[2];
     if (!userId) {
       console.error("❌ Error: User ID required");
-      console.log("   Usage: kendaliai channel bind-telegram <user_id> [--gateway <gw-name>]");
+      console.log(
+        "   Usage: kendaliai channel bind-telegram <user_id> [--gateway <gw-name>]",
+      );
       return;
     }
-    
+
     // Find gateway first if name provided
     let gateway;
     if (gatewayName) {
-      gateway = database.query<{ id: string }, [string]>(`
+      gateway = database
+        .query<{ id: string }, [string]>(
+          `
         SELECT id FROM gateways WHERE name = ?
-      `).get(gatewayName);
+      `,
+        )
+        .get(gatewayName);
     }
-    
+
     // Find channel for this gateway (or first telegram channel if no gateway specified)
     let channel;
     if (gateway) {
-      channel = database.query<{ id: string }, [string]>(`
+      channel = database
+        .query<{ id: string }, [string]>(
+          `
         SELECT id FROM channels WHERE type = 'telegram' AND gateway_id = ? LIMIT 1
-      `).get(gateway.id);
+      `,
+        )
+        .get(gateway.id);
     } else {
-      channel = database.query<{ id: string }, []>(`
+      channel = database
+        .query<{ id: string }, []>(
+          `
         SELECT id FROM channels WHERE type = 'telegram' LIMIT 1
-      `).get();
+      `,
+        )
+        .get();
     }
-    
+
     if (!channel) {
       // Create telegram channel if it doesn't exist
       if (!gateway && !gatewayName) {
-        gateway = database.query<{ id: string }, []>(`
+        gateway = database
+          .query<{ id: string }, []>(
+            `
           SELECT id FROM gateways LIMIT 1
-        `).get();
+        `,
+          )
+          .get();
       }
-      
+
       if (!gateway) {
-        console.error(gatewayName ? `❌ Gateway '${gatewayName}' not found.` : "❌ No gateway found. Run 'kendaliai onboard' first.");
+        console.error(
+          gatewayName
+            ? `❌ Gateway '${gatewayName}' not found.`
+            : "❌ No gateway found. Run 'kendaliai onboard' first.",
+        );
         return;
       }
-      
+
       const channelId = `ch_${randomUUID().slice(0, 8)}`;
       const now = Date.now();
-      database.run(`
+      database.run(
+        `
         INSERT INTO channels (id, gateway_id, type, name, allowed_users, enabled, status, created_at, updated_at)
         VALUES (?, ?, 'telegram', 'Telegram Bot', ?, 1, 'stopped', ?, ?)
-      `, [channelId, gateway.id, JSON.stringify([userId]), now, now]);
-      
-      console.log(`✅ Created new Telegram channel ${channelId} and added user ${userId} to allowlist (linked to gateway: ${gatewayName || 'default'})`);
+      `,
+        [channelId, gateway.id, JSON.stringify([userId]), now, now],
+      );
+
+      console.log(
+        `✅ Created new Telegram channel ${channelId} and added user ${userId} to allowlist (linked to gateway: ${gatewayName || "default"})`,
+      );
       if (gatewayName) syncGatewayLocalDb(database, gatewayName, channelId);
     } else {
       await securityManager.addToAllowlist(channel.id, userId);
-      console.log(`✅ Added user ${userId} to Telegram channel allowlist (Channel: ${channel.id})`);
+      console.log(
+        `✅ Added user ${userId} to Telegram channel allowlist (Channel: ${channel.id})`,
+      );
       if (gatewayName) syncGatewayLocalDb(database, gatewayName, channel.id);
     }
   } else if (subCommand === "add-telegram") {
     // Add Telegram channel with bot token
     const botToken = getString("bot-token", "");
-    
+
     if (!botToken) {
       console.error("❌ Error: --bot-token is required");
-      console.log("   Usage: kendaliai channel add-telegram --bot-token <token>");
+      console.log(
+        "   Usage: kendaliai channel add-telegram --bot-token <token>",
+      );
       return;
     }
-    
+
     let gateway;
     if (gatewayName) {
-      gateway = database.query<{ id: string }, [string]>(`
+      gateway = database
+        .query<{ id: string }, [string]>(
+          `
         SELECT id FROM gateways WHERE name = ?
-      `).get(gatewayName);
-      
+      `,
+        )
+        .get(gatewayName);
+
       if (!gateway) {
         console.error(`❌ Gateway '${gatewayName}' not found.`);
         return;
       }
     } else {
-      gateway = database.query<{ id: string }, []>(`
+      gateway = database
+        .query<{ id: string }, []>(
+          `
         SELECT id FROM gateways LIMIT 1
-      `).get();
+      `,
+        )
+        .get();
     }
-    
+
     if (!gateway) {
       console.error("❌ No gateway found. Run 'kendaliai onboard' first.");
       return;
     }
-    
+
     // Check if telegram channel already exists for THIS gateway
-    const existingChannel = database.query<{ id: string }, [string]>(`
+    const existingChannel = database
+      .query<{ id: string }, [string]>(
+        `
       SELECT id FROM channels WHERE type = 'telegram' AND gateway_id = ?
-    `).get(gateway.id);
-    
+    `,
+      )
+      .get(gateway.id);
+
     const now = Date.now();
-    
+
     if (existingChannel) {
       // Update existing channel
-      database.run(`
+      database.run(
+        `
         UPDATE channels SET config = ?, updated_at = ? WHERE id = ?
-      `, [JSON.stringify({ botToken }), now, existingChannel.id]);
-      console.log(`✅ Updated Telegram channel with new bot token for gateway: ${gatewayName || 'default'}`);
-      if (gatewayName) syncGatewayLocalDb(database, gatewayName, existingChannel.id); // Added call here
+      `,
+        [JSON.stringify({ botToken }), now, existingChannel.id],
+      );
+      console.log(
+        `✅ Updated Telegram channel with new bot token for gateway: ${gatewayName || "default"}`,
+      );
+      if (gatewayName)
+        syncGatewayLocalDb(database, gatewayName, existingChannel.id); // Added call here
     } else {
       // Create new telegram channel
       const channelId = `ch_${randomUUID().slice(0, 8)}`;
-      database.run(`
+      database.run(
+        `
         INSERT INTO channels (id, gateway_id, type, name, config, allowed_users, enabled, status, created_at, updated_at)
         VALUES (?, ?, 'telegram', 'Telegram Bot', ?, '[]', 1, 'stopped', ?, ?)
-      `, [channelId, gateway.id, JSON.stringify({ botToken }), now, now]);
-      console.log(`✅ Created Telegram channel: ${channelId} (linked to gateway: ${gatewayName || 'default'})`);
+      `,
+        [channelId, gateway.id, JSON.stringify({ botToken }), now, now],
+      );
+      console.log(
+        `✅ Created Telegram channel: ${channelId} (linked to gateway: ${gatewayName || "default"})`,
+      );
       if (gatewayName) syncGatewayLocalDb(database, gatewayName, channelId); // Added call here
     }
-    
+
     console.log(`\n   To allow users, run:`);
     console.log(`   kendaliai channel bind-telegram <user_id>`);
   } else if (subCommand === "list") {
-    const channels = database.query<{ id: string; type: string; name: string; enabled: number; status: string }, []>(`
+    const channels = database
+      .query<
+        {
+          id: string;
+          type: string;
+          name: string;
+          enabled: number;
+          status: string;
+        },
+        []
+      >(
+        `
       SELECT id, type, name, enabled, status FROM channels
-    `).all();
-    
+    `,
+      )
+      .all();
+
     if (channels.length === 0) {
       console.log("No channels configured.");
       return;
     }
-    
+
     console.log("Configured Channels:\n");
     for (const ch of channels) {
       console.log(`  ${ch.name} (${ch.type})`);
@@ -1162,34 +1362,51 @@ async function handleChannel(): Promise<void> {
 async function handleStatus(): Promise<void> {
   const dbPath = getString("db-path", ".kendaliai/kendaliai.db");
   const database = getDb(dbPath);
-  
+
   console.log("📊 KendaliAI Status\n");
-  
+
   // Get all gateways
-  const gateways = database.query<{ 
-    id: string; 
-    name: string; 
-    provider: string; 
-    default_model: string; 
-    status: string;
-    daemon_enabled: number;
-    daemon_pid: number | null;
-    daemon_port: number;
-    require_pairing: number;
-  }, []>(`
+  const gateways = database
+    .query<
+      {
+        id: string;
+        name: string;
+        provider: string;
+        default_model: string;
+        status: string;
+        daemon_enabled: number;
+        daemon_pid: number | null;
+        daemon_port: number;
+        require_pairing: number;
+      },
+      []
+    >(
+      `
     SELECT id, name, provider, default_model, status, daemon_enabled, daemon_pid, daemon_port, require_pairing 
     FROM gateways ORDER BY name
-  `).all();
-  
+  `,
+    )
+    .all();
+
   if (gateways.length > 0) {
-    console.log("╔══════════════════════════════════════════════════════════════════════════╗");
-    console.log("║                        KendaliAI Gateways                              ║");
-    console.log("╠══════════════════════════════════════════════════════════════════════════╣");
-    console.log("║ Name          Status    PID      Provider    Model           Port      ║");
-    console.log("╠══════════════════════════════════════════════════════════════════════════╣");
-    
+    console.log(
+      "╔══════════════════════════════════════════════════════════════════════════╗",
+    );
+    console.log(
+      "║                        KendaliAI Gateways                              ║",
+    );
+    console.log(
+      "╠══════════════════════════════════════════════════════════════════════════╣",
+    );
+    console.log(
+      "║ Name          Status    PID      Provider    Model           Port      ║",
+    );
+    console.log(
+      "╠══════════════════════════════════════════════════════════════════════════╣",
+    );
+
     let runningCount = 0;
-    
+
     for (const gw of gateways) {
       let currentStatus = gw.status;
       let currentPid = gw.daemon_pid;
@@ -1202,28 +1419,40 @@ async function handleStatus(): Promise<void> {
           // Process is not running
           currentStatus = "stopped";
           currentPid = null;
-          
+
           // Update database for stale status
-          database.run(`UPDATE gateways SET status = 'stopped', daemon_pid = NULL WHERE id = ?`, [gw.id]);
+          database.run(
+            `UPDATE gateways SET status = 'stopped', daemon_pid = NULL WHERE id = ?`,
+            [gw.id],
+          );
         }
       }
 
-      const statusText = currentStatus === "running" ? "● Running" : "○ Stopped";
+      const statusText =
+        currentStatus === "running" ? "● Running" : "○ Stopped";
       const pidText = currentPid ? String(currentPid) : "-";
       const model = gw.default_model || "-";
       const port = gw.daemon_port || "-";
-      
+
       if (currentStatus === "running") runningCount++;
-      
-      console.log(`║ ${gw.name.padEnd(14)} ${statusText.padEnd(9)} ${pidText.padEnd(7)} ${gw.provider.padEnd(10)} ${model.padEnd(16)} ${String(port).padEnd(9)}║`);
+
+      console.log(
+        `║ ${gw.name.padEnd(14)} ${statusText.padEnd(9)} ${pidText.padEnd(7)} ${gw.provider.padEnd(10)} ${model.padEnd(16)} ${String(port).padEnd(9)}║`,
+      );
     }
-    
-    console.log("╚══════════════════════════════════════════════════════════════════════════╝");
-    console.log(`Total: ${gateways.length} gateway(s), ${runningCount} running\n`);
+
+    console.log(
+      "╚══════════════════════════════════════════════════════════════════════════╝",
+    );
+    console.log(
+      `Total: ${gateways.length} gateway(s), ${runningCount} running\n`,
+    );
   } else {
-    console.log("No gateways configured. Run 'kendaliai onboard' or 'kendaliai gateway create' to get started.\n");
+    console.log(
+      "No gateways configured. Run 'kendaliai onboard' or 'kendaliai gateway create' to get started.\n",
+    );
   }
-  
+
   // Check if any daemon is running
   console.log("Daemon Status:");
   try {
@@ -1237,34 +1466,46 @@ async function handleStatus(): Promise<void> {
   } catch {
     console.log(`  Status: Unknown`);
   }
-  
+
   // Memory status
-  const memoryCount = database.query<{ count: number }, []>(`
+  const memoryCount = database
+    .query<{ count: number }, []>(
+      `
     SELECT COUNT(*) as count FROM memories
-  `).get();
-  
+  `,
+    )
+    .get();
+
   console.log(`\nMemory:`);
   console.log(`  Entries: ${memoryCount?.count || 0}`);
-  
+
   // Channels status
-  const channels = database.query<{ count: number }, []>(`
+  const channels = database
+    .query<{ count: number }, []>(
+      `
     SELECT COUNT(*) as count FROM channels WHERE enabled = 1
-  `).get();
-  
+  `,
+    )
+    .get();
+
   console.log(`\nChannels:`);
   console.log(`  Active: ${channels?.count || 0}`);
 }
 
 async function handleDoctor(): Promise<void> {
   console.log("🔍 KendaliAI Diagnostics\n");
-  
-  const checks: { name: string; status: "ok" | "warn" | "error"; message: string }[] = [];
-  
+
+  const checks: {
+    name: string;
+    status: "ok" | "warn" | "error";
+    message: string;
+  }[] = [];
+
   // Initialize database and tables
   const dbPath = getString("db-path", ".kendaliai/kendaliai.db");
   const database = getDb(dbPath);
   await initTables(database);
-  
+
   // Check database
   try {
     database.query("SELECT 1").get();
@@ -1272,28 +1513,40 @@ async function handleDoctor(): Promise<void> {
   } catch (e) {
     checks.push({ name: "Database", status: "error", message: `Failed: ${e}` });
   }
-  
+
   // Check gateway
   try {
-    const gateway = database.query<{ id: string }, []>(`
+    const gateway = database
+      .query<{ id: string }, []>(
+        `
       SELECT id FROM gateways LIMIT 1
-    `).get();
-    
+    `,
+      )
+      .get();
+
     if (gateway) {
       checks.push({ name: "Gateway", status: "ok", message: "Configured" });
     } else {
-      checks.push({ name: "Gateway", status: "warn", message: "Not configured" });
+      checks.push({
+        name: "Gateway",
+        status: "warn",
+        message: "Not configured",
+      });
     }
   } catch (e) {
     checks.push({ name: "Gateway", status: "error", message: `Error: ${e}` });
   }
-  
+
   // Check pairing
   try {
-    const gateway = database.query<{ id: string }, []>(`
+    const gateway = database
+      .query<{ id: string }, []>(
+        `
       SELECT id FROM gateways LIMIT 1
-    `).get();
-    
+    `,
+      )
+      .get();
+
     if (gateway) {
       const status = await securityManager.getPairingStatus(gateway.id);
       if (status.isPaired) {
@@ -1305,25 +1558,26 @@ async function handleDoctor(): Promise<void> {
   } catch (e) {
     checks.push({ name: "Pairing", status: "error", message: `Error: ${e}` });
   }
-  
+
   // Print results
   for (const check of checks) {
-    const icon = check.status === "ok" ? "✅" : check.status === "warn" ? "⚠️" : "❌";
+    const icon =
+      check.status === "ok" ? "✅" : check.status === "warn" ? "⚠️" : "❌";
     console.log(`${icon} ${check.name}: ${check.message}`);
   }
 }
 
 async function handleReset(): Promise<void> {
   const dbPath = getString("db-path", ".kendaliai/kendaliai.db");
-  
+
   console.log("⚠️  This will delete all data!");
   console.log(`   Database: ${dbPath}`);
   console.log("\n   Run with --confirm to proceed");
-  
+
   console.log("\n🔄 Resetting database...");
-  
+
   closeDb();
-  
+
   // Delete existing database files
   const fs = require("fs");
   const files = [dbPath, dbPath + "-wal", dbPath + "-shm"];
@@ -1336,18 +1590,18 @@ async function handleReset(): Promise<void> {
       // File might not exist
     }
   }
-  
+
   // Reinitialize
   const database = getDb(dbPath);
   await initTables(database);
-  
+
   console.log("✅ Database reset complete");
 }
 
 async function handleInit(): Promise<void> {
   const cliDbPath = getString("db-path");
   const config = loadConfig();
-  
+
   // Priority: CLI arg > config file > default
   let dbPath: string;
   if (cliDbPath) {
@@ -1357,12 +1611,12 @@ async function handleInit(): Promise<void> {
   } else {
     dbPath = join(KENDALIAI_DIR, "kendaliai.db");
   }
-  
+
   console.log("🔄 Initializing database...");
-  
+
   const database = getDb(dbPath);
   await initTables(database);
-  
+
   console.log("✅ Database initialized successfully");
   console.log(`   Location: ${dbPath}`);
 }
@@ -1397,14 +1651,14 @@ async function startTelegramBot(
   apiUrl: string,
   apiKey: string,
   allowedUsers: string[],
-  database: Database
+  database: Database,
 ): Promise<void> {
   const telegramApi = `https://api.telegram.org/bot${botToken}`;
-  
+
   // Initialize routing manager
   const { getRoutingManager } = await import("./server/routing");
   const routingManager = getRoutingManager(database);
-  
+
   async function sendMessage(chatId: number, text: string): Promise<void> {
     try {
       await fetch(`${telegramApi}/sendMessage`, {
@@ -1420,8 +1674,12 @@ async function startTelegramBot(
       console.error("Failed to send message:", error);
     }
   }
-  
-  async function callAI(userMessage: string, targetGateway?: GatewayConfig, targetApiKey?: string): Promise<string> {
+
+  async function callAI(
+    userMessage: string,
+    targetGateway?: GatewayConfig,
+    targetApiKey?: string,
+  ): Promise<string> {
     const gw = targetGateway || gateway;
     const authKey = targetApiKey || apiKey;
     try {
@@ -1429,7 +1687,7 @@ async function startTelegramBot(
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${authKey}`,
+          Authorization: `Bearer ${authKey}`,
         },
         body: JSON.stringify({
           model: gw.default_model,
@@ -1437,33 +1695,42 @@ async function startTelegramBot(
           stream: false,
         }),
       });
-      
+
       if (!response.ok) return `❌ API Error: ${response.status}`;
-      
-      const data = await response.json() as {
+
+      const data = (await response.json()) as {
         choices?: Array<{ message?: { content?: string } }>;
       };
-      
+
       return data.choices?.[0]?.message?.content || "No response";
     } catch (error) {
       return `❌ Error: ${error}`;
     }
   }
-  
+
   // Get gateway config by ID with decrypted API key
-  function getGatewayById(gatewayId: string): { gateway: GatewayConfig; apiKey: string } | null {
-    const gw = database.query<{
-      id: string;
-      provider: string;
-      default_model: string;
-      endpoint: string | null;
-      api_key_encrypted: string | null;
-    }, [string]>(`
+  function getGatewayById(
+    gatewayId: string,
+  ): { gateway: GatewayConfig; apiKey: string } | null {
+    const gw = database
+      .query<
+        {
+          id: string;
+          provider: string;
+          default_model: string;
+          endpoint: string | null;
+          api_key_encrypted: string | null;
+        },
+        [string]
+      >(
+        `
       SELECT id, provider, default_model, endpoint, api_key_encrypted FROM gateways WHERE id = ?
-    `).get(gatewayId);
-    
+    `,
+      )
+      .get(gatewayId);
+
     if (!gw) return null;
-    
+
     // Decrypt API key
     let decryptedKey = "";
     try {
@@ -1472,183 +1739,269 @@ async function startTelegramBot(
       // Backward compatibility: try plain text if decryption fails
       decryptedKey = gw.api_key_encrypted || "";
     }
-    
+
     return { gateway: gw, apiKey: decryptedKey };
   }
-  
+
   // Update channel status
-  database.run(`UPDATE channels SET status = 'running', updated_at = ? WHERE id = ?`, [Date.now(), channelId]);
-  
+  database.run(
+    `UPDATE channels SET status = 'running', updated_at = ? WHERE id = ?`,
+    [Date.now(), channelId],
+  );
+
   console.log(`   ✅ Telegram bot started`);
-  console.log(`   Allowed users: ${allowedUsers.length > 0 ? allowedUsers.join(", ") : "All users"}`);
+  console.log(
+    `   Allowed users: ${allowedUsers.length > 0 ? allowedUsers.join(", ") : "All users"}`,
+  );
   console.log(`   Send /init to pair!\n`);
-  
+
   // Polling loop
   let lastUpdateId = 0;
-  const pendingPairings = new Map<string, { chatId: number; timestamp: number }>();
-  
+  const pendingPairings = new Map<
+    string,
+    { chatId: number; timestamp: number }
+  >();
+
   while (true) {
     try {
-      const response = await fetch(`${telegramApi}/getUpdates?offset=${lastUpdateId + 1}&timeout=30`);
-      const data = await response.json() as { ok: boolean; result?: TelegramUpdate[] };
-      
+      const response = await fetch(
+        `${telegramApi}/getUpdates?offset=${lastUpdateId + 1}&timeout=30`,
+      );
+      const data = (await response.json()) as {
+        ok: boolean;
+        result?: TelegramUpdate[];
+      };
+
       if (!data.ok || !data.result) {
-        await new Promise(r => setTimeout(r, 1000));
+        await new Promise((r) => setTimeout(r, 1000));
         continue;
       }
-      
+
       for (const update of data.result) {
         lastUpdateId = update.update_id;
-        
+
         if (!update.message?.text) continue;
-        
+
         const chatId = update.message.chat.id;
         const userId = update.message.from?.id.toString() || "unknown";
         const userName = update.message.from?.first_name || "User";
         const text = update.message.text.trim();
-        
+
         console.log(`📩 [${userName}] ${text}`);
-        
+
         // Handle /init command - Start pairing flow
         if (text === "/init" || text === "/start") {
           if (allowedUsers.includes(userId)) {
-            await sendMessage(chatId, `✅ You're already paired!\n\nSend me a message to chat with AI.`);
+            await sendMessage(
+              chatId,
+              `✅ You're already paired!\n\nSend me a message to chat with AI.`,
+            );
             continue;
           }
-          
-          const pairingStatus = await securityManager.getPairingStatus(gateway.id);
-          
+
+          const pairingStatus = await securityManager.getPairingStatus(
+            gateway.id,
+          );
+
           if (pairingStatus.pairingCode) {
             pendingPairings.set(userId, { chatId, timestamp: Date.now() });
-            await sendMessage(chatId, `🔐 *Pairing Required*\n\nYour User ID: \`${userId}\`\n\nEnter the pairing code to continue.\n\nPairing Code: \`${pairingStatus.pairingCode}\`\n\n_Type the 6-digit code to pair your account._`);
+            await sendMessage(
+              chatId,
+              `🔐 *Pairing Required*\n\nYour User ID: \`${userId}\`\n\nEnter the pairing code to continue.\n\nPairing Code: \`${pairingStatus.pairingCode}\`\n\n_Type the 6-digit code to pair your account._`,
+            );
           } else {
             const result = await securityManager.createPairing(gateway.id);
             if (result.success && result.pairingCode) {
               pendingPairings.set(userId, { chatId, timestamp: Date.now() });
-              await sendMessage(chatId, `🔐 *Pairing Required*\n\nYour User ID: \`${userId}\`\n\nEnter the pairing code to continue.\n\nPairing Code: \`${result.pairingCode}\`\n\n_Type the 6-digit code to pair your account._`);
+              await sendMessage(
+                chatId,
+                `🔐 *Pairing Required*\n\nYour User ID: \`${userId}\`\n\nEnter the pairing code to continue.\n\nPairing Code: \`${result.pairingCode}\`\n\n_Type the 6-digit code to pair your account._`,
+              );
             } else {
-              await sendMessage(chatId, "❌ Failed to create pairing code. Please try again.");
+              await sendMessage(
+                chatId,
+                "❌ Failed to create pairing code. Please try again.",
+              );
             }
           }
           continue;
         }
-        
+
         // Handle pairing code input
         const pendingPairing = pendingPairings.get(userId);
         if (pendingPairing && /^\d{6}$/.test(text)) {
-          const pairingStatus = await securityManager.getPairingStatus(gateway.id);
-          
+          const pairingStatus = await securityManager.getPairingStatus(
+            gateway.id,
+          );
+
           if (pairingStatus.pairingCode === text) {
-            const result = await securityManager.completePairing(gateway.id, text, { 
-              ip: "telegram", 
-              userAgent: `telegram:${userId}` 
-            });
-            
+            const result = await securityManager.completePairing(
+              gateway.id,
+              text,
+              {
+                ip: "telegram",
+                userAgent: `telegram:${userId}`,
+              },
+            );
+
             if (result.success) {
               await securityManager.addToAllowlist(channelId, userId);
               allowedUsers.push(userId);
               pendingPairings.delete(userId);
-              
-              await sendMessage(pendingPairing.chatId, `✅ *Pairing Successful!*\n\nYour Telegram account is now paired with KendaliAI.\n\nYou can now chat with me! Send any message to start.`);
+
+              await sendMessage(
+                pendingPairing.chatId,
+                `✅ *Pairing Successful!*\n\nYour Telegram account is now paired with KendaliAI.\n\nYou can now chat with me! Send any message to start.`,
+              );
               console.log(`   ✅ User ${userId} paired successfully`);
             } else {
-              await sendMessage(pendingPairing.chatId, `❌ Pairing failed: ${result.error}\n\nTry /init again.`);
+              await sendMessage(
+                pendingPairing.chatId,
+                `❌ Pairing failed: ${result.error}\n\nTry /init again.`,
+              );
               pendingPairings.delete(userId);
             }
           } else {
-            await sendMessage(pendingPairing.chatId, "❌ Invalid pairing code. Try again or use /init for a new code.");
+            await sendMessage(
+              pendingPairing.chatId,
+              "❌ Invalid pairing code. Try again or use /init for a new code.",
+            );
           }
           continue;
         }
-        
+
         // Check allowlist
         if (allowedUsers.length > 0 && !allowedUsers.includes(userId)) {
           console.log(`   ⛔ User ${userId} not in allowlist`);
-          await sendMessage(chatId, "⛔ You are not authorized.\n\nUse /init to pair your account first.");
+          await sendMessage(
+            chatId,
+            "⛔ You are not authorized.\n\nUse /init to pair your account first.",
+          );
           continue;
         }
-        
+
         // Handle /status command
         if (text === "/status") {
-          await sendMessage(chatId, `📊 *KendaliAI Status*\n\nProvider: ${gateway.provider}\nModel: ${gateway.default_model}\nStatus: Running\n\nYour ID: \`${userId}\``);
+          await sendMessage(
+            chatId,
+            `📊 *KendaliAI Status*\n\nProvider: ${gateway.provider}\nModel: ${gateway.default_model}\nStatus: Running\n\nYour ID: \`${userId}\``,
+          );
           continue;
         }
-        
+
         // Handle /gateways command - show available gateways
         if (text === "/gateways") {
-          const availableGateways = database.query<{ name: string; description: string | null; status: string }, []>(`
+          const availableGateways = database
+            .query<
+              { name: string; description: string | null; status: string },
+              []
+            >(
+              `
             SELECT name, description, status FROM gateways ORDER BY name
-          `).all();
-          
+          `,
+            )
+            .all();
+
           let gwList = "🤖 *Available Gateways:*\n\n";
           for (const gw of availableGateways) {
             const status = gw.status === "running" ? "●" : "○";
             const desc = gw.description ? ` - ${gw.description}` : "";
             gwList += `${status} ${gw.name}${desc}\n`;
           }
-          gwList += "\n_Use prefix commands like /dev, /support to route to specific gateways._";
+          gwList +=
+            "\n_Use prefix commands like /dev, /support to route to specific gateways._";
           await sendMessage(chatId, gwList);
           continue;
         }
-        
+
         // Route message to appropriate gateway
-        const routingResult = routingManager.routeMessage(channelId, text, userId);
-        
+        const routingResult = routingManager.routeMessage(
+          channelId,
+          text,
+          userId,
+        );
+
         // Handle interactive mode - show gateway selection
-        if (routingResult.matchType === "interactive" && routingResult.interactiveOptions) {
-          const interactiveMsg = routingManager.generateInteractiveMessage(routingResult.interactiveOptions);
+        if (
+          routingResult.matchType === "interactive" &&
+          routingResult.interactiveOptions
+        ) {
+          const interactiveMsg = routingManager.generateInteractiveMessage(
+            routingResult.interactiveOptions,
+          );
           await sendMessage(chatId, interactiveMsg);
           continue;
         }
-        
+
         // No gateway matched
         if (!routingResult.matched || !routingResult.gatewayId) {
-          await sendMessage(chatId, "❌ No gateway available to handle your message.\n\nUse /gateways to see available gateways.");
+          await sendMessage(
+            chatId,
+            "❌ No gateway available to handle your message.\n\nUse /gateways to see available gateways.",
+          );
           continue;
         }
-        
+
         // Get the target gateway and its API key
         let targetGw: GatewayConfig;
         let targetApiKey: string;
-        
+
         if (routingResult.gatewayId === gateway.id) {
           targetGw = gateway;
           targetApiKey = apiKey;
         } else {
           const gwResult = getGatewayById(routingResult.gatewayId);
           if (!gwResult) {
-            await sendMessage(chatId, `❌ Gateway '${routingResult.gatewayName}' not found.`);
+            await sendMessage(
+              chatId,
+              `❌ Gateway '${routingResult.gatewayName}' not found.`,
+            );
             continue;
           }
           targetGw = gwResult.gateway;
           targetApiKey = gwResult.apiKey;
         }
-        
+
         // Use stripped message for prefix-based routing
         const messageToProcess = routingResult.strippedMessage || text;
-        
+
         // Call AI with routed gateway
-        console.log(`   🔄 Routing to ${routingResult.gatewayName} (${routingResult.matchType})...`);
-        const aiResponse = await callAI(messageToProcess, targetGw, targetApiKey);
+        console.log(
+          `   🔄 Routing to ${routingResult.gatewayName} (${routingResult.matchType})...`,
+        );
+        const aiResponse = await callAI(
+          messageToProcess,
+          targetGw,
+          targetApiKey,
+        );
         console.log(`   🤖 Response sent`);
-        
+
         // Send response
         const maxLen = 4000;
-        const truncated = aiResponse.length > maxLen ? aiResponse.slice(0, maxLen) + "..." : aiResponse;
+        const truncated =
+          aiResponse.length > maxLen
+            ? aiResponse.slice(0, maxLen) + "..."
+            : aiResponse;
         await sendMessage(chatId, truncated);
-        
+
         // Store message in database
-        database.run(`
+        database.run(
+          `
           INSERT INTO messages (gateway_id, channel_id, role, content, sender_id, sender_name, created_at)
           VALUES (?, ?, 'user', ?, ?, ?, ?)
-        `, [targetGw.id, channelId, text, userId, userName, Date.now()]);
-        
-        database.run(`
+        `,
+          [targetGw.id, channelId, text, userId, userName, Date.now()],
+        );
+
+        database.run(
+          `
           INSERT INTO messages (gateway_id, channel_id, role, content, created_at)
           VALUES (?, ?, 'assistant', ?, ?)
-        `, [targetGw.id, channelId, aiResponse, Date.now()]);
+        `,
+          [targetGw.id, channelId, aiResponse, Date.now()],
+        );
       }
-      
+
       // Clean up expired pending pairings
       const now = Date.now();
       for (const [uid, data] of pendingPairings) {
@@ -1658,7 +2011,7 @@ async function startTelegramBot(
       }
     } catch (error) {
       console.error("Polling error:", error);
-      await new Promise(r => setTimeout(r, 5000));
+      await new Promise((r) => setTimeout(r, 5000));
     }
   }
 }
@@ -1667,58 +2020,83 @@ async function handleDaemon(): Promise<void> {
   const dbPath = getString("db-path", ".kendaliai/kendaliai.db");
   const database = getDb(dbPath);
   const gatewayName = getString("gateway", "");
-  
+
   console.log("🤖 Starting KendaliAI Daemon (Telegram Bot Only)\n");
-  
+
   // Get gateway configuration
   let gateway;
   if (gatewayName) {
-    gateway = database.query<{ 
-      id: string; 
-      provider: string; 
-      default_model: string; 
-      endpoint: string | null;
-      api_key_encrypted: string | null;
-    }, [string]>(`
+    gateway = database
+      .query<
+        {
+          id: string;
+          provider: string;
+          default_model: string;
+          endpoint: string | null;
+          api_key_encrypted: string | null;
+        },
+        [string]
+      >(
+        `
       SELECT id, provider, default_model, endpoint, api_key_encrypted FROM gateways WHERE name = ?
-    `).get(gatewayName);
-    
+    `,
+      )
+      .get(gatewayName);
+
     if (!gateway) {
       console.error(`❌ Gateway '${gatewayName}' not found.`);
       return;
     }
   } else {
-    gateway = database.query<{ 
-      id: string; 
-      provider: string; 
-      default_model: string; 
-      endpoint: string | null;
-      api_key_encrypted: string | null;
-    }, []>(`
+    gateway = database
+      .query<
+        {
+          id: string;
+          provider: string;
+          default_model: string;
+          endpoint: string | null;
+          api_key_encrypted: string | null;
+        },
+        []
+      >(
+        `
       SELECT id, provider, default_model, endpoint, api_key_encrypted FROM gateways LIMIT 1
-    `).get();
+    `,
+      )
+      .get();
   }
-  
+
   if (!gateway) {
     console.error("❌ No gateway found. Run 'kendaliai onboard' first.");
     return;
   }
-  
+
   // Get Telegram channel specifically for this gateway
-  const channel = database.query<{ 
-    id: string; 
-    config: string; 
-    allowed_users: string; 
-  }, [string]>(`
+  const channel = database
+    .query<
+      {
+        id: string;
+        config: string;
+        allowed_users: string;
+      },
+      [string]
+    >(
+      `
     SELECT id, config, allowed_users FROM channels WHERE type = 'telegram' AND enabled = 1 AND gateway_id = ? LIMIT 1
-  `).get(gateway.id);
-  
+  `,
+    )
+    .get(gateway.id);
+
   if (!channel) {
-    console.error(`❌ No Telegram channel configured for gateway: ${gatewayName || 'default'}`);
-    console.log("   Run: kendaliai channel add-telegram --bot-token <token> --gateway <gw-name>");
+    console.error(
+      `❌ No Telegram channel configured for gateway: ${gatewayName || "default"}`,
+    );
+    console.log(
+      "   Run: kendaliai channel add-telegram --bot-token <token> --gateway <gw-name>",
+    );
     return;
   }
-  
+
   // Parse channel config
   let botToken: string;
   try {
@@ -1729,7 +2107,7 @@ async function handleDaemon(): Promise<void> {
     console.error("❌ Invalid Telegram channel config");
     return;
   }
-  
+
   // Parse allowed users
   let allowedUsers: string[] = [];
   try {
@@ -1737,7 +2115,7 @@ async function handleDaemon(): Promise<void> {
   } catch {
     allowedUsers = [];
   }
-  
+
   // Determine API endpoint
   let apiUrl = gateway.endpoint;
   if (!apiUrl) {
@@ -1749,24 +2127,37 @@ async function handleDaemon(): Promise<void> {
     };
     apiUrl = defaultEndpoints[gateway.provider] || "https://api.openai.com/v1";
   }
-  
+
   console.log(`📡 Provider: ${gateway.provider} (${gateway.default_model})`);
   console.log(`📱 Telegram Bot: Starting...\n`);
-  
+
   // Update gateway status
-  database.run(`UPDATE gateways SET status = 'running', updated_at = ? WHERE id = ?`, [Date.now(), gateway.id]);
-  
+  database.run(
+    `UPDATE gateways SET status = 'running', updated_at = ? WHERE id = ?`,
+    [Date.now(), gateway.id],
+  );
+
   // Decrypt API key
   let apiKey: string;
   try {
-    apiKey = gateway.api_key_encrypted ? decrypt(gateway.api_key_encrypted) : "";
+    apiKey = gateway.api_key_encrypted
+      ? decrypt(gateway.api_key_encrypted)
+      : "";
   } catch {
     // Backward compatibility
     apiKey = gateway.api_key_encrypted || "";
   }
-  
+
   // Start the bot
-  await startTelegramBot(botToken, channel.id, gateway, apiUrl, apiKey, allowedUsers, database);
+  await startTelegramBot(
+    botToken,
+    channel.id,
+    gateway,
+    apiUrl,
+    apiKey,
+    allowedUsers,
+    database,
+  );
 }
 
 // Database Tables initialization moved to src/cli/db-init.ts
@@ -1777,15 +2168,15 @@ async function handleDaemon(): Promise<void> {
 
 async function main(): Promise<void> {
   const command = positionals[0];
-  
+
   if (values.help || !command) {
     return handleHelp();
   }
-  
+
   if (values.version) {
     return handleVersion();
   }
-  
+
   switch (command) {
     case "onboard":
       await handleOnboard();
@@ -1795,24 +2186,25 @@ async function main(): Promise<void> {
       // Multi-gateway management
       const subCommand = positionals[1];
       const subArgs = positionals.slice(2);
-      
+
       // For gateway creation/list, use the central DB first
-      const gatewayNameArg = subArgs[0] && !subArgs[0].startsWith("-") ? subArgs[0] : undefined;
+      const gatewayNameArg =
+        subArgs[0] && !subArgs[0].startsWith("-") ? subArgs[0] : undefined;
       const database = getDb(getString("db-path", ".kendaliai/kendaliai.db"));
       await initTables(database);
-      
+
       // Get options from values object
       const provider = getString("provider");
       const model = getString("model");
       const apiKey = getString("api-key");
       const apiUrl = getString("api-url");
-      
+
       // Get gateway-specific options
       const daemon = Boolean((values as Record<string, unknown>)["daemon"]);
       const port = (values as Record<string, unknown>)["port"];
       const host = getString("host");
       const force = Boolean((values as Record<string, unknown>)["force"]);
-      
+
       // Build combined args array that includes both positional args and options
       const fullArgs = [...subArgs];
       if (provider) {
@@ -1839,7 +2231,7 @@ async function main(): Promise<void> {
       if (force) {
         fullArgs.push("--force");
       }
-      
+
       const { handleGatewayCommand } = await import("./cli/gateway");
       await handleGatewayCommand(database, subCommand || "list", fullArgs);
       break;
@@ -1850,7 +2242,7 @@ async function main(): Promise<void> {
       const subArgs = positionals.slice(2);
       const database = getDb(getString("db-path", ".kendaliai/kendaliai.db"));
       await initTables(database);
-      
+
       const { handleDaemonCommand } = await import("./cli/daemon");
       await handleDaemonCommand(database, subCommand || "status", subArgs);
       break;
@@ -1860,10 +2252,18 @@ async function main(): Promise<void> {
       const subCommand = positionals[1];
       const subArgs = positionals.slice(2);
       const gatewayNameArg = getString("gateway");
-      const database = getDb(getString("db-path", ".kendaliai/kendaliai.db"), gatewayNameArg);
+      const database = getDb(
+        getString("db-path", ".kendaliai/kendaliai.db"),
+        gatewayNameArg,
+      );
       await initTables(database);
       const { handleSkillsCommand } = await import("./cli/skills-config");
-      await handleSkillsCommand(database, subCommand || "list", subArgs, values);
+      await handleSkillsCommand(
+        database,
+        subCommand || "list",
+        subArgs,
+        values,
+      );
       break;
     }
     case "tools": {
@@ -1871,7 +2271,10 @@ async function main(): Promise<void> {
       const subCommand = positionals[1];
       const subArgs = positionals.slice(2);
       const gatewayNameArg = getString("gateway");
-      const database = getDb(getString("db-path", ".kendaliai/kendaliai.db"), gatewayNameArg);
+      const database = getDb(
+        getString("db-path", ".kendaliai/kendaliai.db"),
+        gatewayNameArg,
+      );
       await initTables(database);
       const { handleToolsCommand } = await import("./cli/skills-config");
       await handleToolsCommand(database, subCommand || "list", subArgs, values);
@@ -1882,10 +2285,18 @@ async function main(): Promise<void> {
       const subCommand = positionals[1];
       const subArgs = positionals.slice(2);
       const gatewayNameArg = getString("gateway");
-      const database = getDb(getString("db-path", ".kendaliai/kendaliai.db"), gatewayNameArg);
+      const database = getDb(
+        getString("db-path", ".kendaliai/kendaliai.db"),
+        gatewayNameArg,
+      );
       await initTables(database);
       const { handleSecurityCommand } = await import("./cli/skills-config");
-      await handleSecurityCommand(database, subCommand || "show", subArgs, values);
+      await handleSecurityCommand(
+        database,
+        subCommand || "show",
+        subArgs,
+        values,
+      );
       break;
     }
     case "status":
@@ -1905,9 +2316,12 @@ async function main(): Promise<void> {
       const subCommand = positionals[1] || "help";
       const subArgs = positionals.slice(2);
       const gatewayNameArg = getString("gateway");
-      const database = getDb(getString("db-path", ".kendaliai/kendaliai.db"), gatewayNameArg);
+      const database = getDb(
+        getString("db-path", ".kendaliai/kendaliai.db"),
+        gatewayNameArg,
+      );
       await initTables(database);
-      
+
       const { handleRoutingCommand } = await import("./cli/routing");
       await handleRoutingCommand(database, subCommand, subArgs);
       break;

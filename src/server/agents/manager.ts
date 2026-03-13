@@ -11,7 +11,7 @@ export const agentManager = {
   delegate: async (agentName: string, task: string) => {
     console.log(`[AgentManager] Delegating task to ${agentName}: ${task}`);
     return `Completed task: ${task}`;
-  }
+  },
 };
 
 export default agentManager;

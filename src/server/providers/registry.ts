@@ -1,6 +1,6 @@
 /**
  * KendaliAI Provider Registry
- * 
+ *
  * Manages AI provider instances and provides factory methods.
  */
 
@@ -11,11 +11,11 @@ import type {
   ProviderFactory,
   ProviderEventHandler,
   ProviderEvent,
-} from './types';
-import { OpenAIProvider } from './openai';
-import { DeepSeekProvider } from './deepseek';
-import { ZAIProvider } from './zai';
-import { CustomProvider } from './custom';
+} from "./types";
+import { OpenAIProvider } from "./openai";
+import { DeepSeekProvider } from "./deepseek";
+import { ZAIProvider } from "./zai";
+import { CustomProvider } from "./custom";
 
 // ============================================
 // Provider Registry
@@ -29,26 +29,26 @@ class ProviderRegistry {
   constructor() {
     // Register built-in provider factories
     this.registerFactory({
-      type: 'openai',
-      name: 'OpenAI',
+      type: "openai",
+      name: "OpenAI",
       create: (config) => new OpenAIProvider(config),
     });
 
     this.registerFactory({
-      type: 'deepseek',
-      name: 'DeepSeek',
+      type: "deepseek",
+      name: "DeepSeek",
       create: (config) => new DeepSeekProvider(config),
     });
 
     this.registerFactory({
-      type: 'zai',
-      name: 'ZAI',
+      type: "zai",
+      name: "ZAI",
       create: (config) => new ZAIProvider(config),
     });
 
     this.registerFactory({
-      type: 'custom',
-      name: 'Custom',
+      type: "custom",
+      name: "Custom",
       create: (config) => new CustomProvider(config),
     });
   }
@@ -65,7 +65,7 @@ class ProviderRegistry {
    */
   create(type: ProviderType, config: ProviderConfig): AIProvider {
     const factory = this.factories.get(type);
-    
+
     if (!factory) {
       throw new Error(`Unknown provider type: ${type}`);
     }
@@ -79,7 +79,7 @@ class ProviderRegistry {
   register(name: string, provider: AIProvider): void {
     this.providers.set(name, provider);
     this.emitEvent({
-      type: 'initialized',
+      type: "initialized",
       provider: name,
       timestamp: new Date(),
     });
@@ -108,7 +108,7 @@ class ProviderRegistry {
       await provider.dispose();
       this.providers.delete(name);
       this.emitEvent({
-        type: 'disposed',
+        type: "disposed",
         provider: name,
         timestamp: new Date(),
       });
@@ -153,13 +153,13 @@ class ProviderRegistry {
           await provider.initialize();
         } catch (error) {
           this.emitEvent({
-            type: 'error',
+            type: "error",
             provider: name,
             timestamp: new Date(),
             data: error,
           });
         }
-      }
+      },
     );
     await Promise.all(promises);
   }
@@ -169,7 +169,7 @@ class ProviderRegistry {
    */
   async healthCheckAll(): Promise<Record<string, boolean>> {
     const results: Record<string, boolean> = {};
-    
+
     for (const [name, provider] of this.providers) {
       try {
         results[name] = await provider.healthCheck();
@@ -177,7 +177,7 @@ class ProviderRegistry {
         results[name] = false;
       }
     }
-    
+
     return results;
   }
 
@@ -186,7 +186,7 @@ class ProviderRegistry {
    */
   async disposeAll(): Promise<void> {
     const promises = Array.from(this.providers.keys()).map((name) =>
-      this.remove(name)
+      this.remove(name),
     );
     await Promise.all(promises);
   }
@@ -216,7 +216,7 @@ class ProviderRegistry {
       try {
         handler(event);
       } catch (error) {
-        console.error('[ProviderRegistry] Error in event handler:', error);
+        console.error("[ProviderRegistry] Error in event handler:", error);
       }
     }
   }
@@ -238,7 +238,7 @@ export const providerRegistry = new ProviderRegistry();
 export async function createProvider(
   name: string,
   type: ProviderType,
-  config: ProviderConfig
+  config: ProviderConfig,
 ): Promise<AIProvider> {
   const provider = providerRegistry.create(type, config);
   await provider.initialize();

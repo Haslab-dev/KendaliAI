@@ -1,6 +1,6 @@
 /**
  * KendaliAI Providers Module
- * 
+ *
  * Exports all provider-related functionality.
  */
 
@@ -22,16 +22,16 @@ export type {
   ProviderFactory,
   ProviderEvent,
   ProviderEventHandler,
-} from './types';
+} from "./types";
 
 // Base class
-export { BaseProvider } from './base';
+export { BaseProvider } from "./base";
 
 // Providers
-export { OpenAIProvider, createOpenAIProvider } from './openai';
-export { DeepSeekProvider, createDeepSeekProvider } from './deepseek';
-export { ZAIProvider, createZAIProvider } from './zai';
-export { CustomProvider, createCustomProvider } from './custom';
+export { OpenAIProvider, createOpenAIProvider } from "./openai";
+export { DeepSeekProvider, createDeepSeekProvider } from "./deepseek";
+export { ZAIProvider, createZAIProvider } from "./zai";
+export { CustomProvider, createCustomProvider } from "./custom";
 
 // Registry
 export {
@@ -41,18 +41,18 @@ export {
   hasProvider,
   removeProvider,
   getAllProviders,
-} from './registry';
+} from "./registry";
 
 // ============================================
 // Convenience Functions
 // ============================================
 
-import { providerRegistry } from './registry';
-import { OpenAIProvider } from './openai';
-import { DeepSeekProvider } from './deepseek';
-import { ZAIProvider } from './zai';
-import { CustomProvider } from './custom';
-import type { ProviderConfig, ProviderType } from './types';
+import { providerRegistry } from "./registry";
+import { OpenAIProvider } from "./openai";
+import { DeepSeekProvider } from "./deepseek";
+import { ZAIProvider } from "./zai";
+import { CustomProvider } from "./custom";
+import type { ProviderConfig, ProviderType } from "./types";
 
 /**
  * Quick setup for a provider
@@ -60,7 +60,7 @@ import type { ProviderConfig, ProviderType } from './types';
 export function setupProvider(
   type: ProviderType,
   apiKey: string,
-  options?: Partial<ProviderConfig>
+  options?: Partial<ProviderConfig>,
 ): ReturnType<typeof providerRegistry.create> {
   const config: ProviderConfig = {
     type,
@@ -76,7 +76,7 @@ export function setupProvider(
  */
 export function openai(apiKey: string, model?: string): OpenAIProvider {
   return new OpenAIProvider({
-    type: 'openai',
+    type: "openai",
     apiKey,
     defaultModel: model,
   });
@@ -87,7 +87,7 @@ export function openai(apiKey: string, model?: string): OpenAIProvider {
  */
 export function deepseek(apiKey: string, model?: string): DeepSeekProvider {
   return new DeepSeekProvider({
-    type: 'deepseek',
+    type: "deepseek",
     apiKey,
     defaultModel: model,
   });
@@ -98,7 +98,7 @@ export function deepseek(apiKey: string, model?: string): DeepSeekProvider {
  */
 export function zai(apiKey: string, model?: string): ZAIProvider {
   return new ZAIProvider({
-    type: 'zai',
+    type: "zai",
     apiKey,
     defaultModel: model,
   });
@@ -107,9 +107,13 @@ export function zai(apiKey: string, model?: string): ZAIProvider {
 /**
  * Create custom provider quickly
  */
-export function custom(baseURL: string, apiKey?: string, model?: string): CustomProvider {
+export function custom(
+  baseURL: string,
+  apiKey?: string,
+  model?: string,
+): CustomProvider {
   return new CustomProvider({
-    type: 'custom',
+    type: "custom",
     baseURL,
     apiKey,
     defaultModel: model,

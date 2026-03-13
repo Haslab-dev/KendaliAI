@@ -201,7 +201,9 @@ export async function handleSkillsCommand(
       const source = args[0];
       if (!source) {
         console.error("❌ Error: Skill source required");
-        console.log("Usage: kendaliai skills install <source> [--force] [--gateway <name>]");
+        console.log(
+          "Usage: kendaliai skills install <source> [--force] [--gateway <name>]",
+        );
         console.log("\nSources:");
         console.log("  namespace/name            ZeroMarket registry");
         console.log("  clawhub:name              ClawHub");
@@ -213,13 +215,21 @@ export async function handleSkillsCommand(
       }
 
       // Parse options
-      const force = options.force || args.includes("--force") || args.includes("-f");
-      
+      const force =
+        options.force || args.includes("--force") || args.includes("-f");
+
       // Gateway option
       let gatewayName = options.gateway;
       if (!gatewayName) {
-        const gatewayIdx = args.indexOf("--gateway") !== -1 ? args.indexOf("--gateway") : args.indexOf("-g");
-        if (gatewayIdx !== -1 && args[gatewayIdx + 1] && !args[gatewayIdx + 1].startsWith("-")) {
+        const gatewayIdx =
+          args.indexOf("--gateway") !== -1
+            ? args.indexOf("--gateway")
+            : args.indexOf("-g");
+        if (
+          gatewayIdx !== -1 &&
+          args[gatewayIdx + 1] &&
+          !args[gatewayIdx + 1].startsWith("-")
+        ) {
           gatewayName = args[gatewayIdx + 1];
         }
       }
@@ -244,20 +254,27 @@ export async function handleSkillsCommand(
           console.log(`\n🔄 Binding skill to gateway: ${gatewayName}...`);
           // Get gateway ID
           const gateway = db
-            .query<{ id: string }, [string]>(
-              `SELECT id FROM gateways WHERE name = ?`,
-            )
+            .query<
+              { id: string },
+              [string]
+            >(`SELECT id FROM gateways WHERE name = ?`)
             .get(gatewayName);
 
           if (!gateway) {
-            console.error(`❌ Error: Gateway '${gatewayName}' not found. Skill installed globally but not bound.`);
+            console.error(
+              `❌ Error: Gateway '${gatewayName}' not found. Skill installed globally but not bound.`,
+            );
           } else {
             try {
               skillsManager.enableSkill(gateway.id, skill.name);
               updateGatewayConfigFile(db, gatewayName);
-              console.log(`✅ Skill '${skill.name}' enabled for gateway '${gatewayName}'`);
+              console.log(
+                `✅ Skill '${skill.name}' enabled for gateway '${gatewayName}'`,
+              );
             } catch (enableError) {
-              console.error(`❌ Failed to enable skill for gateway: ${enableError}`);
+              console.error(
+                `❌ Failed to enable skill for gateway: ${enableError}`,
+              );
             }
           }
         }

@@ -12,13 +12,15 @@ export class Retriever {
 
   async search(query: string, limit: number = 3): Promise<string> {
     const result = await this.engine.search(query, { topK: limit });
-    
+
     if (result.chunks.length === 0) {
       return "No relevant internal knowledge found.";
     }
 
     return result.chunks
-      .map((r: VectorSearchResult, i: number) => `[Doc ${i + 1}]:\n${r.content}`)
+      .map(
+        (r: VectorSearchResult, i: number) => `[Doc ${i + 1}]:\n${r.content}`,
+      )
       .join("\n\n");
   }
 }

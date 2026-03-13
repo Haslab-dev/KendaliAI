@@ -15,22 +15,26 @@ export interface IntentRouterOptions {
  */
 export async function routeIntent(
   message: string,
-  options: IntentRouterOptions
+  options: IntentRouterOptions,
 ): Promise<IntentResult> {
   // 1. Heuristic Router (Fastest, 0 tokens)
   const heuristic = heuristicRouter(message);
   if (heuristic !== "unknown") {
-    return { intent: heuristic, confidence: 1.0, reason: "matched heuristic keywords" };
+    return {
+      intent: heuristic,
+      confidence: 1.0,
+      reason: "matched heuristic keywords",
+    };
   }
 
   // 2. Embedding Router (Medium speed, cheap tokens)
   try {
     const embedding = await embeddingRouter(message, options.embedder);
     if (embedding.confidence > 0.85) {
-      return { 
-        intent: embedding.intent, 
-        confidence: embedding.confidence, 
-        reason: "semantic similarity threshold reached" 
+      return {
+        intent: embedding.intent,
+        confidence: embedding.confidence,
+        reason: "semantic similarity threshold reached",
       };
     }
   } catch (err) {

@@ -1,6 +1,6 @@
 /**
  * Smoke Test Configuration
- * 
+ *
  * Loads test credentials from environment variables.
  * Copy .env.smoke to .env and configure your credentials.
  */
@@ -12,12 +12,12 @@ export interface TestCredentials {
     model: string;
   };
   provider: {
-    type: 'deepseek';
+    type: "deepseek";
     apiKey: string;
     model: string;
   };
   channel: {
-    type: 'telegram';
+    type: "telegram";
     botToken: string;
   };
 }
@@ -25,34 +25,40 @@ export interface TestCredentials {
 // Load credentials from environment variables
 function loadCredentials(): TestCredentials {
   const embeddings = {
-    apiKey: process.env.EMBEDDINGS_API_KEY || '',
-    endpoint: process.env.EMBEDDINGS_ENDPOINT || 'https://api.maiarouter.ai/v1/embeddings',
-    model: process.env.EMBEDDINGS_MODEL || 'openai/text-embedding-3-small',
+    apiKey: process.env.EMBEDDINGS_API_KEY || "",
+    endpoint:
+      process.env.EMBEDDINGS_ENDPOINT ||
+      "https://api.maiarouter.ai/v1/embeddings",
+    model: process.env.EMBEDDINGS_MODEL || "openai/text-embedding-3-small",
   };
 
   const provider = {
-    type: 'deepseek' as const,
-    apiKey: process.env.PROVIDER_API_KEY || '',
-    model: process.env.PROVIDER_MODEL || 'deepseek-chat',
+    type: "deepseek" as const,
+    apiKey: process.env.PROVIDER_API_KEY || "",
+    model: process.env.PROVIDER_MODEL || "deepseek-chat",
   };
 
   const channel = {
-    type: 'telegram' as const,
-    botToken: process.env.CHANNEL_BOT_TOKEN || '',
+    type: "telegram" as const,
+    botToken: process.env.CHANNEL_BOT_TOKEN || "",
   };
 
   // Validate that required credentials are present
   const missing: string[] = [];
-  
-  if (!embeddings.apiKey) missing.push('EMBEDDINGS_API_KEY');
-  if (!provider.apiKey) missing.push('PROVIDER_API_KEY');
-  if (!channel.botToken) missing.push('CHANNEL_BOT_TOKEN');
+
+  if (!embeddings.apiKey) missing.push("EMBEDDINGS_API_KEY");
+  if (!provider.apiKey) missing.push("PROVIDER_API_KEY");
+  if (!channel.botToken) missing.push("CHANNEL_BOT_TOKEN");
 
   if (missing.length > 0) {
-    console.error('❌ Missing required environment variables:');
-    missing.forEach(key => console.error(`   - ${key}`));
-    console.error('\n   Copy .env.smoke to .env and configure your credentials.');
-    console.error('   Or set the environment variables before running tests.\n');
+    console.error("❌ Missing required environment variables:");
+    missing.forEach((key) => console.error(`   - ${key}`));
+    console.error(
+      "\n   Copy .env.smoke to .env and configure your credentials.",
+    );
+    console.error(
+      "   Or set the environment variables before running tests.\n",
+    );
     process.exit(1);
   }
 

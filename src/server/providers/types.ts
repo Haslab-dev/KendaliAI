@@ -1,6 +1,6 @@
 /**
  * KendaliAI Provider Types
- * 
+ *
  * Defines the interface and types for AI providers.
  * Supports OpenAI-compatible and native providers.
  */
@@ -9,7 +9,16 @@
 // Core Types
 // ============================================
 
-export type ProviderType = 'openai' | 'deepseek' | 'zai' | 'anthropic' | 'ollama' | 'openrouter' | 'groq' | 'together' | 'custom';
+export type ProviderType =
+  | "openai"
+  | "deepseek"
+  | "zai"
+  | "anthropic"
+  | "ollama"
+  | "openrouter"
+  | "groq"
+  | "together"
+  | "custom";
 
 export interface ProviderConfig {
   /** Provider type identifier */
@@ -31,7 +40,7 @@ export interface ProviderConfig {
 }
 
 export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant' | 'function' | 'tool';
+  role: "system" | "user" | "assistant" | "function" | "tool";
   content: string;
   name?: string;
   functionCall?: {
@@ -44,7 +53,7 @@ export interface ChatMessage {
 
 export interface ToolCall {
   id: string;
-  type: 'function';
+  type: "function";
   function: {
     name: string;
     arguments: string;
@@ -52,7 +61,7 @@ export interface ToolCall {
 }
 
 export interface ToolDefinition {
-  type: 'function';
+  type: "function";
   function: {
     name: string;
     description?: string;
@@ -80,9 +89,13 @@ export interface GenerateOptions {
   /** Tools/functions available */
   tools?: ToolDefinition[];
   /** Tool choice strategy */
-  toolChoice?: 'auto' | 'none' | 'required' | { type: 'function'; function: { name: string } };
+  toolChoice?:
+    | "auto"
+    | "none"
+    | "required"
+    | { type: "function"; function: { name: string } };
   /** Response format */
-  responseFormat?: { type: 'text' | 'json_object' };
+  responseFormat?: { type: "text" | "json_object" };
   /** Seed for reproducibility */
   seed?: number;
   /** User identifier for tracking */
@@ -97,7 +110,7 @@ export interface GenerateResult {
   /** Model used */
   model: string;
   /** Finish reason */
-  finishReason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'unknown';
+  finishReason: "stop" | "length" | "tool_calls" | "content_filter" | "unknown";
   /** Tool calls if any */
   toolCalls?: ToolCall[];
   /** Usage statistics */
@@ -116,7 +129,12 @@ export interface StreamChunk {
   /** Is this the final chunk */
   done: boolean;
   /** Finish reason if done */
-  finishReason?: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'unknown';
+  finishReason?:
+    | "stop"
+    | "length"
+    | "tool_calls"
+    | "content_filter"
+    | "unknown";
   /** Tool calls if any */
   toolCalls?: ToolCall[];
   /** Usage statistics (usually in final chunk) */
@@ -201,7 +219,7 @@ export interface AIProvider {
   readonly type: ProviderType;
   /** Provider capabilities */
   readonly capabilities: ProviderCapabilities;
-  
+
   /** Initialize the provider */
   initialize(): Promise<void>;
   /** Check if provider is healthy */
@@ -238,7 +256,7 @@ export interface ProviderFactory {
 // ============================================
 
 export interface ProviderEvent {
-  type: 'initialized' | 'error' | 'rate_limit' | 'timeout' | 'disposed';
+  type: "initialized" | "error" | "rate_limit" | "timeout" | "disposed";
   provider: string;
   timestamp: Date;
   data?: unknown;

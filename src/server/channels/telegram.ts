@@ -1,12 +1,12 @@
 /**
  * KendaliAI Telegram Channel - Powered by grammY
- * 
+ *
  * Implementation for Telegram Bot API using grammY library.
  */
 
 import { Bot, Context } from "grammy";
 import type { InlineKeyboardMarkup, InlineKeyboardButton } from "grammy/types";
-import { BaseChannel } from './base';
+import { BaseChannel } from "./base";
 import type {
   ChannelConfig,
   ChannelMessage,
@@ -17,22 +17,22 @@ import type {
   UserInfo,
   CallbackQuery as KaiCallbackQuery,
   MessageAttachment,
-} from './types';
+} from "./types";
 
 export class TelegramChannel extends BaseChannel {
-  readonly type = 'telegram' as const;
-  
+  readonly type = "telegram" as const;
+
   private bot: Bot;
   private isStarted = false;
 
   constructor(config: ChannelConfig) {
     super(config);
-    const token = config.token || '';
-    
+    const token = config.token || "";
+
     if (!token) {
-      throw new Error('Telegram channel requires bot token');
+      throw new Error("Telegram channel requires bot token");
     }
-    
+
     this.bot = new Bot(token);
     this.setupHandlers();
   }
@@ -50,11 +50,13 @@ export class TelegramChannel extends BaseChannel {
     this.bot.on("callback_query:data", async (ctx) => {
       const query: KaiCallbackQuery = {
         id: ctx.callbackQuery.id,
-        message: ctx.callbackQuery.message ? this.convertGrammyMessage(ctx.callbackQuery.message) : undefined,
+        message: ctx.callbackQuery.message
+          ? this.convertGrammyMessage(ctx.callbackQuery.message)
+          : undefined,
         data: ctx.callbackQuery.data,
         userId: ctx.from.id.toString(),
         username: ctx.from.username,
-        chatId: ctx.chat?.id.toString() || '',
+        chatId: ctx.chat?.id.toString() || "",
       };
       await this.handleCallback(query);
     });
@@ -68,12 +70,14 @@ export class TelegramChannel extends BaseChannel {
   protected async doInitialize(): Promise<void> {
     const me = await this.bot.api.getMe();
     this.config.botId = me.id.toString();
-    console.log(`[Telegram] Initialized bot: @${me.username} (${me.first_name})`);
+    console.log(
+      `[Telegram] Initialized bot: @${me.username} (${me.first_name})`,
+    );
   }
 
   protected async doConnect(): Promise<void> {
     if (this.isStarted) return;
-    
+
     // Start bot in background
     this.bot.start({
       onStart: (botInfo) => {
@@ -81,7 +85,7 @@ export class TelegramChannel extends BaseChannel {
       },
       allowed_updates: ["message", "callback_query", "edited_message"],
     });
-    
+
     this.isStarted = true;
   }
 
@@ -92,24 +96,31 @@ export class TelegramChannel extends BaseChannel {
     console.log(`[Telegram] Bot stopped`);
   }
 
-  protected async doSendMessage(text: string, options?: SendMessageOptions): Promise<ChannelMessage> {
+  protected async doSendMessage(
+    text: string,
+    options?: SendMessageOptions,
+  ): Promise<ChannelMessage> {
     const chatId = options?.chatId || this.config.defaultChatId;
-    if (!chatId) throw new Error('No chat ID provided');
+    if (!chatId) throw new Error("No chat ID provided");
 
-    const replyMarkup: InlineKeyboardMarkup | undefined = options?.keyboard ? {
-      inline_keyboard: options.keyboard.buttons.map(row => 
-        row.map(btn => {
-          const button: any = { text: btn.text };
-          if (btn.callbackData) button.callback_data = btn.callbackData;
-          if (btn.url) button.url = btn.url;
-          return button as InlineKeyboardButton;
-        })
-      )
-    } : undefined;
+    const replyMarkup: InlineKeyboardMarkup | undefined = options?.keyboard
+      ? {
+          inline_keyboard: options.keyboard.buttons.map((row) =>
+            row.map((btn) => {
+              const button: any = { text: btn.text };
+              if (btn.callbackData) button.callback_data = btn.callbackData;
+              if (btn.url) button.url = btn.url;
+              return button as InlineKeyboardButton;
+            }),
+          ),
+        }
+      : undefined;
 
     const result = await this.bot.api.sendMessage(chatId, text, {
       parse_mode: this.getParseMode(options?.parseMode),
-      reply_to_message_id: options?.replyTo ? parseInt(options.replyTo) : undefined,
+      reply_to_message_id: options?.replyTo
+        ? parseInt(options.replyTo)
+        : undefined,
       disable_notification: options?.silent,
       reply_markup: replyMarkup,
     });
@@ -117,34 +128,47 @@ export class TelegramChannel extends BaseChannel {
     return this.convertGrammyMessage(result);
   }
 
-  protected async doEditMessage(messageId: string, options: EditMessageOptions): Promise<ChannelMessage> {
+  protected async doEditMessage(
+    messageId: string,
+    options: EditMessageOptions,
+  ): Promise<ChannelMessage> {
     const chatId = this.config.defaultChatId;
-    if (!chatId) throw new Error('No chat ID provided');
+    if (!chatId) throw new Error("No chat ID provided");
 
-    const replyMarkup: InlineKeyboardMarkup | undefined = options.keyboard ? {
-      inline_keyboard: options.keyboard.buttons.map(row => 
-        row.map(btn => {
-          const button: any = { text: btn.text };
-          if (btn.callbackData) button.callback_data = btn.callbackData;
-          if (btn.url) button.url = btn.url;
-          return button as InlineKeyboardButton;
-        })
-      )
-    } : undefined;
+    const replyMarkup: InlineKeyboardMarkup | undefined = options.keyboard
+      ? {
+          inline_keyboard: options.keyboard.buttons.map((row) =>
+            row.map((btn) => {
+              const button: any = { text: btn.text };
+              if (btn.callbackData) button.callback_data = btn.callbackData;
+              if (btn.url) button.url = btn.url;
+              return button as InlineKeyboardButton;
+            }),
+          ),
+        }
+      : undefined;
 
-    const result = await this.bot.api.editMessageText(chatId, parseInt(messageId), options.text, {
-      parse_mode: this.getParseMode(options.parseMode),
-      reply_markup: replyMarkup,
-    });
+    const result = await this.bot.api.editMessageText(
+      chatId,
+      parseInt(messageId),
+      options.text,
+      {
+        parse_mode: this.getParseMode(options.parseMode),
+        reply_markup: replyMarkup,
+      },
+    );
 
-    if (typeof result === 'boolean') {
-        throw new Error('Edit message returned boolean instead of message');
+    if (typeof result === "boolean") {
+      throw new Error("Edit message returned boolean instead of message");
     }
 
     return this.convertGrammyMessage(result);
   }
 
-  protected async doDeleteMessage(messageId: string, options?: DeleteMessageOptions): Promise<boolean> {
+  protected async doDeleteMessage(
+    messageId: string,
+    options?: DeleteMessageOptions,
+  ): Promise<boolean> {
     const chatId = this.config.defaultChatId;
     if (!chatId) return false;
 
@@ -180,7 +204,9 @@ export class TelegramChannel extends BaseChannel {
     await this.bot.api.sendChatAction(chatId, "typing");
   }
 
-  async setCommands(commands: Array<{ command: string; description: string }>): Promise<void> {
+  async setCommands(
+    commands: Array<{ command: string; description: string }>,
+  ): Promise<void> {
     await this.bot.api.setMyCommands(commands);
   }
 
@@ -191,24 +217,34 @@ export class TelegramChannel extends BaseChannel {
 
   private convertGrammyMessage(msg: any): ChannelMessage {
     const attachments: MessageAttachment[] = [];
-    
+
     if (msg.photo) {
       const photo = msg.photo[msg.photo.length - 1];
-      attachments.push({ type: 'image', url: photo.file_id, size: photo.file_size });
+      attachments.push({
+        type: "image",
+        url: photo.file_id,
+        size: photo.file_size,
+      });
     }
-    
+
     if (msg.video) {
-        attachments.push({ type: 'video', url: msg.video.file_id, size: msg.video.file_size });
+      attachments.push({
+        type: "video",
+        url: msg.video.file_id,
+        size: msg.video.file_size,
+      });
     }
 
     return {
       id: msg.message_id.toString(),
-      channelType: 'telegram',
+      channelType: "telegram",
       chatId: msg.chat.id.toString(),
-      userId: msg.from?.id.toString() || 'unknown',
+      userId: msg.from?.id.toString() || "unknown",
       username: msg.from?.username,
-      displayName: [msg.from?.first_name, msg.from?.last_name].filter(Boolean).join(' '),
-      text: msg.text || msg.caption || '',
+      displayName: [msg.from?.first_name, msg.from?.last_name]
+        .filter(Boolean)
+        .join(" "),
+      text: msg.text || msg.caption || "",
       timestamp: new Date(msg.date * 1000),
       replyTo: msg.reply_to_message?.message_id.toString(),
       attachments: attachments.length > 0 ? attachments : undefined,
@@ -216,11 +252,16 @@ export class TelegramChannel extends BaseChannel {
     };
   }
 
-  private getParseMode(mode?: 'text' | 'markdown' | 'html'): "Markdown" | "HTML" | undefined {
+  private getParseMode(
+    mode?: "text" | "markdown" | "html",
+  ): "Markdown" | "HTML" | undefined {
     switch (mode) {
-      case 'markdown': return 'Markdown';
-      case 'html': return 'HTML';
-      default: return undefined;
+      case "markdown":
+        return "Markdown";
+      case "html":
+        return "HTML";
+      default:
+        return undefined;
     }
   }
 }

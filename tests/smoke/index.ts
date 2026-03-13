@@ -1,11 +1,11 @@
 /**
  * Smoke Test Runner
- * 
+ *
  * Main entry point for running all smoke tests.
  * Run with: bun test tests/smoke/index.ts
  */
 
-import { testCredentials } from './test-config';
+import { testCredentials } from "./test-config";
 
 // Test status tracking
 interface TestResult {
@@ -46,48 +46,50 @@ async function runTest(name: string, fn: () => Promise<void>): Promise<void> {
  * Test DeepSeek Provider
  */
 async function testDeepSeekProvider(): Promise<void> {
-  const { DeepSeekProvider } = await import('../../src/server/providers/deepseek');
-  
+  const { DeepSeekProvider } =
+    await import("../../src/server/providers/deepseek");
+
   const provider = new DeepSeekProvider({
-    type: 'deepseek',
+    type: "deepseek",
     apiKey: testCredentials.provider.apiKey,
     defaultModel: testCredentials.provider.model,
   });
 
-  await runTest('DeepSeek: Initialize provider', async () => {
+  await runTest("DeepSeek: Initialize provider", async () => {
     await provider.initialize();
-    if (!provider.name) throw new Error('Provider name not set');
+    if (!provider.name) throw new Error("Provider name not set");
   });
 
-  await runTest('DeepSeek: List models', async () => {
+  await runTest("DeepSeek: List models", async () => {
     const models = await provider.listModels();
-    if (!Array.isArray(models)) throw new Error('Models should be an array');
-    if (models.length === 0) throw new Error('No models returned');
+    if (!Array.isArray(models)) throw new Error("Models should be an array");
+    if (models.length === 0) throw new Error("No models returned");
   });
 
-  await runTest('DeepSeek: Generate response', async () => {
+  await runTest("DeepSeek: Generate response", async () => {
     const result = await provider.generate({
-      messages: [{ role: 'user', content: 'Say "test ok"' }],
+      messages: [{ role: "user", content: 'Say "test ok"' }],
       maxTokens: 20,
       temperature: 0,
     });
-    if (!result.text) throw new Error('No text in response');
+    if (!result.text) throw new Error("No text in response");
   });
 
-  await runTest('DeepSeek: Stream response', async () => {
+  await runTest("DeepSeek: Stream response", async () => {
     let hasContent = false;
     for await (const chunk of provider.stream({
-      messages: [{ role: 'user', content: 'Say hi' }],
+      messages: [{ role: "user", content: "Say hi" }],
       maxTokens: 10,
     })) {
       if (chunk.delta) hasContent = true;
     }
-    if (!hasContent) throw new Error('No content streamed');
+    if (!hasContent) throw new Error("No content streamed");
   });
 
-  await runTest('DeepSeek: Health check', async () => {
+  await runTest("DeepSeek: Health check", async () => {
     const isHealthy = await provider.healthCheck();
-    if (typeof isHealthy !== 'boolean') throw new Error('Health check should return boolean');
+    if (typeof isHealthy !== "boolean")
+      throw new Error("Health check should return boolean");
   });
 }
 
@@ -97,16 +99,16 @@ async function testDeepSeekProvider(): Promise<void> {
 async function testEmbeddings(): Promise<void> {
   const { embeddings } = testCredentials;
 
-  await runTest('Embeddings: Generate single embedding', async () => {
+  await runTest("Embeddings: Generate single embedding", async () => {
     const response = await fetch(embeddings.endpoint, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${embeddings.apiKey}`,
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${embeddings.apiKey}`,
       },
       body: JSON.stringify({
         model: embeddings.model,
-        input: 'Test embedding',
+        input: "Test embedding",
       }),
     });
 
@@ -114,45 +116,50 @@ async function testEmbeddings(): Promise<void> {
       throw new Error(`API error: ${response.status}`);
     }
 
-    const data = await response.json() as { data: Array<{ embedding: number[] }> };
-    if (!data.data?.[0]?.embedding) throw new Error('No embedding returned');
-    if (data.data[0].embedding.length === 0) throw new Error('Empty embedding');
+    const data = (await response.json()) as {
+      data: Array<{ embedding: number[] }>;
+    };
+    if (!data.data?.[0]?.embedding) throw new Error("No embedding returned");
+    if (data.data[0].embedding.length === 0) throw new Error("Empty embedding");
   });
 
-  await runTest('Embeddings: Generate multiple embeddings', async () => {
+  await runTest("Embeddings: Generate multiple embeddings", async () => {
     const response = await fetch(embeddings.endpoint, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${embeddings.apiKey}`,
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${embeddings.apiKey}`,
       },
       body: JSON.stringify({
         model: embeddings.model,
-        input: ['Text 1', 'Text 2', 'Text 3'],
+        input: ["Text 1", "Text 2", "Text 3"],
       }),
     });
 
     if (!response.ok) throw new Error(`API error: ${response.status}`);
 
-    const data = await response.json() as { data: Array<{ embedding: number[] }> };
-    if (data.data.length !== 3) throw new Error('Expected 3 embeddings');
+    const data = (await response.json()) as {
+      data: Array<{ embedding: number[] }>;
+    };
+    if (data.data.length !== 3) throw new Error("Expected 3 embeddings");
   });
 
-  await runTest('Embeddings: Reject invalid key', async () => {
+  await runTest("Embeddings: Reject invalid key", async () => {
     const response = await fetch(embeddings.endpoint, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer invalid-key',
+        "Content-Type": "application/json",
+        Authorization: "Bearer invalid-key",
       },
       body: JSON.stringify({
         model: embeddings.model,
-        input: 'Test',
+        input: "Test",
       }),
     });
 
-    if (response.ok) throw new Error('Should have rejected invalid key');
-    if (response.status !== 401) throw new Error(`Expected 401, got ${response.status}`);
+    if (response.ok) throw new Error("Should have rejected invalid key");
+    if (response.status !== 401)
+      throw new Error(`Expected 401, got ${response.status}`);
   });
 }
 
@@ -163,41 +170,57 @@ async function testTelegram(): Promise<void> {
   const { channel } = testCredentials;
   const apiUrl = `https://api.telegram.org/bot${channel.botToken}`;
 
-  async function apiCall<T>(method: string, params?: Record<string, unknown>): Promise<T> {
+  async function apiCall<T>(
+    method: string,
+    params?: Record<string, unknown>,
+  ): Promise<T> {
     const response = await fetch(`${apiUrl}/${method}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: params ? JSON.stringify(params) : undefined,
     });
-    const data = await response.json() as { ok: boolean; result?: T; description?: string };
-    if (!data.ok) throw new Error(data.description || 'API error');
+    const data = (await response.json()) as {
+      ok: boolean;
+      result?: T;
+      description?: string;
+    };
+    if (!data.ok) throw new Error(data.description || "API error");
     return data.result as T;
   }
 
-  await runTest('Telegram: Get bot info', async () => {
-    const me = await apiCall<{ id: number; is_bot: boolean; username: string }>('getMe');
-    if (!me.is_bot) throw new Error('Should be a bot');
-    if (!me.username) throw new Error('Should have username');
+  await runTest("Telegram: Get bot info", async () => {
+    const me = await apiCall<{ id: number; is_bot: boolean; username: string }>(
+      "getMe",
+    );
+    if (!me.is_bot) throw new Error("Should be a bot");
+    if (!me.username) throw new Error("Should have username");
   });
 
-  await runTest('Telegram: Get webhook info', async () => {
-    const info = await apiCall<{ url: string; pending_update_count: number }>('getWebhookInfo');
-    if (typeof info.url !== 'string') throw new Error('URL should be string');
+  await runTest("Telegram: Get webhook info", async () => {
+    const info = await apiCall<{ url: string; pending_update_count: number }>(
+      "getWebhookInfo",
+    );
+    if (typeof info.url !== "string") throw new Error("URL should be string");
   });
 
-  await runTest('Telegram: Delete webhook', async () => {
-    await apiCall<boolean>('deleteWebhook');
+  await runTest("Telegram: Delete webhook", async () => {
+    await apiCall<boolean>("deleteWebhook");
   });
 
-  await runTest('Telegram: Get updates', async () => {
-    const updates = await apiCall<unknown[]>('getUpdates', { limit: 5, timeout: 0 });
-    if (!Array.isArray(updates)) throw new Error('Updates should be array');
+  await runTest("Telegram: Get updates", async () => {
+    const updates = await apiCall<unknown[]>("getUpdates", {
+      limit: 5,
+      timeout: 0,
+    });
+    if (!Array.isArray(updates)) throw new Error("Updates should be array");
   });
 
-  await runTest('Telegram: Reject invalid token', async () => {
-    const response = await fetch(`https://api.telegram.org/botinvalid-token/getMe`);
-    const data = await response.json() as { ok: boolean };
-    if (data.ok) throw new Error('Should have rejected invalid token');
+  await runTest("Telegram: Reject invalid token", async () => {
+    const response = await fetch(
+      `https://api.telegram.org/botinvalid-token/getMe`,
+    );
+    const data = (await response.json()) as { ok: boolean };
+    if (data.ok) throw new Error("Should have rejected invalid token");
   });
 }
 
@@ -205,12 +228,12 @@ async function testTelegram(): Promise<void> {
  * Print test summary
  */
 function printSummary(): void {
-  console.log('\n' + '='.repeat(60));
-  console.log('SMOKE TEST SUMMARY');
-  console.log('='.repeat(60));
+  console.log("\n" + "=".repeat(60));
+  console.log("SMOKE TEST SUMMARY");
+  console.log("=".repeat(60));
 
-  const passed = results.filter(r => r.passed).length;
-  const failed = results.filter(r => r.passed === false).length;
+  const passed = results.filter((r) => r.passed).length;
+  const failed = results.filter((r) => r.passed === false).length;
   const total = results.length;
   const totalDuration = results.reduce((sum, r) => sum + r.duration, 0);
 
@@ -218,16 +241,16 @@ function printSummary(): void {
   console.log(`Duration: ${totalDuration}ms`);
 
   if (failed > 0) {
-    console.log('\nFailed tests:');
+    console.log("\nFailed tests:");
     results
-      .filter(r => !r.passed)
-      .forEach(r => {
+      .filter((r) => !r.passed)
+      .forEach((r) => {
         console.log(`  ❌ ${r.name}`);
         console.log(`     ${r.error}`);
       });
   }
 
-  console.log('\n' + '='.repeat(60));
+  console.log("\n" + "=".repeat(60));
 
   if (failed > 0) {
     process.exit(1);
@@ -238,21 +261,21 @@ function printSummary(): void {
  * Main test runner
  */
 async function main(): Promise<void> {
-  console.log('🚀 Starting Smoke Tests\n');
-  console.log('Test credentials loaded from docs/test.txt');
-  console.log('─'.repeat(60) + '\n');
+  console.log("🚀 Starting Smoke Tests\n");
+  console.log("Test credentials loaded from docs/test.txt");
+  console.log("─".repeat(60) + "\n");
 
-  console.log('📦 Testing DeepSeek Provider...');
+  console.log("📦 Testing DeepSeek Provider...");
   await testDeepSeekProvider();
-  console.log('');
+  console.log("");
 
-  console.log('📦 Testing Embeddings (Maia Router)...');
+  console.log("📦 Testing Embeddings (Maia Router)...");
   await testEmbeddings();
-  console.log('');
+  console.log("");
 
-  console.log('📦 Testing Telegram Channel...');
+  console.log("📦 Testing Telegram Channel...");
   await testTelegram();
-  console.log('');
+  console.log("");
 
   printSummary();
 }

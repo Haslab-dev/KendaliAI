@@ -1,6 +1,6 @@
 /**
  * KendaliAI Channels Module
- * 
+ *
  * Exports all channel-related functionality.
  */
 
@@ -26,16 +26,20 @@ export type {
   ChannelFactory,
   ChannelBinding,
   ChannelEventHandler,
-} from './types';
+} from "./types";
 
 // Base class
-export { BaseChannel } from './base';
+export { BaseChannel } from "./base";
 
 // Channels
-export { TelegramChannel, createTelegramChannel } from './telegram';
-export { DiscordChannel, createDiscordChannel } from './discord';
-export { SlackChannel, createSlackChannel } from './slack';
-export { WebhookChannel, createWebhookChannel, type WebhookPayload } from './webhook';
+export { TelegramChannel, createTelegramChannel } from "./telegram";
+export { DiscordChannel, createDiscordChannel } from "./discord";
+export { SlackChannel, createSlackChannel } from "./slack";
+export {
+  WebhookChannel,
+  createWebhookChannel,
+  type WebhookPayload,
+} from "./webhook";
 
 // Manager
 export {
@@ -45,18 +49,18 @@ export {
   hasChannel,
   removeChannel,
   getAllChannels,
-} from './manager';
+} from "./manager";
 
 // ============================================
 // Convenience Functions
 // ============================================
 
-import { channelManager } from './manager';
-import { TelegramChannel } from './telegram';
-import { DiscordChannel } from './discord';
-import { SlackChannel } from './slack';
-import { WebhookChannel } from './webhook';
-import type { ChannelConfig, ChannelType } from './types';
+import { channelManager } from "./manager";
+import { TelegramChannel } from "./telegram";
+import { DiscordChannel } from "./discord";
+import { SlackChannel } from "./slack";
+import { WebhookChannel } from "./webhook";
+import type { ChannelConfig, ChannelType } from "./types";
 
 /**
  * Quick setup for a channel
@@ -64,7 +68,7 @@ import type { ChannelConfig, ChannelType } from './types';
 export function setupChannel(
   type: ChannelType,
   name: string,
-  config: Partial<ChannelConfig>
+  config: Partial<ChannelConfig>,
 ): ReturnType<typeof channelManager.create> {
   const fullConfig: ChannelConfig = {
     type,
@@ -80,7 +84,7 @@ export function setupChannel(
  */
 export function telegram(name: string, token: string): TelegramChannel {
   return new TelegramChannel({
-    type: 'telegram',
+    type: "telegram",
     name,
     token,
   });
@@ -91,7 +95,7 @@ export function telegram(name: string, token: string): TelegramChannel {
  */
 export function discord(name: string, token: string): DiscordChannel {
   return new DiscordChannel({
-    type: 'discord',
+    type: "discord",
     name,
     token,
   });
@@ -100,9 +104,13 @@ export function discord(name: string, token: string): DiscordChannel {
 /**
  * Create Slack channel quickly
  */
-export function slack(name: string, botToken: string, appToken?: string): SlackChannel {
+export function slack(
+  name: string,
+  botToken: string,
+  appToken?: string,
+): SlackChannel {
   return new SlackChannel({
-    type: 'slack',
+    type: "slack",
     name,
     token: botToken,
     apiKey: appToken,
@@ -112,9 +120,13 @@ export function slack(name: string, botToken: string, appToken?: string): SlackC
 /**
  * Create Webhook channel quickly
  */
-export function webhook(name: string, webhookUrl?: string, secret?: string): WebhookChannel {
+export function webhook(
+  name: string,
+  webhookUrl?: string,
+  secret?: string,
+): WebhookChannel {
   return new WebhookChannel({
-    type: 'webhook',
+    type: "webhook",
     name,
     webhookUrl,
     apiKey: secret,

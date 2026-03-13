@@ -16,7 +16,7 @@ export const log = {
     if (process.env.DEBUG) {
       console.log(`[DEBUG] ${message}`, ...args);
     }
-  }
+  },
 };
 
 export default { log };

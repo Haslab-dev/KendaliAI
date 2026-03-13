@@ -1,25 +1,30 @@
 /**
  * KendaliAI Agent System
- * 
+ *
  * Phase 4: Agent personality configuration, templates, and per-gateway behavior.
  * Provides customizable AI agents with distinct personalities and capabilities.
  */
 
 import { Database } from "bun:sqlite";
 import { randomUUID } from "crypto";
-import { AIClient, createProvider, AIProvider, type ModelMessage } from "../ai";
+import { AIClient, createProvider, type ModelMessage } from "../ai";
 
 // ============================================
 // Types
 // ============================================
 
-export type ResponseStyle = "concise" | "detailed" | "friendly" | "formal" | "technical";
-export type AgentTrait = 
-  | "analytical" 
-  | "creative" 
-  | "empathetic" 
-  | "thorough" 
-  | "patient" 
+export type ResponseStyle =
+  | "concise"
+  | "detailed"
+  | "friendly"
+  | "formal"
+  | "technical";
+export type AgentTrait =
+  | "analytical"
+  | "creative"
+  | "empathetic"
+  | "thorough"
+  | "patient"
   | "casual"
   | "professional"
   | "playful"
@@ -79,7 +84,8 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
   {
     id: "dev-assistant",
     name: "Development Assistant",
-    description: "Senior developer for code review, debugging, and development tasks",
+    description:
+      "Senior developer for code review, debugging, and development tasks",
     category: "development",
     personality: {
       name: "DevAssistant",
@@ -150,7 +156,13 @@ Your role is to:
       name: "DataAnalyst",
       traits: ["analytical", "thorough", "professional"],
       responseStyle: "detailed",
-      expertise: ["data-analysis", "visualization", "statistics", "python", "sql"],
+      expertise: [
+        "data-analysis",
+        "visualization",
+        "statistics",
+        "python",
+        "sql",
+      ],
     },
     systemPromptTemplate: `You are {name}, an analytical data expert.
 
@@ -258,7 +270,9 @@ export class AgentManager {
    */
   configureAgent(
     gatewayId: string,
-    config: Partial<Omit<AgentConfig, "id" | "gatewayId" | "createdAt" | "updatedAt">>
+    config: Partial<
+      Omit<AgentConfig, "id" | "gatewayId" | "createdAt" | "updatedAt">
+    >,
   ): AgentConfig {
     const now = Date.now();
     const existing = this.getAgentByGateway(gatewayId);
@@ -271,7 +285,8 @@ export class AgentManager {
         updatedAt: now,
       };
 
-      this.db.run(`
+      this.db.run(
+        `
         UPDATE agents SET 
           name = ?,
           personality = ?,
@@ -283,18 +298,20 @@ export class AgentManager {
           temperature = ?,
           updated_at = ?
         WHERE gateway_id = ?
-      `, [
-        updated.name,
-        JSON.stringify(updated.personality),
-        updated.systemPrompt,
-        JSON.stringify(updated.customInstructions),
-        updated.greeting || null,
-        updated.farewell || null,
-        updated.maxTokens,
-        updated.temperature,
-        now,
-        gatewayId,
-      ]);
+      `,
+        [
+          updated.name,
+          JSON.stringify(updated.personality),
+          updated.systemPrompt,
+          JSON.stringify(updated.customInstructions),
+          updated.greeting || null,
+          updated.farewell || null,
+          updated.maxTokens,
+          updated.temperature,
+          now,
+          gatewayId,
+        ],
+      );
 
       // Invalidate cached client
       this.clients.delete(gatewayId);
@@ -323,25 +340,28 @@ export class AgentManager {
       updatedAt: now,
     };
 
-    this.db.run(`
+    this.db.run(
+      `
       INSERT INTO agents (
         id, gateway_id, name, personality, system_prompt, custom_instructions,
         greeting, farewell, max_tokens, temperature, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      newAgent.id,
-      newAgent.gatewayId,
-      newAgent.name,
-      JSON.stringify(newAgent.personality),
-      newAgent.systemPrompt,
-      JSON.stringify(newAgent.customInstructions),
-      newAgent.greeting || null,
-      newAgent.farewell || null,
-      newAgent.maxTokens,
-      newAgent.temperature,
-      newAgent.createdAt,
-      newAgent.updatedAt,
-    ]);
+    `,
+      [
+        newAgent.id,
+        newAgent.gatewayId,
+        newAgent.name,
+        JSON.stringify(newAgent.personality),
+        newAgent.systemPrompt,
+        JSON.stringify(newAgent.customInstructions),
+        newAgent.greeting || null,
+        newAgent.farewell || null,
+        newAgent.maxTokens,
+        newAgent.temperature,
+        newAgent.createdAt,
+        newAgent.updatedAt,
+      ],
+    );
 
     return newAgent;
   }
@@ -356,9 +376,9 @@ export class AgentManager {
       name?: string;
       additionalInstructions?: string[];
       temperature?: number;
-    }
+    },
   ): AgentConfig | null {
-    const template = AGENT_TEMPLATES.find(t => t.id === templateId);
+    const template = AGENT_TEMPLATES.find((t) => t.id === templateId);
     if (!template) return null;
 
     const personality: AgentPersonality = {
@@ -372,13 +392,18 @@ export class AgentManager {
     ];
 
     // Build system prompt from template
-    const systemPrompt = this.renderSystemPrompt(template.systemPromptTemplate, {
-      name: personality.name,
-      traits: personality.traits.join(", "),
-      responseStyle: personality.responseStyle,
-      expertise: personality.expertise?.join(", ") || "general",
-      customInstructions: customInstructions.map((i, idx) => `${idx + 1}. ${i}`).join("\n"),
-    });
+    const systemPrompt = this.renderSystemPrompt(
+      template.systemPromptTemplate,
+      {
+        name: personality.name,
+        traits: personality.traits.join(", "),
+        responseStyle: personality.responseStyle,
+        expertise: personality.expertise?.join(", ") || "general",
+        customInstructions: customInstructions
+          .map((i, idx) => `${idx + 1}. ${i}`)
+          .join("\n"),
+      },
+    );
 
     return this.configureAgent(gatewayId, {
       name: personality.name,
@@ -393,7 +418,10 @@ export class AgentManager {
   /**
    * Render system prompt template
    */
-  private renderSystemPrompt(template: string, vars: Record<string, string>): string {
+  private renderSystemPrompt(
+    template: string,
+    vars: Record<string, string>,
+  ): string {
     return template.replace(/\{(\w+)\}/g, (_, key) => vars[key] || `{${key}}`);
   }
 
@@ -402,22 +430,29 @@ export class AgentManager {
    */
   getAgentByGateway(gatewayId: string): AgentConfig | null {
     try {
-      const result = this.db.query<{
-        id: string;
-        gateway_id: string;
-        name: string;
-        personality: string;
-        system_prompt: string;
-        custom_instructions: string;
-        greeting: string | null;
-        farewell: string | null;
-        max_tokens: number;
-        temperature: number;
-        created_at: number;
-        updated_at: number;
-      }, [string]>(`
+      const result = this.db
+        .query<
+          {
+            id: string;
+            gateway_id: string;
+            name: string;
+            personality: string;
+            system_prompt: string;
+            custom_instructions: string;
+            greeting: string | null;
+            farewell: string | null;
+            max_tokens: number;
+            temperature: number;
+            created_at: number;
+            updated_at: number;
+          },
+          [string]
+        >(
+          `
         SELECT * FROM agents WHERE gateway_id = ?
-      `).get(gatewayId);
+      `,
+        )
+        .get(gatewayId);
 
       if (!result) return null;
 
@@ -445,7 +480,7 @@ export class AgentManager {
    */
   async getAgentClient(
     gatewayId: string,
-    providerConfig: { provider: string; apiKey: string; baseURL?: string }
+    providerConfig: { provider: string; apiKey: string; baseURL?: string },
   ): Promise<AIClient | null> {
     // Check cache
     const cached = this.clients.get(gatewayId);
@@ -459,7 +494,7 @@ export class AgentManager {
     const provider = createProvider(
       providerConfig.provider,
       providerConfig.apiKey,
-      providerConfig.baseURL
+      providerConfig.baseURL,
     );
 
     const client = new AIClient(provider, agent.systemPrompt);
@@ -473,9 +508,14 @@ export class AgentManager {
    */
   async generateResponse(
     gatewayId: string,
-    providerConfig: { provider: string; apiKey: string; baseURL?: string; model?: string },
+    providerConfig: {
+      provider: string;
+      apiKey: string;
+      baseURL?: string;
+      model?: string;
+    },
     messages: ModelMessage[],
-    context?: Partial<ConversationContext>
+    context?: Partial<ConversationContext>,
   ): Promise<string> {
     const client = await this.getAgentClient(gatewayId, providerConfig);
     if (!client) {
@@ -483,7 +523,7 @@ export class AgentManager {
     }
 
     const agent = this.getAgentByGateway(gatewayId);
-    
+
     return client.chat(messages, {
       model: providerConfig.model,
       temperature: agent?.temperature,
@@ -496,8 +536,13 @@ export class AgentManager {
    */
   async *streamResponse(
     gatewayId: string,
-    providerConfig: { provider: string; apiKey: string; baseURL?: string; model?: string },
-    messages: ModelMessage[]
+    providerConfig: {
+      provider: string;
+      apiKey: string;
+      baseURL?: string;
+      model?: string;
+    },
+    messages: ModelMessage[],
   ): AsyncGenerator<string> {
     const client = await this.getAgentClient(gatewayId, providerConfig);
     if (!client) {
@@ -525,24 +570,36 @@ export class AgentManager {
    * Get templates by category
    */
   getTemplatesByCategory(category: string): AgentTemplate[] {
-    return AGENT_TEMPLATES.filter(t => t.category === category);
+    return AGENT_TEMPLATES.filter((t) => t.category === category);
   }
 
   /**
    * List all agents
    */
-  listAgents(): Array<{ id: string; gatewayId: string; name: string; personality: AgentPersonality }> {
+  listAgents(): Array<{
+    id: string;
+    gatewayId: string;
+    name: string;
+    personality: AgentPersonality;
+  }> {
     try {
-      const results = this.db.query<{
-        id: string;
-        gateway_id: string;
-        name: string;
-        personality: string;
-      }, []>(`
+      const results = this.db
+        .query<
+          {
+            id: string;
+            gateway_id: string;
+            name: string;
+            personality: string;
+          },
+          []
+        >(
+          `
         SELECT id, gateway_id, name, personality FROM agents
-      `).all();
+      `,
+        )
+        .all();
 
-      return results.map(r => ({
+      return results.map((r) => ({
         id: r.id,
         gatewayId: r.gateway_id,
         name: r.name,
@@ -577,7 +634,7 @@ export class AgentManager {
 
     const name = agent?.personality.name || "Assistant";
     const traits = agent?.personality.traits || ["helpful"];
-    
+
     if (traits.includes("playful")) {
       return `Hey there! 👋 I'm ${name}. How can I help you today?`;
     } else if (traits.includes("professional")) {

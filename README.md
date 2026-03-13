@@ -55,44 +55,58 @@ KendaliAI is a self-hosted AI automation platform that unified AI access, enable
 Follow these steps to create an isolated AI Gateway and connect it to Telegram:
 
 #### 1. Create the Gateway
+
 This initializes a dedicated workspace in `.kendaliai/my-assistant/`.
+
 ```bash
 bun src/cli.ts gateway create my-assistant --provider deepseek
 ```
 
 #### 2. Set API Credentials
+
 Securely store your AI provider's API key.
+
 ```bash
 bun src/cli.ts gateway set-api-key my-assistant "your-api-key"
 ```
 
 #### 3. Connect Telegram
+
 Add your Telegram Bot Token to the gateway.
+
 ```bash
 bun src/cli.ts channel add-telegram --gateway my-assistant --bot-token "your-bot-token"
 ```
 
 #### 4. Authorize Yourself
+
 KendaliAI uses a "Deny-by-Default" security model. You must allowlist your Telegram ID.
+
 ```bash
 bun src/cli.ts channel bind-telegram <your-telegram-id> --gateway my-assistant
 ```
 
 #### 5. Bind Routing
+
 Bind the channel to the gateway so it knows which agent should handle the messages.
+
 ```bash
 # Get your channel ID from 'bun src/cli.ts channel list'
 bun src/cli.ts routing bind <channel-id> my-assistant
 ```
 
 #### 6. Launch!
+
 Start the gateway as a background daemon.
+
 ```bash
 bun src/cli.ts gateway start my-assistant --daemon
 ```
 
 ### Gateway Workspace Structure
+
 Each gateway lives in its own isolated directory inside `.kendaliai/`:
+
 - `.kendaliai/<name>/data/kendaliai.db`: Gateway-specific message history and settings.
 - `.kendaliai/<name>/logs/gateway.log`: Dedicated execution logs.
 - `.kendaliai/<name>/identity.md`: Define who your agent is (Name, Vibe, Emoji).
@@ -146,13 +160,13 @@ bun run src/cli.ts agent instructions dev-assistant "Always include code example
 
 #### Available Agent Templates
 
-| Template | Description |
-|----------|-------------|
-| `dev-assistant` | Senior developer for code review and development |
-| `support-bot` | Friendly customer support representative |
-| `data-analyst` | Analytical data expert for analysis and visualization |
-| `content-writer` | Creative writer for content creation |
-| `general-assistant` | Versatile AI assistant for general tasks |
+| Template            | Description                                           |
+| ------------------- | ----------------------------------------------------- |
+| `dev-assistant`     | Senior developer for code review and development      |
+| `support-bot`       | Friendly customer support representative              |
+| `data-analyst`      | Analytical data expert for analysis and visualization |
+| `content-writer`    | Creative writer for content creation                  |
+| `general-assistant` | Versatile AI assistant for general tasks              |
 
 ### Skills & Tools
 
@@ -211,13 +225,13 @@ bun run src/cli.ts skills new my-custom-skill
 
 #### Skill Sources
 
-| Source Format | Description | Example |
-|---------------|-------------|---------|
-| `namespace/name` | ZeroMarket registry | `zeroclaw/code-review` |
-| `clawhub:name` | ClawHub registry | `clawhub:summarize` |
-| `https://...` | Git remote repository | `https://github.com/user/skill` |
-| `~/path/to/file.zip` | Local zip file | `~/Downloads/skill.zip` |
-| `zip:https://...` | Direct zip URL | `zip:https://example.com/skill.zip` |
+| Source Format        | Description           | Example                             |
+| -------------------- | --------------------- | ----------------------------------- |
+| `namespace/name`     | ZeroMarket registry   | `zeroclaw/code-review`              |
+| `clawhub:name`       | ClawHub registry      | `clawhub:summarize`                 |
+| `https://...`        | Git remote repository | `https://github.com/user/skill`     |
+| `~/path/to/file.zip` | Local zip file        | `~/Downloads/skill.zip`             |
+| `zip:https://...`    | Direct zip URL        | `zip:https://example.com/skill.zip` |
 
 #### Skill Manifest (SKILL.toml)
 
@@ -243,26 +257,26 @@ model = { type = "string", default = "gpt-4", description = "AI model to use" }
 
 #### Built-in Skills
 
-| Skill | Description |
-|-------|-------------|
-| `code-analysis` | Analyze and review code |
-| `git-operations` | Git repository operations |
-| `web-search` | Search the web for information |
-| `data-processing` | Process and analyze data |
-| `debugging` | Help debug code and troubleshoot |
-| `faq-lookup` | Look up answers from FAQ database |
+| Skill             | Description                       |
+| ----------------- | --------------------------------- |
+| `code-analysis`   | Analyze and review code           |
+| `git-operations`  | Git repository operations         |
+| `web-search`      | Search the web for information    |
+| `data-processing` | Process and analyze data          |
+| `debugging`       | Help debug code and troubleshoot  |
+| `faq-lookup`      | Look up answers from FAQ database |
 
 #### Built-in Tools
 
-| Tool | Risk Level | Description |
-|------|------------|-------------|
-| `shell` | High | Execute shell commands |
-| `git` | Medium | Git operations |
-| `file` | Medium | File read/write operations |
-| `http` | Low | HTTP requests |
-| `memory` | Low | Memory storage and retrieval |
-| `browser` | Medium | Browser automation (disabled by default) |
-| `python` | High | Python code execution (disabled by default) |
+| Tool      | Risk Level | Description                                 |
+| --------- | ---------- | ------------------------------------------- |
+| `shell`   | High       | Execute shell commands                      |
+| `git`     | Medium     | Git operations                              |
+| `file`    | Medium     | File read/write operations                  |
+| `http`    | Low        | HTTP requests                               |
+| `memory`  | Low        | Memory storage and retrieval                |
+| `browser` | Medium     | Browser automation (disabled by default)    |
+| `python`  | High       | Python code execution (disabled by default) |
 
 ### Telegram Bot Commands
 
@@ -286,7 +300,21 @@ The frontend application runs on top of Vite and React. The backend API is entir
 bun run src/server/index.ts
 ```
 
-## Available Scripts
+### Build Binary
+
+To create a standalone executable for the CLI:
+
+```bash
+# General build for the current platform
+npm run build:binary
+
+# Output is in dist/kendaliai
+./dist/kendaliai --version
+```
+
+| Command                | Output           |
+| ---------------------- | ---------------- |
+| `npm run build:binary` | `dist/kendaliai` |
 
 | Script            | Description                           |
 | ----------------- | ------------------------------------- |

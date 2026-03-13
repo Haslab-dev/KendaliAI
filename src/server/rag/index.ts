@@ -1,6 +1,6 @@
 /**
  * KendaliAI RAG Module
- * 
+ *
  * Retrieval-Augmented Generation implementation including:
  * - Document ingestion
  * - Text chunking
@@ -58,17 +58,10 @@ export {
 } from "./embedding";
 
 // Storage
-export {
-  VectorStorage,
-  hashContent,
-  generateId,
-} from "./storage";
+export { VectorStorage, hashContent, generateId } from "./storage";
 
 // Engine
-export {
-  RAGEngineImpl,
-  createRAGEngine,
-} from "./engine";
+export { RAGEngineImpl, createRAGEngine } from "./engine";
 
 // Quick setup function
 import { Database } from "bun:sqlite";
@@ -80,7 +73,7 @@ import type { RAGConfig, RAGEngine } from "./types";
  */
 export async function rag(
   db: Database,
-  config?: Partial<RAGConfig>
+  config?: Partial<RAGConfig>,
 ): Promise<RAGEngine> {
   return createRAGEngine(db, config);
 }

@@ -65,32 +65,34 @@ export function getGatewayPaths(name: string) {
  * Load gateway context from markdown files
  */
 export function loadGatewayContext(name: string): string {
-    const paths = getGatewayPaths(name);
-    let context = "";
-    
-    const files = [
-        { name: "Identity", path: paths.identity },
-        { name: "Soul", path: paths.soul },
-        { name: "User", path: paths.user },
-        { name: "Agents", path: paths.agents },
-        { name: "Tools", path: paths.tools },
-        { name: "Boot", path: paths.boot }
-    ];
+  const paths = getGatewayPaths(name);
+  let context = "";
 
-    for (const file of files) {
-        if (existsSync(file.path)) {
-            try {
-                const content = readFileSync(file.path, "utf-8").trim();
-                if (content) {
-                    context += `\n--- [${file.name}] ---\n${content}\n`;
-                }
-            } catch (err) {
-                console.warn(`[Gateway] Failed to read ${file.name} for ${name}: ${err}`);
-            }
+  const files = [
+    { name: "Identity", path: paths.identity },
+    { name: "Soul", path: paths.soul },
+    { name: "User", path: paths.user },
+    { name: "Agents", path: paths.agents },
+    { name: "Tools", path: paths.tools },
+    { name: "Boot", path: paths.boot },
+  ];
+
+  for (const file of files) {
+    if (existsSync(file.path)) {
+      try {
+        const content = readFileSync(file.path, "utf-8").trim();
+        if (content) {
+          context += `\n--- [${file.name}] ---\n${content}\n`;
         }
+      } catch (err) {
+        console.warn(
+          `[Gateway] Failed to read ${file.name} for ${name}: ${err}`,
+        );
+      }
     }
+  }
 
-    return context;
+  return context;
 }
 
 // Regex for valid gateway names: alphanumeric, underscores, hyphens only
@@ -178,28 +180,26 @@ export function getGatewayByName(
   name: string,
 ): Gateway | undefined {
   const result = db
-    .query<Gateway, [string]>(
-      `SELECT * FROM gateways WHERE name = ?`,
-    )
+    .query<Gateway, [string]>(`SELECT * FROM gateways WHERE name = ?`)
     .get(name);
-  
+
   if (result) return result;
 
   // Fallback: try to load from gateway.json if it exists
   const paths = getGatewayPaths(name);
   if (existsSync(paths.config)) {
-      try {
-          const config = JSON.parse(readFileSync(paths.config, "utf-8"));
-          return {
-              id: config.id,
-              name: config.name,
-              description: config.description,
-              provider: config.provider,
-              default_model: config.defaultModel,
-              status: "stopped", // Default if just loading from file
-              // ... fill other fields as needed or leave null
-          } as Gateway;
-      } catch {}
+    try {
+      const config = JSON.parse(readFileSync(paths.config, "utf-8"));
+      return {
+        id: config.id,
+        name: config.name,
+        description: config.description,
+        provider: config.provider,
+        default_model: config.defaultModel,
+        status: "stopped", // Default if just loading from file
+        // ... fill other fields as needed or leave null
+      } as Gateway;
+    } catch {}
   }
 
   return undefined;
@@ -230,8 +230,16 @@ export function updateGatewayConfigFile(db: Database, name: string): void {
     allowPublicBind: !!gateway.allow_public_bind,
     workspaceOnly: !!gateway.workspace_only,
     agentConfig: gateway.agent_config ? JSON.parse(gateway.agent_config) : null,
-    skills: skillsConfig ? skillsConfig.skills : (gateway.skills ? JSON.parse(gateway.skills) : null),
-    tools: skillsConfig ? skillsConfig.tools : (gateway.tools ? JSON.parse(gateway.tools) : null),
+    skills: skillsConfig
+      ? skillsConfig.skills
+      : gateway.skills
+        ? JSON.parse(gateway.skills)
+        : null,
+    tools: skillsConfig
+      ? skillsConfig.tools
+      : gateway.tools
+        ? JSON.parse(gateway.tools)
+        : null,
     securityPolicy: skillsConfig ? skillsConfig.securityPolicy : null,
     daemonEnabled: !!gateway.daemon_enabled,
     daemonAutoRestart: !!gateway.daemon_auto_restart,
@@ -245,42 +253,52 @@ export function updateGatewayConfigFile(db: Database, name: string): void {
 // List all gateways
 export function listGateways(db: Database): Gateway[] {
   const gateways: Gateway[] = [];
-  
+
   // 1. Scan .kendaliai directory for folders
   if (existsSync(KENDALIAI_DIR)) {
-      const { readdirSync, statSync } = require("fs");
-      const entries = readdirSync(KENDALIAI_DIR);
-      
-      for (const entry of entries) {
-          if (entry === "data" || entry === "logs" || entry === "run" || entry === "gateways" || entry === "skills" || entry.startsWith("kendaliai.db")) continue;
-          
-          const fullPath = join(KENDALIAI_DIR, entry);
-          if (statSync(fullPath).isDirectory()) {
-              const paths = getGatewayPaths(entry);
-              if (existsSync(paths.config)) {
-                  try {
-                      const config = JSON.parse(readFileSync(paths.config, "utf-8"));
-                      gateways.push({
-                          id: config.id,
-                          name: config.name,
-                          provider: config.provider,
-                          default_model: config.defaultModel,
-                          daemon_port: config.daemonPort,
-                          status: "unknown", // Will be checked in handleGatewayCommand
-                      } as Gateway);
-                  } catch {}
-              }
-          }
+    const { readdirSync, statSync } = require("fs");
+    const entries = readdirSync(KENDALIAI_DIR);
+
+    for (const entry of entries) {
+      if (
+        entry === "data" ||
+        entry === "logs" ||
+        entry === "run" ||
+        entry === "gateways" ||
+        entry === "skills" ||
+        entry.startsWith("kendaliai.db")
+      )
+        continue;
+
+      const fullPath = join(KENDALIAI_DIR, entry);
+      if (statSync(fullPath).isDirectory()) {
+        const paths = getGatewayPaths(entry);
+        if (existsSync(paths.config)) {
+          try {
+            const config = JSON.parse(readFileSync(paths.config, "utf-8"));
+            gateways.push({
+              id: config.id,
+              name: config.name,
+              provider: config.provider,
+              default_model: config.defaultModel,
+              daemon_port: config.daemonPort,
+              status: "unknown", // Will be checked in handleGatewayCommand
+            } as Gateway);
+          } catch {}
+        }
       }
+    }
   }
 
   // If no folders found, fallback to database (backward compatibility)
   if (gateways.length === 0) {
-      try {
-          return db.query<Gateway, []>(`SELECT * FROM gateways ORDER BY created_at DESC`).all();
-      } catch {
-          return [];
-      }
+    try {
+      return db
+        .query<Gateway, []>(`SELECT * FROM gateways ORDER BY created_at DESC`)
+        .all();
+    } catch {
+      return [];
+    }
   }
 
   return gateways;
@@ -359,10 +377,12 @@ export async function createGateway(
   // Initialize local gateway database
   const localDb = new Database(paths.db);
   await initTables(localDb);
-  
+
   // Mirror the gateway entry in the local database
-  localDb.run(`INSERT INTO gateways (id, name, provider, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`, 
-    [gateway.id, gateway.name, gateway.provider, "stopped", now, now]);
+  localDb.run(
+    `INSERT INTO gateways (id, name, provider, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+    [gateway.id, gateway.name, gateway.provider, "stopped", now, now],
+  );
 
   // Write config
   updateGatewayConfigFile(db, name);
@@ -403,12 +423,12 @@ export function deleteGateway(db: Database, name: string): void {
 
   // Delete gateway directory and all contents
   try {
-      const fs = require("fs");
-      if (existsSync(paths.base)) {
-          fs.rmSync(paths.base, { recursive: true, force: true });
-      }
+    const fs = require("fs");
+    if (existsSync(paths.base)) {
+      fs.rmSync(paths.base, { recursive: true, force: true });
+    }
   } catch (err) {
-      console.error(`Warning: Could not delete gateway directory: ${err}`);
+    console.error(`Warning: Could not delete gateway directory: ${err}`);
   }
 
   // Delete from database
@@ -454,7 +474,9 @@ export async function startGateway(
     if (gateway.daemon_pid) {
       try {
         process.kill(gateway.daemon_pid, 0);
-        console.log(`Gateway '${name}' is already running (PID: ${gateway.daemon_pid})`);
+        console.log(
+          `Gateway '${name}' is already running (PID: ${gateway.daemon_pid})`,
+        );
         return;
       } catch {}
     }
@@ -489,7 +511,11 @@ export async function startGateway(
 
     // Save PID and update logs
     writeFileSync(paths.pidFile, pid.toString());
-    writeFileSync(paths.logFile, `\n[${new Date().toISOString()}] Gateway '${name}' started (PID: ${pid}, Port: ${port})\n`, { flag: "a" });
+    writeFileSync(
+      paths.logFile,
+      `\n[${new Date().toISOString()}] Gateway '${name}' started (PID: ${pid}, Port: ${port})\n`,
+      { flag: "a" },
+    );
 
     // Update database
     db.run(
@@ -506,7 +532,9 @@ export async function startGateway(
       [pid, port, Date.now(), Date.now(), gateway.id],
     );
 
-    console.log(`🚀 Gateway '${name}' started as daemon (PID: ${child.pid}, Port: ${port})`);
+    console.log(
+      `🚀 Gateway '${name}' started as daemon (PID: ${child.pid}, Port: ${port})`,
+    );
     console.log(`   Logs: ${paths.logFile}`);
   } else {
     // Start in foreground

@@ -170,7 +170,11 @@ export class SkillRegistry {
         if (isDir) {
           return { type: "directory", url: expanded, name: basename(expanded) };
         } else if (expanded.endsWith(".zip")) {
-          return { type: "local", url: expanded, name: basename(expanded, ".zip") };
+          return {
+            type: "local",
+            url: expanded,
+            name: basename(expanded, ".zip"),
+          };
         }
       }
     }
@@ -203,7 +207,9 @@ export class SkillRegistry {
       source.startsWith(".kendaliai/") ||
       existsSync(source)
     ) {
-      const expanded = source.startsWith("/") ? source : join(process.cwd(), source);
+      const expanded = source.startsWith("/")
+        ? source
+        : join(process.cwd(), source);
       if (existsSync(expanded) && statSync(expanded).isDirectory()) {
         const name = basename(source);
         return { type: "directory", url: expanded, name };
@@ -309,7 +315,9 @@ export class SkillRegistry {
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to download skill: ${response.status} ${response.statusText}`);
+      throw new Error(
+        `Failed to download skill: ${response.status} ${response.statusText}`,
+      );
     }
 
     // Security check: Verify content type
@@ -317,7 +325,7 @@ export class SkillRegistry {
     if (contentType && contentType.includes("text/html")) {
       throw new Error(
         `Failed to download skill: The URL ${url} returned an HTML page instead of a ZIP file. ` +
-        `This often happens when a link is private, invalid, or requires login.`,
+          `This often happens when a link is private, invalid, or requires login.`,
       );
     }
 
@@ -412,16 +420,17 @@ export class SkillRegistry {
     const { execSync } = require("child_process");
     try {
       // Ensure source path is absolute for execSync
-      const absoluteSource = sourcePath.startsWith("/") 
-        ? sourcePath 
+      const absoluteSource = sourcePath.startsWith("/")
+        ? sourcePath
         : join(process.cwd(), sourcePath);
-      
+
       // Use a more robust copy command that handles the content of the directory
       // We want to copy everything INSIDE sourcePath to targetPath
-      const command = process.platform === "win32"
-        ? `xcopy /E /I /Y "${absoluteSource}\\*" "${targetPath}"`
-        : `cp -R "${absoluteSource}/." "${targetPath}/"`;
-      
+      const command =
+        process.platform === "win32"
+          ? `xcopy /E /I /Y "${absoluteSource}\\*" "${targetPath}"`
+          : `cp -R "${absoluteSource}/." "${targetPath}/"`;
+
       execSync(command, { stdio: "pipe" });
     } catch (err) {
       throw new Error(

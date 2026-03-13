@@ -1,11 +1,11 @@
 /**
  * KendaliAI Webhook Channel
- * 
+ *
  * Implementation for generic webhook channel.
  * Allows receiving messages via HTTP webhooks from any source.
  */
 
-import { BaseChannel } from './base';
+import { BaseChannel } from "./base";
 import type {
   ChannelConfig,
   ChannelMessage,
@@ -15,15 +15,15 @@ import type {
   ChatInfo,
   UserInfo,
   MessageAttachment,
-} from './types';
+} from "./types";
 
 // ============================================
 // Webhook Channel Implementation
 // ============================================
 
 export class WebhookChannel extends BaseChannel {
-  readonly type = 'webhook' as const;
-  
+  readonly type = "webhook" as const;
+
   private outboundWebhookUrl?: string;
   private secretKey?: string;
   private pendingMessages: Map<string, ChannelMessage> = new Map();
@@ -52,19 +52,22 @@ export class WebhookChannel extends BaseChannel {
     console.log(`[Webhook] Disconnected`);
   }
 
-  protected async doSendMessage(text: string, options?: SendMessageOptions): Promise<ChannelMessage> {
+  protected async doSendMessage(
+    text: string,
+    options?: SendMessageOptions,
+  ): Promise<ChannelMessage> {
     if (!this.outboundWebhookUrl) {
-      throw new Error('No outbound webhook URL configured');
+      throw new Error("No outbound webhook URL configured");
     }
 
-    const chatId = options?.chatId || this.config.defaultChatId || 'default';
+    const chatId = options?.chatId || this.config.defaultChatId || "default";
     const messageId = this.generateMessageId();
-    
+
     const message: ChannelMessage = {
       id: messageId,
-      channelType: 'webhook',
+      channelType: "webhook",
       chatId,
-      userId: this.config.botId || 'webhook-bot',
+      userId: this.config.botId || "webhook-bot",
       text,
       timestamp: new Date(),
       replyTo: options?.replyTo,
@@ -86,30 +89,35 @@ export class WebhookChannel extends BaseChannel {
     };
 
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     };
 
     if (this.secretKey) {
-      headers['X-Webhook-Secret'] = this.secretKey;
+      headers["X-Webhook-Secret"] = this.secretKey;
     }
 
     const response = await fetch(this.outboundWebhookUrl, {
-      method: 'POST',
+      method: "POST",
       headers,
       body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
-      throw new Error(`Webhook send failed: ${response.status} ${response.statusText}`);
+      throw new Error(
+        `Webhook send failed: ${response.status} ${response.statusText}`,
+      );
     }
 
     this.pendingMessages.set(messageId, message);
     return message;
   }
 
-  protected async doEditMessage(messageId: string, options: EditMessageOptions): Promise<ChannelMessage> {
+  protected async doEditMessage(
+    messageId: string,
+    options: EditMessageOptions,
+  ): Promise<ChannelMessage> {
     if (!this.outboundWebhookUrl) {
-      throw new Error('No outbound webhook URL configured');
+      throw new Error("No outbound webhook URL configured");
     }
 
     const existingMessage = this.pendingMessages.get(messageId);
@@ -123,7 +131,7 @@ export class WebhookChannel extends BaseChannel {
     };
 
     const payload = {
-      action: 'edit',
+      action: "edit",
       messageId,
       message: {
         text: options.text,
@@ -133,15 +141,15 @@ export class WebhookChannel extends BaseChannel {
     };
 
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     };
 
     if (this.secretKey) {
-      headers['X-Webhook-Secret'] = this.secretKey;
+      headers["X-Webhook-Secret"] = this.secretKey;
     }
 
     await fetch(this.outboundWebhookUrl, {
-      method: 'POST',
+      method: "POST",
       headers,
       body: JSON.stringify(payload),
     });
@@ -150,34 +158,37 @@ export class WebhookChannel extends BaseChannel {
     return updatedMessage;
   }
 
-  protected async doDeleteMessage(messageId: string, options?: DeleteMessageOptions): Promise<boolean> {
+  protected async doDeleteMessage(
+    messageId: string,
+    options?: DeleteMessageOptions,
+  ): Promise<boolean> {
     if (!this.outboundWebhookUrl) {
       // If no outbound URL, just remove from pending
       return this.pendingMessages.delete(messageId);
     }
 
     const payload = {
-      action: 'delete',
+      action: "delete",
       messageId,
       channel: this.name,
       revoke: options?.revoke,
     };
 
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     };
 
     if (this.secretKey) {
-      headers['X-Webhook-Secret'] = this.secretKey;
+      headers["X-Webhook-Secret"] = this.secretKey;
     }
 
     try {
       await fetch(this.outboundWebhookUrl, {
-        method: 'POST',
+        method: "POST",
         headers,
         body: JSON.stringify(payload),
       });
-      
+
       this.pendingMessages.delete(messageId);
       return true;
     } catch {
@@ -189,7 +200,7 @@ export class WebhookChannel extends BaseChannel {
     // Webhook channels don't have chat info
     return {
       id: chatId,
-      type: 'group',
+      type: "group",
     };
   }
 
@@ -215,14 +226,14 @@ export class WebhookChannel extends BaseChannel {
   async handleIncomingWebhook(payload: WebhookPayload): Promise<void> {
     // Validate secret if configured
     if (this.secretKey && payload.secret !== this.secretKey) {
-      throw new Error('Invalid webhook secret');
+      throw new Error("Invalid webhook secret");
     }
 
     const message: ChannelMessage = {
       id: payload.messageId || this.generateMessageId(),
-      channelType: 'webhook',
-      chatId: payload.chatId || 'default',
-      userId: payload.userId || 'unknown',
+      channelType: "webhook",
+      chatId: payload.chatId || "default",
+      userId: payload.userId || "unknown",
       username: payload.username,
       displayName: payload.displayName,
       text: payload.text,
@@ -245,10 +256,11 @@ export class WebhookChannel extends BaseChannel {
   }): Promise<void> {
     // Validate secret from header
     if (this.secretKey) {
-      const headerSecret = request.headers['x-webhook-secret'] || 
-                          request.headers['X-Webhook-Secret'];
+      const headerSecret =
+        request.headers["x-webhook-secret"] ||
+        request.headers["X-Webhook-Secret"];
       if (headerSecret !== this.secretKey) {
-        throw new Error('Invalid webhook secret');
+        throw new Error("Invalid webhook secret");
       }
     }
 

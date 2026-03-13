@@ -1,6 +1,6 @@
 /**
  * KendaliAI Routing CLI Module
- * 
+ *
  * CLI commands for managing channel-to-gateway routing:
  * - routing bind <channel> <gateway>
  * - routing unbind <channel> <gateway>
@@ -13,12 +13,12 @@
 import { Database } from "bun:sqlite";
 import { existsSync } from "fs";
 import { getGatewayPaths } from "./gateway";
-import { 
-  RoutingManager, 
-  getRoutingManager, 
-  RoutingMode, 
+import {
+  RoutingManager,
+  getRoutingManager,
+  RoutingMode,
   RoutingConfig,
-  initRoutingTables
+  initRoutingTables,
 } from "../server/routing";
 
 // ============================================
@@ -26,7 +26,14 @@ import {
 // ============================================
 
 function parseRoutingMode(mode: string): RoutingMode | null {
-  const validModes: RoutingMode[] = ["prefix", "keyword", "interactive", "broadcast", "round-robin", "default"];
+  const validModes: RoutingMode[] = [
+    "prefix",
+    "keyword",
+    "interactive",
+    "broadcast",
+    "round-robin",
+    "default",
+  ];
   if (validModes.includes(mode as RoutingMode)) {
     return mode as RoutingMode;
   }
@@ -81,13 +88,17 @@ Examples:
 /**
  * Sync channel and bindings to gateway-specific local database
  */
-export function syncGatewayLocalDb(centralDb: Database, gatewayName: string, channelId: string): void {
+export function syncGatewayLocalDb(
+  centralDb: Database,
+  gatewayName: string,
+  channelId: string,
+): void {
   try {
     const paths = getGatewayPaths(gatewayName);
     if (!existsSync(paths.base)) return;
 
     const localDb = new Database(paths.db);
-    
+
     // 1. Ensure channels table exists
     localDb.run(`CREATE TABLE IF NOT EXISTS channels (
         id TEXT PRIMARY KEY,
@@ -102,18 +113,25 @@ export function syncGatewayLocalDb(centralDb: Database, gatewayName: string, cha
     initRoutingTables(localDb);
 
     // 2. Mirror channel info
-    const channel = centralDb.query("SELECT * FROM channels WHERE id = ?").get(channelId) as any;
+    const channel = centralDb
+      .query("SELECT * FROM channels WHERE id = ?")
+      .get(channelId) as any;
     if (channel) {
-        const cols = Object.keys(channel);
-        const placeholders = cols.map(() => "?").join(", ");
-        localDb.run(`INSERT OR REPLACE INTO channels (${cols.join(", ")}) VALUES (${placeholders})`, Object.values(channel) as any[]);
+      const cols = Object.keys(channel);
+      const placeholders = cols.map(() => "?").join(", ");
+      localDb.run(
+        `INSERT OR REPLACE INTO channels (${cols.join(", ")}) VALUES (${placeholders})`,
+        Object.values(channel) as any[],
+      );
     }
 
     // 2.5 Mirror gateway info (critical for API keys/config)
-    const gateway = centralDb.query("SELECT * FROM gateways WHERE name = ?").get(gatewayName) as any;
+    const gateway = centralDb
+      .query("SELECT * FROM gateways WHERE name = ?")
+      .get(gatewayName) as any;
     if (gateway) {
-        // Ensure table exists (mirroring core schema)
-        localDb.run(`CREATE TABLE IF NOT EXISTS gateways (
+      // Ensure table exists (mirroring core schema)
+      localDb.run(`CREATE TABLE IF NOT EXISTS gateways (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL UNIQUE,
             description TEXT,
@@ -140,24 +158,36 @@ export function syncGatewayLocalDb(centralDb: Database, gatewayName: string, cha
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL
         )`);
-        const cols = Object.keys(gateway);
-        const placeholders = cols.map(() => "?").join(", ");
-        localDb.run(`INSERT OR REPLACE INTO gateways (${cols.join(", ")}) VALUES (${placeholders})`, Object.values(gateway) as any[]);
+      const cols = Object.keys(gateway);
+      const placeholders = cols.map(() => "?").join(", ");
+      localDb.run(
+        `INSERT OR REPLACE INTO gateways (${cols.join(", ")}) VALUES (${placeholders})`,
+        Object.values(gateway) as any[],
+      );
     }
 
     // 3. Mirror ALL bindings for this channel
-    // We mirror all because a channel might be bound to multiple gateways, 
+    // We mirror all because a channel might be bound to multiple gateways,
     // and the gateway needs to know the full routing context for that channel
-    const bindings = centralDb.query("SELECT * FROM channel_bindings WHERE channel_id = ?").all(channelId) as any[];
-    localDb.run("DELETE FROM channel_bindings WHERE channel_id = ?", [channelId]);
+    const bindings = centralDb
+      .query("SELECT * FROM channel_bindings WHERE channel_id = ?")
+      .all(channelId) as any[];
+    localDb.run("DELETE FROM channel_bindings WHERE channel_id = ?", [
+      channelId,
+    ]);
     for (const binding of bindings) {
-        const cols = Object.keys(binding);
-        const placeholders = cols.map(() => "?").join(", ");
-        localDb.run(`INSERT INTO channel_bindings (${cols.join(", ")}) VALUES (${placeholders})`, Object.values(binding) as any[]);
+      const cols = Object.keys(binding);
+      const placeholders = cols.map(() => "?").join(", ");
+      localDb.run(
+        `INSERT INTO channel_bindings (${cols.join(", ")}) VALUES (${placeholders})`,
+        Object.values(binding) as any[],
+      );
     }
 
     localDb.close();
-    console.log(`📡 Synced channel '${channelId}' to gateway '${gatewayName}' local database`);
+    console.log(
+      `📡 Synced channel '${channelId}' to gateway '${gatewayName}' local database`,
+    );
   } catch (err) {
     console.warn(`⚠️ Failed to sync to gateway local database: ${err}`);
   }
@@ -170,7 +200,7 @@ export function syncGatewayLocalDb(centralDb: Database, gatewayName: string, cha
 export async function handleRoutingCommand(
   db: Database,
   subCommand: string,
-  args: string[]
+  args: string[],
 ): Promise<void> {
   const routingManager = getRoutingManager(db);
 
@@ -178,7 +208,9 @@ export async function handleRoutingCommand(
     case "bind": {
       if (args.length < 2) {
         console.error("❌ Error: Channel ID and gateway name required");
-        console.log("Usage: kendaliai routing bind <channel-id> <gateway-name> [options]");
+        console.log(
+          "Usage: kendaliai routing bind <channel-id> <gateway-name> [options]",
+        );
         return;
       }
 
@@ -201,7 +233,9 @@ export async function handleRoutingCommand(
             mode = parsedMode;
           } else {
             console.error(`❌ Invalid mode: ${nextArg}`);
-            console.log("Valid modes: prefix, keyword, interactive, broadcast, round-robin, default");
+            console.log(
+              "Valid modes: prefix, keyword, interactive, broadcast, round-robin, default",
+            );
             return;
           }
           i++;
@@ -209,7 +243,10 @@ export async function handleRoutingCommand(
           prefix = nextArg;
           i++;
         } else if (arg === "--keywords" && nextArg) {
-          keywords = nextArg.split(",").map(k => k.trim()).filter(k => k);
+          keywords = nextArg
+            .split(",")
+            .map((k) => k.trim())
+            .filter((k) => k);
           i++;
         } else if (arg === "--priority" && nextArg) {
           priority = parseInt(nextArg) || 0;
@@ -218,9 +255,13 @@ export async function handleRoutingCommand(
       }
 
       // Get gateway ID
-      const gateway = db.query<{ id: string; name: string }, [string]>(`
+      const gateway = db
+        .query<{ id: string; name: string }, [string]>(
+          `
         SELECT id, name FROM gateways WHERE name = ?
-      `).get(gatewayName);
+      `,
+        )
+        .get(gatewayName);
 
       if (!gateway) {
         console.error(`❌ Gateway '${gatewayName}' not found`);
@@ -237,16 +278,18 @@ export async function handleRoutingCommand(
         channelId,
         gateway.id,
         routingConfig,
-        priority
+        priority,
       );
 
       if (success) {
-        console.log(`✅ Bound channel '${channelId}' to gateway '${gatewayName}'`);
+        console.log(
+          `✅ Bound channel '${channelId}' to gateway '${gatewayName}'`,
+        );
         console.log(`   Mode: ${mode}`);
         if (prefix) console.log(`   Prefix: ${prefix}`);
         if (keywords) console.log(`   Keywords: ${keywords.join(", ")}`);
         console.log(`   Priority: ${priority}`);
-        
+
         // Sync to gateway local database
         syncGatewayLocalDb(db, gatewayName, channelId);
       } else {
@@ -258,7 +301,9 @@ export async function handleRoutingCommand(
     case "unbind": {
       if (args.length < 2) {
         console.error("❌ Error: Channel ID and gateway name required");
-        console.log("Usage: kendaliai routing unbind <channel-id> <gateway-name>");
+        console.log(
+          "Usage: kendaliai routing unbind <channel-id> <gateway-name>",
+        );
         return;
       }
 
@@ -266,19 +311,28 @@ export async function handleRoutingCommand(
       const gatewayName = args[1];
 
       // Get gateway ID
-      const gateway = db.query<{ id: string }, [string]>(`
+      const gateway = db
+        .query<{ id: string }, [string]>(
+          `
         SELECT id FROM gateways WHERE name = ?
-      `).get(gatewayName);
+      `,
+        )
+        .get(gatewayName);
 
       if (!gateway) {
         console.error(`❌ Gateway '${gatewayName}' not found`);
         return;
       }
 
-      const success = routingManager.unbindChannelFromGateway(channelId, gateway.id);
+      const success = routingManager.unbindChannelFromGateway(
+        channelId,
+        gateway.id,
+      );
 
       if (success) {
-        console.log(`✅ Unbound channel '${channelId}' from gateway '${gatewayName}'`);
+        console.log(
+          `✅ Unbound channel '${channelId}' from gateway '${gatewayName}'`,
+        );
         // Sync to gateway local database
         syncGatewayLocalDb(db, gatewayName, channelId);
       } else {
@@ -292,9 +346,13 @@ export async function handleRoutingCommand(
 
       if (gatewayFilter) {
         // List bindings for specific gateway
-        const gateway = db.query<{ id: string; name: string }, [string]>(`
+        const gateway = db
+          .query<{ id: string; name: string }, [string]>(
+            `
           SELECT id, name FROM gateways WHERE name = ?
-        `).get(gatewayFilter);
+        `,
+          )
+          .get(gatewayFilter);
 
         if (!gateway) {
           console.error(`❌ Gateway '${gatewayFilter}' not found`);
@@ -323,33 +381,52 @@ export async function handleRoutingCommand(
         }
       } else {
         // List all bindings
-        const bindings = db.query<{
-          id: string;
-          channel_id: string;
-          gateway_id: string;
-          routing_config: string | null;
-          priority: number;
-          enabled: number;
-        }, []>(`
+        const bindings = db
+          .query<
+            {
+              id: string;
+              channel_id: string;
+              gateway_id: string;
+              routing_config: string | null;
+              priority: number;
+              enabled: number;
+            },
+            []
+          >(
+            `
           SELECT * FROM channel_bindings WHERE enabled = 1 ORDER BY priority ASC
-        `).all();
+        `,
+          )
+          .all();
 
         if (bindings.length === 0) {
           console.log("No channel bindings found.");
           console.log("\nTo create a binding:");
-          console.log("  kendaliai routing bind <channel-id> <gateway-name> --mode prefix --prefix /dev");
+          console.log(
+            "  kendaliai routing bind <channel-id> <gateway-name> --mode prefix --prefix /dev",
+          );
           return;
         }
 
-        console.log("\n╔══════════════════════════════════════════════════════════════════════════╗");
-        console.log("║                        Channel Bindings                                   ║");
-        console.log("╠══════════════════════════════════════════════════════════════════════════╣");
+        console.log(
+          "\n╔══════════════════════════════════════════════════════════════════════════╗",
+        );
+        console.log(
+          "║                        Channel Bindings                                   ║",
+        );
+        console.log(
+          "╠══════════════════════════════════════════════════════════════════════════╣",
+        );
 
         for (const binding of bindings) {
           // Get gateway name
-          const gateway = db.query<{ name: string }, [string]>(`
+          const gateway = db
+            .query<{ name: string }, [string]>(
+              `
             SELECT name FROM gateways WHERE id = ?
-          `).get(binding.gateway_id);
+          `,
+            )
+            .get(binding.gateway_id);
 
           let routing: RoutingConfig = { mode: "default" };
           try {
@@ -360,13 +437,20 @@ export async function handleRoutingCommand(
 
           const gatewayName = gateway?.name || binding.gateway_id;
           const mode = routing.mode;
-          const extra = routing.prefix ? ` (${routing.prefix})` : 
-                        routing.keywords ? ` (${routing.keywords.length} keywords)` : "";
+          const extra = routing.prefix
+            ? ` (${routing.prefix})`
+            : routing.keywords
+              ? ` (${routing.keywords.length} keywords)`
+              : "";
 
-          console.log(`║ ${binding.channel_id.padEnd(16)} → ${gatewayName.padEnd(16)} ${mode.padEnd(12)} ${extra.padEnd(16)} ║`);
+          console.log(
+            `║ ${binding.channel_id.padEnd(16)} → ${gatewayName.padEnd(16)} ${mode.padEnd(12)} ${extra.padEnd(16)} ║`,
+          );
         }
 
-        console.log("╚══════════════════════════════════════════════════════════════════════════╝");
+        console.log(
+          "╚══════════════════════════════════════════════════════════════════════════╝",
+        );
         console.log(`\nTotal: ${bindings.length} binding(s)`);
       }
       break;
@@ -384,13 +468,19 @@ export async function handleRoutingCommand(
 
       if (!mode) {
         console.error(`❌ Invalid mode: ${args[1]}`);
-        console.log("Valid modes: prefix, keyword, interactive, broadcast, round-robin, default");
+        console.log(
+          "Valid modes: prefix, keyword, interactive, broadcast, round-robin, default",
+        );
         return;
       }
 
-      const gateway = db.query<{ id: string }, [string]>(`
+      const gateway = db
+        .query<{ id: string }, [string]>(
+          `
         SELECT id FROM gateways WHERE name = ?
-      `).get(gatewayName);
+      `,
+        )
+        .get(gatewayName);
 
       if (!gateway) {
         console.error(`❌ Gateway '${gatewayName}' not found`);
@@ -410,16 +500,22 @@ export async function handleRoutingCommand(
     case "set-prefix": {
       if (args.length < 2) {
         console.error("❌ Error: Gateway name and prefix required");
-        console.log("Usage: kendaliai routing set-prefix <gateway-name> <prefix>");
+        console.log(
+          "Usage: kendaliai routing set-prefix <gateway-name> <prefix>",
+        );
         return;
       }
 
       const gatewayName = args[0];
       const prefix = args[1];
 
-      const gateway = db.query<{ id: string }, [string]>(`
+      const gateway = db
+        .query<{ id: string }, [string]>(
+          `
         SELECT id FROM gateways WHERE name = ?
-      `).get(gatewayName);
+      `,
+        )
+        .get(gatewayName);
 
       if (!gateway) {
         console.error(`❌ Gateway '${gatewayName}' not found`);
@@ -428,7 +524,7 @@ export async function handleRoutingCommand(
 
       const success = routingManager.updateGatewayRouting(gateway.id, {
         mode: "prefix",
-        prefix
+        prefix,
       });
 
       if (success) {
@@ -442,16 +538,25 @@ export async function handleRoutingCommand(
     case "set-keywords": {
       if (args.length < 2) {
         console.error("❌ Error: Gateway name and keywords required");
-        console.log("Usage: kendaliai routing set-keywords <gateway-name> <keywords>");
+        console.log(
+          "Usage: kendaliai routing set-keywords <gateway-name> <keywords>",
+        );
         return;
       }
 
       const gatewayName = args[0];
-      const keywords = args[1].split(",").map(k => k.trim()).filter(k => k);
+      const keywords = args[1]
+        .split(",")
+        .map((k) => k.trim())
+        .filter((k) => k);
 
-      const gateway = db.query<{ id: string }, [string]>(`
+      const gateway = db
+        .query<{ id: string }, [string]>(
+          `
         SELECT id FROM gateways WHERE name = ?
-      `).get(gatewayName);
+      `,
+        )
+        .get(gatewayName);
 
       if (!gateway) {
         console.error(`❌ Gateway '${gatewayName}' not found`);
@@ -460,12 +565,12 @@ export async function handleRoutingCommand(
 
       const success = routingManager.updateGatewayRouting(gateway.id, {
         mode: "keyword",
-        keywords
+        keywords,
       });
 
       if (success) {
         console.log(`✅ Set keywords for '${gatewayName}':`);
-        keywords.forEach(k => console.log(`   - ${k}`));
+        keywords.forEach((k) => console.log(`   - ${k}`));
       } else {
         console.error(`❌ Failed to update keywords`);
       }
@@ -482,14 +587,21 @@ export async function handleRoutingCommand(
       const channelId = args[0];
 
       // Get channel info
-      const channel = db.query<{
-        id: string;
-        type: string;
-        name: string;
-        gateway_id: string | null;
-      }, [string]>(`
+      const channel = db
+        .query<
+          {
+            id: string;
+            type: string;
+            name: string;
+            gateway_id: string | null;
+          },
+          [string]
+        >(
+          `
         SELECT id, type, name, gateway_id FROM channels WHERE id = ?
-      `).get(channelId);
+      `,
+        )
+        .get(channelId);
 
       if (!channel) {
         console.error(`❌ Channel '${channelId}' not found`);
@@ -503,7 +615,11 @@ export async function handleRoutingCommand(
       // Test routing with optional user-provided message
       const testMessage = args[1]; // Optional test message
       if (testMessage) {
-        const result = routingManager.routeMessage(channelId, testMessage, "test-user");
+        const result = routingManager.routeMessage(
+          channelId,
+          testMessage,
+          "test-user",
+        );
         console.log(`  Test Message: "${testMessage}"`);
         console.log(`  Routed To: ${result.gatewayName || "None"}`);
         console.log(`  Match Type: ${result.matchType}`);
@@ -511,7 +627,9 @@ export async function handleRoutingCommand(
         if (result.interactiveOptions && result.interactiveOptions.length > 0) {
           console.log(`\n  Interactive Options:`);
           result.interactiveOptions.forEach((opt, i) => {
-            console.log(`    [${i + 1}] ${opt.gatewayName} - ${opt.description}`);
+            console.log(
+              `    [${i + 1}] ${opt.gatewayName} - ${opt.description}`,
+            );
           });
         }
       } else {
@@ -521,23 +639,34 @@ export async function handleRoutingCommand(
       }
 
       // Show bindings
-      const bindings = db.query<{
-        gateway_id: string;
-        routing_config: string | null;
-        priority: number;
-      }, [string]>(`
+      const bindings = db
+        .query<
+          {
+            gateway_id: string;
+            routing_config: string | null;
+            priority: number;
+          },
+          [string]
+        >(
+          `
         SELECT gateway_id, routing_config, priority 
         FROM channel_bindings 
         WHERE channel_id = ? AND enabled = 1
         ORDER BY priority ASC
-      `).all(channelId);
+      `,
+        )
+        .all(channelId);
 
       if (bindings.length > 0) {
         console.log(`\n  Bindings (${bindings.length}):`);
         for (const binding of bindings) {
-          const gw = db.query<{ name: string }, [string]>(`
+          const gw = db
+            .query<{ name: string }, [string]>(
+              `
             SELECT name FROM gateways WHERE id = ?
-          `).get(binding.gateway_id);
+          `,
+            )
+            .get(binding.gateway_id);
 
           let routing: RoutingConfig = { mode: "default" };
           try {
@@ -546,9 +675,12 @@ export async function handleRoutingCommand(
             }
           } catch {}
 
-          console.log(`    - ${gw?.name || binding.gateway_id} (${routing.mode})`);
+          console.log(
+            `    - ${gw?.name || binding.gateway_id} (${routing.mode})`,
+          );
           if (routing.prefix) console.log(`      Prefix: ${routing.prefix}`);
-          if (routing.keywords) console.log(`      Keywords: ${routing.keywords.join(", ")}`);
+          if (routing.keywords)
+            console.log(`      Keywords: ${routing.keywords.join(", ")}`);
         }
       }
       break;

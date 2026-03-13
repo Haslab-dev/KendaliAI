@@ -1,13 +1,13 @@
 /**
  * KendaliAI AI SDK Integration
- * 
+ *
  * Provides AI abstraction using Vercel AI SDK for OpenAI-compatible providers.
  * Supports: OpenAI, DeepSeek, ZAI, and any OpenAI-compatible endpoint.
- * 
+ *
  * @example
  * ```typescript
  * import { createProvider, generateText, streamText } from './ai';
- * 
+ *
  * const provider = createProvider('deepseek', 'api-key');
  * const { text } = await generateText(provider, 'deepseek-chat', 'Hello!');
  * ```
@@ -108,13 +108,13 @@ export const PROVIDER_PRESETS: Record<string, ProviderPreset> = {
 export function createProvider(
   providerType: string,
   apiKey: string,
-  customBaseURL?: string
+  customBaseURL?: string,
 ): AIProvider {
   const preset = PROVIDER_PRESETS[providerType];
 
   if (!preset && !customBaseURL) {
     throw new Error(
-      `Unknown provider: ${providerType}. Provide --api-url or use a known provider.`
+      `Unknown provider: ${providerType}. Provide --api-url or use a known provider.`,
     );
   }
 
@@ -162,7 +162,7 @@ export function getDefaultModel(providerType: string): string {
 export async function generateText(
   provider: AIProvider,
   modelId: string,
-  options: AIGenerateOptions
+  options: AIGenerateOptions,
 ): Promise<AIGenerateResult> {
   const model = provider(modelId);
 
@@ -183,7 +183,7 @@ export async function generateText(
 
     // Use messages-based generation
     const messages = options.messages || [];
-    
+
     const result = await aiGenerateText({
       model,
       messages,
@@ -206,7 +206,7 @@ export async function generateTextSimple(
   provider: AIProvider,
   modelId: string,
   prompt: string,
-  systemPrompt?: string
+  systemPrompt?: string,
 ): Promise<string> {
   const result = await generateText(provider, modelId, {
     prompt,
@@ -225,7 +225,7 @@ export async function generateTextSimple(
 export async function* streamText(
   provider: AIProvider,
   modelId: string,
-  options: AIGenerateOptions
+  options: AIGenerateOptions,
 ): AsyncGenerator<string, void, unknown> {
   const model = provider(modelId);
 
@@ -246,7 +246,7 @@ export async function* streamText(
 
     // Use messages-based streaming
     const messages = options.messages || [];
-    
+
     const result = await aiStreamText({
       model,
       messages,
@@ -273,7 +273,7 @@ export class AIClient {
   constructor(
     provider: AIProvider,
     defaultModel: string,
-    defaultSystemPrompt?: string
+    defaultSystemPrompt?: string,
   ) {
     this.provider = provider;
     this.defaultModel = defaultModel;
@@ -285,7 +285,7 @@ export class AIClient {
    */
   async generate(
     prompt: string,
-    options?: Omit<AIGenerateOptions, "prompt">
+    options?: Omit<AIGenerateOptions, "prompt">,
   ): Promise<string> {
     const result = await generateText(
       this.provider,
@@ -294,7 +294,7 @@ export class AIClient {
         prompt,
         system: options?.system || this.defaultSystemPrompt,
         ...options,
-      }
+      },
     );
     return result.text;
   }
@@ -304,7 +304,7 @@ export class AIClient {
    */
   async chat(
     messages: ModelMessage[],
-    options?: Omit<AIGenerateOptions, "messages">
+    options?: Omit<AIGenerateOptions, "messages">,
   ): Promise<string> {
     const result = await generateText(
       this.provider,
@@ -313,7 +313,7 @@ export class AIClient {
         messages,
         system: options?.system || this.defaultSystemPrompt,
         ...options,
-      }
+      },
     );
     return result.text;
   }
@@ -323,7 +323,7 @@ export class AIClient {
    */
   async *stream(
     prompt: string,
-    options?: Omit<AIGenerateOptions, "prompt">
+    options?: Omit<AIGenerateOptions, "prompt">,
   ): AsyncGenerator<string> {
     yield* streamText(this.provider, options?.model || this.defaultModel, {
       prompt,
@@ -337,7 +337,7 @@ export class AIClient {
    */
   async *streamChat(
     messages: ModelMessage[],
-    options?: Omit<AIGenerateOptions, "messages">
+    options?: Omit<AIGenerateOptions, "messages">,
   ): AsyncGenerator<string> {
     yield* streamText(this.provider, options?.model || this.defaultModel, {
       messages,
@@ -372,7 +372,7 @@ export function createAIClient(
   providerType: string,
   apiKey: string,
   customBaseURL?: string,
-  systemPrompt?: string
+  systemPrompt?: string,
 ): AIClient {
   const provider = createProvider(providerType, apiKey, customBaseURL);
   const defaultModel = getDefaultModel(providerType);

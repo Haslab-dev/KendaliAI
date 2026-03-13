@@ -7,7 +7,7 @@ import type { AIProvider } from "../server/providers/types";
 export async function llmRouter(
   message: string,
   provider: AIProvider,
-  model?: string
+  model?: string,
 ): Promise<Intent> {
   const prompt = `Classify the user request into exactly one category:
 - chat: general conversation, explanations, or creative writing
@@ -21,9 +21,12 @@ Return only the label (chat, rag, or agent).`;
   const response = await provider.generate({
     model,
     messages: [
-      { role: "system", content: "You are a concise intent classification router." },
-      { role: "user", content: prompt }
-    ]
+      {
+        role: "system",
+        content: "You are a concise intent classification router.",
+      },
+      { role: "user", content: prompt },
+    ],
   });
 
   const label = response.text.trim().toLowerCase();

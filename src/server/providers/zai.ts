@@ -1,20 +1,20 @@
 /**
  * KendaliAI ZAI Provider
- * 
+ *
  * Implementation for ZAI models.
  * ZAI is an OpenAI-compatible provider with coding-focused models.
  */
 
-import { BaseProvider } from './base';
-import type { ProviderConfig, ProviderCapabilities, ModelInfo } from './types';
+import { BaseProvider } from "./base";
+import type { ProviderConfig, ProviderCapabilities, ModelInfo } from "./types";
 
 // ============================================
 // ZAI Provider Implementation
 // ============================================
 
 export class ZAIProvider extends BaseProvider {
-  readonly name = 'ZAI';
-  readonly type = 'zai' as const;
+  readonly name = "ZAI";
+  readonly type = "zai" as const;
 
   constructor(config: ProviderConfig) {
     super(config);
@@ -33,11 +33,11 @@ export class ZAIProvider extends BaseProvider {
   }
 
   getDefaultBaseUrl(): string {
-    return 'https://api.z.ai/api/coding/paas/v4';
+    return "https://api.z.ai/api/coding/paas/v4";
   }
 
   getDefaultModel(): string {
-    return 'zai-1';
+    return "zai-1";
   }
 
   protected getProviderSpecificHeaders(): Record<string, string> {
@@ -48,20 +48,20 @@ export class ZAIProvider extends BaseProvider {
     // Return known ZAI models with detailed info
     return [
       {
-        id: 'zai-1',
-        name: 'ZAI-1',
+        id: "zai-1",
+        name: "ZAI-1",
         provider: this.name,
         contextWindow: 128000,
         maxOutputTokens: 8192,
         supportsVision: false,
         supportsFunctionCalling: true,
         supportsStreaming: true,
-        inputCostPer1M: 0.50,
-        outputCostPer1M: 1.50,
+        inputCostPer1M: 0.5,
+        outputCostPer1M: 1.5,
       },
       {
-        id: 'zai-1-mini',
-        name: 'ZAI-1 Mini',
+        id: "zai-1-mini",
+        name: "ZAI-1 Mini",
         provider: this.name,
         contextWindow: 32000,
         maxOutputTokens: 4096,
@@ -69,19 +69,19 @@ export class ZAIProvider extends BaseProvider {
         supportsFunctionCalling: true,
         supportsStreaming: true,
         inputCostPer1M: 0.15,
-        outputCostPer1M: 0.60,
+        outputCostPer1M: 0.6,
       },
       {
-        id: 'zai-coder',
-        name: 'ZAI Coder',
+        id: "zai-coder",
+        name: "ZAI Coder",
         provider: this.name,
         contextWindow: 64000,
         maxOutputTokens: 8192,
         supportsVision: false,
         supportsFunctionCalling: true,
         supportsStreaming: true,
-        inputCostPer1M: 0.30,
-        outputCostPer1M: 0.90,
+        inputCostPer1M: 0.3,
+        outputCostPer1M: 0.9,
       },
     ];
   }

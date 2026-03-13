@@ -1,6 +1,6 @@
 /**
  * KendaliAI Base Channel
- * 
+ *
  * Base class for messaging channel implementations.
  * Provides common functionality for all channels.
  */
@@ -20,7 +20,7 @@ import type {
   UserInfo,
   CommandContext,
   CallbackQuery,
-} from './types';
+} from "./types";
 
 // ============================================
 // Base Channel Implementation
@@ -28,14 +28,19 @@ import type {
 
 export abstract class BaseChannel implements Channel {
   abstract readonly type: ChannelType;
-  
+
   readonly name: string;
   readonly config: ChannelConfig;
-  
-  protected _status: ChannelStatus = 'disconnected';
-  protected messageHandlers: Array<(message: ChannelMessage) => Promise<void>> = [];
-  protected callbackHandlers: Array<(query: CallbackQuery) => Promise<void>> = [];
-  protected commandHandlers: Map<string, (ctx: CommandContext) => Promise<void>> = new Map();
+
+  protected _status: ChannelStatus = "disconnected";
+  protected messageHandlers: Array<(message: ChannelMessage) => Promise<void>> =
+    [];
+  protected callbackHandlers: Array<(query: CallbackQuery) => Promise<void>> =
+    [];
+  protected commandHandlers: Map<
+    string,
+    (ctx: CommandContext) => Promise<void>
+  > = new Map();
   protected eventHandlers: ChannelEventHandler[] = [];
   protected initialized = false;
 
@@ -55,11 +60,11 @@ export abstract class BaseChannel implements Channel {
   }
 
   async connect(): Promise<void> {
-    if (this._status === 'connected') return;
-    
-    this._status = 'connecting';
+    if (this._status === "connected") return;
+
+    this._status = "connecting";
     this.emitEvent({
-      type: 'connected',
+      type: "connected",
       channel: this.name,
       channelType: this.type,
       timestamp: new Date(),
@@ -67,11 +72,11 @@ export abstract class BaseChannel implements Channel {
 
     try {
       await this.doConnect();
-      this._status = 'connected';
+      this._status = "connected";
     } catch (error) {
-      this._status = 'error';
+      this._status = "error";
       this.emitEvent({
-        type: 'error',
+        type: "error",
         channel: this.name,
         channelType: this.type,
         timestamp: new Date(),
@@ -82,13 +87,13 @@ export abstract class BaseChannel implements Channel {
   }
 
   async disconnect(): Promise<void> {
-    if (this._status === 'disconnected') return;
-    
+    if (this._status === "disconnected") return;
+
     await this.doDisconnect();
-    this._status = 'disconnected';
-    
+    this._status = "disconnected";
+
     this.emitEvent({
-      type: 'disconnected',
+      type: "disconnected",
       channel: this.name,
       channelType: this.type,
       timestamp: new Date(),
@@ -96,19 +101,22 @@ export abstract class BaseChannel implements Channel {
   }
 
   async healthCheck(): Promise<boolean> {
-    return this._status === 'connected';
+    return this._status === "connected";
   }
 
-  async sendMessage(text: string, options?: SendMessageOptions): Promise<ChannelMessage> {
+  async sendMessage(
+    text: string,
+    options?: SendMessageOptions,
+  ): Promise<ChannelMessage> {
     const chatId = options?.chatId || this.config.defaultChatId;
     if (!chatId) {
-      throw new Error('No chat ID provided and no default chat ID configured');
+      throw new Error("No chat ID provided and no default chat ID configured");
     }
 
     const message = await this.doSendMessage(text, options);
-    
+
     this.emitEvent({
-      type: 'message_sent',
+      type: "message_sent",
       channel: this.name,
       channelType: this.type,
       timestamp: new Date(),
@@ -118,11 +126,14 @@ export abstract class BaseChannel implements Channel {
     return message;
   }
 
-  async editMessage(messageId: string, options: EditMessageOptions): Promise<ChannelMessage> {
+  async editMessage(
+    messageId: string,
+    options: EditMessageOptions,
+  ): Promise<ChannelMessage> {
     const message = await this.doEditMessage(messageId, options);
-    
+
     this.emitEvent({
-      type: 'message_edited',
+      type: "message_edited",
       channel: this.name,
       channelType: this.type,
       timestamp: new Date(),
@@ -132,11 +143,14 @@ export abstract class BaseChannel implements Channel {
     return message;
   }
 
-  async deleteMessage(messageId: string, options?: DeleteMessageOptions): Promise<boolean> {
+  async deleteMessage(
+    messageId: string,
+    options?: DeleteMessageOptions,
+  ): Promise<boolean> {
     const result = await this.doDeleteMessage(messageId, options);
-    
+
     this.emitEvent({
-      type: 'message_deleted',
+      type: "message_deleted",
       channel: this.name,
       channelType: this.type,
       timestamp: new Date(),
@@ -149,11 +163,16 @@ export abstract class BaseChannel implements Channel {
   abstract getChatInfo(chatId: string): Promise<ChatInfo>;
   abstract getUserInfo(userId: string): Promise<UserInfo>;
   abstract setTyping(chatId: string): Promise<void>;
-  async setCommands(commands: Array<{ command: string; description: string }>): Promise<void> {
+  async setCommands(
+    commands: Array<{ command: string; description: string }>,
+  ): Promise<void> {
     // Default implementation does nothing
   }
 
-  onCommand(command: string, handler: (ctx: CommandContext) => Promise<void>): void {
+  onCommand(
+    command: string,
+    handler: (ctx: CommandContext) => Promise<void>,
+  ): void {
     this.commandHandlers.set(command, handler);
   }
 
@@ -206,16 +225,25 @@ export abstract class BaseChannel implements Channel {
   protected abstract doInitialize(): Promise<void>;
   protected abstract doConnect(): Promise<void>;
   protected abstract doDisconnect(): Promise<void>;
-  protected abstract doSendMessage(text: string, options?: SendMessageOptions): Promise<ChannelMessage>;
-  protected abstract doEditMessage(messageId: string, options: EditMessageOptions): Promise<ChannelMessage>;
-  protected abstract doDeleteMessage(messageId: string, options?: DeleteMessageOptions): Promise<boolean>;
+  protected abstract doSendMessage(
+    text: string,
+    options?: SendMessageOptions,
+  ): Promise<ChannelMessage>;
+  protected abstract doEditMessage(
+    messageId: string,
+    options: EditMessageOptions,
+  ): Promise<ChannelMessage>;
+  protected abstract doDeleteMessage(
+    messageId: string,
+    options?: DeleteMessageOptions,
+  ): Promise<boolean>;
 
   /**
    * Handle an incoming message - calls all registered handlers
    */
   protected async handleMessage(message: ChannelMessage): Promise<void> {
     this.emitEvent({
-      type: 'message_received',
+      type: "message_received",
       channel: this.name,
       channelType: this.type,
       timestamp: new Date(),
@@ -223,11 +251,11 @@ export abstract class BaseChannel implements Channel {
     });
 
     // Check for command
-    if (message.text.startsWith('/')) {
+    if (message.text.startsWith("/")) {
       const parts = message.text.slice(1).split(/\s+/);
       const command = parts[0].toLowerCase();
       const args = parts.slice(1);
-      
+
       const handler = this.commandHandlers.get(command);
       if (handler) {
         try {
@@ -237,18 +265,21 @@ export abstract class BaseChannel implements Channel {
             message,
             channel: this,
           });
-          
+
           this.emitEvent({
-            type: 'command',
+            type: "command",
             channel: this.name,
             channelType: this.type,
             timestamp: new Date(),
             data: { command, args, message },
           });
-          
+
           return; // Don't process as regular message if handled as command
         } catch (error) {
-          console.error(`[${this.name}] Error handling command ${command}:`, error);
+          console.error(
+            `[${this.name}] Error handling command ${command}:`,
+            error,
+          );
         }
       }
     }

@@ -27,9 +27,11 @@ export type KendaliDB = BunSQLiteDatabase<typeof schema>;
 /**
  * Initialize database connection
  */
-export function initDatabase(dbPath: string = ".kendaliai/kendaliai.db"): KendaliDB {
+export function initDatabase(
+  dbPath: string = ".kendaliai/kendaliai.db",
+): KendaliDB {
   if (dbInstance && sqlite?.filename === dbPath) return dbInstance;
-  
+
   // Close existing if path changed
   if (sqlite && sqlite.filename !== dbPath) {
     sqlite.close();
@@ -38,7 +40,7 @@ export function initDatabase(dbPath: string = ".kendaliai/kendaliai.db"): Kendal
   }
 
   if (dbInstance) return dbInstance;
-  
+
   // Ensure directory exists
   const dir = dbPath.substring(0, dbPath.lastIndexOf("/"));
   if (dir) {
@@ -52,17 +54,17 @@ export function initDatabase(dbPath: string = ".kendaliai/kendaliai.db"): Kendal
       // Directory might already exist
     }
   }
-  
+
   sqlite = new Database(dbPath);
-  
+
   // Enable WAL mode for better performance
   sqlite.run("PRAGMA journal_mode = WAL");
   sqlite.run("PRAGMA synchronous = NORMAL");
   sqlite.run("PRAGMA cache_size = 10000");
   sqlite.run("PRAGMA temp_store = MEMORY");
-  
+
   dbInstance = drizzle(sqlite, { schema });
-  
+
   return dbInstance;
 }
 
@@ -97,9 +99,11 @@ export function closeDatabase(): void {
 /**
  * Reset database (drop all tables and recreate)
  */
-export async function resetDatabase(dbPath: string = ".kendaliai/kendaliai.db"): Promise<void> {
+export async function resetDatabase(
+  dbPath: string = ".kendaliai/kendaliai.db",
+): Promise<void> {
   closeDatabase();
-  
+
   // Delete existing database files
   const fs = require("fs");
   const files = [dbPath, dbPath + "-wal", dbPath + "-shm"];
@@ -112,10 +116,10 @@ export async function resetDatabase(dbPath: string = ".kendaliai/kendaliai.db"):
       // File might not exist
     }
   }
-  
+
   // Reinitialize
   sqlite = new Database(dbPath);
-  
+
   // Create tables using raw SQL for initial setup
   const createTablesSQL = `
     -- Gateways
@@ -352,20 +356,20 @@ export async function resetDatabase(dbPath: string = ".kendaliai/kendaliai.db"):
     CREATE INDEX IF NOT EXISTS idx_event_logs_created ON event_logs(created_at);
     CREATE INDEX IF NOT EXISTS idx_cache_key ON embedding_cache(cache_key);
   `;
-  
+
   sqlite.run("PRAGMA journal_mode = WAL");
   sqlite.run("PRAGMA synchronous = NORMAL");
-  
+
   // Execute each statement
-  const statements = createTablesSQL.split(";").filter(s => s.trim());
+  const statements = createTablesSQL.split(";").filter((s) => s.trim());
   for (const stmt of statements) {
     if (stmt.trim()) {
       sqlite.run(stmt);
     }
   }
-  
+
   dbInstance = drizzle(sqlite, { schema });
-  
+
   console.log("✅ Database reset complete");
 }
 

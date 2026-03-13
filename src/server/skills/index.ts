@@ -1,13 +1,20 @@
 /**
  * KendaliAI Skills & Tools System
- * 
+ *
  * Phase 5: Skills configuration, tools configuration, security sandboxing, and permissions.
  * Provides per-gateway skill and tool management with security controls.
  */
 
 import { Database } from "bun:sqlite";
 import { randomUUID } from "crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, statSync } from "fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+  unlinkSync,
+  statSync,
+} from "fs";
 import { join } from "path";
 import { getSkillRegistry } from "./registry";
 
@@ -70,8 +77,27 @@ export const DEFAULT_SECURITY_POLICY: SecurityPolicy = {
   workspaceOnly: true,
   allowedRoots: ["~/projects", "~/documents"],
   forbiddenPaths: ["~/.ssh", "~/.aws", "~/.gnupg", "/etc", "/root", "/var"],
-  allowedCommands: ["git", "npm", "bun", "cargo", "ls", "cat", "grep", "find", "mkdir", "touch"],
-  forbiddenCommands: ["rm -rf", "sudo", "su", "chmod 777", "dd", "mkfs", "fdisk"],
+  allowedCommands: [
+    "git",
+    "npm",
+    "bun",
+    "cargo",
+    "ls",
+    "cat",
+    "grep",
+    "find",
+    "mkdir",
+    "touch",
+  ],
+  forbiddenCommands: [
+    "rm -rf",
+    "sudo",
+    "su",
+    "chmod 777",
+    "dd",
+    "mkfs",
+    "fdisk",
+  ],
   sandboxEnabled: false,
   sandboxType: "none",
   maxExecutionTime: 30000,
@@ -88,7 +114,8 @@ export const BUILTIN_SKILLS: Record<string, Partial<SkillConfig>> = {
   "code-analysis": {
     name: "code-analysis",
     version: "1.0.0",
-    description: "Analyze and review code for quality, security, and best practices",
+    description:
+      "Analyze and review code for quality, security, and best practices",
     enabled: true,
     config: {
       languages: ["typescript", "python", "javascript", "rust", "go"],
@@ -131,7 +158,7 @@ export const BUILTIN_SKILLS: Record<string, Partial<SkillConfig>> = {
     },
     permissions: ["file:read", "file:write"],
   },
-  "debugging": {
+  debugging: {
     name: "debugging",
     version: "1.0.0",
     description: "Help debug code and troubleshoot issues",
@@ -267,16 +294,23 @@ export class SkillsManager {
    */
   getGatewaySkillsConfig(gatewayId: string): GatewaySkillsConfig | null {
     try {
-      const result = this.db.query<{
-        gateway_id: string;
-        skills: string;
-        tools: string;
-        security_policy: string;
-        created_at: number;
-        updated_at: number;
-      }, [string]>(`
+      const result = this.db
+        .query<
+          {
+            gateway_id: string;
+            skills: string;
+            tools: string;
+            security_policy: string;
+            created_at: number;
+            updated_at: number;
+          },
+          [string]
+        >(
+          `
         SELECT * FROM gateway_skills WHERE gateway_id = ?
-      `).get(gatewayId);
+      `,
+        )
+        .get(gatewayId);
 
       if (!result) return null;
 
@@ -284,7 +318,9 @@ export class SkillsManager {
         gatewayId: result.gateway_id,
         skills: JSON.parse(result.skills || "[]"),
         tools: JSON.parse(result.tools || "[]"),
-        securityPolicy: JSON.parse(result.security_policy || JSON.stringify(DEFAULT_SECURITY_POLICY)),
+        securityPolicy: JSON.parse(
+          result.security_policy || JSON.stringify(DEFAULT_SECURITY_POLICY),
+        ),
         createdAt: result.created_at,
         updatedAt: result.updated_at,
       };
@@ -300,7 +336,7 @@ export class SkillsManager {
     gatewayId: string,
     skills: SkillConfig[],
     tools: ToolConfig[],
-    securityPolicy?: Partial<SecurityPolicy>
+    securityPolicy?: Partial<SecurityPolicy>,
   ): GatewaySkillsConfig {
     const now = Date.now();
     const existing = this.getGatewaySkillsConfig(gatewayId);
@@ -321,35 +357,41 @@ export class SkillsManager {
     };
 
     if (existing) {
-      this.db.run(`
+      this.db.run(
+        `
         UPDATE gateway_skills SET 
           skills = ?,
           tools = ?,
           security_policy = ?,
           updated_at = ?
         WHERE gateway_id = ?
-      `, [
-        JSON.stringify(skills),
-        JSON.stringify(tools),
-        JSON.stringify(finalPolicy),
-        now,
-        gatewayId,
-      ]);
+      `,
+        [
+          JSON.stringify(skills),
+          JSON.stringify(tools),
+          JSON.stringify(finalPolicy),
+          now,
+          gatewayId,
+        ],
+      );
     } else {
       const id = `gsk_${randomUUID().slice(0, 8)}`;
-      this.db.run(`
+      this.db.run(
+        `
         INSERT INTO gateway_skills (
           id, gateway_id, skills, tools, security_policy, created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?)
-      `, [
-        id,
-        gatewayId,
-        JSON.stringify(skills),
-        JSON.stringify(tools),
-        JSON.stringify(finalPolicy),
-        now,
-        now,
-      ]);
+      `,
+        [
+          id,
+          gatewayId,
+          JSON.stringify(skills),
+          JSON.stringify(tools),
+          JSON.stringify(finalPolicy),
+          now,
+          now,
+        ],
+      );
     }
 
     return config;
@@ -358,12 +400,16 @@ export class SkillsManager {
   /**
    * Enable a skill for a gateway
    */
-  enableSkill(gatewayId: string, skillName: string, config?: Record<string, unknown>): boolean {
+  enableSkill(
+    gatewayId: string,
+    skillName: string,
+    config?: Record<string, unknown>,
+  ): boolean {
     const gatewayConfig = this.getGatewaySkillsConfig(gatewayId);
-    
+
     // Check built-in skills first
     let skillBase = BUILTIN_SKILLS[skillName] as Partial<SkillConfig>;
-    
+
     // If not built-in, check registry
     if (!skillBase) {
       const registry = getSkillRegistry(this.db);
@@ -375,7 +421,9 @@ export class SkillsManager {
           description: installed.description,
           enabled: true,
           config: installed.defaultConfig || {},
-          permissions: (installed.permissions || []).map((p: any) => `${p.type}:${p.access}`),
+          permissions: (installed.permissions || []).map(
+            (p: any) => `${p.type}:${p.access}`,
+          ),
           dependencies: installed.dependencies || [],
         } as Partial<SkillConfig>;
       }
@@ -386,7 +434,7 @@ export class SkillsManager {
     }
 
     const skills = gatewayConfig?.skills || [];
-    const existingIndex = skills.findIndex(s => s.name === skillName);
+    const existingIndex = skills.findIndex((s) => s.name === skillName);
 
     const newSkill: SkillConfig = {
       ...skillBase,
@@ -413,7 +461,7 @@ export class SkillsManager {
     const gatewayConfig = this.getGatewaySkillsConfig(gatewayId);
     if (!gatewayConfig) return false;
 
-    const skills = gatewayConfig.skills.filter(s => s.name !== skillName);
+    const skills = gatewayConfig.skills.filter((s) => s.name !== skillName);
     this.configureGatewaySkills(gatewayId, skills, gatewayConfig.tools);
     return true;
   }
@@ -421,19 +469,25 @@ export class SkillsManager {
   /**
    * Enable a tool for a gateway
    */
-  enableTool(gatewayId: string, toolName: string, config?: Record<string, unknown>): boolean {
+  enableTool(
+    gatewayId: string,
+    toolName: string,
+    config?: Record<string, unknown>,
+  ): boolean {
     const gatewayConfig = this.getGatewaySkillsConfig(gatewayId);
-    
+
     // Check built-in tools first
     let toolBase = BUILTIN_TOOLS[toolName] as Partial<ToolConfig>;
-    
+
     // If not built-in, check if any installed skill provides this tool
     if (!toolBase) {
       const registry = getSkillRegistry(this.db);
       const installedSkills = registry.listInstalled();
-      
+
       for (const skill of installedSkills) {
-        const foundTool = (skill.tools || []).find((t: any) => t.name === toolName);
+        const foundTool = (skill.tools || []).find(
+          (t: any) => t.name === toolName,
+        );
         if (foundTool) {
           toolBase = {
             name: foundTool.name,
@@ -452,7 +506,7 @@ export class SkillsManager {
     }
 
     const tools = gatewayConfig?.tools || [];
-    const existingIndex = tools.findIndex(t => t.name === toolName);
+    const existingIndex = tools.findIndex((t) => t.name === toolName);
 
     const newTool: ToolConfig = {
       ...toolBase,
@@ -479,7 +533,7 @@ export class SkillsManager {
     const gatewayConfig = this.getGatewaySkillsConfig(gatewayId);
     if (!gatewayConfig) return false;
 
-    const tools = gatewayConfig.tools.filter(t => t.name !== toolName);
+    const tools = gatewayConfig.tools.filter((t) => t.name !== toolName);
     this.configureGatewaySkills(gatewayId, gatewayConfig.skills, tools);
     return true;
   }
@@ -490,7 +544,7 @@ export class SkillsManager {
   isSkillEnabled(gatewayId: string, skillName: string): boolean {
     const config = this.getGatewaySkillsConfig(gatewayId);
     if (!config) return false;
-    return config.skills.some(s => s.name === skillName && s.enabled);
+    return config.skills.some((s) => s.name === skillName && s.enabled);
   }
 
   /**
@@ -499,7 +553,7 @@ export class SkillsManager {
   isToolEnabled(gatewayId: string, toolName: string): boolean {
     const config = this.getGatewaySkillsConfig(gatewayId);
     if (!config) return false;
-    return config.tools.some(t => t.name === toolName && t.enabled);
+    return config.tools.some((t) => t.name === toolName && t.enabled);
   }
 
   /**
@@ -508,7 +562,7 @@ export class SkillsManager {
   getEnabledSkills(gatewayId: string): SkillConfig[] {
     const config = this.getGatewaySkillsConfig(gatewayId);
     if (!config) return [];
-    return config.skills.filter(s => s.enabled);
+    return config.skills.filter((s) => s.enabled);
   }
 
   /**
@@ -517,7 +571,7 @@ export class SkillsManager {
   getEnabledTools(gatewayId: string): ToolConfig[] {
     const config = this.getGatewaySkillsConfig(gatewayId);
     if (!config) return [];
-    return config.tools.filter(t => t.enabled);
+    return config.tools.filter((t) => t.enabled);
   }
 
   /**
@@ -529,7 +583,7 @@ export class SkillsManager {
       type: "shell" | "file" | "http" | "memory";
       action: string;
       target?: string;
-    }
+    },
   ): { allowed: boolean; reason?: string } {
     const config = this.getGatewaySkillsConfig(gatewayId);
     const policy = config?.securityPolicy || DEFAULT_SECURITY_POLICY;
@@ -539,14 +593,20 @@ export class SkillsManager {
         // Check forbidden commands
         for (const forbidden of policy.forbiddenCommands) {
           if (operation.action.includes(forbidden)) {
-            return { allowed: false, reason: `Forbidden command: ${forbidden}` };
+            return {
+              allowed: false,
+              reason: `Forbidden command: ${forbidden}`,
+            };
           }
         }
 
         // Check allowed commands
         const cmdBase = operation.action.split(" ")[0];
         if (!policy.allowedCommands.includes(cmdBase)) {
-          return { allowed: false, reason: `Command not in allowlist: ${cmdBase}` };
+          return {
+            allowed: false,
+            reason: `Command not in allowlist: ${cmdBase}`,
+          };
         }
 
         return { allowed: true };
@@ -561,18 +621,24 @@ export class SkillsManager {
         for (const forbidden of policy.forbiddenPaths) {
           const expanded = forbidden.replace("~", process.env.HOME || "");
           if (operation.target.includes(expanded)) {
-            return { allowed: false, reason: `Access to path forbidden: ${forbidden}` };
+            return {
+              allowed: false,
+              reason: `Access to path forbidden: ${forbidden}`,
+            };
           }
         }
 
         // Check workspace-only mode
         if (policy.workspaceOnly) {
-          const inAllowedRoot = policy.allowedRoots.some(root => {
+          const inAllowedRoot = policy.allowedRoots.some((root) => {
             const expanded = root.replace("~", process.env.HOME || "");
             return operation.target!.startsWith(expanded);
           });
           if (!inAllowedRoot) {
-            return { allowed: false, reason: "File access restricted to workspace" };
+            return {
+              allowed: false,
+              reason: "File access restricted to workspace",
+            };
           }
         }
 
@@ -587,7 +653,10 @@ export class SkillsManager {
         if (operation.target && policy.allowedDomains.length > 0) {
           const url = new URL(operation.target);
           if (!policy.allowedDomains.includes(url.hostname)) {
-            return { allowed: false, reason: `Domain not allowed: ${url.hostname}` };
+            return {
+              allowed: false,
+              reason: `Domain not allowed: ${url.hostname}`,
+            };
           }
         }
 
@@ -607,7 +676,7 @@ export class SkillsManager {
    */
   updateSecurityPolicy(
     gatewayId: string,
-    policy: Partial<SecurityPolicy>
+    policy: Partial<SecurityPolicy>,
   ): SecurityPolicy | null {
     const config = this.getGatewaySkillsConfig(gatewayId);
     if (!config) return null;
@@ -617,14 +686,23 @@ export class SkillsManager {
       ...policy,
     };
 
-    this.configureGatewaySkills(gatewayId, config.skills, config.tools, newPolicy);
+    this.configureGatewaySkills(
+      gatewayId,
+      config.skills,
+      config.tools,
+      newPolicy,
+    );
     return newPolicy;
   }
 
   /**
    * List available skills (built-in + custom)
    */
-  listAvailableSkills(): Array<{ name: string; description: string; builtin: boolean }> {
+  listAvailableSkills(): Array<{
+    name: string;
+    description: string;
+    builtin: boolean;
+  }> {
     const skills = Object.entries(BUILTIN_SKILLS).map(([name, config]) => ({
       name,
       description: config.description || "",
@@ -650,7 +728,11 @@ export class SkillsManager {
   /**
    * List available tools (built-in)
    */
-  listAvailableTools(): Array<{ name: string; description: string; riskLevel: ToolRiskLevel }> {
+  listAvailableTools(): Array<{
+    name: string;
+    description: string;
+    riskLevel: ToolRiskLevel;
+  }> {
     return Object.entries(BUILTIN_TOOLS).map(([name, config]) => ({
       name,
       description: `${name} tool`,

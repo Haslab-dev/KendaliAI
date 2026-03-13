@@ -1,6 +1,6 @@
 /**
  * KendaliAI Vector Storage Module
- * 
+ *
  * Implements vector storage for RAG using Bun-native vector search.
  * Since sqlite-vss doesn't work with Bun (can't load extensions),
  * we use our own BunVSS implementation.
@@ -10,11 +10,11 @@ import { randomUUID } from "crypto";
 import { createHash } from "crypto";
 import { Database } from "bun:sqlite";
 import { BunVSS, HNSWIndex, createBunVSS } from "./bun-vss";
-import type { 
-  VectorConfig, 
-  VectorSearchResult, 
+import type {
+  VectorConfig,
+  VectorSearchResult,
   TextChunk,
-  RetrievalConfig 
+  RetrievalConfig,
 } from "./types";
 
 // ============================================
@@ -120,7 +120,7 @@ export class VectorStorage {
         CREATE VIRTUAL TABLE IF NOT EXISTS rag_chunks_fts 
         USING fts5(id, content, content='rag_chunks')
       `);
-      
+
       // Create triggers to keep FTS in sync
       this.db.run(`
         CREATE TRIGGER IF NOT EXISTS rag_chunks_ai AFTER INSERT ON rag_chunks BEGIN
@@ -128,14 +128,14 @@ export class VectorStorage {
           VALUES (new.rowid, new.id, new.content);
         END
       `);
-      
+
       this.db.run(`
         CREATE TRIGGER IF NOT EXISTS rag_chunks_ad AFTER DELETE ON rag_chunks BEGIN
           INSERT INTO rag_chunks_fts(rag_chunks_fts, rowid, id, content) 
           VALUES('delete', old.rowid, old.id, old.content);
         END
       `);
-      
+
       this.db.run(`
         CREATE TRIGGER IF NOT EXISTS rag_chunks_au AFTER UPDATE ON rag_chunks BEGIN
           INSERT INTO rag_chunks_fts(rag_chunks_fts, rowid, id, content) 
@@ -149,9 +149,15 @@ export class VectorStorage {
     }
 
     // Create indexes
-    this.db.run(`CREATE INDEX IF NOT EXISTS idx_chunks_document ON rag_chunks(document_id)`);
-    this.db.run(`CREATE INDEX IF NOT EXISTS idx_documents_gateway ON rag_documents(gateway_id)`);
-    this.db.run(`CREATE INDEX IF NOT EXISTS idx_documents_hash ON rag_documents(content_hash)`);
+    this.db.run(
+      `CREATE INDEX IF NOT EXISTS idx_chunks_document ON rag_chunks(document_id)`,
+    );
+    this.db.run(
+      `CREATE INDEX IF NOT EXISTS idx_documents_gateway ON rag_documents(gateway_id)`,
+    );
+    this.db.run(
+      `CREATE INDEX IF NOT EXISTS idx_documents_hash ON rag_documents(content_hash)`,
+    );
 
     // Initialize BunVSS for vector storage
     try {
@@ -160,7 +166,10 @@ export class VectorStorage {
         metric: this.config.metric || "cosine",
       });
     } catch (error) {
-      console.warn("[RAG] Failed to initialize BunVSS, using in-memory HNSW:", error);
+      console.warn(
+        "[RAG] Failed to initialize BunVSS, using in-memory HNSW:",
+        error,
+      );
       this.hnswIndex = new HNSWIndex({
         dimension: this.config.dimensions || 1536,
         metric: this.config.metric || "cosine",
@@ -189,32 +198,39 @@ export class VectorStorage {
     gatewayId?: string;
   }): Promise<void> {
     const now = Date.now();
-    
-    this.db.run(`
+
+    this.db.run(
+      `
       INSERT INTO rag_documents (
         id, gateway_id, content, content_hash, source, source_path, 
         title, metadata, status, ingested_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'processed', ?)
-    `, [
-      doc.id,
-      doc.gatewayId || null,
-      doc.content,
-      doc.contentHash,
-      doc.source,
-      doc.sourcePath || null,
-      doc.title || null,
-      doc.metadata ? JSON.stringify(doc.metadata) : null,
-      now,
-    ]);
+    `,
+      [
+        doc.id,
+        doc.gatewayId || null,
+        doc.content,
+        doc.contentHash,
+        doc.source,
+        doc.sourcePath || null,
+        doc.title || null,
+        doc.metadata ? JSON.stringify(doc.metadata) : null,
+        now,
+      ],
+    );
   }
 
   /**
    * Get document by ID
    */
   async getDocument(id: string): Promise<DocumentRow | null> {
-    const row = this.db.prepare(`
+    const row = this.db
+      .prepare(
+        `
       SELECT * FROM rag_documents WHERE id = ? LIMIT 1
-    `).get(id);
+    `,
+      )
+      .get(id);
     return row as DocumentRow | null;
   }
 
@@ -228,21 +244,29 @@ export class VectorStorage {
   }): Promise<DocumentRow[]> {
     const limit = options?.limit || 50;
     const offset = options?.offset || 0;
-    
+
     if (options?.gatewayId) {
-      return this.db.prepare(`
+      return this.db
+        .prepare(
+          `
         SELECT * FROM rag_documents 
         WHERE gateway_id = ?
         ORDER BY ingested_at DESC
         LIMIT ? OFFSET ?
-      `).all(options.gatewayId, limit, offset) as DocumentRow[];
+      `,
+        )
+        .all(options.gatewayId, limit, offset) as DocumentRow[];
     }
-    
-    return this.db.prepare(`
+
+    return this.db
+      .prepare(
+        `
       SELECT * FROM rag_documents 
       ORDER BY ingested_at DESC
       LIMIT ? OFFSET ?
-    `).all(limit, offset) as DocumentRow[];
+    `,
+      )
+      .all(limit, offset) as DocumentRow[];
   }
 
   /**
@@ -250,10 +274,14 @@ export class VectorStorage {
    */
   async deleteDocument(id: string): Promise<void> {
     // Get chunk IDs first for vector cleanup
-    const chunks = this.db.prepare(`
+    const chunks = this.db
+      .prepare(
+        `
       SELECT id FROM rag_chunks WHERE document_id = ?
-    `).all(id) as { id: string }[];
-    
+    `,
+      )
+      .all(id) as { id: string }[];
+
     // Delete from vector index
     for (const chunk of chunks) {
       if (this.bunVSS) {
@@ -262,7 +290,7 @@ export class VectorStorage {
         this.hnswIndex.delete(chunk.id);
       }
     }
-    
+
     // Delete chunks
     this.db.run(`DELETE FROM rag_chunks WHERE document_id = ?`, [id]);
     // Delete document
@@ -273,9 +301,13 @@ export class VectorStorage {
    * Check if document exists by hash
    */
   async documentExistsByHash(contentHash: string): Promise<DocumentRow | null> {
-    const row = this.db.prepare(`
+    const row = this.db
+      .prepare(
+        `
       SELECT * FROM rag_documents WHERE content_hash = ? LIMIT 1
-    `).get(contentHash);
+    `,
+      )
+      .get(contentHash);
     return row as DocumentRow | null;
   }
 
@@ -288,24 +320,27 @@ export class VectorStorage {
    */
   async storeChunk(chunk: TextChunk): Promise<void> {
     // Insert chunk
-    this.db.run(`
+    this.db.run(
+      `
       INSERT INTO rag_chunks (
         id, document_id, content, chunk_index, start_position, 
         end_position, embedding, embedding_model, metadata, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      chunk.id,
-      chunk.documentId,
-      chunk.content,
-      chunk.index,
-      chunk.startPosition,
-      chunk.endPosition,
-      chunk.embedding ? JSON.stringify(chunk.embedding) : null,
-      chunk.embeddingModel || null,
-      chunk.metadata ? JSON.stringify(chunk.metadata) : null,
-      chunk.createdAt.getTime(),
-    ]);
-    
+    `,
+      [
+        chunk.id,
+        chunk.documentId,
+        chunk.content,
+        chunk.index,
+        chunk.startPosition,
+        chunk.endPosition,
+        chunk.embedding ? JSON.stringify(chunk.embedding) : null,
+        chunk.embeddingModel || null,
+        chunk.metadata ? JSON.stringify(chunk.metadata) : null,
+        chunk.createdAt.getTime(),
+      ],
+    );
+
     // Add to vector index if embedding exists
     if (chunk.embedding) {
       if (this.bunVSS) {
@@ -332,7 +367,7 @@ export class VectorStorage {
         end_position, embedding, embedding_model, metadata, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    
+
     const insertMany = this.db.transaction((items: TextChunk[]) => {
       for (const chunk of items) {
         stmt.run(
@@ -345,9 +380,9 @@ export class VectorStorage {
           chunk.embedding ? JSON.stringify(chunk.embedding) : null,
           chunk.embeddingModel || null,
           chunk.metadata ? JSON.stringify(chunk.metadata) : null,
-          chunk.createdAt.getTime()
+          chunk.createdAt.getTime(),
         );
-        
+
         // Add to vector index if embedding exists
         if (chunk.embedding) {
           if (this.bunVSS) {
@@ -364,7 +399,7 @@ export class VectorStorage {
         }
       }
     });
-    
+
     insertMany(chunks);
   }
 
@@ -372,32 +407,43 @@ export class VectorStorage {
    * Get chunks for a document
    */
   async getChunks(documentId: string): Promise<ChunkRow[]> {
-    return this.db.prepare(`
+    return this.db
+      .prepare(
+        `
       SELECT * FROM rag_chunks 
       WHERE document_id = ? 
       ORDER BY chunk_index ASC
-    `).all(documentId) as ChunkRow[];
+    `,
+      )
+      .all(documentId) as ChunkRow[];
   }
 
   /**
    * Update chunk embedding
    */
   async updateChunkEmbedding(
-    chunkId: string, 
-    embedding: number[], 
-    model: string
+    chunkId: string,
+    embedding: number[],
+    model: string,
   ): Promise<void> {
-    this.db.run(`
+    this.db.run(
+      `
       UPDATE rag_chunks 
       SET embedding = ?, embedding_model = ?
       WHERE id = ?
-    `, [JSON.stringify(embedding), model, chunkId]);
+    `,
+      [JSON.stringify(embedding), model, chunkId],
+    );
 
     // Update vector index
-    const chunk = this.db.prepare(`
+    const chunk = this.db
+      .prepare(
+        `
       SELECT * FROM rag_chunks WHERE id = ?
-    `).get(chunkId) as ChunkRow | undefined;
-    
+    `,
+      )
+      .get(chunkId) as ChunkRow | undefined;
+
     if (chunk) {
       if (this.bunVSS) {
         this.bunVSS.insert(chunkId, embedding, {
@@ -417,9 +463,13 @@ export class VectorStorage {
    * Get chunk by ID
    */
   async getChunk(id: string): Promise<ChunkRow | null> {
-    const row = this.db.prepare(`
+    const row = this.db
+      .prepare(
+        `
       SELECT * FROM rag_chunks WHERE id = ? LIMIT 1
-    `).get(id);
+    `,
+      )
+      .get(id);
     return row as ChunkRow | null;
   }
 
@@ -432,12 +482,16 @@ export class VectorStorage {
    */
   async vectorSearch(
     embedding: number[],
-    options?: Partial<RetrievalConfig>
+    options?: Partial<RetrievalConfig>,
   ): Promise<VectorSearchResult[]> {
     const topK = options?.topK || 5;
     const threshold = 0; // Minimum similarity threshold
 
-    let results: Array<{ id: string; score: number; metadata?: Record<string, unknown> }>;
+    let results: Array<{
+      id: string;
+      score: number;
+      metadata?: Record<string, unknown>;
+    }>;
 
     if (this.bunVSS) {
       results = this.bunVSS.search(embedding, topK);
@@ -450,10 +504,10 @@ export class VectorStorage {
 
     // Filter by threshold and enrich with chunk data
     const searchResults: VectorSearchResult[] = [];
-    
+
     for (const result of results) {
       if (result.score < threshold) continue;
-      
+
       const chunk = await this.getChunk(result.id);
       if (!chunk) continue;
 
@@ -473,12 +527,18 @@ export class VectorStorage {
    * Brute force vector search (fallback)
    */
   private async bruteForceSearch(
-    queryEmbedding: number[], 
-    topK: number
-  ): Promise<Array<{ id: string; score: number; metadata?: Record<string, unknown> }>> {
-    const chunks = this.db.prepare(`
+    queryEmbedding: number[],
+    topK: number,
+  ): Promise<
+    Array<{ id: string; score: number; metadata?: Record<string, unknown> }>
+  > {
+    const chunks = this.db
+      .prepare(
+        `
       SELECT id, embedding FROM rag_chunks WHERE embedding IS NOT NULL
-    `).all() as { id: string; embedding: string }[];
+    `,
+      )
+      .all() as { id: string; embedding: string }[];
 
     const results: Array<{ id: string; score: number }> = [];
 
@@ -503,16 +563,16 @@ export class VectorStorage {
     let dotProduct = 0;
     let normA = 0;
     let normB = 0;
-    
+
     for (let i = 0; i < a.length; i++) {
       dotProduct += a[i] * b[i];
       normA += a[i] * a[i];
       normB += b[i] * b[i];
     }
-    
+
     normA = Math.sqrt(normA);
     normB = Math.sqrt(normB);
-    
+
     if (normA === 0 || normB === 0) return 0;
     return dotProduct / (normA * normB);
   }
@@ -523,26 +583,32 @@ export class VectorStorage {
   async hybridSearch(
     embedding: number[],
     query: string,
-    options?: Partial<RetrievalConfig>
+    options?: Partial<RetrievalConfig>,
   ): Promise<VectorSearchResult[]> {
     const topK = options?.topK || 5;
     const alpha = 0.5; // Weight for vector vs keyword (0.5 = equal weight)
 
     // Get vector search results
-    const vectorResults = await this.vectorSearch(embedding, { topK: topK * 2 });
+    const vectorResults = await this.vectorSearch(embedding, {
+      topK: topK * 2,
+    });
 
     // Get keyword search results
     let keywordResults: Array<{ chunkId: string; score: number }> = [];
     try {
-      const ftsResults = this.db.prepare(`
+      const ftsResults = this.db
+        .prepare(
+          `
         SELECT id as chunkId, bm25(rag_chunks_fts) as score
         FROM rag_chunks_fts
         WHERE rag_chunks_fts MATCH ?
         ORDER BY score DESC
         LIMIT ?
-      `).all(query, topK * 2) as { chunkId: string; score: number }[];
-      
-      keywordResults = ftsResults.map(r => ({
+      `,
+        )
+        .all(query, topK * 2) as { chunkId: string; score: number }[];
+
+      keywordResults = ftsResults.map((r) => ({
         chunkId: r.chunkId,
         score: Math.abs(r.score), // BM25 can be negative
       }));
@@ -552,13 +618,13 @@ export class VectorStorage {
 
     // Combine scores using Reciprocal Rank Fusion
     const combinedScores = new Map<string, number>();
-    
+
     for (let i = 0; i < vectorResults.length; i++) {
       const result = vectorResults[i];
       const rrf = 1 / (60 + i + 1);
       combinedScores.set(result.chunkId, alpha * rrf);
     }
-    
+
     for (let i = 0; i < keywordResults.length; i++) {
       const result = keywordResults[i];
       const existing = combinedScores.get(result.chunkId) || 0;
@@ -602,11 +668,19 @@ export class VectorStorage {
     embeddedChunks: number;
     vectorIndexSize: number;
   }> {
-    const docCount = this.db.prepare(`SELECT COUNT(*) as count FROM rag_documents`).get() as { count: number };
-    const chunkCount = this.db.prepare(`SELECT COUNT(*) as count FROM rag_chunks`).get() as { count: number };
-    const embeddedCount = this.db.prepare(`
+    const docCount = this.db
+      .prepare(`SELECT COUNT(*) as count FROM rag_documents`)
+      .get() as { count: number };
+    const chunkCount = this.db
+      .prepare(`SELECT COUNT(*) as count FROM rag_chunks`)
+      .get() as { count: number };
+    const embeddedCount = this.db
+      .prepare(
+        `
       SELECT COUNT(*) as count FROM rag_chunks WHERE embedding IS NOT NULL
-    `).get() as { count: number };
+    `,
+      )
+      .get() as { count: number };
 
     let vectorIndexSize = 0;
     if (this.bunVSS) {
@@ -629,7 +703,7 @@ export class VectorStorage {
   async clear(): Promise<void> {
     this.db.run(`DELETE FROM rag_chunks`);
     this.db.run(`DELETE FROM rag_documents`);
-    
+
     if (this.bunVSS) {
       this.bunVSS.clear();
     } else if (this.hnswIndex) {
@@ -659,7 +733,10 @@ export function generateId(): string {
 /**
  * Create vector storage instance
  */
-export function createVectorStorage(db: Database, config: VectorConfig): VectorStorage {
+export function createVectorStorage(
+  db: Database,
+  config: VectorConfig,
+): VectorStorage {
   const storage = new VectorStorage(db, config);
   return storage;
 }

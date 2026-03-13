@@ -1,11 +1,11 @@
 /**
  * KendaliAI Slack Channel
- * 
+ *
  * Implementation for Slack Bot API channel.
  * Supports channels, groups, and DMs via Slack API.
  */
 
-import { BaseChannel } from './base';
+import { BaseChannel } from "./base";
 import type {
   ChannelConfig,
   ChannelMessage,
@@ -16,7 +16,7 @@ import type {
   UserInfo,
   CallbackQuery,
   MessageAttachment,
-} from './types';
+} from "./types";
 
 // ============================================
 // Slack API Types
@@ -106,11 +106,11 @@ interface SlackResponse<T> {
 // ============================================
 
 export class SlackChannel extends BaseChannel {
-  readonly type = 'slack' as const;
-  
+  readonly type = "slack" as const;
+
   private botToken: string;
   private appToken?: string;
-  private apiUrl = 'https://slack.com/api';
+  private apiUrl = "https://slack.com/api";
   private ws?: WebSocket;
   private heartbeatInterval?: ReturnType<typeof setInterval>;
   private reconnectAttempts = 0;
@@ -118,17 +118,21 @@ export class SlackChannel extends BaseChannel {
 
   constructor(config: ChannelConfig) {
     super(config);
-    this.botToken = config.token || '';
+    this.botToken = config.token || "";
     this.appToken = config.apiKey; // App-level token for WebSocket
-    
+
     if (!this.botToken) {
-      throw new Error('Slack channel requires bot token');
+      throw new Error("Slack channel requires bot token");
     }
   }
 
   protected async doInitialize(): Promise<void> {
     // Get bot info
-    const auth = await this.apiCall<{ user_id: string; bot_id: string; user: string }>('auth.test');
+    const auth = await this.apiCall<{
+      user_id: string;
+      bot_id: string;
+      user: string;
+    }>("auth.test");
     this.config.botId = auth.bot_id;
     console.log(`[Slack] Initialized bot: @${auth.user}`);
   }
@@ -147,20 +151,23 @@ export class SlackChannel extends BaseChannel {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = undefined;
     }
-    
+
     if (this.ws) {
       this.ws.close();
       this.ws = undefined;
     }
-    
+
     console.log(`[Slack] Disconnected`);
   }
 
-  protected async doSendMessage(text: string, options?: SendMessageOptions): Promise<ChannelMessage> {
+  protected async doSendMessage(
+    text: string,
+    options?: SendMessageOptions,
+  ): Promise<ChannelMessage> {
     const channelId = options?.chatId || this.config.defaultChatId;
-    
+
     if (!channelId) {
-      throw new Error('No channel ID provided');
+      throw new Error("No channel ID provided");
     }
 
     const body: Record<string, unknown> = {
@@ -172,7 +179,7 @@ export class SlackChannel extends BaseChannel {
       body.thread_ts = options.replyTo;
     }
 
-    if (options?.parseMode === 'markdown') {
+    if (options?.parseMode === "markdown") {
       body.mrkdwn = true;
     }
 
@@ -180,17 +187,21 @@ export class SlackChannel extends BaseChannel {
       body.blocks = this.convertKeyboard(options.keyboard);
     }
 
-    const result = await this.apiCall<{ ts: string; channel: string; message: SlackMessage }>(
-      'chat.postMessage',
-      body
-    );
-    
+    const result = await this.apiCall<{
+      ts: string;
+      channel: string;
+      message: SlackMessage;
+    }>("chat.postMessage", body);
+
     return this.convertMessage(result.message, result.channel);
   }
 
-  protected async doEditMessage(messageId: string, options: EditMessageOptions): Promise<ChannelMessage> {
+  protected async doEditMessage(
+    messageId: string,
+    options: EditMessageOptions,
+  ): Promise<ChannelMessage> {
     const channelId = this.config.defaultChatId;
-    
+
     const body: Record<string, unknown> = {
       channel: channelId,
       ts: messageId,
@@ -201,19 +212,23 @@ export class SlackChannel extends BaseChannel {
       body.blocks = this.convertKeyboard(options.keyboard);
     }
 
-    const result = await this.apiCall<{ ts: string; channel: string; message: SlackMessage }>(
-      'chat.update',
-      body
-    );
-    
+    const result = await this.apiCall<{
+      ts: string;
+      channel: string;
+      message: SlackMessage;
+    }>("chat.update", body);
+
     return this.convertMessage(result.message, result.channel);
   }
 
-  protected async doDeleteMessage(messageId: string, options?: DeleteMessageOptions): Promise<boolean> {
+  protected async doDeleteMessage(
+    messageId: string,
+    options?: DeleteMessageOptions,
+  ): Promise<boolean> {
     const channelId = this.config.defaultChatId;
-    
+
     try {
-      await this.apiCall('chat.delete', {
+      await this.apiCall("chat.delete", {
         channel: channelId,
         ts: messageId,
       });
@@ -224,19 +239,22 @@ export class SlackChannel extends BaseChannel {
   }
 
   async getChatInfo(chatId: string): Promise<ChatInfo> {
-    const conversation = await this.apiCall<SlackConversation>('conversations.info', {
-      channel: chatId,
-    });
-    
-    let type: 'private' | 'group' | 'supergroup' | 'channel' = 'group';
+    const conversation = await this.apiCall<SlackConversation>(
+      "conversations.info",
+      {
+        channel: chatId,
+      },
+    );
+
+    let type: "private" | "group" | "supergroup" | "channel" = "group";
     if (conversation.is_im) {
-      type = 'private';
+      type = "private";
     } else if (conversation.is_channel) {
-      type = 'channel';
+      type = "channel";
     } else if (conversation.is_group) {
-      type = 'group';
+      type = "group";
     }
-    
+
     return {
       id: conversation.id,
       type,
@@ -247,14 +265,15 @@ export class SlackChannel extends BaseChannel {
   }
 
   async getUserInfo(userId: string): Promise<UserInfo> {
-    const user = await this.apiCall<{ user: SlackUser }>('users.info', {
+    const user = await this.apiCall<{ user: SlackUser }>("users.info", {
       user: userId,
     });
-    
+
     return {
       id: user.user.id,
       username: user.user.name,
-      displayName: user.user.profile?.display_name || user.user.profile?.real_name,
+      displayName:
+        user.user.profile?.display_name || user.user.profile?.real_name,
       photoUrl: user.user.profile?.image_192 || user.user.profile?.image_72,
       isBot: user.user.is_bot,
     };
@@ -275,19 +294,20 @@ export class SlackChannel extends BaseChannel {
   async sendBlocks(
     text: string,
     blocks: unknown[],
-    options?: SendMessageOptions
+    options?: SendMessageOptions,
   ): Promise<ChannelMessage> {
     const channelId = options?.chatId || this.config.defaultChatId;
-    
-    const result = await this.apiCall<{ ts: string; channel: string; message: SlackMessage }>(
-      'chat.postMessage',
-      {
-        channel: channelId,
-        text,
-        blocks,
-      }
-    );
-    
+
+    const result = await this.apiCall<{
+      ts: string;
+      channel: string;
+      message: SlackMessage;
+    }>("chat.postMessage", {
+      channel: channelId,
+      text,
+      blocks,
+    });
+
     return this.convertMessage(result.message, result.channel);
   }
 
@@ -297,27 +317,31 @@ export class SlackChannel extends BaseChannel {
   async sendEphemeral(
     text: string,
     userId: string,
-    options?: SendMessageOptions
+    options?: SendMessageOptions,
   ): Promise<string> {
     const channelId = options?.chatId || this.config.defaultChatId;
-    
+
     const result = await this.apiCall<{ message_ts: string }>(
-      'chat.postEphemeral',
+      "chat.postEphemeral",
       {
         channel: channelId,
         user: userId,
         text,
-      }
+      },
     );
-    
+
     return result.message_ts;
   }
 
   /**
    * Add a reaction to a message
    */
-  async addReaction(messageId: string, emoji: string, chatId?: string): Promise<void> {
-    await this.apiCall('reactions.add', {
+  async addReaction(
+    messageId: string,
+    emoji: string,
+    chatId?: string,
+  ): Promise<void> {
+    await this.apiCall("reactions.add", {
       channel: chatId || this.config.defaultChatId,
       timestamp: messageId,
       name: emoji,
@@ -328,7 +352,7 @@ export class SlackChannel extends BaseChannel {
    * Open a modal
    */
   async openModal(triggerId: string, view: unknown): Promise<string> {
-    const result = await this.apiCall<{ view: { id: string } }>('views.open', {
+    const result = await this.apiCall<{ view: { id: string } }>("views.open", {
       trigger_id: triggerId,
       view,
     });
@@ -341,83 +365,93 @@ export class SlackChannel extends BaseChannel {
 
   private async apiCall<T>(
     method: string,
-    params?: Record<string, unknown>
+    params?: Record<string, unknown>,
   ): Promise<T> {
     const url = `${this.apiUrl}/${method}`;
-    
+
     const formData = new URLSearchParams();
     if (params) {
       for (const [key, value] of Object.entries(params)) {
         if (value !== undefined) {
-          formData.append(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
+          formData.append(
+            key,
+            typeof value === "object" ? JSON.stringify(value) : String(value),
+          );
         }
       }
     }
 
     const response = await fetch(url, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Authorization': `Bearer ${this.botToken}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
+        Authorization: `Bearer ${this.botToken}`,
+        "Content-Type": "application/x-www-form-urlencoded",
       },
       body: formData.toString(),
     });
 
-    const data = await response.json() as SlackResponse<T>;
-    
+    const data = (await response.json()) as SlackResponse<T>;
+
     if (!data.ok) {
       throw new Error(`Slack API error: ${data.error}`);
     }
-    
+
     return data as T;
   }
 
   private async connectSocketMode(): Promise<void> {
     // Get WebSocket URL from Slack
-    const result = await this.apiCall<{ url: string }>('apps.connections.open', {});
-    
+    const result = await this.apiCall<{ url: string }>(
+      "apps.connections.open",
+      {},
+    );
+
     this.ws = new WebSocket(result.url);
-    
+
     this.ws.onopen = () => {
-      console.log('[Slack] WebSocket connected');
+      console.log("[Slack] WebSocket connected");
       this.reconnectAttempts = 0;
       this.startPing();
     };
-    
+
     this.ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data as string);
         this.handleWebSocketMessage(data);
       } catch (error) {
-        console.error('[Slack] Error parsing WebSocket message:', error);
+        console.error("[Slack] Error parsing WebSocket message:", error);
       }
     };
-    
+
     this.ws.onclose = (event) => {
       console.log(`[Slack] WebSocket closed: ${event.code} ${event.reason}`);
       this.handleDisconnect();
     };
-    
+
     this.ws.onerror = (error) => {
-      console.error('[Slack] WebSocket error:', error);
+      console.error("[Slack] WebSocket error:", error);
     };
   }
 
   private startPing(): void {
     this.heartbeatInterval = setInterval(() => {
       if (this.ws?.readyState === WebSocket.OPEN) {
-        this.ws.send(JSON.stringify({ type: 'ping' }));
+        this.ws.send(JSON.stringify({ type: "ping" }));
       }
     }, 30000);
   }
 
-  private handleWebSocketMessage(data: { type: string; payload?: unknown; envelope_id?: string }): void {
+  private handleWebSocketMessage(data: {
+    type: string;
+    payload?: unknown;
+    envelope_id?: string;
+  }): void {
     // Acknowledge the message
     if (data.envelope_id && this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ envelope_id: data.envelope_id }));
     }
 
-    if (data.type === 'events_api' && data.payload) {
+    if (data.type === "events_api" && data.payload) {
       const payload = data.payload as { event: SlackEvent };
       this.handleEvent(payload.event);
     }
@@ -425,23 +459,26 @@ export class SlackChannel extends BaseChannel {
 
   private handleEvent(event: SlackEvent): void {
     // Ignore bot messages
-    if (event.bot_id || event.subtype === 'bot_message') return;
-    
+    if (event.bot_id || event.subtype === "bot_message") return;
+
     switch (event.type) {
-      case 'message':
+      case "message":
         if (event.text && event.channel && event.user) {
-          const message = this.convertMessage({
-            type: 'message',
-            ts: event.ts,
-            channel: event.channel,
-            user: event.user,
-            text: event.text,
-          }, event.channel);
+          const message = this.convertMessage(
+            {
+              type: "message",
+              ts: event.ts,
+              channel: event.channel,
+              user: event.user,
+              text: event.text,
+            },
+            event.channel,
+          );
           this.handleMessage(message);
         }
         break;
-        
-      case 'message_changed':
+
+      case "message_changed":
         if (event.message && event.previous_message) {
           const message = this.convertMessage(event.message, event.channel);
           this.handleMessage(message);
@@ -455,30 +492,35 @@ export class SlackChannel extends BaseChannel {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = undefined;
     }
-    
+
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
       const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
-      console.log(`[Slack] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
+      console.log(
+        `[Slack] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`,
+      );
       setTimeout(() => this.connectSocketMode(), delay);
     }
   }
 
-  private convertMessage(msg: SlackMessage, channelId?: string): ChannelMessage {
+  private convertMessage(
+    msg: SlackMessage,
+    channelId?: string,
+  ): ChannelMessage {
     const attachments: MessageAttachment[] = [];
-    
+
     if (msg.files) {
       for (const file of msg.files) {
-        let type: MessageAttachment['type'] = 'document';
-        
-        if (file.mimetype?.startsWith('image/')) {
-          type = 'image';
-        } else if (file.mimetype?.startsWith('video/')) {
-          type = 'video';
-        } else if (file.mimetype?.startsWith('audio/')) {
-          type = 'audio';
+        let type: MessageAttachment["type"] = "document";
+
+        if (file.mimetype?.startsWith("image/")) {
+          type = "image";
+        } else if (file.mimetype?.startsWith("video/")) {
+          type = "video";
+        } else if (file.mimetype?.startsWith("audio/")) {
+          type = "audio";
         }
-        
+
         attachments.push({
           type,
           url: file.url_private,
@@ -492,9 +534,9 @@ export class SlackChannel extends BaseChannel {
 
     return {
       id: msg.ts,
-      channelType: 'slack',
-      chatId: msg.channel || channelId || '',
-      userId: msg.user || 'unknown',
+      channelType: "slack",
+      chatId: msg.channel || channelId || "",
+      userId: msg.user || "unknown",
       text: msg.text,
       timestamp: new Date(parseFloat(msg.ts) * 1000),
       replyTo: msg.thread_ts,
@@ -503,14 +545,16 @@ export class SlackChannel extends BaseChannel {
     };
   }
 
-  private convertKeyboard(keyboard: import('./types').InlineKeyboard): unknown[] {
+  private convertKeyboard(
+    keyboard: import("./types").InlineKeyboard,
+  ): unknown[] {
     // Convert to Slack block kit buttons
     return [
       {
-        type: 'actions',
+        type: "actions",
         elements: keyboard.buttons.flat().map((btn) => ({
-          type: 'button',
-          text: { type: 'plain_text', text: btn.text },
+          type: "button",
+          text: { type: "plain_text", text: btn.text },
           action_id: btn.callbackData || btn.text,
           url: btn.url,
         })),

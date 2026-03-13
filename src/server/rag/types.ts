@@ -1,6 +1,6 @@
 /**
  * KendaliAI RAG (Retrieval-Augmented Generation) Types
- * 
+ *
  * Defines interfaces and types for the RAG engine including:
  * - Document ingestion and management
  * - Text chunking strategies
@@ -16,13 +16,13 @@
 /**
  * Document source type
  */
-export type DocumentSource = 
-  | 'file'       // Local file
-  | 'url'        // Web URL
-  | 'text'       // Raw text input
-  | 'database'   // Database record
-  | 'api'        // API response
-  | 'upload';    // User upload
+export type DocumentSource =
+  | "file" // Local file
+  | "url" // Web URL
+  | "text" // Raw text input
+  | "database" // Database record
+  | "api" // API response
+  | "upload"; // User upload
 
 /**
  * Document metadata
@@ -69,7 +69,7 @@ export interface Document {
   /** Ingestion timestamp */
   ingestedAt: Date;
   /** Processing status */
-  status: 'pending' | 'processed' | 'failed';
+  status: "pending" | "processed" | "failed";
   /** Error message if failed */
   error?: string;
 }
@@ -81,12 +81,12 @@ export interface Document {
 /**
  * Chunking strategy type
  */
-export type ChunkingStrategy = 
-  | 'fixed'      // Fixed-size chunks
-  | 'sentence'   // Sentence-based chunks
-  | 'paragraph'  // Paragraph-based chunks
-  | 'semantic'   // Semantic chunking
-  | 'recursive'; // Recursive character chunking
+export type ChunkingStrategy =
+  | "fixed" // Fixed-size chunks
+  | "sentence" // Sentence-based chunks
+  | "paragraph" // Paragraph-based chunks
+  | "semantic" // Semantic chunking
+  | "recursive"; // Recursive character chunking
 
 /**
  * Chunking configuration
@@ -141,12 +141,12 @@ export interface TextChunk {
 /**
  * Embedding provider type
  */
-export type EmbeddingProvider = 
-  | 'openai'     // OpenAI embeddings
-  | 'zai'        // ZAI embeddings
-  | 'deepseek'   // DeepSeek embeddings
-  | 'local'      // Local embeddings
-  | 'custom';    // Custom embedding provider
+export type EmbeddingProvider =
+  | "openai" // OpenAI embeddings
+  | "zai" // ZAI embeddings
+  | "deepseek" // DeepSeek embeddings
+  | "local" // Local embeddings
+  | "custom"; // Custom embedding provider
 
 /**
  * Embedding configuration
@@ -191,10 +191,10 @@ export interface EmbeddingEntry {
 /**
  * Vector storage backend type
  */
-export type VectorBackend = 
-  | 'sqlite'     // SQLite with JSON vectors
-  | 'memory'     // In-memory storage
-  | 'none';      // No vector storage
+export type VectorBackend =
+  | "sqlite" // SQLite with JSON vectors
+  | "memory" // In-memory storage
+  | "none"; // No vector storage
 
 /**
  * Vector storage configuration
@@ -205,11 +205,11 @@ export interface VectorConfig {
   /** Embedding dimensions */
   dimensions: number;
   /** Distance metric */
-  metric: 'cosine' | 'euclidean' | 'dot';
+  metric: "cosine" | "euclidean" | "dot";
   /** Whether to persist to disk */
   persist?: boolean;
   /** Index type for efficient search */
-  indexType?: 'flat' | 'ivf' | 'hnsw';
+  indexType?: "flat" | "ivf" | "hnsw";
 }
 
 /**
@@ -235,11 +235,11 @@ export interface VectorSearchResult {
 /**
  * Retrieval strategy type
  */
-export type RetrievalStrategy = 
-  | 'vector'     // Pure vector similarity
-  | 'keyword'    // Keyword/FTS search
-  | 'hybrid'     // Combined vector + keyword
-  | 'reranked';  // Vector + reranking
+export type RetrievalStrategy =
+  | "vector" // Pure vector similarity
+  | "keyword" // Keyword/FTS search
+  | "hybrid" // Combined vector + keyword
+  | "reranked"; // Vector + reranking
 
 /**
  * Retrieval configuration
@@ -311,28 +311,28 @@ export interface RAGConfig {
 export const DEFAULT_RAG_CONFIG: RAGConfig = {
   enabled: true,
   chunking: {
-    strategy: 'semantic',
+    strategy: "semantic",
     maxChunkSize: 1000,
     overlap: 200,
     minChunkSize: 100,
     preserveSentences: true,
   },
   embedding: {
-    provider: 'openai',
-    model: 'openai/text-embedding-3-small',
+    provider: "openai",
+    model: "openai/text-embedding-3-small",
     dimensions: 1536,
     batchSize: 100,
     useCache: true,
     cacheTTL: 7 * 24 * 60 * 60 * 1000, // 7 days
   },
   vector: {
-    backend: 'sqlite',
+    backend: "sqlite",
     dimensions: 1536,
-    metric: 'cosine',
+    metric: "cosine",
     persist: true,
   },
   retrieval: {
-    strategy: 'hybrid',
+    strategy: "hybrid",
     topK: 5,
     minScore: 0.7,
     vectorWeight: 0.7,
@@ -353,10 +353,13 @@ export const DEFAULT_RAG_CONFIG: RAGConfig = {
 export interface RAGEngine {
   /** Initialize the RAG engine */
   init(): Promise<void>;
-  
+
   // Document operations
   /** Ingest a document */
-  ingestDocument(content: string, metadata?: DocumentMetadata): Promise<Document>;
+  ingestDocument(
+    content: string,
+    metadata?: DocumentMetadata,
+  ): Promise<Document>;
   /** Ingest from file */
   ingestFile(filePath: string, metadata?: DocumentMetadata): Promise<Document>;
   /** Ingest from URL */
@@ -366,34 +369,53 @@ export interface RAGEngine {
   /** Delete document */
   deleteDocument(id: string): Promise<void>;
   /** List documents */
-  listDocuments(options?: { gatewayId?: string; limit?: number; offset?: number }): Promise<Document[]>;
-  
+  listDocuments(options?: {
+    gatewayId?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<Document[]>;
+
   // Chunking operations
   /** Chunk a document */
   chunkDocument(document: Document): Promise<TextChunk[]>;
   /** Get chunks for a document */
   getChunks(documentId: string): Promise<TextChunk[]>;
-  
+
   // Embedding operations
   /** Generate embedding for text */
   embedText(text: string): Promise<number[]>;
   /** Generate embeddings for multiple texts */
   embedTexts(texts: string[]): Promise<number[][]>;
-  
+
   // Search operations
   /** Search for relevant chunks */
-  search(query: string, options?: Partial<RetrievalConfig>): Promise<RetrievedContext>;
+  search(
+    query: string,
+    options?: Partial<RetrievalConfig>,
+  ): Promise<RetrievedContext>;
   /** Vector similarity search */
-  vectorSearch(embedding: number[], options?: Partial<RetrievalConfig>): Promise<VectorSearchResult[]>;
+  vectorSearch(
+    embedding: number[],
+    options?: Partial<RetrievalConfig>,
+  ): Promise<VectorSearchResult[]>;
   /** Keyword search */
-  keywordSearch(query: string, options?: Partial<RetrievalConfig>): Promise<VectorSearchResult[]>;
-  
+  keywordSearch(
+    query: string,
+    options?: Partial<RetrievalConfig>,
+  ): Promise<VectorSearchResult[]>;
+
   // Context operations
   /** Build context for AI generation */
-  buildContext(query: string, options?: Partial<RetrievalConfig>): Promise<string>;
+  buildContext(
+    query: string,
+    options?: Partial<RetrievalConfig>,
+  ): Promise<string>;
   /** Get context with sources */
-  getContextWithSources(query: string, options?: Partial<RetrievalConfig>): Promise<{ context: string; sources: VectorSearchResult[] }>;
-  
+  getContextWithSources(
+    query: string,
+    options?: Partial<RetrievalConfig>,
+  ): Promise<{ context: string; sources: VectorSearchResult[] }>;
+
   // Management operations
   /** Get RAG statistics */
   getStats(): Promise<RAGStats>;
@@ -430,14 +452,14 @@ export interface RAGStats {
 /**
  * RAG event type
  */
-export type RAGEventType = 
-  | 'document_ingested'
-  | 'document_deleted'
-  | 'chunk_created'
-  | 'embedding_generated'
-  | 'search_performed'
-  | 'context_built'
-  | 'error';
+export type RAGEventType =
+  | "document_ingested"
+  | "document_deleted"
+  | "chunk_created"
+  | "embedding_generated"
+  | "search_performed"
+  | "context_built"
+  | "error";
 
 /**
  * RAG event

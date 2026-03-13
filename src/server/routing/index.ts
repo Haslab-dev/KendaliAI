@@ -1,6 +1,6 @@
 /**
  * KendaliAI Channel Routing Module
- * 
+ *
  * Implements Phase 3: Channel-to-Gateway Routing
  * - Prefix-based routing
  * - Keyword-based routing
@@ -14,7 +14,13 @@ import { Database } from "bun:sqlite";
 // Types
 // ============================================
 
-export type RoutingMode = "prefix" | "keyword" | "interactive" | "broadcast" | "round-robin" | "default";
+export type RoutingMode =
+  | "prefix"
+  | "keyword"
+  | "interactive"
+  | "broadcast"
+  | "round-robin"
+  | "default";
 
 export interface RoutingConfig {
   mode: RoutingMode;
@@ -36,7 +42,14 @@ export interface RoutingResult {
   gatewayId: string | null;
   gatewayName: string | null;
   matched: boolean;
-  matchType: "prefix" | "keyword" | "default" | "interactive" | "broadcast" | "round-robin" | "none";
+  matchType:
+    | "prefix"
+    | "keyword"
+    | "default"
+    | "interactive"
+    | "broadcast"
+    | "round-robin"
+    | "none";
   strippedMessage?: string;
   interactiveOptions?: InteractiveOption[];
 }
@@ -73,11 +86,11 @@ export class RoutingManager {
   routeMessage(
     channelId: string,
     message: string,
-    senderId: string
+    senderId: string,
   ): RoutingResult {
     // Get all bindings for this channel
     const bindings = this.getChannelBindings(channelId);
-    
+
     if (bindings.length === 0) {
       // No bindings - try to get default gateway
       const defaultGateway = this.getDefaultGateway();
@@ -86,15 +99,15 @@ export class RoutingManager {
           gatewayId: defaultGateway.id,
           gatewayName: defaultGateway.name,
           matched: true,
-          matchType: "default"
+          matchType: "default",
         };
       }
-      
+
       return {
         gatewayId: null,
         gatewayName: null,
         matched: false,
-        matchType: "none"
+        matchType: "none",
       };
     }
 
@@ -102,13 +115,13 @@ export class RoutingManager {
     if (bindings.length === 1) {
       const binding = bindings[0];
       const gateway = this.getGatewayById(binding.gatewayId);
-      
+
       if (!gateway) {
         return {
           gatewayId: null,
           gatewayName: null,
           matched: false,
-          matchType: "none"
+          matchType: "none",
         };
       }
 
@@ -121,16 +134,16 @@ export class RoutingManager {
             gatewayName: gateway.name,
             matched: true,
             matchType: "prefix",
-            strippedMessage: prefixResult.strippedMessage
+            strippedMessage: prefixResult.strippedMessage,
           };
         }
-        
+
         // Prefix not matched - return none
         return {
           gatewayId: null,
           gatewayName: null,
           matched: false,
-          matchType: "none"
+          matchType: "none",
         };
       }
 
@@ -138,7 +151,7 @@ export class RoutingManager {
         gatewayId: binding.gatewayId,
         gatewayName: gateway.name,
         matched: true,
-        matchType: "default"
+        matchType: "default",
       };
     }
 
@@ -152,7 +165,7 @@ export class RoutingManager {
   private routeMultipleGateways(
     bindings: ChannelBinding[],
     message: string,
-    channelId: string
+    channelId: string,
   ): RoutingResult {
     // 1. Try prefix-based routing first
     for (const binding of bindings) {
@@ -165,7 +178,7 @@ export class RoutingManager {
             gatewayName: gateway?.name || null,
             matched: true,
             matchType: "prefix",
-            strippedMessage: prefixResult.strippedMessage
+            strippedMessage: prefixResult.strippedMessage,
           };
         }
       }
@@ -173,57 +186,70 @@ export class RoutingManager {
 
     // 2. Try keyword-based routing
     for (const binding of bindings) {
-      if (binding.routing.mode === "keyword" && binding.routing.keywords?.length) {
+      if (
+        binding.routing.mode === "keyword" &&
+        binding.routing.keywords?.length
+      ) {
         if (this.matchKeywords(message, binding.routing.keywords)) {
           const gateway = this.getGatewayById(binding.gatewayId);
           return {
             gatewayId: binding.gatewayId,
             gatewayName: gateway?.name || null,
             matched: true,
-            matchType: "keyword"
+            matchType: "keyword",
           };
         }
       }
     }
 
     // 3. Check for interactive mode
-    const interactiveBindings = bindings.filter(b => b.routing.mode === "interactive");
+    const interactiveBindings = bindings.filter(
+      (b) => b.routing.mode === "interactive",
+    );
     if (interactiveBindings.length > 0) {
       // Check if message is a selection number
       const selectionNum = parseInt(message.trim());
-      if (!isNaN(selectionNum) && selectionNum > 0 && selectionNum <= interactiveBindings.length) {
+      if (
+        !isNaN(selectionNum) &&
+        selectionNum > 0 &&
+        selectionNum <= interactiveBindings.length
+      ) {
         const binding = interactiveBindings[selectionNum - 1];
         const gateway = this.getGatewayById(binding.gatewayId);
         return {
           gatewayId: binding.gatewayId,
           gatewayName: gateway?.name || null,
           matched: true,
-          matchType: "interactive"
+          matchType: "interactive",
         };
       }
 
       // Return interactive options
-      const options: InteractiveOption[] = interactiveBindings.map((binding, index) => {
-        const gateway = this.getGatewayById(binding.gatewayId);
-        return {
-          gatewayId: binding.gatewayId,
-          gatewayName: gateway?.name || "Unknown",
-          description: gateway?.description || "",
-          prefix: binding.routing.prefix || `/${index + 1}`
-        };
-      });
+      const options: InteractiveOption[] = interactiveBindings.map(
+        (binding, index) => {
+          const gateway = this.getGatewayById(binding.gatewayId);
+          return {
+            gatewayId: binding.gatewayId,
+            gatewayName: gateway?.name || "Unknown",
+            description: gateway?.description || "",
+            prefix: binding.routing.prefix || `/${index + 1}`,
+          };
+        },
+      );
 
       return {
         gatewayId: null,
         gatewayName: null,
         matched: false,
         matchType: "interactive",
-        interactiveOptions: options
+        interactiveOptions: options,
       };
     }
 
     // 4. Broadcast mode - return all gateways
-    const broadcastBindings = bindings.filter(b => b.routing.mode === "broadcast");
+    const broadcastBindings = bindings.filter(
+      (b) => b.routing.mode === "broadcast",
+    );
     if (broadcastBindings.length > 0) {
       // For broadcast, we return the first one and mark as broadcast
       // The caller should handle sending to all
@@ -233,33 +259,38 @@ export class RoutingManager {
         gatewayId: binding.gatewayId,
         gatewayName: gateway?.name || null,
         matched: true,
-        matchType: "broadcast"
+        matchType: "broadcast",
       };
     }
 
     // 5. Round-robin mode
-    const roundRobinBindings = bindings.filter(b => b.routing.mode === "round-robin");
+    const roundRobinBindings = bindings.filter(
+      (b) => b.routing.mode === "round-robin",
+    );
     if (roundRobinBindings.length > 0) {
-      const index = this.getNextRoundRobinIndex(channelId, roundRobinBindings.length);
+      const index = this.getNextRoundRobinIndex(
+        channelId,
+        roundRobinBindings.length,
+      );
       const binding = roundRobinBindings[index];
       const gateway = this.getGatewayById(binding.gatewayId);
       return {
         gatewayId: binding.gatewayId,
         gatewayName: gateway?.name || null,
         matched: true,
-        matchType: "round-robin"
+        matchType: "round-robin",
       };
     }
 
     // 6. Fall back to default gateway
-    const defaultBinding = bindings.find(b => b.routing.defaultGateway);
+    const defaultBinding = bindings.find((b) => b.routing.defaultGateway);
     if (defaultBinding) {
       const gateway = this.getGatewayById(defaultBinding.gatewayId);
       return {
         gatewayId: defaultBinding.gatewayId,
         gatewayName: gateway?.name || null,
         matched: true,
-        matchType: "default"
+        matchType: "default",
       };
     }
 
@@ -270,24 +301,29 @@ export class RoutingManager {
       gatewayId: firstBinding.gatewayId,
       gatewayName: gateway?.name || null,
       matched: true,
-      matchType: "default"
+      matchType: "default",
     };
   }
 
   /**
    * Match message against prefix
    */
-  private matchPrefix(message: string, prefix: string): { matched: boolean; strippedMessage?: string } {
+  private matchPrefix(
+    message: string,
+    prefix: string,
+  ): { matched: boolean; strippedMessage?: string } {
     const normalizedMessage = message.trim();
     const normalizedPrefix = prefix.trim();
-    
+
     if (normalizedMessage.startsWith(normalizedPrefix)) {
       return {
         matched: true,
-        strippedMessage: normalizedMessage.slice(normalizedPrefix.length).trim()
+        strippedMessage: normalizedMessage
+          .slice(normalizedPrefix.length)
+          .trim(),
       };
     }
-    
+
     return { matched: false };
   }
 
@@ -296,7 +332,7 @@ export class RoutingManager {
    */
   private matchKeywords(message: string, keywords: string[]): boolean {
     const lowerMessage = message.toLowerCase();
-    return keywords.some(keyword => {
+    return keywords.some((keyword) => {
       const lowerKeyword = keyword.toLowerCase();
       // Match whole word or phrase
       return lowerMessage.includes(lowerKeyword);
@@ -318,27 +354,37 @@ export class RoutingManager {
    */
   private getChannelBindings(channelId: string): ChannelBinding[] {
     try {
-      const results = this.db.query<{
-        channel_id: string;
-        gateway_id: string;
-        routing_config: string | null;
-        priority: number;
-        enabled: number;
-      }, [string]>(`
+      const results = this.db
+        .query<
+          {
+            channel_id: string;
+            gateway_id: string;
+            routing_config: string | null;
+            priority: number;
+            enabled: number;
+          },
+          [string]
+        >(
+          `
         SELECT cb.channel_id, cb.gateway_id, cb.routing_config, cb.priority, cb.enabled
         FROM channel_bindings cb
         WHERE cb.channel_id = ? AND cb.enabled = 1
         ORDER BY cb.priority ASC
-      `).all(channelId);
+      `,
+        )
+        .all(channelId);
 
-      return results.map(row => {
+      return results.map((row) => {
         let routing: RoutingConfig = { mode: "default" };
         try {
           if (row.routing_config) {
             routing = JSON.parse(row.routing_config);
           }
         } catch (parseError) {
-          console.warn(`Failed to parse routing config for channel ${channelId}:`, parseError);
+          console.warn(
+            `Failed to parse routing config for channel ${channelId}:`,
+            parseError,
+          );
         }
 
         return {
@@ -346,7 +392,7 @@ export class RoutingManager {
           gatewayId: row.gateway_id,
           routing,
           priority: row.priority,
-          enabled: row.enabled === 1
+          enabled: row.enabled === 1,
         };
       });
     } catch (error) {
@@ -363,9 +409,13 @@ export class RoutingManager {
    */
   private getGatewayById(id: string): GatewayInfo | null {
     try {
-      const result = this.db.query<GatewayInfo, [string]>(`
+      const result = this.db
+        .query<GatewayInfo, [string]>(
+          `
         SELECT id, name, description, routing_config FROM gateways WHERE id = ?
-      `).get(id);
+      `,
+        )
+        .get(id);
       return result || null;
     } catch (error) {
       console.warn(`Failed to fetch gateway ${id}:`, error);
@@ -378,11 +428,15 @@ export class RoutingManager {
    */
   private getDefaultGateway(): GatewayInfo | null {
     try {
-      const result = this.db.query<GatewayInfo, []>(`
+      const result = this.db
+        .query<GatewayInfo, []>(
+          `
         SELECT id, name, description, routing_config FROM gateways
         WHERE status = 'running'
         LIMIT 1
-      `).get();
+      `,
+        )
+        .get();
       return result || null;
     } catch (error) {
       console.warn("Failed to fetch default gateway:", error);
@@ -397,31 +451,41 @@ export class RoutingManager {
     channelId: string,
     gatewayId: string,
     routing: RoutingConfig,
-    priority: number = 0
+    priority: number = 0,
   ): boolean {
     try {
       const now = Date.now();
       const routingJson = JSON.stringify(routing);
 
       // Check if binding already exists
-      const existing = this.db.query<{ id: string }, [string, string]>(`
+      const existing = this.db
+        .query<{ id: string }, [string, string]>(
+          `
         SELECT id FROM channel_bindings WHERE channel_id = ? AND gateway_id = ?
-      `).get(channelId, gatewayId);
+      `,
+        )
+        .get(channelId, gatewayId);
 
       if (existing) {
         // Update existing binding
-        this.db.run(`
+        this.db.run(
+          `
           UPDATE channel_bindings 
           SET routing_config = ?, priority = ?, enabled = 1, updated_at = ?
           WHERE channel_id = ? AND gateway_id = ?
-        `, [routingJson, priority, now, channelId, gatewayId]);
+        `,
+          [routingJson, priority, now, channelId, gatewayId],
+        );
       } else {
         // Create new binding
         const bindingId = `cb_${Date.now().toString(36)}`;
-        this.db.run(`
+        this.db.run(
+          `
           INSERT INTO channel_bindings (id, channel_id, gateway_id, routing_config, priority, enabled, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, 1, ?, ?)
-        `, [bindingId, channelId, gatewayId, routingJson, priority, now, now]);
+        `,
+          [bindingId, channelId, gatewayId, routingJson, priority, now, now],
+        );
       }
 
       return true;
@@ -436,10 +500,13 @@ export class RoutingManager {
    */
   unbindChannelFromGateway(channelId: string, gatewayId: string): boolean {
     try {
-      this.db.run(`
+      this.db.run(
+        `
         UPDATE channel_bindings SET enabled = 0, updated_at = ?
         WHERE channel_id = ? AND gateway_id = ?
-      `, [Date.now(), channelId, gatewayId]);
+      `,
+        [Date.now(), channelId, gatewayId],
+      );
       return true;
     } catch {
       return false;
@@ -451,20 +518,27 @@ export class RoutingManager {
    */
   getGatewayBindings(gatewayId: string): ChannelBinding[] {
     try {
-      const results = this.db.query<{
-        channel_id: string;
-        gateway_id: string;
-        routing_config: string | null;
-        priority: number;
-        enabled: number;
-      }, [string]>(`
+      const results = this.db
+        .query<
+          {
+            channel_id: string;
+            gateway_id: string;
+            routing_config: string | null;
+            priority: number;
+            enabled: number;
+          },
+          [string]
+        >(
+          `
         SELECT channel_id, gateway_id, routing_config, priority, enabled
         FROM channel_bindings
         WHERE gateway_id = ? AND enabled = 1
         ORDER BY priority ASC
-      `).all(gatewayId);
+      `,
+        )
+        .all(gatewayId);
 
-      return results.map(row => {
+      return results.map((row) => {
         let routing: RoutingConfig = { mode: "default" };
         try {
           if (row.routing_config) {
@@ -477,7 +551,7 @@ export class RoutingManager {
           gatewayId: row.gateway_id,
           routing,
           priority: row.priority,
-          enabled: row.enabled === 1
+          enabled: row.enabled === 1,
         };
       });
     } catch {
@@ -490,12 +564,12 @@ export class RoutingManager {
    */
   generateInteractiveMessage(options: InteractiveOption[]): string {
     let message = "🤖 *Which assistant do you need?*\n\n";
-    
+
     options.forEach((option, index) => {
       const desc = option.description ? ` - ${option.description}` : "";
       message += `[${index + 1}] **${option.gatewayName}**${desc}\n`;
     });
-    
+
     message += "\n_Reply with a number to select an assistant._";
     return message;
   }
@@ -505,10 +579,14 @@ export class RoutingManager {
    */
   getAvailableGateways(): GatewayInfo[] {
     try {
-      return this.db.query<GatewayInfo, []>(`
+      return this.db
+        .query<GatewayInfo, []>(
+          `
         SELECT id, name, description, routing_config FROM gateways
         ORDER BY name ASC
-      `).all();
+      `,
+        )
+        .all();
     } catch {
       return [];
     }
@@ -517,7 +595,10 @@ export class RoutingManager {
   /**
    * Update gateway routing config
    */
-  updateGatewayRouting(gatewayId: string, routing: Partial<RoutingConfig>): boolean {
+  updateGatewayRouting(
+    gatewayId: string,
+    routing: Partial<RoutingConfig>,
+  ): boolean {
     try {
       const gateway = this.getGatewayById(gatewayId);
       if (!gateway) return false;
@@ -530,11 +611,14 @@ export class RoutingManager {
       } catch {}
 
       const newRouting = { ...existingRouting, ...routing };
-      
-      this.db.run(`
+
+      this.db.run(
+        `
         UPDATE gateways SET routing_config = ?, updated_at = ? WHERE id = ?
-      `, [JSON.stringify(newRouting), Date.now(), gatewayId]);
-      
+      `,
+        [JSON.stringify(newRouting), Date.now(), gatewayId],
+      );
+
       return true;
     } catch {
       return false;

@@ -1,8 +1,8 @@
 /**
  * KendaliAI Trait-Based Architecture - ZeroClaw Style
- * 
+ *
  * All subsystems are traits - swap implementations with config change, zero code changes.
- * 
+ *
  * Traits:
  * - Provider: AI model providers
  * - Channel: Messaging channels
@@ -80,30 +80,30 @@ export interface ProviderTool {
 export interface Provider {
   /** Provider identifier */
   readonly id: string;
-  
+
   /** Provider display name */
   readonly name: string;
-  
+
   /** List available models */
   listModels(): Promise<string[]>;
-  
+
   /** Check if provider is available */
   isAvailable(): Promise<boolean>;
-  
+
   /** Send a chat completion request */
   chat(
     messages: ProviderMessage[],
     config: ProviderConfig,
-    tools?: ProviderTool[]
+    tools?: ProviderTool[],
   ): Promise<ProviderResponse>;
-  
+
   /** Stream a chat completion request */
   chatStream?(
     messages: ProviderMessage[],
     config: ProviderConfig,
-    tools?: ProviderTool[]
+    tools?: ProviderTool[],
   ): AsyncGenerator<ProviderStreamChunk>;
-  
+
   /** Generate embeddings */
   embed?(texts: string[], model?: string): Promise<number[][]>;
 }
@@ -145,34 +145,34 @@ export interface ChannelAttachment {
 export interface Channel {
   /** Channel identifier */
   readonly id: string;
-  
+
   /** Channel type */
   readonly type: string;
-  
+
   /** Channel display name */
   readonly name: string;
-  
+
   /** Start the channel */
   start(): Promise<void>;
-  
+
   /** Stop the channel */
   stop(): Promise<void>;
-  
+
   /** Check if channel is running */
   isRunning(): boolean;
-  
+
   /** Send a message */
   send(message: ChannelSendMessage): Promise<void>;
-  
+
   /** Send message with attachment */
   sendWithAttachment?(
     message: ChannelSendMessage,
-    attachment: ChannelAttachment
+    attachment: ChannelAttachment,
   ): Promise<void>;
-  
+
   /** Set message handler */
   onMessage(handler: (message: ChannelMessage) => Promise<void>): void;
-  
+
   /** Get channel status */
   getStatus(): ChannelStatus;
 }
@@ -201,12 +201,15 @@ export interface ToolResult {
 
 export interface ToolSchema {
   type: "object";
-  properties: Record<string, {
-    type: string;
-    description?: string;
-    enum?: string[];
-    default?: unknown;
-  }>;
+  properties: Record<
+    string,
+    {
+      type: string;
+      description?: string;
+      enum?: string[];
+      default?: unknown;
+    }
+  >;
   required?: string[];
 }
 
@@ -222,22 +225,22 @@ export interface ToolPermission {
 export interface Tool {
   /** Tool identifier */
   readonly id: string;
-  
+
   /** Tool name (for LLM) */
   readonly name: string;
-  
+
   /** Tool description (for LLM) */
   readonly description: string;
-  
+
   /** Input schema */
   readonly schema: ToolSchema;
-  
+
   /** Permission level */
   readonly permission: ToolPermission;
-  
+
   /** Execute the tool */
   execute(input: ToolInput): Promise<ToolResult>;
-  
+
   /** Validate input against schema */
   validate(input: ToolInput): { valid: boolean; errors?: string[] };
 }
@@ -276,31 +279,34 @@ export interface MemoryConfig {
 export interface Memory {
   /** Memory backend identifier */
   readonly id: string;
-  
+
   /** Initialize memory backend */
   init(): Promise<void>;
-  
+
   /** Store a memory */
   store(content: string, metadata?: Record<string, unknown>): Promise<string>;
-  
+
   /** Recall memories (hybrid search) */
   recall(query: string, limit?: number): Promise<MemorySearchResult[]>;
-  
+
   /** Search by vector similarity */
-  searchVector(embedding: number[], limit?: number): Promise<MemorySearchResult[]>;
-  
+  searchVector(
+    embedding: number[],
+    limit?: number,
+  ): Promise<MemorySearchResult[]>;
+
   /** Search by keyword (FTS) */
   searchKeyword(query: string, limit?: number): Promise<MemorySearchResult[]>;
-  
+
   /** Get memory by ID */
   get(id: string): Promise<MemoryEntry | null>;
-  
+
   /** Delete memory by ID */
   delete(id: string): Promise<void>;
-  
+
   /** Clear all memories */
   clear(): Promise<void>;
-  
+
   /** Get memory count */
   count(): Promise<number>;
 }
@@ -327,16 +333,16 @@ export interface TunnelConfig {
 export interface Tunnel {
   /** Tunnel provider identifier */
   readonly id: string;
-  
+
   /** Provider name */
   readonly name: string;
-  
+
   /** Start the tunnel */
   start(config: TunnelConfig): Promise<TunnelStatus>;
-  
+
   /** Stop the tunnel */
   stop(): Promise<void>;
-  
+
   /** Get tunnel status */
   getStatus(): TunnelStatus;
 }
@@ -360,22 +366,22 @@ export interface LogEntry {
 export interface Observer {
   /** Observer identifier */
   readonly id: string;
-  
+
   /** Log an event */
   log(entry: LogEntry): void;
-  
+
   /** Log debug */
   debug(type: string, message: string, data?: Record<string, unknown>): void;
-  
+
   /** Log info */
   info(type: string, message: string, data?: Record<string, unknown>): void;
-  
+
   /** Log warning */
   warn(type: string, message: string, data?: Record<string, unknown>): void;
-  
+
   /** Log error */
   error(type: string, message: string, data?: Record<string, unknown>): void;
-  
+
   /** Get recent logs */
   getLogs?(limit?: number, level?: string): LogEntry[];
 }

@@ -4,20 +4,16 @@
   "version": "0.2.0",
   "type": "module",
   "bin": {
-    "kendaliai": "./src/cli-minimal.ts",
-    "kendaliai-full": "./src/cli.tsx"
+    "kendaliai": "./src/cli.ts",
+    "kendaliai-full": "./src/cli.ts"
   },
   "scripts": {
-    "start": "bun run src/cli-minimal.ts",
-    "tui": "bun run src/cli.tsx",
-    "gateway": "bun src/cli-minimal.ts gateway",
-    "gw": "bun src/cli-minimal.ts gateway",
-    "dev": "concurrently \"bun run dev:frontend\" \"bun run dev:backend\"",
-    "dev:frontend": "vite",
-    "dev:backend": "bun --watch src/server/index.ts",
-    "build": "tsc -b && vite build",
+    "start": "bun run src/cli.ts",
+    "tui": "bun run src/cli.ts",
+    "gateway": "bun src/cli.ts gateway",
+    "gw": "bun src/cli.ts gateway",
+    "dev": "bun --watch src/server/index.ts",
     "lint": "eslint .",
-    "preview": "vite preview",
     "test": "bun test",
     "test:smoke": "bun --env-file=.env run tests/smoke/index.ts",
     "test:smoke:provider": "bun --env-file=.env test tests/smoke/provider.test.ts",
@@ -25,61 +21,44 @@
     "test:smoke:telegram": "bun --env-file=.env test tests/smoke/telegram.test.ts",
     "test:smoke:all": "bun --env-file=.env test tests/smoke/*.test.ts",
     "db:push": "drizzle-kit push",
-    "db:reset": "bun src/cli-minimal.ts reset",
-    "build:binary": "bun build --compile --minify --sourcemap=none src/cli-minimal.ts --outfile dist/kendaliai",
-    "build:binary:macos": "bun build --compile --minify --sourcemap=none --target=darwin-arm64 src/cli-minimal.ts --outfile dist/kendaliai-darwin-arm64",
-    "build:binary:macos-x64": "bun build --compile --minify --sourcemap=none --target=darwin-x64 src/cli-minimal.ts --outfile dist/kendaliai-darwin-x64",
-    "build:binary:linux": "bun build --compile --minify --sourcemap=none --target=linux-x64 src/cli-minimal.ts --outfile dist/kendaliai-linux-x64",
-    "build:binary:linux-arm": "bun build --compile --minify --sourcemap=none --target=linux-arm64 src/cli-minimal.ts --outfile dist/kendaliai-linux-arm64",
-    "build:binary:windows": "bun build --compile --minify --sourcemap=none --target=windows-x64 src/cli-minimal.ts --outfile dist/kendaliai-windows-x64.exe",
+    "db:reset": "bun src/cli.ts reset",
+    "build:binary": "bun build --compile --minify --sourcemap=none src/cli.ts --outfile dist/kendaliai",
+    "build:binary:macos": "bun build --compile --minify --sourcemap=none --target=darwin-arm64 src/cli.ts --outfile dist/kendaliai-darwin-arm64",
+    "build:binary:macos-x64": "bun build --compile --minify --sourcemap=none --target=darwin-x64 src/cli.ts --outfile dist/kendaliai-darwin-x64",
+    "build:binary:linux": "bun build --compile --minify --sourcemap=none --target=linux-x64 src/cli.ts --outfile dist/kendaliai-linux-x64",
+    "build:binary:linux-arm": "bun build --compile --minify --sourcemap=none --target=linux-arm64 src/cli.ts --outfile dist/kendaliai-linux-arm64",
+    "build:binary:windows": "bun build --compile --minify --sourcemap=none --target=windows-x64 src/cli.ts --outfile dist/kendaliai-windows-x64.exe",
     "build:binary:all": "bun run build:binary:macos && bun run build:binary:linux && bun run build:binary:windows",
-    "onboard": "bun src/cli-minimal.ts onboard",
-    "status": "bun src/cli-minimal.ts status",
-    "doctor": "bun src/cli-minimal.ts doctor",
-    "pairing": "bun src/cli-minimal.ts pairing create"
+    "onboard": "bun src/cli.ts onboard",
+    "status": "bun src/cli.ts status",
+    "doctor": "bun src/cli.ts doctor",
+    "pairing": "bun src/cli.ts pairing create",
+    "prepare": "husky",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "lint-staged": {
+    "*.{ts,js,json,md}": [
+      "prettier --write"
+    ]
   },
   "dependencies": {
-    "@ai-sdk/openai": "^3.0.41",
     "@ai-sdk/openai-compatible": "^2.0.35",
-    "@inquirer/prompts": "^8.3.0",
-    "@libsql/client": "^0.17.0",
-    "@tailwindcss/vite": "^4.2.1",
-    "@tanstack/react-query": "^5.90.21",
-    "@tanstack/react-router": "^1.166.7",
-    "@xyflow/react": "^12.10.1",
     "ai": "^6.0.116",
     "drizzle-orm": "^0.45.1",
-    "framer-motion": "^12.35.2",
-    "grammy": "^1.41.1",
-    "hono": "^4.12.7",
-    "ink": "^6.8.0",
-    "lucide-react": "^0.577.0",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "tailwindcss": "^4.2.1",
-    "zod": "^4.3.6"
+    "grammy": "^1.41.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
-    "@tanstack/router-plugin": "^1.166.7",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/bun": "^1.3.10",
     "@types/node": "^25.4.0",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^5.1.4",
-    "babel-plugin-react-compiler": "^1.0.0",
-    "concurrently": "^9.2.1",
     "drizzle-kit": "^0.31.9",
     "eslint": "^9.39.4",
-    "eslint-plugin-react-hooks": "^7.0.1",
-    "eslint-plugin-react-refresh": "^0.4.26",
     "globals": "^16.5.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.3.3",
+    "prettier": "^3.8.1",
     "typescript": "~5.9.3",
-    "typescript-eslint": "^8.57.0",
-    "vite": "^8.0.0"
-  },
-  "overrides": {
-    "vite": "^8.0.0-beta.13"
+    "typescript-eslint": "^8.57.0"
   }
 }
