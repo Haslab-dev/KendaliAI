@@ -17,23 +17,39 @@ import { sql } from "drizzle-orm";
 export const gateways = sqliteTable("gateways", {
   id: text("id").primaryKey(),
   name: text("name").notNull().unique(),
+  description: text("description"),
   
   // Provider configuration
-  provider: text("provider").notNull(), // "openai" | "anthropic" | "ollama" | "zai" | "deepseek" | "custom"
-  endpoint: text("endpoint"), // Custom API endpoint URL
-  apiKeyEncrypted: text("api_key_encrypted"), // Encrypted API key
+  provider: text("provider").notNull(), 
+  endpoint: text("endpoint"), 
+  apiKeyEncrypted: text("api_key_encrypted"),
   defaultModel: text("default_model"),
-  models: text("models"), // JSON array of available models
+  models: text("models"), 
   
   // ZeroClaw-style security
   requirePairing: integer("require_pairing").default(1),
   allowPublicBind: integer("allow_public_bind").default(0),
   workspaceOnly: integer("workspace_only").default(1),
+
+  // Agent & Capability Config
+  agentConfig: text("agent_config"), // JSON
+  skills: text("skills"), // JSON array
+  tools: text("tools"), // JSON array
+
+  // Daemon settings
+  daemonEnabled: integer("daemon_enabled").default(0),
+  daemonPid: integer("daemon_pid"),
+  daemonAutoRestart: integer("daemon_auto_restart").default(1),
+  daemonPort: integer("daemon_port"),
+  
+  // Routing
+  routingConfig: text("routing_config"), // JSON
   
   // Runtime config
-  config: text("config"), // JSON for provider-specific config
-  status: text("status").default("stopped"), // "stopped" | "running" | "error"
+  config: text("config"), 
+  status: text("status").default("stopped"),
   lastError: text("last_error"),
+  startedAt: integer("started_at", { mode: 'timestamp' }),
   
   // Timestamps
   createdAt: integer("created_at", { mode: 'timestamp' }).$defaultFn(() => new Date()),

@@ -55,6 +55,10 @@ import { decrypt } from "./security/encryption";
 // Channels
 import { channelManager, type SendMessageOptions, type ChannelMessage } from "./channels";
 
+// Executors & Routing
+import { autonomousPipeline } from "../executors";
+import { Retriever } from "../rag/retriever";
+
 // ============================================
 // Types
 // ============================================
@@ -89,6 +93,7 @@ interface GatewayConfig {
     personality?: string;
     instructions?: string;
     traits?: string[];
+    systemPrompt?: string;
   };
   skills?: string[];
   tools?: string[];
@@ -282,10 +287,8 @@ function setupChannelEvents(db: any) {
                     await channel.setTyping(chatId);
                     
                     const queryText = route.strippedMessage || text;
-                    let finalPrompt = queryText;
-                    let useRag = false;
 
-                    // 1. Handle Explicit RAG Commands
+                    // 1. Handle Explicit RAG Ingest Command
                     if (queryText.startsWith('/ingest ')) {
                         if (!ragEngineInstance) {
                             await channel.sendMessage("⚠️ RAG engine is not initialized.", { chatId } as SendMessageOptions);
@@ -305,101 +308,45 @@ function setupChannelEvents(db: any) {
                         return;
                     }
 
-                    if (queryText.startsWith('/ask ') || queryText.startsWith('/rag ')) {
-                        if (!ragEngineInstance) {
-                            await channel.sendMessage("⚠️ RAG engine is not initialized.", { chatId } as SendMessageOptions);
-                            return;
-                        }
-                        const actualQuery = queryText.startsWith('/ask ') ? queryText.slice(5).trim() : queryText.slice(5).trim();
-                        if (!actualQuery) {
-                            await channel.sendMessage("ℹ️ Please provide a question. Usage: `/ask <your question>`", { chatId, parseMode: 'markdown' } as SendMessageOptions);
-                            return;
-                        }
-                        
-                        const context = await ragEngineInstance.buildContext(actualQuery);
-                        if (context) {
-                            finalPrompt = `You are a helpful assistant. Use the following context to answer the user's question. If the answer is not in the context, use your general knowledge but mention that it wasn't in the provided documents.\n\n${context}\n\nUser Question: ${actualQuery}`;
-                            log.info(`📚 RAG context added for explicit /ask command (${context.length} chars)`);
-                            useRag = true;
-                        } else {
-                            await channel.sendMessage("🔍 No relevant context found in RAG for your question.", { chatId } as SendMessageOptions);
-                            // Fallback to normal chat or stop? Let's continue with normal for better UX
-                            finalPrompt = actualQuery;
+                    // 2. Call Autonomous Pipeline
+                    if (!ragEngineInstance) {
+                        const rawDb = dbManager.getRaw();
+                        if (rawDb) {
+                            ragEngineInstance = await createRAGEngine(rawDb, {});
                         }
                     }
 
-                    // 2. Generate response (Normal Chat or Augmented /ask)
-                    log.info(`🔄 Generating response for ${instance.config.name} (RAG: ${useRag})`);
+                    if (!ragEngineInstance) {
+                        await channel.sendMessage("⚠️ AI Engine (RAG) is not ready.", { chatId } as SendMessageOptions);
+                        return;
+                    }
                     
-                    const tools = toolRegistry.list();
-                    let aiHistory: ChatMessage[] = [
-                        { role: 'user', content: finalPrompt }
-                    ];
+                    const rawDb = dbManager.getRaw()!;
+                    const retriever = new Retriever(ragEngineInstance);
+                    
+                    // Strip optional /ask or /rag prefixes
+                    let cleanMessage = queryText;
+                    if (queryText.startsWith('/ask ')) cleanMessage = queryText.slice(5).trim();
+                    else if (queryText.startsWith('/rag ')) cleanMessage = queryText.slice(5).trim();
+                    
+                    log.info(`🔄 Routing through autonomous pipeline: ${cleanMessage.slice(0, 50)}...`);
 
-                    let result = await instance.provider.generate({
-                        messages: aiHistory,
+                    const pipelineResult = await autonomousPipeline(cleanMessage, {
+                        provider: instance.provider,
+                        db: rawDb,
+                        gatewayId: route.gatewayId,
                         model: instance.config.provider.model,
-                        tools: tools.map(t => ({
-                            type: 'function',
-                            function: {
-                                name: t.name,
-                                description: t.description,
-                                parameters: t.parameters
-                            }
-                        }))
+                        embedder: {
+                             embed: (t) => ragEngineInstance!.embedText(t)
+                        },
+                        retriever,
+                        agentSystemPrompt: instance.config.agent.systemPrompt
                     });
-
-                    // 3. Handle Tool Calls
-                    let loopCount = 0;
-                    while (result.toolCalls && result.toolCalls.length > 0 && loopCount < 5) {
-                        loopCount++;
-                        aiHistory.push({
-                            role: 'assistant',
-                            content: result.text,
-                            toolCalls: result.toolCalls
-                        });
-
-                        for (const toolCall of result.toolCalls) {
-                            try {
-                                log.info(`🛠️ Executing tool: ${toolCall.function.name}`);
-                                const params = typeof toolCall.function.arguments === 'string' 
-                                    ? JSON.parse(toolCall.function.arguments) 
-                                    : toolCall.function.arguments;
-                                
-                                const toolResult = await toolRegistry.execute(toolCall.function.name, params);
-                                
-                                aiHistory.push({
-                                    role: 'tool',
-                                    content: typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult),
-                                    toolCallId: toolCall.id
-                                });
-                            } catch (toolErr) {
-                                log.error(`Tool execution failed (${toolCall.function.name}):`, toolErr);
-                                aiHistory.push({
-                                    role: 'tool',
-                                    content: `Error: ${toolErr instanceof Error ? toolErr.message : String(toolErr)}`,
-                                    toolCallId: toolCall.id
-                                });
-                            }
-                        }
-
-                        // Get next response from AI with tool results
-                        result = await instance.provider.generate({
-                            messages: aiHistory,
-                            model: instance.config.provider.model,
-                            tools: tools.map(t => ({
-                                type: 'function',
-                                function: {
-                                    name: t.name,
-                                    description: t.description,
-                                    parameters: t.parameters
-                                }
-                            }))
-                        });
-                    }
                     
-                    // 4. Send final response
-                    await channel.sendMessage(result.text, { chatId } as SendMessageOptions);
+                    log.info(`✅ Pipeline routed to [${pipelineResult.intent}]`);
+                    
+                    // 3. Send final response
+                    await channel.sendMessage(pipelineResult.response, { chatId } as SendMessageOptions);
                 } catch (err) {
                     log.error(`AI call failed for gateway ${route.gatewayId}:`, err);
                     await channel.sendMessage("⚠️ Sorry, I encountered an error while processing your request.", { chatId } as SendMessageOptions);
@@ -663,6 +610,8 @@ async function loadGatewayAndChannels(db: any, gatewayName?: string) {
         }
       }
 
+      const agentConfigRaw = gw.agentConfig ? JSON.parse(gw.agentConfig) : {};
+      
       const config: GatewayConfig = {
         id: gw.id,
         name: gw.name,
@@ -675,6 +624,9 @@ async function loadGatewayAndChannels(db: any, gatewayName?: string) {
         },
         agent: {
           name: gw.name,
+          systemPrompt: agentConfigRaw.system_prompt || undefined,
+          personality: agentConfigRaw.personality || undefined,
+          instructions: agentConfigRaw.instructions || undefined,
         },
         status: "running",
         createdAt: gw.createdAt?.toISOString() || new Date().toISOString(),

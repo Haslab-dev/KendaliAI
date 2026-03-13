@@ -994,6 +994,7 @@ async function handlePairing(): Promise<void> {
 async function handleChannel(): Promise<void> {
   const dbPath = getString("db-path", ".kendaliai/data/kendaliai.db");
   const database = getDb(dbPath);
+  const gatewayName = getString("gateway", "");
   
   const subCommand = positionals[1];
   
@@ -1001,31 +1002,54 @@ async function handleChannel(): Promise<void> {
     const userId = positionals[2];
     if (!userId) {
       console.error("❌ Error: User ID required");
-      console.log("   Usage: kendaliai channel bind-telegram <user_id>");
+      console.log("   Usage: kendaliai channel bind-telegram <user_id> [--gateway <gw-name>]");
       return;
     }
     
-    const channel = database.query<{ id: string }, []>(`
-      SELECT id FROM channels WHERE type = 'telegram' LIMIT 1
-    `).get();
+    // Find gateway first if name provided
+    let gateway;
+    if (gatewayName) {
+      gateway = database.query<{ id: string }, [string]>(`
+        SELECT id FROM gateways WHERE name = ?
+      `).get(gatewayName);
+    }
+    
+    // Find channel for this gateway (or first telegram channel if no gateway specified)
+    let channel;
+    if (gateway) {
+      channel = database.query<{ id: string }, [string]>(`
+        SELECT id FROM channels WHERE type = 'telegram' AND gateway_id = ? LIMIT 1
+      `).get(gateway.id);
+    } else {
+      channel = database.query<{ id: string }, []>(`
+        SELECT id FROM channels WHERE type = 'telegram' LIMIT 1
+      `).get();
+    }
     
     if (!channel) {
-      // Create telegram channel
-      const channelId = `ch_${randomUUID().slice(0, 8)}`;
-      const gateway = database.query<{ id: string }, []>(`
-        SELECT id FROM gateways LIMIT 1
-      `).get();
+      // Create telegram channel if it doesn't exist
+      if (!gateway && !gatewayName) {
+        gateway = database.query<{ id: string }, []>(`
+          SELECT id FROM gateways LIMIT 1
+        `).get();
+      }
       
+      if (!gateway) {
+        console.error(gatewayName ? `❌ Gateway '${gatewayName}' not found.` : "❌ No gateway found. Run 'kendaliai onboard' first.");
+        return;
+      }
+      
+      const channelId = `ch_${randomUUID().slice(0, 8)}`;
       const now = Date.now();
       database.run(`
         INSERT INTO channels (id, gateway_id, type, name, allowed_users, enabled, status, created_at, updated_at)
         VALUES (?, ?, 'telegram', 'Telegram Bot', ?, 1, 'stopped', ?, ?)
-      `, [channelId, gateway?.id || null, JSON.stringify([userId]), now, now]);
+      `, [channelId, gateway.id, JSON.stringify([userId]), now, now]);
       
-      console.log(`✅ Added user ${userId} to new Telegram channel allowlist`);
+      console.log(`✅ Created new Telegram channel ${channelId} and added user ${userId} to allowlist (linked to gateway: ${gatewayName || 'default'})`);
     } else {
       await securityManager.addToAllowlist(channel.id, userId);
-      console.log(`✅ Added user ${userId} to Telegram channel allowlist`);
+      console.log(`✅ Added user ${userId} to Telegram channel allowlist (Channel: ${channel.id})`);
     }
   } else if (subCommand === "add-telegram") {
     // Add Telegram channel with bot token
@@ -1037,16 +1061,28 @@ async function handleChannel(): Promise<void> {
       return;
     }
     
-    const gateway = database.query<{ id: string }, []>(`
-      SELECT id FROM gateways LIMIT 1
-    `).get();
+    let gateway;
+    if (gatewayName) {
+      gateway = database.query<{ id: string }, [string]>(`
+        SELECT id FROM gateways WHERE name = ?
+      `).get(gatewayName);
+      
+      if (!gateway) {
+        console.error(`❌ Gateway '${gatewayName}' not found.`);
+        return;
+      }
+    } else {
+      gateway = database.query<{ id: string }, []>(`
+        SELECT id FROM gateways LIMIT 1
+      `).get();
+    }
     
     if (!gateway) {
       console.error("❌ No gateway found. Run 'kendaliai onboard' first.");
       return;
     }
     
-    // Check if telegram channel already exists
+    // Check if telegram channel already exists for THIS gateway
     const existingChannel = database.query<{ id: string }, [string]>(`
       SELECT id FROM channels WHERE type = 'telegram' AND gateway_id = ?
     `).get(gateway.id);
@@ -1058,7 +1094,7 @@ async function handleChannel(): Promise<void> {
       database.run(`
         UPDATE channels SET config = ?, updated_at = ? WHERE id = ?
       `, [JSON.stringify({ botToken }), now, existingChannel.id]);
-      console.log(`✅ Updated Telegram channel with new bot token`);
+      console.log(`✅ Updated Telegram channel with new bot token for gateway: ${gatewayName || 'default'}`);
     } else {
       // Create new telegram channel
       const channelId = `ch_${randomUUID().slice(0, 8)}`;
@@ -1066,7 +1102,7 @@ async function handleChannel(): Promise<void> {
         INSERT INTO channels (id, gateway_id, type, name, config, allowed_users, enabled, status, created_at, updated_at)
         VALUES (?, ?, 'telegram', 'Telegram Bot', ?, '[]', 1, 'stopped', ?, ?)
       `, [channelId, gateway.id, JSON.stringify({ botToken }), now, now]);
-      console.log(`✅ Created Telegram channel: ${channelId}`);
+      console.log(`✅ Created Telegram channel: ${channelId} (linked to gateway: ${gatewayName || 'default'})`);
     }
     
     console.log(`\n   To allow users, run:`);
@@ -1600,37 +1636,56 @@ async function startTelegramBot(
 async function handleDaemon(): Promise<void> {
   const dbPath = getString("db-path", ".kendaliai/data/kendaliai.db");
   const database = getDb(dbPath);
+  const gatewayName = getString("gateway", "");
   
   console.log("🤖 Starting KendaliAI Daemon (Telegram Bot Only)\n");
   
   // Get gateway configuration
-  const gateway = database.query<{ 
-    id: string; 
-    provider: string; 
-    default_model: string; 
-    endpoint: string | null;
-    api_key_encrypted: string | null;
-  }, []>(`
-    SELECT id, provider, default_model, endpoint, api_key_encrypted FROM gateways LIMIT 1
-  `).get();
+  let gateway;
+  if (gatewayName) {
+    gateway = database.query<{ 
+      id: string; 
+      provider: string; 
+      default_model: string; 
+      endpoint: string | null;
+      api_key_encrypted: string | null;
+    }, [string]>(`
+      SELECT id, provider, default_model, endpoint, api_key_encrypted FROM gateways WHERE name = ?
+    `).get(gatewayName);
+    
+    if (!gateway) {
+      console.error(`❌ Gateway '${gatewayName}' not found.`);
+      return;
+    }
+  } else {
+    gateway = database.query<{ 
+      id: string; 
+      provider: string; 
+      default_model: string; 
+      endpoint: string | null;
+      api_key_encrypted: string | null;
+    }, []>(`
+      SELECT id, provider, default_model, endpoint, api_key_encrypted FROM gateways LIMIT 1
+    `).get();
+  }
   
   if (!gateway) {
     console.error("❌ No gateway found. Run 'kendaliai onboard' first.");
     return;
   }
   
-  // Get Telegram channel
+  // Get Telegram channel specifically for this gateway
   const channel = database.query<{ 
     id: string; 
     config: string; 
     allowed_users: string; 
-  }, []>(`
-    SELECT id, config, allowed_users FROM channels WHERE type = 'telegram' AND enabled = 1 LIMIT 1
-  `).get();
+  }, [string]>(`
+    SELECT id, config, allowed_users FROM channels WHERE type = 'telegram' AND enabled = 1 AND gateway_id = ? LIMIT 1
+  `).get(gateway.id);
   
   if (!channel) {
-    console.error("❌ No Telegram channel configured.");
-    console.log("   Run: kendaliai channel add-telegram --bot-token <token>");
+    console.error(`❌ No Telegram channel configured for gateway: ${gatewayName || 'default'}`);
+    console.log("   Run: kendaliai channel add-telegram --bot-token <token> --gateway <gw-name>");
     return;
   }
   
