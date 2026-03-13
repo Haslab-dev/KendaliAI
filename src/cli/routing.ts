@@ -11,11 +11,14 @@
  */
 
 import { Database } from "bun:sqlite";
+import { existsSync } from "fs";
+import { getGatewayPaths } from "./gateway";
 import { 
   RoutingManager, 
   getRoutingManager, 
   RoutingMode, 
-  RoutingConfig 
+  RoutingConfig,
+  initRoutingTables
 } from "../server/routing";
 
 // ============================================
@@ -73,6 +76,91 @@ Examples:
   # Set gateway routing mode
   kendaliai routing set-mode dev-assistant prefix
 `);
+}
+
+/**
+ * Sync channel and bindings to gateway-specific local database
+ */
+export function syncGatewayLocalDb(centralDb: Database, gatewayName: string, channelId: string): void {
+  try {
+    const paths = getGatewayPaths(gatewayName);
+    if (!existsSync(paths.base)) return;
+
+    const localDb = new Database(paths.db);
+    
+    // 1. Ensure channels table exists
+    localDb.run(`CREATE TABLE IF NOT EXISTS channels (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL,
+        name TEXT NOT NULL,
+        config TEXT,
+        gateway_id TEXT,
+        enabled INTEGER DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+    )`);
+    initRoutingTables(localDb);
+
+    // 2. Mirror channel info
+    const channel = centralDb.query("SELECT * FROM channels WHERE id = ?").get(channelId) as any;
+    if (channel) {
+        const cols = Object.keys(channel);
+        const placeholders = cols.map(() => "?").join(", ");
+        localDb.run(`INSERT OR REPLACE INTO channels (${cols.join(", ")}) VALUES (${placeholders})`, Object.values(channel) as any[]);
+    }
+
+    // 2.5 Mirror gateway info (critical for API keys/config)
+    const gateway = centralDb.query("SELECT * FROM gateways WHERE name = ?").get(gatewayName) as any;
+    if (gateway) {
+        // Ensure table exists (mirroring core schema)
+        localDb.run(`CREATE TABLE IF NOT EXISTS gateways (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            description TEXT,
+            provider TEXT NOT NULL,
+            endpoint TEXT,
+            api_key_encrypted TEXT,
+            default_model TEXT,
+            models TEXT,
+            require_pairing INTEGER DEFAULT 1,
+            allow_public_bind INTEGER DEFAULT 0,
+            workspace_only INTEGER DEFAULT 1,
+            agent_config TEXT,
+            skills TEXT,
+            tools TEXT,
+            daemon_enabled INTEGER DEFAULT 0,
+            daemon_pid INTEGER,
+            daemon_auto_restart INTEGER DEFAULT 1,
+            daemon_port INTEGER DEFAULT 0,
+            routing_config TEXT,
+            config TEXT,
+            status TEXT DEFAULT 'stopped',
+            last_error TEXT,
+            started_at INTEGER,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )`);
+        const cols = Object.keys(gateway);
+        const placeholders = cols.map(() => "?").join(", ");
+        localDb.run(`INSERT OR REPLACE INTO gateways (${cols.join(", ")}) VALUES (${placeholders})`, Object.values(gateway) as any[]);
+    }
+
+    // 3. Mirror ALL bindings for this channel
+    // We mirror all because a channel might be bound to multiple gateways, 
+    // and the gateway needs to know the full routing context for that channel
+    const bindings = centralDb.query("SELECT * FROM channel_bindings WHERE channel_id = ?").all(channelId) as any[];
+    localDb.run("DELETE FROM channel_bindings WHERE channel_id = ?", [channelId]);
+    for (const binding of bindings) {
+        const cols = Object.keys(binding);
+        const placeholders = cols.map(() => "?").join(", ");
+        localDb.run(`INSERT INTO channel_bindings (${cols.join(", ")}) VALUES (${placeholders})`, Object.values(binding) as any[]);
+    }
+
+    localDb.close();
+    console.log(`📡 Synced channel '${channelId}' to gateway '${gatewayName}' local database`);
+  } catch (err) {
+    console.warn(`⚠️ Failed to sync to gateway local database: ${err}`);
+  }
 }
 
 // ============================================
@@ -158,6 +246,9 @@ export async function handleRoutingCommand(
         if (prefix) console.log(`   Prefix: ${prefix}`);
         if (keywords) console.log(`   Keywords: ${keywords.join(", ")}`);
         console.log(`   Priority: ${priority}`);
+        
+        // Sync to gateway local database
+        syncGatewayLocalDb(db, gatewayName, channelId);
       } else {
         console.error(`❌ Failed to create binding`);
       }
@@ -188,6 +279,8 @@ export async function handleRoutingCommand(
 
       if (success) {
         console.log(`✅ Unbound channel '${channelId}' from gateway '${gatewayName}'`);
+        // Sync to gateway local database
+        syncGatewayLocalDb(db, gatewayName, channelId);
       } else {
         console.error(`❌ Failed to remove binding`);
       }

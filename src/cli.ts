@@ -22,12 +22,16 @@
  */
 
 import { Database } from "bun:sqlite";
+import { initTables } from "./cli/db-init";
 import { randomUUID } from "crypto";
 import { existsSync, mkdirSync, readFileSync } from "fs";
 import { join } from "path";
 import { parseArgs } from "util";
 import { securityManager } from "./server/security";
 import { encrypt, decrypt } from "./server/security/encryption";
+import { loadGatewayContext } from "./cli/gateway";
+import { BUILTIN_SKILLS, BUILTIN_TOOLS } from "./server/skills";
+import { syncGatewayLocalDb } from "./cli/routing";
 
 // ============================================
 // CLI Version
@@ -47,10 +51,6 @@ const HOME_DIR = process.env.HOME || "";
 
 // These will be set based on config-path option
 let KENDALIAI_DIR: string;
-let GATEWAYS_DIR: string;
-let RUN_DIR: string;
-let LOGS_DIR: string;
-let DATA_DIR: string;
 let CONFIG_FILE: string;
 
 // Config type
@@ -77,10 +77,6 @@ function initializePaths(): void {
     KENDALIAI_DIR = join(PROJECT_DIR, ".kendaliai");
   }
   
-  GATEWAYS_DIR = join(KENDALIAI_DIR, "gateways");
-  RUN_DIR = join(KENDALIAI_DIR, "run");
-  LOGS_DIR = join(KENDALIAI_DIR, "logs");
-  DATA_DIR = join(KENDALIAI_DIR, "data");
   CONFIG_FILE = join(KENDALIAI_DIR, "config.json");
 }
 
@@ -101,11 +97,9 @@ function loadConfig(): KendaliAIConfig {
 // Ensure directories exist
 function ensureDirectories(): void {
   initializePaths();
-  [KENDALIAI_DIR, GATEWAYS_DIR, RUN_DIR, LOGS_DIR, DATA_DIR].forEach(dir => {
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
-    }
-  });
+  if (!existsSync(KENDALIAI_DIR)) {
+    mkdirSync(KENDALIAI_DIR, { recursive: true });
+  }
 }
 
 // ============================================
@@ -127,7 +121,33 @@ function ensureDirectory(filePath: string): void {
   }
 }
 
-function getDb(dbPath?: string): Database {
+/**
+ * Get the workspace paths for a specific gateway
+ */
+function getGatewayPaths(name: string) {
+  const base = join(KENDALIAI_DIR, name);
+  return {
+    base,
+    config: join(base, "gateway.json"),
+    data: join(base, "data"),
+    db: join(base, "data", "kendaliai.db"),
+    logs: join(base, "logs"),
+    run: join(base, "run"),
+  };
+}
+
+function getDb(dbPath?: string, gatewayName?: string): Database {
+  initializePaths();
+  
+  if (db && !gatewayName) return db;
+  
+  // If a gateway is specified, we ALWAYS want its local database
+  if (gatewayName) {
+      const paths = getGatewayPaths(gatewayName);
+      ensureDirectory(paths.db);
+      return new Database(paths.db);
+  }
+
   if (db) return db;
   ensureDirectories();
   
@@ -135,15 +155,12 @@ function getDb(dbPath?: string): Database {
   const config = loadConfig();
   let actualPath: string;
   
-  if (dbPath) {
-    // CLI argument provided
+  if (dbPath && dbPath !== ".kendaliai/kendaliai.db") {
     actualPath = dbPath;
   } else if (config.database?.path) {
-    // Config file setting
     actualPath = config.database.path;
   } else {
-    // Default
-    actualPath = join(DATA_DIR, "kendaliai.db");
+    actualPath = join(KENDALIAI_DIR, "kendaliai.db");
   }
   
   ensureDirectory(actualPath);
@@ -324,7 +341,7 @@ SECURITY OPTIONS:
   --workspace-only     Restrict file access to workspace (default: true)
 
 DATABASE OPTIONS:
-  --db-path <path>     Database path (default: .kendaliai/data/kendaliai.db)
+  --db-path <path>     Database path (default: .kendaliai/kendaliai.db)
   --reset-db           Reset database on startup
 
 EXAMPLES:
@@ -361,7 +378,7 @@ async function handleVersion(): Promise<void> {
 async function handleOnboard(): Promise<void> {
   console.log("🚀 KendaliAI Onboarding\n");
   
-  const dbPath = getString("db-path", ".kendaliai/data/kendaliai.db");
+  const dbPath = getString("db-path", ".kendaliai/kendaliai.db");
   
   // Initialize database
   console.log("📁 Initializing database...");
@@ -501,7 +518,7 @@ async function handleOnboard(): Promise<void> {
 async function handleGateway(): Promise<void> {
   const port = parseInt(getString("port", "42617"));
   const host = getString("host", "127.0.0.1");
-  const dbPath = getString("db-path", ".kendaliai/data/kendaliai.db");
+  const dbPath = getString("db-path", ".kendaliai/kendaliai.db");
   
   console.log(`🚀 Starting KendaliAI Gateway on ${host}:${port}\n`);
   
@@ -797,7 +814,7 @@ async function handleGateway(): Promise<void> {
 async function handleAgent(): Promise<void> {
   const message = getString("message", "");
   const gatewayName = getString("gateway", "");
-  const dbPath = getString("db-path", ".kendaliai/data/kendaliai.db");
+  const dbPath = getString("db-path", ".kendaliai/kendaliai.db");
   
   if (!message) {
     console.log("💬 Interactive mode (not implemented in minimal CLI)");
@@ -855,11 +872,19 @@ async function handleAgent(): Promise<void> {
   const enabledTools = skillsManager.getEnabledTools(gateway.id);
 
   let systemPrompt = "You are KendaliAI, a powerful AI orchestrator.\n";
+  
+  // Load gateway context from markdown files
+  const gatewayContext = loadGatewayContext(gateway.name);
+  if (gatewayContext) {
+      systemPrompt += "\n# Gateway Context (System Rules & Identity)\n" + gatewayContext + "\n";
+  }
+
   if (enabledSkills.length > 0) {
     console.log(`⚡ Equipped Skills: ${enabledSkills.map(s => s.name).join(", ")}`);
     systemPrompt += "\nYou have the following skills available:\n";
     enabledSkills.forEach(s => {
-      systemPrompt += `- ${s.name}: ${s.description}\n`;
+      const desc = s.description || BUILTIN_SKILLS[s.name]?.description || "No description";
+      systemPrompt += `- ${s.name}: ${desc}\n`;
       if (s.config) {
         systemPrompt += `  Config: ${JSON.stringify(s.config)}\n`;
       }
@@ -871,7 +896,8 @@ async function handleAgent(): Promise<void> {
     console.log(`🛠️  Equipped Tools: ${enabledTools.map(t => t.name).join(", ")}`);
     systemPrompt += "\nYou have the following tools available:\n";
     enabledTools.forEach(t => {
-      systemPrompt += `- ${t.name}: ${t.riskLevel} risk level\n`;
+      const desc = t.description || BUILTIN_TOOLS[t.name]?.description || "No description";
+      systemPrompt += `- ${t.name}: ${desc} (${t.riskLevel} risk level)\n`;
     });
   }
 
@@ -945,7 +971,7 @@ async function handleAgent(): Promise<void> {
 }
 
 async function handlePairing(): Promise<void> {
-  const dbPath = getString("db-path", ".kendaliai/data/kendaliai.db");
+  const dbPath = getString("db-path", ".kendaliai/kendaliai.db");
   const database = getDb(dbPath);
   
   const subCommand = positionals[1];
@@ -992,7 +1018,7 @@ async function handlePairing(): Promise<void> {
 }
 
 async function handleChannel(): Promise<void> {
-  const dbPath = getString("db-path", ".kendaliai/data/kendaliai.db");
+  const dbPath = getString("db-path", ".kendaliai/kendaliai.db");
   const database = getDb(dbPath);
   const gatewayName = getString("gateway", "");
   
@@ -1047,9 +1073,11 @@ async function handleChannel(): Promise<void> {
       `, [channelId, gateway.id, JSON.stringify([userId]), now, now]);
       
       console.log(`✅ Created new Telegram channel ${channelId} and added user ${userId} to allowlist (linked to gateway: ${gatewayName || 'default'})`);
+      if (gatewayName) syncGatewayLocalDb(database, gatewayName, channelId);
     } else {
       await securityManager.addToAllowlist(channel.id, userId);
       console.log(`✅ Added user ${userId} to Telegram channel allowlist (Channel: ${channel.id})`);
+      if (gatewayName) syncGatewayLocalDb(database, gatewayName, channel.id);
     }
   } else if (subCommand === "add-telegram") {
     // Add Telegram channel with bot token
@@ -1095,6 +1123,7 @@ async function handleChannel(): Promise<void> {
         UPDATE channels SET config = ?, updated_at = ? WHERE id = ?
       `, [JSON.stringify({ botToken }), now, existingChannel.id]);
       console.log(`✅ Updated Telegram channel with new bot token for gateway: ${gatewayName || 'default'}`);
+      if (gatewayName) syncGatewayLocalDb(database, gatewayName, existingChannel.id); // Added call here
     } else {
       // Create new telegram channel
       const channelId = `ch_${randomUUID().slice(0, 8)}`;
@@ -1103,6 +1132,7 @@ async function handleChannel(): Promise<void> {
         VALUES (?, ?, 'telegram', 'Telegram Bot', ?, '[]', 1, 'stopped', ?, ?)
       `, [channelId, gateway.id, JSON.stringify({ botToken }), now, now]);
       console.log(`✅ Created Telegram channel: ${channelId} (linked to gateway: ${gatewayName || 'default'})`);
+      if (gatewayName) syncGatewayLocalDb(database, gatewayName, channelId); // Added call here
     }
     
     console.log(`\n   To allow users, run:`);
@@ -1130,7 +1160,7 @@ async function handleChannel(): Promise<void> {
 }
 
 async function handleStatus(): Promise<void> {
-  const dbPath = getString("db-path", ".kendaliai/data/kendaliai.db");
+  const dbPath = getString("db-path", ".kendaliai/kendaliai.db");
   const database = getDb(dbPath);
   
   console.log("📊 KendaliAI Status\n");
@@ -1231,7 +1261,7 @@ async function handleDoctor(): Promise<void> {
   const checks: { name: string; status: "ok" | "warn" | "error"; message: string }[] = [];
   
   // Initialize database and tables
-  const dbPath = getString("db-path", ".kendaliai/data/kendaliai.db");
+  const dbPath = getString("db-path", ".kendaliai/kendaliai.db");
   const database = getDb(dbPath);
   await initTables(database);
   
@@ -1284,7 +1314,7 @@ async function handleDoctor(): Promise<void> {
 }
 
 async function handleReset(): Promise<void> {
-  const dbPath = getString("db-path", ".kendaliai/data/kendaliai.db");
+  const dbPath = getString("db-path", ".kendaliai/kendaliai.db");
   
   console.log("⚠️  This will delete all data!");
   console.log(`   Database: ${dbPath}`);
@@ -1325,7 +1355,7 @@ async function handleInit(): Promise<void> {
   } else if (config.database?.path) {
     dbPath = config.database.path;
   } else {
-    dbPath = join(DATA_DIR, "kendaliai.db");
+    dbPath = join(KENDALIAI_DIR, "kendaliai.db");
   }
   
   console.log("🔄 Initializing database...");
@@ -1634,7 +1664,7 @@ async function startTelegramBot(
 }
 
 async function handleDaemon(): Promise<void> {
-  const dbPath = getString("db-path", ".kendaliai/data/kendaliai.db");
+  const dbPath = getString("db-path", ".kendaliai/kendaliai.db");
   const database = getDb(dbPath);
   const gatewayName = getString("gateway", "");
   
@@ -1739,215 +1769,7 @@ async function handleDaemon(): Promise<void> {
   await startTelegramBot(botToken, channel.id, gateway, apiUrl, apiKey, allowedUsers, database);
 }
 
-// ============================================
-// Database Initialization
-// ============================================
-
-async function initTables(db: Database): Promise<void> {
-  const createTablesSQL = `
-    -- Gateways (Enhanced for Multi-Gateway Support)
-    CREATE TABLE IF NOT EXISTS gateways (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      description TEXT,
-      provider TEXT NOT NULL,
-      endpoint TEXT,
-      api_key_encrypted TEXT,
-      default_model TEXT,
-      models TEXT,
-      require_pairing INTEGER DEFAULT 1,
-      allow_public_bind INTEGER DEFAULT 0,
-      workspace_only INTEGER DEFAULT 1,
-      
-      -- Agent configuration (JSON)
-      agent_config TEXT,
-      
-      -- Skills and tools (JSON arrays)
-      skills TEXT,
-      tools TEXT,
-      
-      -- Daemon configuration
-      daemon_enabled INTEGER DEFAULT 0,
-      daemon_pid INTEGER,
-      daemon_auto_restart INTEGER DEFAULT 1,
-      daemon_port INTEGER DEFAULT 0,
-      
-      -- Routing configuration
-      routing_config TEXT,
-      
-      -- Status and metadata
-      config TEXT,
-      status TEXT DEFAULT 'stopped',
-      last_error TEXT,
-      started_at INTEGER,
-      created_at INTEGER,
-      updated_at INTEGER
-    );
-    
-    -- Pairings
-    CREATE TABLE IF NOT EXISTS pairings (
-      id TEXT PRIMARY KEY,
-      gateway_id TEXT NOT NULL,
-      pairing_code TEXT NOT NULL,
-      bearer_token TEXT,
-      token_hash TEXT,
-      status TEXT DEFAULT 'pending',
-      paired_by TEXT,
-      user_agent TEXT,
-      created_at INTEGER,
-      paired_at INTEGER,
-      expires_at INTEGER,
-      FOREIGN KEY (gateway_id) REFERENCES gateways(id)
-    );
-    
-    -- Channels
-    CREATE TABLE IF NOT EXISTS channels (
-      id TEXT PRIMARY KEY,
-      gateway_id TEXT,
-      type TEXT NOT NULL,
-      name TEXT NOT NULL,
-      credentials_encrypted TEXT,
-      allowed_users TEXT,
-      config TEXT,
-      enabled INTEGER DEFAULT 1,
-      status TEXT DEFAULT 'stopped',
-      last_error TEXT,
-      last_message_at INTEGER,
-      created_at INTEGER,
-      updated_at INTEGER,
-      FOREIGN KEY (gateway_id) REFERENCES gateways(id)
-    );
-    
-    -- Memories
-    CREATE TABLE IF NOT EXISTS memories (
-      id TEXT PRIMARY KEY,
-      gateway_id TEXT,
-      content TEXT NOT NULL,
-      content_hash TEXT,
-      source TEXT,
-      source_id TEXT,
-      embedding TEXT,
-      embedding_model TEXT,
-      importance REAL DEFAULT 0.5,
-      access_count INTEGER DEFAULT 0,
-      created_at INTEGER,
-      updated_at INTEGER,
-      last_accessed_at INTEGER,
-      FOREIGN KEY (gateway_id) REFERENCES gateways(id)
-    );
-    
-    -- Messages
-    CREATE TABLE IF NOT EXISTS messages (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      gateway_id TEXT,
-      channel_id TEXT,
-      role TEXT NOT NULL,
-      content TEXT NOT NULL,
-      sender_id TEXT,
-      sender_name TEXT,
-      tokens INTEGER DEFAULT 0,
-      model TEXT,
-      latency_ms INTEGER,
-      embedding TEXT,
-      created_at INTEGER,
-      FOREIGN KEY (gateway_id) REFERENCES gateways(id),
-      FOREIGN KEY (channel_id) REFERENCES channels(id)
-    );
-    
-    -- Tools
-    CREATE TABLE IF NOT EXISTS tools (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      category TEXT,
-      description TEXT,
-      input_schema TEXT,
-      permission_level TEXT DEFAULT 'allowed',
-      requires_confirmation INTEGER DEFAULT 0,
-      enabled INTEGER DEFAULT 1,
-      usage_count INTEGER DEFAULT 0,
-      created_at INTEGER,
-      updated_at INTEGER
-    );
-    
-    -- Skills
-    CREATE TABLE IF NOT EXISTS skills (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      version TEXT NOT NULL,
-      description TEXT,
-      instructions TEXT,
-      manifest TEXT,
-      audit_status TEXT DEFAULT 'pending',
-      audit_notes TEXT,
-      enabled INTEGER DEFAULT 1,
-      installed_at INTEGER,
-      updated_at INTEGER
-    );
-    
-    -- Hooks
-    CREATE TABLE IF NOT EXISTS hooks (
-      id TEXT PRIMARY KEY,
-      gateway_id TEXT,
-      event TEXT NOT NULL,
-      name TEXT NOT NULL,
-      config TEXT,
-      priority INTEGER DEFAULT 0,
-      enabled INTEGER DEFAULT 1,
-      created_at INTEGER,
-      FOREIGN KEY (gateway_id) REFERENCES gateways(id)
-    );
-    
-    -- Event Logs
-    CREATE TABLE IF NOT EXISTS event_logs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      type TEXT NOT NULL,
-      level TEXT NOT NULL,
-      message TEXT NOT NULL,
-      data TEXT,
-      gateway_id TEXT,
-      channel_id TEXT,
-      correlation_id TEXT,
-      created_at INTEGER,
-      FOREIGN KEY (gateway_id) REFERENCES gateways(id),
-      FOREIGN KEY (channel_id) REFERENCES channels(id)
-    );
-    
-    -- System Config
-    CREATE TABLE IF NOT EXISTS system_config (
-      key TEXT PRIMARY KEY,
-      value TEXT,
-      description TEXT,
-      updated_at INTEGER
-    );
-    
-    -- Embedding Cache
-    CREATE TABLE IF NOT EXISTS embedding_cache (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      cache_key TEXT NOT NULL UNIQUE,
-      input_text TEXT NOT NULL,
-      embedding TEXT NOT NULL,
-      model TEXT NOT NULL,
-      access_count INTEGER DEFAULT 0,
-      last_accessed_at INTEGER,
-      created_at INTEGER,
-      expires_at INTEGER
-    );
-    
-    -- Indexes for performance
-    CREATE INDEX IF NOT EXISTS idx_pairings_gateway ON pairings(gateway_id);
-    CREATE INDEX IF NOT EXISTS idx_pairings_code ON pairings(pairing_code);
-    CREATE INDEX IF NOT EXISTS idx_channels_gateway ON channels(gateway_id);
-    CREATE INDEX IF NOT EXISTS idx_memories_gateway ON memories(gateway_id);
-    CREATE INDEX IF NOT EXISTS idx_messages_gateway ON messages(gateway_id);
-  `;
-  
-  const statements = createTablesSQL.split(";").filter(s => s.trim());
-  for (const stmt of statements) {
-    if (stmt.trim()) {
-      db.run(stmt);
-    }
-  }
-}
+// Database Tables initialization moved to src/cli/db-init.ts
 
 // ============================================
 // Main Entry Point
@@ -1973,7 +1795,10 @@ async function main(): Promise<void> {
       // Multi-gateway management
       const subCommand = positionals[1];
       const subArgs = positionals.slice(2);
-      const database = getDb(getString("db-path", ".kendaliai/data/kendaliai.db"));
+      
+      // For gateway creation/list, use the central DB first
+      const gatewayNameArg = subArgs[0] && !subArgs[0].startsWith("-") ? subArgs[0] : undefined;
+      const database = getDb(getString("db-path", ".kendaliai/kendaliai.db"));
       await initTables(database);
       
       // Get options from values object
@@ -2023,7 +1848,7 @@ async function main(): Promise<void> {
       // Daemon management
       const subCommand = positionals[1];
       const subArgs = positionals.slice(2);
-      const database = getDb(getString("db-path", ".kendaliai/data/kendaliai.db"));
+      const database = getDb(getString("db-path", ".kendaliai/kendaliai.db"));
       await initTables(database);
       
       const { handleDaemonCommand } = await import("./cli/daemon");
@@ -2034,7 +1859,9 @@ async function main(): Promise<void> {
       // Skills management
       const subCommand = positionals[1];
       const subArgs = positionals.slice(2);
-      const database = getDb(getString("db-path", ".kendaliai/data/kendaliai.db"));
+      const gatewayNameArg = getString("gateway");
+      const database = getDb(getString("db-path", ".kendaliai/kendaliai.db"), gatewayNameArg);
+      await initTables(database);
       const { handleSkillsCommand } = await import("./cli/skills-config");
       await handleSkillsCommand(database, subCommand || "list", subArgs, values);
       break;
@@ -2043,7 +1870,9 @@ async function main(): Promise<void> {
       // Tools management
       const subCommand = positionals[1];
       const subArgs = positionals.slice(2);
-      const database = getDb(getString("db-path", ".kendaliai/data/kendaliai.db"));
+      const gatewayNameArg = getString("gateway");
+      const database = getDb(getString("db-path", ".kendaliai/kendaliai.db"), gatewayNameArg);
+      await initTables(database);
       const { handleToolsCommand } = await import("./cli/skills-config");
       await handleToolsCommand(database, subCommand || "list", subArgs, values);
       break;
@@ -2052,7 +1881,9 @@ async function main(): Promise<void> {
       // Security management
       const subCommand = positionals[1];
       const subArgs = positionals.slice(2);
-      const database = getDb(getString("db-path", ".kendaliai/data/kendaliai.db"));
+      const gatewayNameArg = getString("gateway");
+      const database = getDb(getString("db-path", ".kendaliai/kendaliai.db"), gatewayNameArg);
+      await initTables(database);
       const { handleSecurityCommand } = await import("./cli/skills-config");
       await handleSecurityCommand(database, subCommand || "show", subArgs, values);
       break;
@@ -2073,7 +1904,8 @@ async function main(): Promise<void> {
       // Channel routing management
       const subCommand = positionals[1] || "help";
       const subArgs = positionals.slice(2);
-      const database = getDb(getString("db-path", ".kendaliai/data/kendaliai.db"));
+      const gatewayNameArg = getString("gateway");
+      const database = getDb(getString("db-path", ".kendaliai/kendaliai.db"), gatewayNameArg);
       await initTables(database);
       
       const { handleRoutingCommand } = await import("./cli/routing");

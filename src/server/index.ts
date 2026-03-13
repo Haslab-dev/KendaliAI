@@ -59,6 +59,7 @@ import { channelManager, type SendMessageOptions, type ChannelMessage } from "./
 // Executors & Routing
 import { autonomousPipeline } from "../executors";
 import { Retriever } from "../rag/retriever";
+import { loadGatewayContext } from "../cli/gateway";
 
 // ============================================
 // Types
@@ -157,9 +158,17 @@ let ragEngineInstance: RAGEngine | null = null;
 async function bootstrap() {
   log.info("Starting KendaliAI Server...");
 
+  // Parse command line arguments early to determine database path
+  const cmdArgs = parseArgs();
+  let dbPath = ".kendaliai/kendaliai.db";
+  
+  if (cmdArgs.gateway) {
+      dbPath = join(".kendaliai", cmdArgs.gateway, "data", "kendaliai.db");
+  }
+
   // Initialize database
-  const db = initDatabase();
-  log.info("Database initialized successfully.");
+  const db = initDatabase(dbPath);
+  log.info(`Database initialized: ${dbPath}`);
 
   // Get raw database for routing manager
   const rawDb = dbManager.getRaw();
@@ -192,7 +201,6 @@ async function bootstrap() {
   }
 
   // Load gateways and channels
-  const cmdArgs = parseArgs();
   await loadGatewayAndChannels(db, cmdArgs.gateway);
 
   // Set up event handlers
@@ -720,19 +728,28 @@ async function loadGatewayAndChannels(db: any, gatewayName?: string) {
     for (const gw of dbGateways) {
       log.info(`Loading gateway: ${gw.name} (${gw.id})`);
       
-      // Decrypt API key
+      // Decrypt API key - Handle both camelCase and snake_case for robustness
+      const encryptedKey = gw.apiKeyEncrypted || gw.api_key_encrypted;
       let apiKey = "";
-      if (gw.apiKeyEncrypted) {
+      if (encryptedKey) {
         try {
-          apiKey = decrypt(gw.apiKeyEncrypted);
+          apiKey = decrypt(encryptedKey);
         } catch (e) {
-          log.warn(`Failed to decrypt API key for gateway ${gw.name}, using as-is`);
-          apiKey = gw.apiKeyEncrypted;
+          log.warn(`  - Failed to decrypt API key for gateway ${gw.name}, using as-is`);
+          apiKey = encryptedKey;
         }
       }
 
-      const agentConfigRaw = gw.agentConfig ? JSON.parse(gw.agentConfig) : {};
+      const agentConfigStr = gw.agentConfig || gw.agent_config;
+      const agentConfigRaw = agentConfigStr ? JSON.parse(agentConfigStr) : {};
       
+      // Load context from markdown files
+      const mdContext = loadGatewayContext(gw.name);
+      const baseSystemPrompt = agentConfigRaw.system_prompt || "You are KendaliAI, a powerful AI orchestrator.";
+      const combinedPrompt = mdContext 
+        ? `${mdContext}\n\n# Base Instructions\n${baseSystemPrompt}`
+        : baseSystemPrompt;
+
       const config: GatewayConfig = {
         id: gw.id,
         name: gw.name,
@@ -740,17 +757,17 @@ async function loadGatewayAndChannels(db: any, gatewayName?: string) {
         provider: {
           type: gw.provider as any,
           apiKey,
-          model: gw.defaultModel || undefined,
+          model: gw.defaultModel || gw.default_model || undefined,
           endpoint: gw.endpoint || undefined,
         },
         agent: {
           name: gw.name,
-          systemPrompt: agentConfigRaw.system_prompt || undefined,
+          systemPrompt: combinedPrompt,
           personality: agentConfigRaw.personality || undefined,
           instructions: agentConfigRaw.instructions || undefined,
         },
         status: "running",
-        createdAt: gw.createdAt?.toISOString() || new Date().toISOString(),
+        createdAt: gw.createdAt || gw.created_at || new Date().toISOString(),
       };
 
       // Initialize provider
@@ -1327,9 +1344,9 @@ function parseArgs(): { port?: number; host?: string; gateway?: string } {
 
 async function startServer() {
   try {
+    // bootstrap handles parseArgs and database init
     await bootstrap();
 
-    // Parse command line arguments (override config)
     const cmdArgs = parseArgs();
     const port = cmdArgs.port || configLoader.get().server?.port || 3000;
     const host = cmdArgs.host || configLoader.get().server?.host || "0.0.0.0";

@@ -41,14 +41,14 @@ export async function autonomousPipeline(
   let response: string;
   switch (routeResult.intent) {
     case "rag":
-      response = await ragExecutor(message, options.retriever, options.provider, options.model);
+      response = await ragExecutor(message, options.retriever, options.provider, options.model, options.agentSystemPrompt);
       break;
     case "agent":
       response = await agentExecutor(message, options.provider, options.db, options.gatewayId, options.model, options.agentSystemPrompt);
       break;
     case "chat":
     default:
-      response = await chatExecutor(message, options.provider, options.model);
+      response = await chatExecutor(message, options.provider, options.model, options.agentSystemPrompt);
       break;
   }
 

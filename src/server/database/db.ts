@@ -27,7 +27,16 @@ export type KendaliDB = BunSQLiteDatabase<typeof schema>;
 /**
  * Initialize database connection
  */
-export function initDatabase(dbPath: string = ".kendaliai/data/kendaliai.db"): KendaliDB {
+export function initDatabase(dbPath: string = ".kendaliai/kendaliai.db"): KendaliDB {
+  if (dbInstance && sqlite?.filename === dbPath) return dbInstance;
+  
+  // Close existing if path changed
+  if (sqlite && sqlite.filename !== dbPath) {
+    sqlite.close();
+    sqlite = null;
+    dbInstance = null;
+  }
+
   if (dbInstance) return dbInstance;
   
   // Ensure directory exists
@@ -88,7 +97,7 @@ export function closeDatabase(): void {
 /**
  * Reset database (drop all tables and recreate)
  */
-export async function resetDatabase(dbPath: string = ".kendaliai/data/kendaliai.db"): Promise<void> {
+export async function resetDatabase(dbPath: string = ".kendaliai/kendaliai.db"): Promise<void> {
   closeDatabase();
   
   // Delete existing database files

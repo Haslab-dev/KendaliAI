@@ -50,30 +50,54 @@ KendaliAI is a self-hosted AI automation platform that unified AI access, enable
 
 ## Quickstart
 
-### Gateway CLI (Telegram Bots)
+### Step-by-Step: Creating your first AI Telegram Bot
 
-The fastest way to get started is with the Gateway CLI, which lets you create and manage AI-powered Telegram bots.
+Follow these steps to create an isolated AI Gateway and connect it to Telegram:
 
+#### 1. Create the Gateway
+This initializes a dedicated workspace in `.kendaliai/my-assistant/`.
 ```bash
-# Start the interactive TUI to create a gateway
-bun start
-
-# Or use direct commands:
-bun run gateway list              # List all gateways
-bun run gateway start <name>      # Start a gateway
-bun run gateway stop <name>       # Stop a gateway
-bun run gateway logs <name>       # Follow gateway logs
+bun src/cli.ts gateway create my-assistant --provider deepseek
 ```
 
-The TUI wizard will guide you through:
+#### 2. Set API Credentials
+Securely store your AI provider's API key.
+```bash
+bun src/cli.ts gateway set-api-key my-assistant "your-api-key"
+```
 
-1. Selecting an AI provider (ZAI/DeepSeek)
-2. Entering your API key
-3. Choosing a model
-4. Connecting a Telegram bot token
-5. Configuring optional skills and hooks
+#### 3. Connect Telegram
+Add your Telegram Bot Token to the gateway.
+```bash
+bun src/cli.ts channel add-telegram --gateway my-assistant --bot-token "your-bot-token"
+```
 
-Gateway configurations are stored in `gateways/` directory (not tracked in git).
+#### 4. Authorize Yourself
+KendaliAI uses a "Deny-by-Default" security model. You must allowlist your Telegram ID.
+```bash
+bun src/cli.ts channel bind-telegram <your-telegram-id> --gateway my-assistant
+```
+
+#### 5. Bind Routing
+Bind the channel to the gateway so it knows which agent should handle the messages.
+```bash
+# Get your channel ID from 'bun src/cli.ts channel list'
+bun src/cli.ts routing bind <channel-id> my-assistant
+```
+
+#### 6. Launch!
+Start the gateway as a background daemon.
+```bash
+bun src/cli.ts gateway start my-assistant --daemon
+```
+
+### Gateway Workspace Structure
+Each gateway lives in its own isolated directory inside `.kendaliai/`:
+- `.kendaliai/<name>/data/kendaliai.db`: Gateway-specific message history and settings.
+- `.kendaliai/<name>/logs/gateway.log`: Dedicated execution logs.
+- `.kendaliai/<name>/identity.md`: Define who your agent is (Name, Vibe, Emoji).
+- `.kendaliai/<name>/soul.md`: The "brain" and deep instructions for the agent.
+- `.kendaliai/<name>/run/`: Process ID (PID) management.
 
 ### Channel Routing
 
@@ -271,13 +295,10 @@ bun run src/server/index.ts
 | `bun run dev`     | Start frontend + backend concurrently |
 | `bun test`        | Run unit tests                        |
 
-## Security Notes
-
-- Gateway configurations contain sensitive credentials (API keys, bot tokens)
-- The `gateways/` directory is excluded from git via `.gitignore`
-- Shell commands executed by AI are restricted to a safe allowlist
-- File system access is limited to allowed directories
-- Security policies can be configured per gateway
+- **Workspace Isolation**: Each gateway has its own SQLite database and markdown-based identity files.
+- **Credential Encryption**: API keys and bot tokens are encrypted using AES-256-GCM before storage.
+- **Deny-by-Default**: Channels will reject any user not explicitly added via `bind-telegram`.
+- **System Level**: The main system database at `.kendaliai/kendaliai.db` manages global gateway states.
 
 ## Testing
 

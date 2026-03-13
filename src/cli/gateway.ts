@@ -25,17 +25,73 @@ import {
 } from "fs";
 import { join } from "path";
 import { getSkillsManager } from "../server/skills";
+import { initTables } from "./db-init";
 
 // Directory paths - use project-local directory by default
 const PROJECT_DIR = process.cwd();
 const KENDALIAI_DIR = join(PROJECT_DIR, ".kendaliai");
-const GATEWAYS_DIR = join(KENDALIAI_DIR, "gateways");
-const RUN_DIR = join(KENDALIAI_DIR, "run");
-const LOGS_DIR = join(KENDALIAI_DIR, "logs");
-const DATA_DIR = join(KENDALIAI_DIR, "data");
 
-// Export directory paths for use by other modules
-export { KENDALIAI_DIR, GATEWAYS_DIR, RUN_DIR, LOGS_DIR, DATA_DIR };
+/**
+ * Get the workspace directory for a specific gateway
+ */
+export function getGatewayDir(name: string): string {
+  return join(KENDALIAI_DIR, name);
+}
+
+/**
+ * Get paths for gateway-specific files
+ */
+export function getGatewayPaths(name: string) {
+  const base = getGatewayDir(name);
+  return {
+    base,
+    config: join(base, "gateway.json"),
+    data: join(base, "data"),
+    db: join(base, "data", "kendaliai.db"),
+    logs: join(base, "logs"),
+    logFile: join(base, "logs", "gateway.log"),
+    run: join(base, "run"),
+    pidFile: join(base, "run", "gateway.pid"),
+    agents: join(base, "agents.md"),
+    boot: join(base, "boot.md"),
+    identity: join(base, "identity.md"),
+    soul: join(base, "soul.md"),
+    user: join(base, "user.md"),
+    tools: join(base, "tools.md"),
+  };
+}
+
+/**
+ * Load gateway context from markdown files
+ */
+export function loadGatewayContext(name: string): string {
+    const paths = getGatewayPaths(name);
+    let context = "";
+    
+    const files = [
+        { name: "Identity", path: paths.identity },
+        { name: "Soul", path: paths.soul },
+        { name: "User", path: paths.user },
+        { name: "Agents", path: paths.agents },
+        { name: "Tools", path: paths.tools },
+        { name: "Boot", path: paths.boot }
+    ];
+
+    for (const file of files) {
+        if (existsSync(file.path)) {
+            try {
+                const content = readFileSync(file.path, "utf-8").trim();
+                if (content) {
+                    context += `\n--- [${file.name}] ---\n${content}\n`;
+                }
+            } catch (err) {
+                console.warn(`[Gateway] Failed to read ${file.name} for ${name}: ${err}`);
+            }
+        }
+    }
+
+    return context;
+}
 
 // Regex for valid gateway names: alphanumeric, underscores, hyphens only
 const GATEWAY_NAME_REGEX = /^[a-zA-Z0-9_-]+$/;
@@ -71,13 +127,20 @@ export function validateGatewayName(name: string): {
   return { valid: true };
 }
 
-// Ensure directories exist
-function ensureDirectories(): void {
-  [KENDALIAI_DIR, GATEWAYS_DIR, RUN_DIR, LOGS_DIR].forEach((dir) => {
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
-    }
-  });
+// Ensure directories exist for a specific gateway
+function ensureDirectories(name?: string): void {
+  if (!existsSync(KENDALIAI_DIR)) {
+    mkdirSync(KENDALIAI_DIR, { recursive: true });
+  }
+
+  if (name) {
+    const paths = getGatewayPaths(name);
+    [paths.base, paths.data, paths.logs, paths.run].forEach((dir) => {
+      if (!existsSync(dir)) {
+        mkdirSync(dir, { recursive: true });
+      }
+    });
+  }
 }
 
 // Gateway interface (matches database schema)
@@ -116,31 +179,46 @@ export function getGatewayByName(
 ): Gateway | undefined {
   const result = db
     .query<Gateway, [string]>(
-      `
-    SELECT * FROM gateways WHERE name = ?
-  `,
+      `SELECT * FROM gateways WHERE name = ?`,
     )
     .get(name);
-  return result ?? undefined;
+  
+  if (result) return result;
+
+  // Fallback: try to load from gateway.json if it exists
+  const paths = getGatewayPaths(name);
+  if (existsSync(paths.config)) {
+      try {
+          const config = JSON.parse(readFileSync(paths.config, "utf-8"));
+          return {
+              id: config.id,
+              name: config.name,
+              description: config.description,
+              provider: config.provider,
+              default_model: config.defaultModel,
+              status: "stopped", // Default if just loading from file
+              // ... fill other fields as needed or leave null
+          } as Gateway;
+      } catch {}
+  }
+
+  return undefined;
 }
 
 /**
  * Update the gateway configuration file with current database state
- * This should be called after any changes to skills, tools, or other gateway settings
  */
 export function updateGatewayConfigFile(db: Database, name: string): void {
   const gateway = getGatewayByName(db, name);
-  if (!gateway) {
-    return;
-  }
+  if (!gateway) return;
 
-  ensureDirectories();
+  const paths = getGatewayPaths(name);
+  ensureDirectories(name);
 
   // Fetch latest skills and tools from SkillsManager
   const skillsManager = getSkillsManager(db);
   const skillsConfig = skillsManager.getGatewaySkillsConfig(gateway.id);
 
-  const gatewayConfigFile = join(GATEWAYS_DIR, `${name}.json`);
   const gatewayConfig = {
     id: gateway.id,
     name: gateway.name,
@@ -161,18 +239,51 @@ export function updateGatewayConfigFile(db: Database, name: string): void {
     createdAt: gateway.created_at,
     updatedAt: gateway.updated_at,
   };
-  writeFileSync(gatewayConfigFile, JSON.stringify(gatewayConfig, null, 2));
+  writeFileSync(paths.config, JSON.stringify(gatewayConfig, null, 2));
 }
 
 // List all gateways
 export function listGateways(db: Database): Gateway[] {
-  return db
-    .query<Gateway, []>(
-      `
-    SELECT * FROM gateways ORDER BY created_at DESC
-  `,
-    )
-    .all();
+  const gateways: Gateway[] = [];
+  
+  // 1. Scan .kendaliai directory for folders
+  if (existsSync(KENDALIAI_DIR)) {
+      const { readdirSync, statSync } = require("fs");
+      const entries = readdirSync(KENDALIAI_DIR);
+      
+      for (const entry of entries) {
+          if (entry === "data" || entry === "logs" || entry === "run" || entry === "gateways" || entry === "skills" || entry.startsWith("kendaliai.db")) continue;
+          
+          const fullPath = join(KENDALIAI_DIR, entry);
+          if (statSync(fullPath).isDirectory()) {
+              const paths = getGatewayPaths(entry);
+              if (existsSync(paths.config)) {
+                  try {
+                      const config = JSON.parse(readFileSync(paths.config, "utf-8"));
+                      gateways.push({
+                          id: config.id,
+                          name: config.name,
+                          provider: config.provider,
+                          default_model: config.defaultModel,
+                          daemon_port: config.daemonPort,
+                          status: "unknown", // Will be checked in handleGatewayCommand
+                      } as Gateway);
+                  } catch {}
+              }
+          }
+      }
+  }
+
+  // If no folders found, fallback to database (backward compatibility)
+  if (gateways.length === 0) {
+      try {
+          return db.query<Gateway, []>(`SELECT * FROM gateways ORDER BY created_at DESC`).all();
+      } catch {
+          return [];
+      }
+  }
+
+  return gateways;
 }
 
 // Create gateway
@@ -196,7 +307,8 @@ export async function createGateway(
     throw new Error(validation.error);
   }
 
-  ensureDirectories();
+  ensureDirectories(name);
+  const paths = getGatewayPaths(name);
 
   const gatewayId = `gw_${randomUUID().slice(0, 8)}`;
   const now = Date.now();
@@ -207,51 +319,8 @@ export async function createGateway(
     throw new Error(`Gateway '${name}' already exists`);
   }
 
-  // Auto-configure OpenAI-compatible providers
-  let apiUrl = options.apiUrl;
-  let model = options.model;
-  const provider = options.provider || "openai";
-
-  const openaiCompatibleProviders: Record<
-    string,
-    { endpoint: string; defaultModel: string }
-  > = {
-    deepseek: {
-      endpoint: "https://api.deepseek.com/v1",
-      defaultModel: "deepseek-chat",
-    },
-    zai: {
-      endpoint: "https://api.z.ai/api/coding/paas/v4",
-      defaultModel: "zai-1",
-    },
-    openrouter: {
-      endpoint: "https://openrouter.ai/api/v1",
-      defaultModel: "openrouter/auto",
-    },
-    together: {
-      endpoint: "https://api.together.xyz/v1",
-      defaultModel: "togethercomputer/CodeLlama-34b-Instruct",
-    },
-    groq: {
-      endpoint: "https://api.groq.com/openai/v1",
-      defaultModel: "llama-3.1-70b-versatile",
-    },
-  };
-
-  if (provider in openaiCompatibleProviders) {
-    const config = openaiCompatibleProviders[provider];
-    if (!apiUrl) apiUrl = config.endpoint;
-    if (!model) model = config.defaultModel;
-  } else {
-    if (!model) {
-      if (provider === "openai") model = "gpt-4o";
-      else if (provider === "anthropic") model = "claude-3-5-sonnet-20241022";
-      else if (provider === "ollama") model = "llama3.2";
-      else model = "default";
-    }
-  }
-
   // Insert new gateway
+  const provider = options.provider || "openai";
   db.run(
     `
     INSERT INTO gateways (
@@ -267,8 +336,8 @@ export async function createGateway(
       name,
       options.description || null,
       provider,
-      apiUrl || null,
-      model,
+      options.apiUrl || null,
+      options.model || "default",
       options.apiKey || null,
       1, // require_pairing
       0, // allow_public_bind
@@ -285,32 +354,35 @@ export async function createGateway(
   );
 
   const gateway = getGatewayByName(db, name);
-  if (!gateway) {
-    throw new Error("Failed to create gateway");
-  }
+  if (!gateway) throw new Error("Failed to create gateway");
 
-  // Save gateway configuration to .kendaliai/gateways/<name>.json
-  const gatewayConfigFile = join(GATEWAYS_DIR, `${name}.json`);
-  const gatewayConfig = {
-    id: gateway.id,
-    name: gateway.name,
-    description: gateway.description,
-    provider: gateway.provider,
-    endpoint: gateway.endpoint,
-    defaultModel: gateway.default_model,
-    requirePairing: !!gateway.require_pairing,
-    allowPublicBind: !!gateway.allow_public_bind,
-    workspaceOnly: !!gateway.workspace_only,
-    agentConfig: gateway.agent_config ? JSON.parse(gateway.agent_config) : null,
-    skills: gateway.skills ? JSON.parse(gateway.skills) : null,
-    tools: gateway.tools ? JSON.parse(gateway.tools) : null,
-    daemonEnabled: !!gateway.daemon_enabled,
-    daemonAutoRestart: !!gateway.daemon_auto_restart,
-    daemonPort: gateway.daemon_port,
-    createdAt: gateway.created_at,
-    updatedAt: gateway.updated_at,
+  // Initialize local gateway database
+  const localDb = new Database(paths.db);
+  await initTables(localDb);
+  
+  // Mirror the gateway entry in the local database
+  localDb.run(`INSERT INTO gateways (id, name, provider, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`, 
+    [gateway.id, gateway.name, gateway.provider, "stopped", now, now]);
+
+  // Write config
+  updateGatewayConfigFile(db, name);
+
+  // Initialize markdown files
+  const templates = {
+    agents: `# Agent Guidelines\nThis workspace is your home. Manage memory and continuity here.\n- Use MEMORY.md for long-term insight.\n- Use memory/YYYY-MM-DD.md for daily context.`,
+    boot: `# Startup Instructions\n- Check for BOOTSTRAP.md for first-run setup.\n- Read IDENTITY.md, SOUL.md, and USER.md on boot.\n- Verify workspace state before acting.`,
+    identity: `Fill this in during your first conversation. Make it yours.\nName: ${name}\nCreature: AI\nVibe: Helpful and Precise\nEmoji: 🤖\nAvatar: `,
+    soul: `# Soul & Principles\n- Be genuinely helpful.\n- Have opinions and be resourceful.\n- Earn trust through competence.`,
+    user: `# User Profile\nName: User\nNotes: Learning projects and preferences...`,
+    tools: `# Environment Tools\nLocal configuration for cameras, SSH hosts, and voice preferences.`,
   };
-  writeFileSync(gatewayConfigFile, JSON.stringify(gatewayConfig, null, 2));
+
+  writeFileSync(paths.agents, templates.agents);
+  writeFileSync(paths.boot, templates.boot);
+  writeFileSync(paths.identity, templates.identity);
+  writeFileSync(paths.soul, templates.soul);
+  writeFileSync(paths.user, templates.user);
+  writeFileSync(paths.tools, templates.tools);
 
   return gateway;
 }
@@ -318,33 +390,26 @@ export async function createGateway(
 // Delete gateway
 export function deleteGateway(db: Database, name: string): void {
   const gateway = getGatewayByName(db, name);
-  if (!gateway) {
-    throw new Error(`Gateway '${name}' not found`);
-  }
+  if (!gateway) throw new Error(`Gateway '${name}' not found`);
+
+  const paths = getGatewayPaths(name);
 
   // Stop daemon if running
   if (gateway.daemon_pid) {
     try {
-      process.kill(gateway.daemon_pid);
-    } catch {
-      // Process might not exist
-    }
+      process.kill(gateway.daemon_pid, "SIGTERM");
+    } catch {}
   }
 
-  // Delete PID, log, and config files
-  const pidFile = join(RUN_DIR, `${name}.pid`);
-  const logFile = join(LOGS_DIR, `${name}.log`);
-  const configFile = join(GATEWAYS_DIR, `${name}.json`);
-
+  // Delete gateway directory and all contents
   try {
-    if (existsSync(pidFile)) unlinkSync(pidFile);
-  } catch {}
-  try {
-    if (existsSync(logFile)) unlinkSync(logFile);
-  } catch {}
-  try {
-    if (existsSync(configFile)) unlinkSync(configFile);
-  } catch {}
+      const fs = require("fs");
+      if (existsSync(paths.base)) {
+          fs.rmSync(paths.base, { recursive: true, force: true });
+      }
+  } catch (err) {
+      console.error(`Warning: Could not delete gateway directory: ${err}`);
+  }
 
   // Delete from database
   db.run(`DELETE FROM gateways WHERE id = ?`, [gateway.id]);
@@ -383,27 +448,21 @@ export async function startGateway(
 
   if (options.daemon) {
     // Start as background daemon
-    const pidFile = join(RUN_DIR, `${name}.pid`);
-    const logFile = join(LOGS_DIR, `${name}.log`);
+    const paths = getGatewayPaths(name);
 
     // Check if already running
     if (gateway.daemon_pid) {
       try {
         process.kill(gateway.daemon_pid, 0);
-        console.log(
-          `Gateway '${name}' is already running (PID: ${gateway.daemon_pid})`,
-        );
+        console.log(`Gateway '${name}' is already running (PID: ${gateway.daemon_pid})`);
         return;
-      } catch {
-        // Process doesn't exist
-      }
+      } catch {}
     }
 
     // Open log file for appending (creates if doesn't exist)
-    const logFd = openSync(logFile, "a");
+    const logFd = openSync(paths.logFile, "a");
 
     // Start the process using Bun.spawn - run the server directly
-    // Redirect stdout and stderr to the log file
     const child = Bun.spawn(
       [
         "bun",
@@ -420,22 +479,17 @@ export async function startGateway(
         stdout: logFd,
         stderr: logFd,
         cwd: process.cwd(),
-        detached: true, // Allow the child to continue running independently
+        detached: true,
       },
     );
 
     // Get PID
     const pid = child.pid;
-    if (!pid) {
-      throw new Error("Failed to get PID of spawned process");
-    }
+    if (!pid) throw new Error("Failed to get PID of spawned process");
 
-    // Save PID
-    writeFileSync(pidFile, pid.toString());
-
-    // Write startup message to log file
-    const startupMsg = `\n[${new Date().toISOString()}] Gateway '${name}' started (PID: ${pid}, Port: ${port})\n`;
-    writeFileSync(logFile, startupMsg, { flag: "a" });
+    // Save PID and update logs
+    writeFileSync(paths.pidFile, pid.toString());
+    writeFileSync(paths.logFile, `\n[${new Date().toISOString()}] Gateway '${name}' started (PID: ${pid}, Port: ${port})\n`, { flag: "a" });
 
     // Update database
     db.run(
@@ -452,10 +506,8 @@ export async function startGateway(
       [pid, port, Date.now(), Date.now(), gateway.id],
     );
 
-    console.log(
-      `🚀 Gateway '${name}' started as daemon (PID: ${child.pid}, Port: ${port})`,
-    );
-    console.log(`   Logs: ${logFile}`);
+    console.log(`🚀 Gateway '${name}' started as daemon (PID: ${child.pid}, Port: ${port})`);
+    console.log(`   Logs: ${paths.logFile}`);
   } else {
     // Start in foreground
     console.log(`Starting gateway '${name}' in foreground...`);
@@ -568,9 +620,9 @@ export function stopGateway(
   }
 
   // Clean up PID file
-  const pidFile = join(RUN_DIR, `${name}.pid`);
+  const paths = getGatewayPaths(name);
   try {
-    if (existsSync(pidFile)) unlinkSync(pidFile);
+    if (existsSync(paths.pidFile)) unlinkSync(paths.pidFile);
   } catch {}
 
   // Update database
@@ -620,21 +672,21 @@ export function getGatewayLogs(
     return;
   }
 
-  const logFile = join(LOGS_DIR, `${name}.log`);
+  const paths = getGatewayPaths(name);
 
-  if (!existsSync(logFile)) {
+  if (!existsSync(paths.logFile)) {
     console.log(`No logs found for gateway '${name}'`);
     return;
   }
 
   if (follow) {
     // Follow mode - watch the file
-    let position = statSync(logFile).size;
+    let position = statSync(paths.logFile).size;
 
     const watcher = setInterval(() => {
-      const stats = statSync(logFile);
+      const stats = statSync(paths.logFile);
       if (stats.size > position) {
-        const stream = require("fs").createReadStream(logFile, {
+        const stream = require("fs").createReadStream(paths.logFile, {
           start: position,
         });
         stream.on("data", (chunk: Buffer) => {
@@ -650,7 +702,7 @@ export function getGatewayLogs(
     });
   } else {
     // Show last N lines
-    const content = readFileSync(logFile, "utf-8");
+    const content = readFileSync(paths.logFile, "utf-8");
     const allLines = content.split("\n");
     const lastLines = allLines.slice(-lines);
     console.log(lastLines.join("\n"));
