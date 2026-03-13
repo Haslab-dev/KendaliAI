@@ -580,6 +580,53 @@ function registerBuiltinTools(db?: any) {
       return Math.floor(Math.random() * (max - min + 1)) + min;
     },
   });
+
+  // Shell tool
+  toolRegistry.register({
+    name: "shell",
+    description: "Executes a shell command",
+    parameters: {
+      type: "object",
+      properties: {
+        command: { type: "string", description: "The command to execute" },
+      },
+      required: ["command"],
+    },
+    handler: async (params: { command: string }) => {
+      const { execSync } = require("child_process");
+      try {
+        log.info(`Executing shell command: ${params.command}`);
+        const output = execSync(params.command, { encoding: "utf8", timeout: 30000 });
+        return output;
+      } catch (err: any) {
+        return `Error: ${err.message}\n${err.stderr || ""}`;
+      }
+    },
+  });
+
+  // File tool
+  toolRegistry.register({
+    name: "read_file",
+    description: "Reads a file from the filesystem",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Path to the file" },
+      },
+      required: ["path"],
+    },
+    handler: async (params: { path: string }) => {
+      const { readFileSync, existsSync } = require("fs");
+      try {
+        if (!existsSync(params.path)) {
+          return `Error: File not found at ${params.path}`;
+        }
+        return readFileSync(params.path, "utf8");
+      } catch (err: any) {
+        return `Error: ${err.message}`;
+      }
+    },
+  });
 }
 
 /**

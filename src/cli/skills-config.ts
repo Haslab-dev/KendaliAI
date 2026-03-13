@@ -1,6 +1,6 @@
 /**
  * KendaliAI Skills & Tools CLI Module
- * 
+ *
  * CLI commands for managing skills and tools:
  * - skills list
  * - skills install <source>
@@ -33,6 +33,7 @@ import {
   type InstalledSkill,
   type SkillSource,
 } from "../server/skills/registry";
+import { updateGatewayConfigFile } from "./gateway";
 
 // ============================================
 // Helper Functions
@@ -116,29 +117,42 @@ EXAMPLES:
 export async function handleSkillsCommand(
   db: Database,
   subCommand: string,
-  args: string[]
+  args: string[],
+  options: Record<string, any> = {},
 ): Promise<void> {
   const skillsManager = getSkillsManager(db);
   const skillRegistry = getSkillRegistry(db);
 
   switch (subCommand) {
     case "list": {
-      console.log("\n╔══════════════════════════════════════════════════════════════════════════╗");
-      console.log("║                        Available Skills                                   ║");
-      console.log("╠══════════════════════════════════════════════════════════════════════════╣");
+      console.log(
+        "\n╔══════════════════════════════════════════════════════════════════════════╗",
+      );
+      console.log(
+        "║                        Available Skills                                   ║",
+      );
+      console.log(
+        "╠══════════════════════════════════════════════════════════════════════════╣",
+      );
 
       const skills = skillsManager.listAvailableSkills();
 
       if (skills.length === 0) {
-        console.log("║ No skills available                                                      ║");
+        console.log(
+          "║ No skills available                                                      ║",
+        );
       } else {
         for (const skill of skills) {
           const builtin = skill.builtin ? "[builtin]" : "[custom]";
-          console.log(`║ ${skill.name.padEnd(20)} ${builtin.padEnd(10)} ${skill.description.slice(0, 35).padEnd(35)} ║`);
+          console.log(
+            `║ ${skill.name.padEnd(20)} ${builtin.padEnd(10)} ${skill.description.slice(0, 35).padEnd(35)} ║`,
+          );
         }
       }
 
-      console.log("╚══════════════════════════════════════════════════════════════════════════╝");
+      console.log(
+        "╚══════════════════════════════════════════════════════════════════════════╝",
+      );
       console.log(`\nTotal: ${skills.length} skill(s)`);
       break;
     }
@@ -157,18 +171,28 @@ export async function handleSkillsCommand(
         return;
       }
 
-      console.log("\n╔══════════════════════════════════════════════════════════════════════════╗");
-      console.log("║                        Installed Skills                                   ║");
-      console.log("╠══════════════════════════════════════════════════════════════════════════╣");
+      console.log(
+        "\n╔══════════════════════════════════════════════════════════════════════════╗",
+      );
+      console.log(
+        "║                        Installed Skills                                   ║",
+      );
+      console.log(
+        "╠══════════════════════════════════════════════════════════════════════════╣",
+      );
 
       for (const skill of installed) {
         const status = skill.enabled ? "●" : "○";
         const source = skill.source.padEnd(10);
         const version = `v${skill.version}`.padEnd(10);
-        console.log(`║ ${status} ${skill.name.padEnd(18)} ${source} ${version} ${skill.description.slice(0, 25).padEnd(25)} ║`);
+        console.log(
+          `║ ${status} ${skill.name.padEnd(18)} ${source} ${version} ${skill.description.slice(0, 25).padEnd(25)} ║`,
+        );
       }
 
-      console.log("╚══════════════════════════════════════════════════════════════════════════╝");
+      console.log(
+        "╚══════════════════════════════════════════════════════════════════════════╝",
+      );
       console.log(`\nTotal: ${installed.length} skill(s) installed`);
       break;
     }
@@ -177,24 +201,65 @@ export async function handleSkillsCommand(
       const source = args[0];
       if (!source) {
         console.error("❌ Error: Skill source required");
-        console.log("Usage: kendaliai skills install <source>");
+        console.log("Usage: kendaliai skills install <source> [--force] [--gateway <name>]");
         console.log("\nSources:");
         console.log("  namespace/name            ZeroMarket registry");
         console.log("  clawhub:name              ClawHub");
         console.log("  https://github.com/...    Git remote");
         console.log("  ~/path/to/skill.zip       Local zip");
         console.log("  zip:https://.../skill.zip Direct zip URL");
+        console.log("  .kendaliai/skills/name    Local directory");
         return;
+      }
+
+      // Parse options
+      const force = options.force || args.includes("--force") || args.includes("-f");
+      
+      // Gateway option
+      let gatewayName = options.gateway;
+      if (!gatewayName) {
+        const gatewayIdx = args.indexOf("--gateway") !== -1 ? args.indexOf("--gateway") : args.indexOf("-g");
+        if (gatewayIdx !== -1 && args[gatewayIdx + 1] && !args[gatewayIdx + 1].startsWith("-")) {
+          gatewayName = args[gatewayIdx + 1];
+        }
       }
 
       try {
         console.log(`\n📥 Installing skill from: ${source}`);
-        const skill = await skillRegistry.install(source, { enable: true });
-        console.log(`\n✅ Successfully installed: ${skill.name} v${skill.version}`);
+        const skill = await skillRegistry.install(source, {
+          enable: true,
+          force,
+        });
+        console.log(
+          `\n✅ Successfully installed: ${skill.name} v${skill.version}`,
+        );
         console.log(`   Source: ${skill.source}`);
         console.log(`   Path: ${skill.path}`);
         if (skill.description) {
           console.log(`   Description: ${skill.description}`);
+        }
+
+        // Auto-enable for gateway if requested
+        if (gatewayName) {
+          console.log(`\n🔄 Binding skill to gateway: ${gatewayName}...`);
+          // Get gateway ID
+          const gateway = db
+            .query<{ id: string }, [string]>(
+              `SELECT id FROM gateways WHERE name = ?`,
+            )
+            .get(gatewayName);
+
+          if (!gateway) {
+            console.error(`❌ Error: Gateway '${gatewayName}' not found. Skill installed globally but not bound.`);
+          } else {
+            try {
+              skillsManager.enableSkill(gateway.id, skill.name);
+              updateGatewayConfigFile(db, gatewayName);
+              console.log(`✅ Skill '${skill.name}' enabled for gateway '${gatewayName}'`);
+            } catch (enableError) {
+              console.error(`❌ Failed to enable skill for gateway: ${enableError}`);
+            }
+          }
         }
       } catch (error) {
         console.error(`❌ Failed to install skill: ${error}`);
@@ -236,7 +301,9 @@ export async function handleSkillsCommand(
         if (result.permissions.length > 0) {
           console.log("\n🔐 Permissions requested:");
           for (const perm of result.permissions) {
-            console.log(`   - ${perm.type}:${perm.access}${perm.target ? ` (${perm.target})` : ""}`);
+            console.log(
+              `   - ${perm.type}:${perm.access}${perm.target ? ` (${perm.target})` : ""}`,
+            );
           }
         }
 
@@ -285,7 +352,9 @@ export async function handleSkillsCommand(
         console.log("\nNext steps:");
         console.log("   1. Edit SKILL.toml to configure your skill");
         console.log("   2. Implement your skill in src/index.ts");
-        console.log("   3. Test with: kendaliai skills install ~/path/to/skill");
+        console.log(
+          "   3. Test with: kendaliai skills install ~/path/to/skill",
+        );
       } catch (error) {
         console.error(`❌ Failed to create skill scaffold: ${error}`);
       }
@@ -301,9 +370,13 @@ export async function handleSkillsCommand(
       }
 
       // Get gateway ID
-      const gateway = db.query<{ id: string }, [string]>(`
+      const gateway = db
+        .query<{ id: string }, [string]>(
+          `
         SELECT id FROM gateways WHERE name = ?
-      `).get(gatewayName);
+      `,
+        )
+        .get(gatewayName);
 
       if (!gateway) {
         console.error(`❌ Gateway '${gatewayName}' not found`);
@@ -342,9 +415,13 @@ export async function handleSkillsCommand(
       }
 
       // Get gateway ID
-      const gateway = db.query<{ id: string }, [string]>(`
+      const gateway = db
+        .query<{ id: string }, [string]>(
+          `
         SELECT id FROM gateways WHERE name = ?
-      `).get(gatewayName);
+      `,
+        )
+        .get(gatewayName);
 
       if (!gateway) {
         console.error(`❌ Gateway '${gatewayName}' not found`);
@@ -353,7 +430,11 @@ export async function handleSkillsCommand(
 
       try {
         skillsManager.enableSkill(gateway.id, skillName);
-        console.log(`✅ Enabled skill '${skillName}' for gateway '${gatewayName}'`);
+        // Update the gateway config file to reflect the change
+        updateGatewayConfigFile(db, gatewayName);
+        console.log(
+          `✅ Enabled skill '${skillName}' for gateway '${gatewayName}'`,
+        );
       } catch (error) {
         console.error(`❌ Failed to enable skill: ${error}`);
       }
@@ -371,9 +452,13 @@ export async function handleSkillsCommand(
       }
 
       // Get gateway ID
-      const gateway = db.query<{ id: string }, [string]>(`
+      const gateway = db
+        .query<{ id: string }, [string]>(
+          `
         SELECT id FROM gateways WHERE name = ?
-      `).get(gatewayName);
+      `,
+        )
+        .get(gatewayName);
 
       if (!gateway) {
         console.error(`❌ Gateway '${gatewayName}' not found`);
@@ -382,7 +467,11 @@ export async function handleSkillsCommand(
 
       const success = skillsManager.disableSkill(gateway.id, skillName);
       if (success) {
-        console.log(`✅ Disabled skill '${skillName}' for gateway '${gatewayName}'`);
+        // Update the gateway config file to reflect the change
+        updateGatewayConfigFile(db, gatewayName);
+        console.log(
+          `✅ Disabled skill '${skillName}' for gateway '${gatewayName}'`,
+        );
       } else {
         console.error(`❌ Failed to disable skill`);
       }
@@ -393,7 +482,7 @@ export async function handleSkillsCommand(
     case "--help":
     case "-h":
       printSkillsHelp();
-      break
+      break;
 
     default:
       console.error(`Unknown skills command: ${subCommand}`);
@@ -408,28 +497,41 @@ export async function handleSkillsCommand(
 export async function handleToolsCommand(
   db: Database,
   subCommand: string,
-  args: string[]
+  args: string[],
+  options: Record<string, any> = {},
 ): Promise<void> {
   const skillsManager = getSkillsManager(db);
 
   switch (subCommand) {
     case "list": {
-      console.log("\n╔══════════════════════════════════════════════════════════════════════════╗");
-      console.log("║                        Available Tools                                    ║");
-      console.log("╠══════════════════════════════════════════════════════════════════════════╣");
+      console.log(
+        "\n╔══════════════════════════════════════════════════════════════════════════╗",
+      );
+      console.log(
+        "║                        Available Tools                                    ║",
+      );
+      console.log(
+        "╠══════════════════════════════════════════════════════════════════════════╣",
+      );
 
       const tools = skillsManager.listAvailableTools();
 
       if (tools.length === 0) {
-        console.log("║ No tools available                                                       ║");
+        console.log(
+          "║ No tools available                                                       ║",
+        );
       } else {
         for (const tool of tools) {
           const risk = `[${tool.riskLevel}]`.padEnd(10);
-          console.log(`║ ${tool.name.padEnd(20)} ${risk} ${tool.description.slice(0, 35).padEnd(35)} ║`);
+          console.log(
+            `║ ${tool.name.padEnd(20)} ${risk} ${tool.description.slice(0, 35).padEnd(35)} ║`,
+          );
         }
       }
 
-      console.log("╚══════════════════════════════════════════════════════════════════════════╝");
+      console.log(
+        "╚══════════════════════════════════════════════════════════════════════════╝",
+      );
       console.log(`\nTotal: ${tools.length} tool(s)`);
       break;
     }
@@ -443,9 +545,13 @@ export async function handleToolsCommand(
       }
 
       // Get gateway ID
-      const gateway = db.query<{ id: string }, [string]>(`
+      const gateway = db
+        .query<{ id: string }, [string]>(
+          `
         SELECT id FROM gateways WHERE name = ?
-      `).get(gatewayName);
+      `,
+        )
+        .get(gatewayName);
 
       if (!gateway) {
         console.error(`❌ Gateway '${gatewayName}' not found`);
@@ -490,9 +596,13 @@ export async function handleToolsCommand(
       }
 
       // Get gateway ID
-      const gateway = db.query<{ id: string }, [string]>(`
+      const gateway = db
+        .query<{ id: string }, [string]>(
+          `
         SELECT id FROM gateways WHERE name = ?
-      `).get(gatewayName);
+      `,
+        )
+        .get(gatewayName);
 
       if (!gateway) {
         console.error(`❌ Gateway '${gatewayName}' not found`);
@@ -501,7 +611,11 @@ export async function handleToolsCommand(
 
       try {
         skillsManager.enableTool(gateway.id, toolName);
-        console.log(`✅ Enabled tool '${toolName}' for gateway '${gatewayName}'`);
+        // Update the gateway config file to reflect the change
+        updateGatewayConfigFile(db, gatewayName);
+        console.log(
+          `✅ Enabled tool '${toolName}' for gateway '${gatewayName}'`,
+        );
       } catch (error) {
         console.error(`❌ Failed to enable tool: ${error}`);
       }
@@ -519,9 +633,13 @@ export async function handleToolsCommand(
       }
 
       // Get gateway ID
-      const gateway = db.query<{ id: string }, [string]>(`
+      const gateway = db
+        .query<{ id: string }, [string]>(
+          `
         SELECT id FROM gateways WHERE name = ?
-      `).get(gatewayName);
+      `,
+        )
+        .get(gatewayName);
 
       if (!gateway) {
         console.error(`❌ Gateway '${gatewayName}' not found`);
@@ -530,7 +648,11 @@ export async function handleToolsCommand(
 
       const success = skillsManager.disableTool(gateway.id, toolName);
       if (success) {
-        console.log(`✅ Disabled tool '${toolName}' for gateway '${gatewayName}'`);
+        // Update the gateway config file to reflect the change
+        updateGatewayConfigFile(db, gatewayName);
+        console.log(
+          `✅ Disabled tool '${toolName}' for gateway '${gatewayName}'`,
+        );
       } else {
         console.error(`❌ Failed to disable tool`);
       }
@@ -556,7 +678,8 @@ export async function handleToolsCommand(
 export async function handleSecurityCommand(
   db: Database,
   subCommand: string,
-  args: string[]
+  args: string[],
+  options: Record<string, any> = {},
 ): Promise<void> {
   const skillsManager = getSkillsManager(db);
 
@@ -570,9 +693,13 @@ export async function handleSecurityCommand(
       }
 
       // Get gateway ID
-      const gateway = db.query<{ id: string }, [string]>(`
+      const gateway = db
+        .query<{ id: string }, [string]>(
+          `
         SELECT id FROM gateways WHERE name = ?
-      `).get(gatewayName);
+      `,
+        )
+        .get(gatewayName);
 
       if (!gateway) {
         console.error(`❌ Gateway '${gatewayName}' not found`);
@@ -590,26 +717,35 @@ export async function handleSecurityCommand(
       console.log(`  maxMemoryMB        - ${policy.maxMemoryMB}MB`);
       console.log(`  networkEnabled     - ${policy.networkEnabled}`);
       console.log(`\n  Allowed Roots:`);
-      policy.allowedRoots.forEach(d => console.log(`    - ${d}`));
+      policy.allowedRoots.forEach((d) => console.log(`    - ${d}`));
       console.log(`\n  Forbidden Paths:`);
-      policy.forbiddenPaths.forEach(p => console.log(`    - ${p}`));
+      policy.forbiddenPaths.forEach((p) => console.log(`    - ${p}`));
       console.log(`\n  Allowed Commands:`);
-      policy.allowedCommands.forEach(c => console.log(`    - ${c}`));
+      policy.allowedCommands.forEach((c) => console.log(`    - ${c}`));
       console.log(`\n  Forbidden Commands:`);
-      policy.forbiddenCommands.forEach(c => console.log(`    - ${c}`));
+      policy.forbiddenCommands.forEach((c) => console.log(`    - ${c}`));
       console.log(`\n  Allowed Domains:`);
-      policy.allowedDomains.forEach(d => console.log(`    - ${d}`));
+      policy.allowedDomains.forEach((d) => console.log(`    - ${d}`));
       break;
     }
 
     case "update": {
       const gatewayName = args[0];
       const key = args[1];
-      const value = args[2];
+      let op = args[2];
+      let value = args[3];
+
+      // If op is not add/remove, assume it's the value (old pattern)
+      if (op !== "add" && op !== "remove") {
+        value = args[2];
+        op = "set";
+      }
 
       if (!gatewayName || !key || !value) {
         console.error("❌ Error: Gateway name, key, and value required");
-        console.log("Usage: kendaliai security update <gateway-name> <key> <value>");
+        console.log(
+          "Usage: kendaliai security update <gateway-name> <key> <add|remove|set> <value>",
+        );
         console.log("\nAvailable keys:");
         console.log("  workspaceOnly      - true/false");
         console.log("  sandboxEnabled     - true/false");
@@ -617,36 +753,75 @@ export async function handleSecurityCommand(
         console.log("  maxExecutionTime   - milliseconds");
         console.log("  maxMemoryMB        - megabytes");
         console.log("  networkEnabled     - true/false");
+        console.log("  allowedCommands    - list");
+        console.log("  forbiddenCommands  - list");
+        console.log("  allowedRoots       - list");
+        console.log("  forbiddenPaths     - list");
+        console.log("  allowedDomains     - list");
         return;
       }
 
       // Get gateway ID
-      const gateway = db.query<{ id: string }, [string]>(`
+      const gateway = db
+        .query<{ id: string }, [string]>(
+          `
         SELECT id FROM gateways WHERE name = ?
-      `).get(gatewayName);
+      `,
+        )
+        .get(gatewayName);
 
       if (!gateway) {
         console.error(`❌ Gateway '${gatewayName}' not found`);
         return;
       }
 
+      const currentConfig = skillsManager.getGatewaySkillsConfig(gateway.id);
+      const currentPolicy =
+        currentConfig?.securityPolicy || DEFAULT_SECURITY_POLICY;
+
       // Parse value based on key
-      let parsedValue: unknown;
-      if (["workspaceOnly", "sandboxEnabled", "networkEnabled"].includes(key)) {
-        parsedValue = value === "true";
+      let patch: Partial<SecurityPolicy> = {};
+      const listKeys = [
+        "allowedCommands",
+        "forbiddenCommands",
+        "allowedRoots",
+        "forbiddenPaths",
+        "allowedDomains",
+      ];
+
+      if (listKeys.includes(key)) {
+        const list = (currentPolicy as any)[key] as string[];
+        if (op === "remove") {
+          patch = { [key]: list.filter((item) => item !== value) };
+        } else if (op === "add") {
+          if (!list.includes(value)) {
+            patch = { [key]: [...list, value] };
+          } else {
+            console.log(`ℹ️  Value already exists in ${key}`);
+            break;
+          }
+        } else {
+          // 'set' or implicit
+          patch = { [key]: [value] };
+        }
+      } else if (
+        ["workspaceOnly", "sandboxEnabled", "networkEnabled"].includes(key)
+      ) {
+        patch = { [key]: value === "true" };
       } else if (["maxExecutionTime", "maxMemoryMB"].includes(key)) {
-        parsedValue = parseInt(value);
+        patch = { [key]: parseInt(value) };
       } else {
-        parsedValue = value;
+        patch = { [key]: value };
       }
 
-      const newPolicy = skillsManager.updateSecurityPolicy(gateway.id, {
-        [key]: parsedValue,
-      });
+      const newPolicy = skillsManager.updateSecurityPolicy(gateway.id, patch);
 
       if (newPolicy) {
+        updateGatewayConfigFile(db, gatewayName);
         console.log(`✅ Updated security policy for '${gatewayName}'`);
-        console.log(`   ${key} = ${parsedValue}`);
+        console.log(
+          `   ${key} = ${JSON.stringify(patch[key as keyof Partial<SecurityPolicy>])}`,
+        );
       } else {
         console.error(`❌ Failed to update security policy`);
       }
@@ -662,18 +837,28 @@ export async function handleSecurityCommand(
       }
 
       // Get gateway ID
-      const gateway = db.query<{ id: string }, [string]>(`
+      const gateway = db
+        .query<{ id: string }, [string]>(
+          `
         SELECT id FROM gateways WHERE name = ?
-      `).get(gatewayName);
+      `,
+        )
+        .get(gatewayName);
 
       if (!gateway) {
         console.error(`❌ Gateway '${gatewayName}' not found`);
         return;
       }
 
-      const newPolicy = skillsManager.updateSecurityPolicy(gateway.id, DEFAULT_SECURITY_POLICY);
+      const newPolicy = skillsManager.updateSecurityPolicy(
+        gateway.id,
+        DEFAULT_SECURITY_POLICY,
+      );
       if (newPolicy) {
-        console.log(`✅ Reset security policy for '${gatewayName}' to defaults`);
+        updateGatewayConfigFile(db, gatewayName);
+        console.log(
+          `✅ Reset security policy for '${gatewayName}' to defaults`,
+        );
       } else {
         console.error(`❌ Failed to reset security policy`);
       }

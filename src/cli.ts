@@ -278,12 +278,18 @@ ROUTING MANAGEMENT:
   routing set-prefix <gw> <prefix> Set prefix for prefix routing
   routing set-keywords <gw> <kw>   Set keywords for keyword routing
 
-SKILLS MANAGEMENT:
+SKILLS & TOOLS MANAGEMENT:
   skills list                List installed skills
   skills install <source>   Install a skill
-  skills audit <name>       Audit a skill for security
+  skills show <gateway>     Show skills for a gateway
+  skills enable <gw> <sk>   Enable a skill for a gateway
+  skills disable <gw> <sk>  Disable a skill for a gateway
   skills new <name>         Scaffold a new skill
-  skills remove <name>      Remove a skill
+  tools list                 List available tools
+  tools enable <gw> <tool>  Enable a tool for a gateway
+  tools disable <gw> <tool> Disable a tool for a gateway
+  security show <gateway>   Show security policy
+  security update <gw> <k> <v> Update security policy
 
 RAG (Retrieval-Augmented Generation):
   rag ingest <source>       Ingest a document (file, URL, or text)
@@ -790,6 +796,7 @@ async function handleGateway(): Promise<void> {
 
 async function handleAgent(): Promise<void> {
   const message = getString("message", "");
+  const gatewayName = getString("gateway", "");
   const dbPath = getString("db-path", ".kendaliai/data/kendaliai.db");
   
   if (!message) {
@@ -798,31 +805,79 @@ async function handleAgent(): Promise<void> {
     return;
   }
   
-  console.log(`💬 Sending message: ${message}\n`);
-  
   // Initialize database
   const database = getDb(dbPath);
   
   // Get gateway with full config
-  const gateway = database.query<{ 
-    id: string; 
-    provider: string; 
-    default_model: string; 
-    endpoint: string | null;
-    api_key_encrypted: string | null;
-  }, []>(`
-    SELECT id, provider, default_model, endpoint, api_key_encrypted FROM gateways LIMIT 1
-  `).get();
+  let gateway;
+  if (gatewayName) {
+    gateway = database.query<{ 
+      id: string; 
+      name: string;
+      provider: string; 
+      default_model: string; 
+      endpoint: string | null;
+      api_key_encrypted: string | null;
+    }, [string]>(`
+      SELECT id, name, provider, default_model, endpoint, api_key_encrypted 
+      FROM gateways 
+      WHERE name = ?
+    `).get(gatewayName);
+  } else {
+    gateway = database.query<{ 
+      id: string; 
+      name: string;
+      provider: string; 
+      default_model: string; 
+      endpoint: string | null;
+      api_key_encrypted: string | null;
+    }, []>(`
+      SELECT id, name, provider, default_model, endpoint, api_key_encrypted 
+      FROM gateways 
+      LIMIT 1
+    `).get();
+  }
   
   if (!gateway) {
-    console.error("❌ No gateway found. Run 'kendaliai onboard' first.");
+    console.error(gatewayName ? `❌ Gateway '${gatewayName}' not found.` : "❌ No gateway found. Run 'kendaliai onboard' first.");
     return;
   }
   
   if (!gateway.api_key_encrypted) {
-    console.error("❌ No API key configured. Run 'kendaliai onboard' first.");
+    console.error(`❌ No API key configured for gateway '${gateway.name}'.`);
     return;
   }
+
+  // Get skills context
+  const { getSkillsManager } = await import("./server/skills");
+  const skillsManager = getSkillsManager(database);
+  const enabledSkills = skillsManager.getEnabledSkills(gateway.id);
+  const enabledTools = skillsManager.getEnabledTools(gateway.id);
+
+  let systemPrompt = "You are KendaliAI, a powerful AI orchestrator.\n";
+  if (enabledSkills.length > 0) {
+    console.log(`⚡ Equipped Skills: ${enabledSkills.map(s => s.name).join(", ")}`);
+    systemPrompt += "\nYou have the following skills available:\n";
+    enabledSkills.forEach(s => {
+      systemPrompt += `- ${s.name}: ${s.description}\n`;
+      if (s.config) {
+        systemPrompt += `  Config: ${JSON.stringify(s.config)}\n`;
+      }
+    });
+    systemPrompt += "\nWhen you use a skill or tool, please starting your response with '[ACTION: <name>]' immediately followed by a code block containing the command.\n";
+    systemPrompt += "Example:\n[ACTION: shell]\n```bash\nls -la\n```\n";
+  }
+  if (enabledTools.length > 0) {
+    console.log(`🛠️  Equipped Tools: ${enabledTools.map(t => t.name).join(", ")}`);
+    systemPrompt += "\nYou have the following tools available:\n";
+    enabledTools.forEach(t => {
+      systemPrompt += `- ${t.name}: ${t.riskLevel} risk level\n`;
+    });
+  }
+
+  console.log(""); // Spacing
+  console.log(`💬 Gateway: ${gateway.name} (${gateway.provider})`);
+  console.log(`💬 Message: ${message}\n`);
   
   // Decrypt API key
   let apiKey: string;
@@ -836,7 +891,6 @@ async function handleAgent(): Promise<void> {
   // Determine API endpoint based on provider
   let apiUrl = gateway.endpoint;
   if (!apiUrl) {
-    // Default endpoints for known providers
     const defaultEndpoints: Record<string, string> = {
       openai: "https://api.openai.com/v1",
       deepseek: "https://api.deepseek.com/v1",
@@ -846,51 +900,47 @@ async function handleAgent(): Promise<void> {
     };
     apiUrl = defaultEndpoints[gateway.provider] || "https://api.openai.com/v1";
   }
-  
-  console.log(`🔄 Calling ${gateway.provider} (${gateway.default_model})...`);
-  
+
+  // Load Autonomous Pipeline components
+  const { autonomousPipeline } = await import("./executors");
+  const { createRAGEngine } = await import("./server/rag/engine");
+  const { Retriever } = await import("./rag/retriever");
+  const { createProvider } = await import("./server/providers/registry");
+
   try {
-    // Make OpenAI-compatible API request
-    const response = await fetch(`${apiUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: gateway.default_model,
-        messages: [
-          { role: "user", content: message }
-        ],
-        stream: false,
-      }),
+    console.log(`\n🔍 Initializing AI Engine...`);
+    
+    // 1. Initialize Provider
+    const provider = await createProvider(gateway.name, gateway.provider as any, {
+      type: gateway.provider as any,
+      apiKey,
+      baseURL: apiUrl || undefined,
     });
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`\n❌ API Error (${response.status}): ${errorText}`);
-      return;
-    }
-    
-    const data = await response.json() as {
-      choices?: Array<{ message?: { content?: string } }>;
-      error?: { message?: string };
-    };
-    
-    if (data.error) {
-      console.error(`\n❌ API Error: ${data.error.message}`);
-      return;
-    }
-    
-    const content = data.choices?.[0]?.message?.content;
-    if (content) {
-      console.log(`\n🤖 Response:\n`);
-      console.log(content);
-    } else {
-      console.error("\n❌ No response content received");
-    }
-  } catch (error) {
-    console.error(`\n❌ Request failed: ${error}`);
+
+    // 2. Initialize RAG Engine
+    const ragEngine = await createRAGEngine(database);
+    const retriever = new Retriever(ragEngine);
+    const embedder = { embed: (text: string) => ragEngine.embedText(text) };
+
+    console.log(`🔄 Routing request through autonomous pipeline...\n`);
+
+    // 3. Execute Pipeline
+    const result = await autonomousPipeline(message, {
+      provider,
+      db: database,
+      gatewayId: gateway.id,
+      model: gateway.default_model,
+      embedder,
+      retriever,
+      agentSystemPrompt: systemPrompt
+    });
+
+    console.log(`\n✅ Processed as: ${result.intent.toUpperCase()}`);
+    console.log(`🤖 Final Response:\n`);
+    console.log(result.response);
+
+  } catch (error: any) {
+    console.error(`\n❌ Pipeline Error: ${error.message}`);
   }
 }
 
@@ -1927,10 +1977,29 @@ async function main(): Promise<void> {
     }
     case "skills": {
       // Skills management
-      const subArgs = positionals.slice(1);
+      const subCommand = positionals[1];
+      const subArgs = positionals.slice(2);
       const database = getDb(getString("db-path", ".kendaliai/data/kendaliai.db"));
-      const { handleSkillsCommand } = await import("./cli/skills");
-      await handleSkillsCommand(database, subArgs);
+      const { handleSkillsCommand } = await import("./cli/skills-config");
+      await handleSkillsCommand(database, subCommand || "list", subArgs, values);
+      break;
+    }
+    case "tools": {
+      // Tools management
+      const subCommand = positionals[1];
+      const subArgs = positionals.slice(2);
+      const database = getDb(getString("db-path", ".kendaliai/data/kendaliai.db"));
+      const { handleToolsCommand } = await import("./cli/skills-config");
+      await handleToolsCommand(database, subCommand || "list", subArgs, values);
+      break;
+    }
+    case "security": {
+      // Security management
+      const subCommand = positionals[1];
+      const subArgs = positionals.slice(2);
+      const database = getDb(getString("db-path", ".kendaliai/data/kendaliai.db"));
+      const { handleSecurityCommand } = await import("./cli/skills-config");
+      await handleSecurityCommand(database, subCommand || "show", subArgs, values);
       break;
     }
     case "status":

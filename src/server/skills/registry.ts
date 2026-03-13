@@ -1,19 +1,28 @@
 /**
  * KendaliAI Skill Registry & Installation System
- * 
+ *
  * Supports installing skills from various sources:
  * - ZeroMarket registry
  * - ClawHub
  * - Git remote
  * - Local zip
  * - Direct zip URL
- * 
+ *
  * Skills can include WASM modules for sandboxed execution.
  */
 
 import { Database } from "bun:sqlite";
 import { randomUUID } from "crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, rmSync, statSync, readdirSync } from "fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+  unlinkSync,
+  rmSync,
+  statSync,
+  readdirSync,
+} from "fs";
 import { join, basename, dirname } from "path";
 import { spawn } from "child_process";
 
@@ -21,7 +30,13 @@ import { spawn } from "child_process";
 // Types
 // ============================================
 
-export type SkillSource = "zeromarket" | "clawhub" | "git" | "local" | "url" | "directory";
+export type SkillSource =
+  | "zeromarket"
+  | "clawhub"
+  | "git"
+  | "local"
+  | "url"
+  | "directory";
 export type SkillFormat = "toml" | "wasm" | "zip";
 
 export interface SkillManifest {
@@ -33,26 +48,26 @@ export interface SkillManifest {
   repository?: string;
   homepage?: string;
   keywords?: string[];
-  
+
   // Dependencies
   dependencies?: string[];
   runtime?: "node" | "bun" | "wasm" | "python";
-  
+
   // Permissions
   permissions?: SkillPermission[];
-  
+
   // Tools provided
   tools?: SkillTool[];
-  
+
   // Configuration schema
   configSchema?: Record<string, unknown>;
   defaultConfig?: Record<string, unknown>;
-  
+
   // Entry points
   main?: string;
   wasmModule?: string;
   pythonModule?: string;
-  
+
   // Metadata
   installedFrom?: string;
   installedAt?: number;
@@ -123,7 +138,11 @@ export class SkillRegistry {
   /**
    * Parse skill source from URL or identifier
    */
-  parseSource(source: string): { type: SkillSource; url: string; name: string } {
+  parseSource(source: string): {
+    type: SkillSource;
+    url: string;
+    name: string;
+  } {
     // ZeroMarket registry: namespace/name
     if (/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+$/.test(source)) {
       return {
@@ -143,11 +162,17 @@ export class SkillRegistry {
       };
     }
 
-    // Local zip file
-    if (source.startsWith("~/") && source.endsWith(".zip")) {
+    // Local path with tilde (e.g., ~/path/to/skill)
+    if (source.startsWith("~/")) {
       const expanded = source.replace("~", process.env.HOME || "");
-      const name = basename(source, ".zip");
-      return { type: "local", url: expanded, name };
+      if (existsSync(expanded)) {
+        const isDir = statSync(expanded).isDirectory();
+        if (isDir) {
+          return { type: "directory", url: expanded, name: basename(expanded) };
+        } else if (expanded.endsWith(".zip")) {
+          return { type: "local", url: expanded, name: basename(expanded, ".zip") };
+        }
+      }
     }
 
     // Direct zip URL prefix
@@ -170,10 +195,19 @@ export class SkillRegistry {
       return { type: "git", url: source, name };
     }
 
-    // Local directory (absolute or relative)
-    if (source.startsWith("/") || source.startsWith("./") || source.startsWith("../")) {
-      const name = basename(source);
-      return { type: "directory", url: source, name };
+    // Local directory (absolute or relative paths including .kendaliai/...)
+    if (
+      source.startsWith("/") ||
+      source.startsWith("./") ||
+      source.startsWith("../") ||
+      source.startsWith(".kendaliai/") ||
+      existsSync(source)
+    ) {
+      const expanded = source.startsWith("/") ? source : join(process.cwd(), source);
+      if (existsSync(expanded) && statSync(expanded).isDirectory()) {
+        const name = basename(source);
+        return { type: "directory", url: expanded, name };
+      }
     }
 
     throw new Error(`Unknown skill source format: ${source}`);
@@ -184,21 +218,23 @@ export class SkillRegistry {
    */
   async install(
     source: string,
-    options: SkillInstallOptions = {}
+    options: SkillInstallOptions = {},
   ): Promise<InstalledSkill> {
     const { type, url, name } = this.parseSource(source);
 
     // Check if already installed
     const existing = this.getInstalledSkill(name);
     if (existing && !options.force) {
-      throw new Error(`Skill '${name}' already installed. Use --force to reinstall.`);
+      throw new Error(
+        `Skill '${name}' already installed. Use --force to reinstall.`,
+      );
     }
 
     const skillPath = join(this.skillsDir, name);
 
     // Remove existing if force, but ONLY if they are not the same path
     if (existing && options.force) {
-      if (existing.path !== url || type !== 'directory') {
+      if (existing.path !== url || type !== "directory") {
         await this.uninstall(name);
       } else {
         // Just remove from DB so we can re-save
@@ -259,12 +295,30 @@ export class SkillRegistry {
   /**
    * Install from URL (download and extract zip)
    */
-  private async installFromUrl(url: string, targetPath: string, name: string): Promise<SkillManifest> {
+  private async installFromUrl(
+    url: string,
+    targetPath: string,
+    name: string,
+  ): Promise<SkillManifest> {
     console.log(`📥 Downloading skill from ${url}...`);
 
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      headers: {
+        Accept: "application/zip, application/octet-stream",
+      },
+    });
+
     if (!response.ok) {
-      throw new Error(`Failed to download skill: ${response.status}`);
+      throw new Error(`Failed to download skill: ${response.status} ${response.statusText}`);
+    }
+
+    // Security check: Verify content type
+    const contentType = response.headers.get("content-type");
+    if (contentType && contentType.includes("text/html")) {
+      throw new Error(
+        `Failed to download skill: The URL ${url} returned an HTML page instead of a ZIP file. ` +
+        `This often happens when a link is private, invalid, or requires login.`,
+      );
     }
 
     const zipPath = join(this.skillsDir, `${name}.zip`);
@@ -275,21 +329,34 @@ export class SkillRegistry {
       return await this.installFromLocalZip(zipPath, targetPath, name);
     } finally {
       // Cleanup zip
-      try { unlinkSync(zipPath); } catch {}
+      try {
+        if (existsSync(zipPath)) {
+          unlinkSync(zipPath);
+        }
+      } catch {}
     }
   }
 
   /**
    * Install from local zip file
    */
-  private async installFromLocalZip(zipPath: string, targetPath: string, name: string): Promise<SkillManifest> {
+  private async installFromLocalZip(
+    zipPath: string,
+    targetPath: string,
+    name: string,
+  ): Promise<SkillManifest> {
     console.log(`📦 Extracting skill from ${zipPath}...`);
 
     // Create target directory
     mkdirSync(targetPath, { recursive: true });
 
     // Extract using unzip command
-    const result = await this.runCommand("unzip", ["-o", zipPath, "-d", targetPath]);
+    const result = await this.runCommand("unzip", [
+      "-o",
+      zipPath,
+      "-d",
+      targetPath,
+    ]);
     if (!result.success) {
       throw new Error(`Failed to extract skill: ${result.error}`);
     }
@@ -300,10 +367,20 @@ export class SkillRegistry {
   /**
    * Install from Git repository
    */
-  private async installFromGit(url: string, targetPath: string, name: string): Promise<SkillManifest> {
+  private async installFromGit(
+    url: string,
+    targetPath: string,
+    name: string,
+  ): Promise<SkillManifest> {
     console.log(`📥 Cloning skill from ${url}...`);
 
-    const result = await this.runCommand("git", ["clone", "--depth", "1", url, targetPath]);
+    const result = await this.runCommand("git", [
+      "clone",
+      "--depth",
+      "1",
+      url,
+      targetPath,
+    ]);
     if (!result.success) {
       throw new Error(`Failed to clone skill: ${result.error}`);
     }
@@ -314,25 +391,42 @@ export class SkillRegistry {
   /**
    * Install from a local directory
    */
-  private async installFromDirectory(sourcePath: string, targetPath: string, name: string): Promise<SkillManifest> {
+  private async installFromDirectory(
+    sourcePath: string,
+    targetPath: string,
+    name: string,
+  ): Promise<SkillManifest> {
     // If it's already in the target path, just load manifest
     if (sourcePath === targetPath) {
       return this.loadManifest(targetPath, name);
     }
 
     console.log(`📂 Registering skill from directory: ${sourcePath}...`);
-    
+
     // Create target directory
     if (!existsSync(targetPath)) {
       mkdirSync(targetPath, { recursive: true });
     }
 
-    // Simple copy for now (recursive)
+    // Simple copy recursive using shell for better compatibility with wildcards
     const { execSync } = require("child_process");
     try {
-      execSync(`cp -R "${sourcePath}/"* "${targetPath}/"`);
+      // Ensure source path is absolute for execSync
+      const absoluteSource = sourcePath.startsWith("/") 
+        ? sourcePath 
+        : join(process.cwd(), sourcePath);
+      
+      // Use a more robust copy command that handles the content of the directory
+      // We want to copy everything INSIDE sourcePath to targetPath
+      const command = process.platform === "win32"
+        ? `xcopy /E /I /Y "${absoluteSource}\\*" "${targetPath}"`
+        : `cp -R "${absoluteSource}/." "${targetPath}/"`;
+      
+      execSync(command, { stdio: "pipe" });
     } catch (err) {
-      throw new Error(`Failed to copy skill directory: ${err instanceof Error ? err.message : String(err)}`);
+      throw new Error(
+        `Failed to copy skill directory: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
 
     return this.loadManifest(targetPath, name);
@@ -412,14 +506,17 @@ export class SkillRegistry {
         let value: any = trimmed.slice(eqIndex + 1).trim();
 
         // Remove quotes
-        if ((value.startsWith('"') && value.endsWith('"')) ||
-            (value.startsWith("'") && value.endsWith("'"))) {
+        if (
+          (value.startsWith('"') && value.endsWith('"')) ||
+          (value.startsWith("'") && value.endsWith("'"))
+        ) {
           value = value.slice(1, -1);
         }
 
         // Parse arrays
         if (value.startsWith("[") && value.endsWith("]")) {
-          value = value.slice(1, -1)
+          value = value
+            .slice(1, -1)
             .split(",")
             .map((v: string) => v.trim().replace(/^["']|["']$/g, ""))
             .filter((v: string) => v);
@@ -444,7 +541,8 @@ export class SkillRegistry {
           manifest.tools = manifest.tools || [];
           manifest.tools.push({
             name: key,
-            description: typeof value === "string" ? value : value.description || "",
+            description:
+              typeof value === "string" ? value : value.description || "",
             parameters: typeof value === "object" ? value : {},
           });
         }
@@ -483,7 +581,7 @@ export class SkillRegistry {
       const yaml = yamlMatch[1];
       const versionMatch = yaml.match(/version:\s*"?([^"\n]+)"?/);
       if (versionMatch) manifest.version = versionMatch[1].trim();
-      
+
       const authorMatch = yaml.match(/author:\s*"?([^"\n]+)"?/);
       if (authorMatch) manifest.author = authorMatch[1].trim();
     }
@@ -514,8 +612,11 @@ export class SkillRegistry {
   /**
    * Run a command
    */
-  private runCommand(cmd: string, args: string[]): Promise<{ success: boolean; error?: string }> {
-    return new Promise(resolve => {
+  private runCommand(
+    cmd: string,
+    args: string[],
+  ): Promise<{ success: boolean; error?: string }> {
+    return new Promise((resolve) => {
       const proc = spawn(cmd, args, { stdio: "pipe" });
       let error = "";
 
@@ -537,27 +638,30 @@ export class SkillRegistry {
    * Save installed skill to database
    */
   private saveInstalledSkill(skill: InstalledSkill): InstalledSkill {
-    this.db.run(`
+    this.db.run(
+      `
       INSERT OR REPLACE INTO installed_skills (
         id, name, version, description, author, license, source, path,
         manifest, enabled, status, error_message, installed_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      skill.id,
-      skill.name,
-      skill.version,
-      skill.description,
-      skill.author || null,
-      skill.license || null,
-      skill.source,
-      skill.path,
-      JSON.stringify(skill),
-      skill.enabled ? 1 : 0,
-      skill.status,
-      skill.errorMessage || null,
-      skill.installedAt,
-      skill.updatedAt,
-    ]);
+    `,
+      [
+        skill.id,
+        skill.name,
+        skill.version,
+        skill.description,
+        skill.author || null,
+        skill.license || null,
+        skill.source,
+        skill.path,
+        JSON.stringify(skill),
+        skill.enabled ? 1 : 0,
+        skill.status,
+        skill.errorMessage || null,
+        skill.installedAt,
+        skill.updatedAt,
+      ],
+    );
 
     return skill;
   }
@@ -567,24 +671,31 @@ export class SkillRegistry {
    */
   getInstalledSkill(name: string): InstalledSkill | null {
     try {
-      const result = this.db.query<{
-        id: string;
-        name: string;
-        version: string;
-        description: string;
-        author: string | null;
-        license: string | null;
-        source: string;
-        path: string;
-        manifest: string;
-        enabled: number;
-        status: string;
-        error_message: string | null;
-        installed_at: number;
-        updated_at: number;
-      }, [string]>(`
+      const result = this.db
+        .query<
+          {
+            id: string;
+            name: string;
+            version: string;
+            description: string;
+            author: string | null;
+            license: string | null;
+            source: string;
+            path: string;
+            manifest: string;
+            enabled: number;
+            status: string;
+            error_message: string | null;
+            installed_at: number;
+            updated_at: number;
+          },
+          [string]
+        >(
+          `
         SELECT * FROM installed_skills WHERE name = ?
-      `).get(name);
+      `,
+        )
+        .get(name);
 
       if (!result) return null;
 
@@ -614,24 +725,31 @@ export class SkillRegistry {
    */
   listInstalled(): InstalledSkill[] {
     try {
-      const results = this.db.query<{
-        id: string;
-        name: string;
-        version: string;
-        description: string;
-        source: string;
-        path: string;
-        manifest: string;
-        enabled: number;
-        status: string;
-        installed_at: number;
-      }, []>(`
+      const results = this.db
+        .query<
+          {
+            id: string;
+            name: string;
+            version: string;
+            description: string;
+            source: string;
+            path: string;
+            manifest: string;
+            enabled: number;
+            status: string;
+            installed_at: number;
+          },
+          []
+        >(
+          `
         SELECT id, name, version, description, source, path, manifest, enabled, status, installed_at
         FROM installed_skills
         ORDER BY installed_at DESC
-      `).all();
+      `,
+        )
+        .all();
 
-      return results.map(r => ({
+      return results.map((r) => ({
         id: r.id,
         name: r.name,
         version: r.version,
@@ -676,9 +794,12 @@ export class SkillRegistry {
     const skill = this.getInstalledSkill(name);
     if (!skill) return false;
 
-    this.db.run(`
+    this.db.run(
+      `
       UPDATE installed_skills SET enabled = 1, status = 'active', updated_at = ? WHERE name = ?
-    `, [Date.now(), name]);
+    `,
+      [Date.now(), name],
+    );
 
     return true;
   }
@@ -690,9 +811,12 @@ export class SkillRegistry {
     const skill = this.getInstalledSkill(name);
     if (!skill) return false;
 
-    this.db.run(`
+    this.db.run(
+      `
       UPDATE installed_skills SET enabled = 0, status = 'disabled', updated_at = ? WHERE name = ?
-    `, [Date.now(), name]);
+    `,
+      [Date.now(), name],
+    );
 
     return true;
   }
@@ -720,7 +844,9 @@ export class SkillRegistry {
       try {
         const { type, url, name } = this.parseSource(sourceOrName);
         // For now, just return a placeholder
-        result.warnings.push("Remote audit not yet implemented. Install the skill first.");
+        result.warnings.push(
+          "Remote audit not yet implemented. Install the skill first.",
+        );
         return result;
       } catch {
         result.errors.push(`Unknown skill: ${sourceOrName}`);
@@ -741,23 +867,29 @@ export class SkillRegistry {
           result.risks.push("MEDIUM: Skill requests file write permission");
         }
         if (perm.type === "network" && perm.access === "all") {
-          result.risks.push("MEDIUM: Skill requests unrestricted network access");
+          result.risks.push(
+            "MEDIUM: Skill requests unrestricted network access",
+          );
         }
       }
     }
 
     // Check for WASM module
     if (manifest.wasmModule) {
-      result.warnings.push("Skill includes WASM module - runs in sandboxed environment");
+      result.warnings.push(
+        "Skill includes WASM module - runs in sandboxed environment",
+      );
     }
 
     // Check for Python module
     if (manifest.pythonModule) {
-      result.risks.push("MEDIUM: Skill includes Python module - runs with Python permissions");
+      result.risks.push(
+        "MEDIUM: Skill includes Python module - runs with Python permissions",
+      );
     }
 
     // Determine pass/fail
-    if (result.risks.some(r => r.startsWith("HIGH:"))) {
+    if (result.risks.some((r) => r.startsWith("HIGH:"))) {
       result.passed = false;
     }
 
@@ -769,7 +901,7 @@ export class SkillRegistry {
    */
   async scaffold(name: string, targetPath?: string): Promise<string> {
     const skillPath = targetPath || join(this.skillsDir, name);
-    
+
     if (existsSync(skillPath)) {
       throw new Error(`Directory already exists: ${skillPath}`);
     }

@@ -9,6 +9,7 @@ import { Database } from "bun:sqlite";
 import { randomUUID } from "crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, statSync } from "fs";
 import { join } from "path";
+import { getSkillRegistry } from "./registry";
 
 // ============================================
 // Types
@@ -351,9 +352,28 @@ export class SkillsManager {
    */
   enableSkill(gatewayId: string, skillName: string, config?: Record<string, unknown>): boolean {
     const gatewayConfig = this.getGatewaySkillsConfig(gatewayId);
-    const builtinSkill = BUILTIN_SKILLS[skillName];
+    
+    // Check built-in skills first
+    let skillBase = BUILTIN_SKILLS[skillName] as Partial<SkillConfig>;
+    
+    // If not built-in, check registry
+    if (!skillBase) {
+      const registry = getSkillRegistry(this.db);
+      const installed = registry.getInstalledSkill(skillName);
+      if (installed) {
+        skillBase = {
+          name: installed.name,
+          version: installed.version,
+          description: installed.description,
+          enabled: true,
+          config: installed.defaultConfig || {},
+          permissions: (installed.permissions || []).map((p: any) => `${p.type}:${p.access}`),
+          dependencies: installed.dependencies || [],
+        } as Partial<SkillConfig>;
+      }
+    }
 
-    if (!builtinSkill) {
+    if (!skillBase) {
       throw new Error(`Unknown skill: ${skillName}`);
     }
 
@@ -361,11 +381,11 @@ export class SkillsManager {
     const existingIndex = skills.findIndex(s => s.name === skillName);
 
     const newSkill: SkillConfig = {
-      ...builtinSkill,
+      ...skillBase,
       ...config,
       name: skillName,
       enabled: true,
-      config: { ...builtinSkill.config, ...config },
+      config: { ...skillBase.config, ...config },
     } as SkillConfig;
 
     if (existingIndex >= 0) {
@@ -395,9 +415,30 @@ export class SkillsManager {
    */
   enableTool(gatewayId: string, toolName: string, config?: Record<string, unknown>): boolean {
     const gatewayConfig = this.getGatewaySkillsConfig(gatewayId);
-    const builtinTool = BUILTIN_TOOLS[toolName];
+    
+    // Check built-in tools first
+    let toolBase = BUILTIN_TOOLS[toolName] as Partial<ToolConfig>;
+    
+    // If not built-in, check if any installed skill provides this tool
+    if (!toolBase) {
+      const registry = getSkillRegistry(this.db);
+      const installedSkills = registry.listInstalled();
+      
+      for (const skill of installedSkills) {
+        const foundTool = (skill.tools || []).find((t: any) => t.name === toolName);
+        if (foundTool) {
+          toolBase = {
+            name: foundTool.name,
+            enabled: true,
+            riskLevel: "medium", // Default for custom tools
+            config: foundTool.parameters || {},
+          } as Partial<ToolConfig>;
+          break;
+        }
+      }
+    }
 
-    if (!builtinTool) {
+    if (!toolBase) {
       throw new Error(`Unknown tool: ${toolName}`);
     }
 
@@ -405,11 +446,11 @@ export class SkillsManager {
     const existingIndex = tools.findIndex(t => t.name === toolName);
 
     const newTool: ToolConfig = {
-      ...builtinTool,
+      ...toolBase,
       ...config,
       name: toolName,
       enabled: true,
-      config: { ...builtinTool.config, ...config },
+      config: { ...toolBase.config, ...config },
     } as ToolConfig;
 
     if (existingIndex >= 0) {
@@ -581,7 +622,18 @@ export class SkillsManager {
       builtin: true,
     }));
 
-    // TODO: Load custom skills from skills directory
+    // Load custom skills from registry
+    const registry = getSkillRegistry(this.db);
+    const installed = registry.listInstalled();
+    for (const skill of installed) {
+      if (!BUILTIN_SKILLS[skill.name]) {
+        skills.push({
+          name: skill.name,
+          description: skill.description || "",
+          builtin: false,
+        });
+      }
+    }
 
     return skills;
   }
