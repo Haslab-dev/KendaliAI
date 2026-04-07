@@ -16,14 +16,33 @@ export class ToolRegistry {
     this.tools.set(tool.name, tool);
   }
 
+  registerSuite(suite: any) {
+    const suiteTools =
+      typeof suite.getTools === "function" ? suite.getTools() : suite.tools;
+    if (Array.isArray(suiteTools)) {
+      for (const t of suiteTools) {
+        this.register({
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+          handler: t.execute || t.handler,
+        });
+      }
+    }
+  }
+
   async execute(name: string, params: any) {
     const tool = this.tools.get(name);
-    if (!tool) throw new Error(`Tool ${name} not found`);
+    if (!tool) throw new Error(`Tool ${name} not found in registry`);
     return await tool.handler(params);
   }
 
   list() {
-    return Array.from(this.tools.values());
+    return Array.from(this.tools.values()).map((t) => ({
+      name: t.name,
+      description: t.description,
+      parameters: t.parameters,
+    }));
   }
 }
 

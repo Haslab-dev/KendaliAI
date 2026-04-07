@@ -1,7 +1,11 @@
 import { Database } from "bun:sqlite";
+import { initRoutingTables } from "../server/routing";
 
-export async function initTables(db: Database): Promise<void> {
-  const createTablesSQL = `
+/**
+ * Get the full SQL for creating all tables
+ */
+function getCreateTablesSQL(): string {
+  return `
     -- Gateways (Enhanced for Multi-Gateway Support)
     CREATE TABLE IF NOT EXISTS gateways (
       id TEXT PRIMARY KEY,
@@ -28,6 +32,12 @@ export async function initTables(db: Database): Promise<void> {
       daemon_pid INTEGER,
       daemon_auto_restart INTEGER DEFAULT 1,
       daemon_port INTEGER DEFAULT 0,
+      
+      -- Autonomous cognition (v2)
+      autonomous_enabled INTEGER DEFAULT 0,
+      autonomous_interval TEXT,
+      autonomous_max_iterations INTEGER DEFAULT 10,
+      reflection_enabled INTEGER DEFAULT 0,
       
       -- Routing configuration
       routing_config TEXT,
@@ -205,9 +215,43 @@ export async function initTables(db: Database): Promise<void> {
       FOREIGN KEY (gateway_id) REFERENCES gateways(id)
     );
   `;
+}
+
+/**
+ * Migrate schema to v2 by adding missing columns if necessary
+ */
+function migrateSchema(db: Database): void {
+  const columns = db.query("PRAGMA table_info(gateways)").all() as any[];
+  const columnNames = columns.map((c) => c.name);
+
+  const newColumns = [
+    { name: "autonomous_enabled", type: "INTEGER DEFAULT 0" },
+    { name: "autonomous_interval", type: "TEXT" },
+    { name: "autonomous_max_iterations", type: "INTEGER DEFAULT 10" },
+    { name: "reflection_enabled", type: "INTEGER DEFAULT 0" },
+  ];
+
+  for (const col of newColumns) {
+    if (!columnNames.includes(col.name)) {
+      try {
+        db.run(`ALTER TABLE gateways ADD COLUMN ${col.name} ${col.type}`);
+      } catch (err) {
+        // Ignore if already exists (race condition)
+      }
+    }
+  }
+}
+
+/**
+ * Initialize all tables and perform migrations
+ */
+export async function initTables(db: Database): Promise<void> {
+  const createTablesSQL = getCreateTablesSQL();
 
   // Use a transaction for initialization
   db.transaction(() => {
     db.run(createTablesSQL);
+    initRoutingTables(db);
+    migrateSchema(db);
   })();
 }

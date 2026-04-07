@@ -2,9 +2,12 @@ import type { AIProvider, ChatMessage } from "../server/providers/types";
 import { toolRegistry } from "../server/tools/registry";
 import { executeToolAction } from "./tool-executor";
 import { Database } from "bun:sqlite";
+import { eventBus, SystemEvent } from "../server/eventbus";
+import { log } from "../server/core";
+import os from "os";
 
 /**
- * Agent Loop - Multi-step reasoning with tools
+ * Agent Loop v3.2 - Bulletproof Stream Merging
  */
 export async function agentLoop(
   initialMessage: string,
@@ -17,33 +20,33 @@ export async function agentLoop(
     systemPrompt?: string;
   },
 ): Promise<string> {
-  const maxSteps = options.maxSteps || 5;
+  const maxSteps = options.maxSteps || 15;
   const skillsManager = await import("../server/skills").then((m) =>
     m.getSkillsManager(db),
   );
   const enabledTools = skillsManager.getEnabledTools(gatewayId);
-
   const toolsList =
     enabledTools.length > 0 ? enabledTools : toolRegistry.list();
 
-  const DEFAULT_SYSTEM_PROMPT = `You are an autonomous AI assistant with tool access.
+  const systemPrompt = `You are KendaliAI, an elite terminal agent.
 
-When asked about system information, files, or commands:
-1. Call the appropriate tool ONCE (e.g., get_system_info for system info)
-2. Wait for the tool result
-3. IMMEDIATELY provide a helpful response to the user based on the result
+ROOT: ${process.cwd()}
+OS: ${os.type()} ${os.release()} (${os.userInfo().username}'s computer)
 
-Do NOT call multiple tools in sequence unless absolutely necessary. After receiving tool results, respond directly to the user in a friendly, helpful way.`;
+Your mission:
+- Use tools instantly. No narration.
+- If you see a file mentioned, READ IT or LIST it.
+- NEVER assume you don't have access. You have FULL root access.`;
 
   const messages: ChatMessage[] = [
-    { role: "system", content: options.systemPrompt || DEFAULT_SYSTEM_PROMPT },
+    { role: "system", content: options.systemPrompt || systemPrompt },
     { role: "user", content: initialMessage },
   ];
 
-  let allToolResults: string[] = [];
+  let lastStepResult = "";
 
   for (let step = 0; step < maxSteps; step++) {
-    console.log(`[AgentLoop] Step ${step + 1}/${maxSteps}...`);
+    log.info(`[Cognition] Cycle ${step + 1}/${maxSteps}`);
 
     const toolDefinitions = toolsList.map((t: any) => ({
       type: "function" as const,
@@ -54,140 +57,196 @@ Do NOT call multiple tools in sequence unless absolutely necessary. After receiv
       },
     }));
 
-    const response = await provider.generate({
-      model: options.model,
-      messages,
-      tools: toolDefinitions,
-      toolChoice: "auto",
+    let stepContent = "";
+    const toolCallsMap = new Map<number, any>();
+    eventBus.emit(SystemEvent.AGENT_RESPONSE_DELTA, {
+      content: "",
+      status: "start",
     });
 
-    if (response.toolCalls && response.toolCalls.length > 0) {
-      messages.push({
-        role: "assistant",
-        content: response.text || "",
-        toolCalls: response.toolCalls,
+    try {
+      const stream = provider.stream({
+        model: options.model,
+        messages,
+        tools: toolDefinitions,
+        toolChoice: "auto",
       });
 
-      console.log(
-        `\n🤖 Tool calls detected: ${response.toolCalls.map((tc) => tc.function.name).join(", ")}`,
-      );
-
-      for (const toolCall of response.toolCalls) {
-        const toolName = toolCall.function.name;
-        let toolArgs: any = {};
-        try {
-          toolArgs = JSON.parse(toolCall.function.arguments);
-        } catch {
-          toolArgs = { command: toolCall.function.arguments };
+      for await (const chunk of stream) {
+        if (chunk.delta) {
+          stepContent += chunk.delta;
+          eventBus.emit(SystemEvent.AGENT_RESPONSE_DELTA, {
+            content: chunk.delta,
+          });
         }
+        if (chunk.toolCalls) {
+          for (const tc of chunk.toolCalls as any[]) {
+            const index = tc.index ?? 0;
+            if (!toolCallsMap.has(index)) {
+              toolCallsMap.set(index, {
+                id: tc.id,
+                type: "function",
+                function: {
+                  name: tc.function?.name || "",
+                  arguments: tc.function?.arguments || "",
+                },
+              });
+            } else {
+              const existing = toolCallsMap.get(index);
+              if (tc.id) existing.id = tc.id;
+              if (tc.function?.name) existing.function.name = tc.function.name;
+              if (tc.function?.arguments)
+                existing.function.arguments += tc.function.arguments;
+            }
+          }
+        }
+      }
+    } catch (err) {
+      log.error(`Stream error, falling back to generate: ${err}`);
+      const res = await provider.generate({ messages, tools: toolDefinitions });
+      stepContent = res.text || "";
+      (res.toolCalls || []).forEach((tc, i) => toolCallsMap.set(i, tc));
+      eventBus.emit(SystemEvent.AGENT_RESPONSE_DELTA, { content: stepContent });
+    }
 
-        console.log(
-          `⚙️  Executing tool: ${toolName}(${JSON.stringify(toolArgs)})`,
-        );
+    const toolCalls = Array.from(toolCallsMap.values());
+
+    if (stepContent || toolCalls.length > 0) {
+      messages.push({
+        role: "assistant",
+        content: stepContent || "",
+        toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+      });
+    }
+
+    // Process Actions
+    let actions: Array<{
+      name: string;
+      args: any;
+      id?: string;
+      isNative: boolean;
+    }> = [];
+
+    if (toolCalls.length > 0) {
+      actions = toolCalls.map((tc) => {
+        let args = {};
+        try {
+          args = JSON.parse(tc.function.arguments || "{}");
+        } catch {
+          args = { raw: tc.function.arguments };
+        }
+        return {
+          name: tc.function.name,
+          args,
+          id: tc.id,
+          isNative: true,
+        };
+      });
+    } else if (stepContent) {
+      const mdRegex =
+        /```(bash|sh|shell|terminal|python|js|ts)(?:\n|\s)([\s\S]*?)```/gi;
+      let match;
+      while ((match = mdRegex.exec(stepContent)) !== null) {
+        actions.push({
+          name:
+            match[1].startsWith("b") || match[1].startsWith("s")
+              ? "terminal"
+              : "execute_code",
+          args: { command: match[2].trim() },
+          id: `act-${Math.random().toString(36).slice(2, 5)}`,
+          isNative: false,
+        });
+      }
+    }
+
+    if (actions.length > 0) {
+      for (const action of actions) {
+        const toolId = action.id || `call-${Date.now()}`;
+        eventBus.emit(SystemEvent.TOOL_CALL_START, {
+          name: action.name,
+          input: action.args,
+          id: toolId,
+        });
 
         try {
-          const result = await toolRegistry.execute(toolName, toolArgs);
-          const resultStr =
-            typeof result === "object"
-              ? JSON.stringify(result, null, 2)
-              : String(result);
-          allToolResults.push(`[${toolName}] ${resultStr}`);
-          console.log(
-            `\n📋 Output:\n${resultStr.slice(0, 500)}${resultStr.length > 500 ? "..." : ""}`,
+          let result = await executeToolAction(
+            action.name,
+            action.args,
+            gatewayId,
+            db,
           );
 
-          messages.push({
-            role: "tool",
-            toolCallId: toolCall.id,
-            name: toolName,
-            content: resultStr,
+          if (result && result.toString().includes("[SAFETY_PAUSE]")) {
+            eventBus.emit(SystemEvent.TOOL_WAITING_APPROVAL, {
+              id: toolId,
+              name: action.name,
+              command: action.args.command || JSON.stringify(action.args),
+            });
+            const approved = await new Promise<boolean>((resolve) => {
+              const onRes = (data: any) => {
+                if (data.id === toolId || !data.id) {
+                  eventBus.off("USER_APPROVAL_RESPONSE", onRes);
+                  resolve(data.approved);
+                }
+              };
+              eventBus.on("USER_APPROVAL_RESPONSE", onRes);
+            });
+            if (!approved) result = "Action rejected by user.";
+            else {
+              process.env.KENDALIAI_YOLO = "true";
+              result = await executeToolAction(
+                action.name,
+                action.args,
+                gatewayId,
+                db,
+              );
+              delete process.env.KENDALIAI_YOLO;
+            }
+          }
+
+          const resultStr = String(result);
+          eventBus.emit(SystemEvent.TOOL_CALL_OUTPUT, {
+            name: action.name,
+            output: resultStr,
+            id: toolId,
           });
+
+          if (action.isNative) {
+            messages.push({
+              role: "tool",
+              content: resultStr,
+              toolCallId: toolId,
+            } as any);
+          } else {
+            messages.push({
+              role: "user",
+              content: `ACTION RESULT (${action.name}):\n${resultStr}`,
+            });
+          }
         } catch (err: any) {
-          console.error(`❌ Tool error: ${err.message}`);
-          messages.push({
-            role: "tool",
-            toolCallId: toolCall.id,
-            name: toolName,
-            content: `Error: ${err.message}`,
+          if (action.isNative) {
+            messages.push({
+              role: "tool",
+              content: `Error: ${err.message}`,
+              toolCallId: toolId,
+            } as any);
+          } else {
+            messages.push({ role: "user", content: `ERROR: ${err.message}` });
+          }
+          eventBus.emit(SystemEvent.TOOL_CALL_OUTPUT, {
+            name: action.name,
+            output: `Error: ${err.message}`,
+            id: toolId,
           });
         }
       }
-
       continue;
     }
 
-    messages.push({ role: "assistant", content: response.text });
-
-    console.log(`\n🤖 Response:\n${response.text}\n`);
-
-    let match =
-      /(?:\[ACTION:|\[TOOL:)\s*([^\]]+)\][\s\S]*?```(?:[a-zA-Z]*)\n([\s\S]*?)```/i.exec(
-        response.text,
-      );
-
-    if (!match) {
-      const fallbackMatch =
-        /<(bash|shell|terminal|command)>\n?([\s\S]*?)\n?<\/\1>/i.exec(
-          response.text,
-        );
-      if (fallbackMatch) {
-        match = [fallbackMatch[0], "shell", fallbackMatch[2]] as any;
-      }
-    }
-
-    if (match) {
-      const actionName = match[1].trim().toLowerCase();
-      const command = match[2].trim();
-
-      console.log(`⚙️  Processing action: ${actionName}...`);
-
-      try {
-        const result = await executeToolAction(
-          actionName,
-          command,
-          gatewayId,
-          db,
-        );
-
-        console.log(
-          `\n📋 Output:\n${result.slice(0, 500)}${result.length > 500 ? "..." : ""}`,
-        );
-
-        messages.push({
-          role: "user",
-          content: `ACTION RESULT (${actionName}):\n${result}`,
-        });
-
-        continue;
-      } catch (err: any) {
-        console.error(`❌ ${err.message}`);
-        messages.push({
-          role: "user",
-          content: `ERROR executing ${actionName}: ${err.message}`,
-        });
-        continue;
-      }
-    }
-
-    return response.text;
+    if (!stepContent && actions.length === 0) break;
+    lastStepResult = stepContent;
+    if (actions.length === 0) break;
   }
 
-  // Max steps reached - generate summary from collected results
-  if (allToolResults.length > 0) {
-    const summaryPrompt = `Based on the following tool results, provide a helpful summary response to the user's question: "${initialMessage}"
-
-Tool Results:
-${allToolResults.join("\n\n")}
-
-Provide a clear, friendly response summarizing the information above.`;
-
-    const finalResponse = await provider.generate({
-      model: options.model,
-      messages: [{ role: "user", content: summaryPrompt }],
-    });
-
-    return finalResponse.text;
-  }
-
-  return "Agent loop exceeded maximum steps.";
+  return lastStepResult || "Mission accomplished.";
 }

@@ -42,6 +42,12 @@ export const gateways = sqliteTable("gateways", {
   daemonAutoRestart: integer("daemon_auto_restart").default(1),
   daemonPort: integer("daemon_port"),
 
+  // Autonomous cognition (v2)
+  autonomousEnabled: integer("autonomous_enabled").default(0),
+  autonomousInterval: text("autonomous_interval"), // e.g. "30s", "1m"
+  autonomousMaxIterations: integer("autonomous_max_iterations").default(10),
+  reflectionEnabled: integer("reflection_enabled").default(0),
+
   // Routing
   routingConfig: text("routing_config"), // JSON
 

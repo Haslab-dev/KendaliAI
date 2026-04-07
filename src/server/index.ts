@@ -19,6 +19,7 @@ import { Database } from "bun:sqlite";
 import os from "os";
 import { join } from "path";
 import { log } from "./core";
+import { CognitionLoop } from "../agent/cognition-loop";
 
 // Database schema
 import {
@@ -119,6 +120,14 @@ interface GatewayConfig {
     config: Record<string, unknown>;
   }>;
   status: "stopped" | "running";
+  autonomous?: {
+    enabled: boolean;
+    intervalMs: number;
+    maxIterations: number;
+  };
+  reflection?: {
+    enabled: boolean;
+  };
   createdAt: string;
 }
 
@@ -244,7 +253,7 @@ async function bootstrap() {
   }
 
   // Load gateways and channels
-  await loadGatewayAndChannels(db, cmdArgs.gateway);
+  await loadGatewayAndChannels(db, rawDb, cmdArgs.gateway);
 
   // Set up event handlers
   setupChannelEvents(db);
@@ -792,6 +801,14 @@ function registerBuiltinTools(db?: any) {
     },
   });
 
+  // --- HERMES SUITE REGISTRATION ---
+  const { HermesSuite } = require("./tools/hermes");
+  const hermes = new HermesSuite({
+    yolo: process.env.KENDALIAI_YOLO === "true",
+  });
+  toolRegistry.registerSuite(hermes);
+  log.info(`📦 Hermes Suite active: ${hermes.getTools().length} tools online.`);
+
   // Random tool
   toolRegistry.register({
     name: "random",
@@ -809,62 +826,16 @@ function registerBuiltinTools(db?: any) {
       return Math.floor(Math.random() * (max - min + 1)) + min;
     },
   });
-
-  // Shell tool
-  toolRegistry.register({
-    name: "shell",
-    description: "Executes a shell command",
-    parameters: {
-      type: "object",
-      properties: {
-        command: { type: "string", description: "The command to execute" },
-      },
-      required: ["command"],
-    },
-    handler: async (params: { command: string }) => {
-      const { execSync } = require("child_process");
-      try {
-        log.info(`Executing shell command: ${params.command}`);
-        const output = execSync(params.command, {
-          encoding: "utf8",
-          timeout: 30000,
-        });
-        return output;
-      } catch (err: any) {
-        return `Error: ${err.message}\n${err.stderr || ""}`;
-      }
-    },
-  });
-
-  // File tool
-  toolRegistry.register({
-    name: "read_file",
-    description: "Reads a file from the filesystem",
-    parameters: {
-      type: "object",
-      properties: {
-        path: { type: "string", description: "Path to the file" },
-      },
-      required: ["path"],
-    },
-    handler: async (params: { path: string }) => {
-      const { readFileSync, existsSync } = require("fs");
-      try {
-        if (!existsSync(params.path)) {
-          return `Error: File not found at ${params.path}`;
-        }
-        return readFileSync(params.path, "utf8");
-      } catch (err: any) {
-        return `Error: ${err.message}`;
-      }
-    },
-  });
 }
 
 /**
  * Load gateways and their associated channels from the database
  */
-async function loadGatewayAndChannels(db: any, gatewayName?: string) {
+async function loadGatewayAndChannels(
+  db: any,
+  rawDb: any,
+  gatewayName?: string,
+) {
   try {
     // 1. Load Gateway(s)
     let dbGateways;
@@ -980,6 +951,28 @@ async function loadGatewayAndChannels(db: any, gatewayName?: string) {
         } catch (err) {
           log.error(`  ❌ Failed to start channel ${ch.name}:`, err);
         }
+      }
+
+      // 3. Start Autonomous Cognition Loop if enabled (v2)
+      if (gw.autonomousEnabled || gw.autonomous_enabled) {
+        log.info(
+          `🤖 Starting autonomous cognition loop for gateway: ${gw.name}`,
+        );
+        const cognition = new CognitionLoop({
+          gatewayId: gw.id,
+          db: rawDb,
+          provider: provider,
+          model: gw.defaultModel || gw.default_model,
+          intervalMs: 30000, // TODO: load from DB
+          maxIterations:
+            gw.autonomousMaxIterations || gw.autonomous_max_iterations || 10,
+          reflectionEnabled: !!(gw.reflectionEnabled || gw.reflection_enabled),
+        });
+        cognition
+          .start()
+          .catch((err) =>
+            log.error(`Autonomous loop error for ${gw.name}:`, err),
+          );
       }
     }
   } catch (err) {
@@ -1517,7 +1510,7 @@ function parseArgs(): {
 // Start Server
 // ============================================
 
-async function startServer() {
+export async function startServer() {
   try {
     // bootstrap handles parseArgs and database init
     await bootstrap();
@@ -1552,5 +1545,7 @@ async function startServer() {
   }
 }
 
-// Start the server
-startServer();
+// Start the server if manually executed
+if (import.meta.main) {
+  startServer();
+}

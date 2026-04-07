@@ -55,13 +55,13 @@ export function getGatewayPaths(name: string) {
     run: join(base, "run"),
     pidFile: join(base, "run", "gateway.pid"),
     // Workspace files
-    identity: join(base, "identity.md"),
-    user: join(base, "user.md"),
-    agents: join(base, "agents.md"),
-    tools: join(base, "tools.md"),
-    memory: join(base, "memory.md"),
+    identity: join(base, "IDENTITY.md"),
+    user: join(base, "USER.md"),
+    agents: join(base, "AGENTS.md"),
+    tools: join(base, "TOOLS.md"),
+    memory: join(base, "MEMORY.md"),
     memoryDir: join(base, "memory"),
-    boot: join(base, "boot.md"),
+    boot: join(base, "BOOT.md"),
   };
 }
 
@@ -210,6 +210,10 @@ export interface Gateway {
   daemon_pid: number | null;
   daemon_auto_restart: number;
   daemon_port: number;
+  autonomous_enabled: number;
+  autonomous_interval: string | null;
+  autonomous_max_iterations: number;
+  reflection_enabled: number;
   routing_config: string | null;
   config: string | null;
   status: string;
@@ -248,6 +252,67 @@ export function getGatewayByName(
   }
 
   return undefined;
+}
+
+/**
+ * Update gateway configuration in database
+ */
+export async function updateGateway(
+  db: Database,
+  name: string,
+  options: {
+    autonomous_enabled?: number;
+    autonomous_interval?: string;
+    autonomous_max_iterations?: number;
+    reflection_enabled?: number;
+    description?: string;
+    model?: string;
+  },
+): Promise<void> {
+  const gateway = getGatewayByName(db, name);
+  if (!gateway) throw new Error(`Gateway '${name}' not found`);
+
+  const now = Date.now();
+  const updates: string[] = [];
+  const params: any[] = [];
+
+  if (options.autonomous_enabled !== undefined) {
+    updates.push("autonomous_enabled = ?");
+    params.push(options.autonomous_enabled);
+  }
+  if (options.autonomous_interval !== undefined) {
+    updates.push("autonomous_interval = ?");
+    params.push(options.autonomous_interval);
+  }
+  if (options.autonomous_max_iterations !== undefined) {
+    updates.push("autonomous_max_iterations = ?");
+    params.push(options.autonomous_max_iterations);
+  }
+  if (options.reflection_enabled !== undefined) {
+    updates.push("reflection_enabled = ?");
+    params.push(options.reflection_enabled);
+  }
+  if (options.description !== undefined) {
+    updates.push("description = ?");
+    params.push(options.description);
+  }
+  if (options.model !== undefined) {
+    updates.push("default_model = ?");
+    params.push(options.model);
+  }
+
+  if (updates.length === 0) return;
+
+  updates.push("updated_at = ?");
+  params.push(now);
+
+  // WHERE clause param
+  params.push(gateway.id);
+
+  db.run(`UPDATE gateways SET ${updates.join(", ")} WHERE id = ?`, params);
+
+  // Sync changes
+  updateGatewayConfigFile(db, name);
 }
 
 /**
@@ -391,8 +456,9 @@ export async function createGateway(
       require_pairing, allow_public_bind, workspace_only,
       agent_config, skills, tools,
       daemon_enabled, daemon_auto_restart,
+      autonomous_enabled, autonomous_interval, autonomous_max_iterations, reflection_enabled,
       status, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `,
     [
       gatewayId,
@@ -410,6 +476,10 @@ export async function createGateway(
       options.tools ? JSON.stringify(options.tools) : null,
       0, // daemon_enabled
       1, // daemon_auto_restart
+      0, // autonomous_enabled
+      "30s", // autonomous_interval
+      10, // autonomous_max_iterations
+      1, // reflection_enabled
       "stopped",
       now,
       now,
@@ -858,6 +928,49 @@ export async function handleGatewayCommand(
       break;
     }
 
+    case "update": {
+      const name = args[0];
+      if (!name) {
+        console.error("Error: Gateway name required");
+        console.log("Usage: kendaliai gateway update <name> [options]");
+        return;
+      }
+
+      const options: any = {};
+      for (let i = 1; i < args.length; i++) {
+        const arg = args[i];
+        const nextArg = args[i + 1];
+
+        if (arg === "--autonomous" && nextArg) {
+          options.autonomous_enabled = parseInt(nextArg, 10);
+          i++;
+        } else if (arg === "--interval" && nextArg) {
+          options.autonomous_interval = nextArg;
+          i++;
+        } else if (arg === "--max-iterations" && nextArg) {
+          options.autonomous_max_iterations = parseInt(nextArg, 10);
+          i++;
+        } else if (arg === "--reflection" && nextArg) {
+          options.reflection_enabled = parseInt(nextArg, 10);
+          i++;
+        } else if (arg === "--model" && nextArg) {
+          options.model = nextArg;
+          i++;
+        } else if (arg === "--description" && nextArg) {
+          options.description = nextArg;
+          i++;
+        }
+      }
+
+      try {
+        await updateGateway(db, name, options);
+        console.log(`✅ Gateway '${name}' updated successfully!`);
+      } catch (error) {
+        console.error(`Error: ${error}`);
+      }
+      break;
+    }
+
     case "list":
     case "ls": {
       const gateways = listGateways(db);
@@ -1084,7 +1197,8 @@ export async function handleGatewayCommand(
       console.log("Usage: kendaliai gateway <command> [options]");
       console.log("\nCommands:");
       console.log("  create <name>   Create new gateway");
-      console.log("  start <name>     Start gateway");
+      console.log("  update <name>   Update gateway configuration");
+      console.log("  start <name>    Start gateway");
       console.log("  stop <name>     Stop gateway");
       console.log("  restart <name>  Restart gateway");
       console.log("  list            List all gateways");

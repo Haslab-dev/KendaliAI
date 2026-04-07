@@ -157,6 +157,21 @@ export abstract class BaseProvider implements AIProvider {
   async initialize(): Promise<void> {
     if (this.initialized) return;
 
+    // Fallback to environment variables if still missing
+    if (!this.config.apiKey) {
+      let apiKey: string | undefined;
+      const type = this.type as string;
+      if (type === "openai") apiKey = process.env.OPENAI_API_KEY;
+      else if (type === "deepseek") apiKey = process.env.DEEPSEEK_API_KEY;
+      else if (type === "anthropic") apiKey = process.env.ANTHROPIC_API_KEY;
+      else if (type === "zai") apiKey = process.env.ZAI_API_KEY;
+
+      if (apiKey) {
+        this.config.apiKey = apiKey;
+        this.defaultHeaders["Authorization"] = `Bearer ${apiKey}`;
+      }
+    }
+
     // Add provider-specific headers
     this.defaultHeaders = {
       ...this.defaultHeaders,

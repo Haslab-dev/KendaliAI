@@ -47,11 +47,13 @@ let db: Database | null = null;
 
 // Directory paths - defaults to project-local, can be overridden with --config-path
 const PROJECT_DIR = process.cwd();
-const HOME_DIR = process.env.HOME || "";
+const HOME_DIR = process.env.HOME || "/Users/hy4-mac-002";
+const DEFAULT_KENDALIAI_DIR = join(HOME_DIR, ".kendaliai");
+const GLOBAL_DB_PATH = join(DEFAULT_KENDALIAI_DIR, "kendaliai.db");
 
 // These will be set based on config-path option
-let KENDALIAI_DIR: string;
-let CONFIG_FILE: string;
+let KENDALIAI_DIR: string = DEFAULT_KENDALIAI_DIR;
+let CONFIG_FILE: string = join(KENDALIAI_DIR, "config.json");
 
 // Config type
 interface KendaliAIConfig {
@@ -68,13 +70,17 @@ function initializePaths(): void {
 
   if (configPath === ".kendaliai" || configPath === "~/.kendaliai") {
     // Use home directory (root system)
-    KENDALIAI_DIR = join(HOME_DIR, ".kendaliai");
+    KENDALIAI_DIR = DEFAULT_KENDALIAI_DIR;
   } else if (configPath) {
     // Use custom path
     KENDALIAI_DIR = configPath;
   } else {
-    // Default: project-local directory
-    KENDALIAI_DIR = join(PROJECT_DIR, ".kendaliai");
+    // Default: use global path in v2 for simplicity unless project-local is explicitly requested with "."
+    if (configPath === ".") {
+      KENDALIAI_DIR = join(PROJECT_DIR, ".kendaliai");
+    } else {
+      KENDALIAI_DIR = DEFAULT_KENDALIAI_DIR;
+    }
   }
 
   CONFIG_FILE = join(KENDALIAI_DIR, "config.json");
@@ -251,10 +257,12 @@ async function handleHelp(): Promise<void> {
 KendaliAI CLI v${VERSION} - Multi-Gateway AI Orchestration Platform
 
 USAGE:
+  kendaliai                Start the Master Orchestrator (starts all gateways)
   kendaliai <command> [options]
 
 COMMANDS:
   onboard              Quick setup wizard
+  tui                  Launch Terminal User Interface (Dashboard)
   gateway              Start the gateway server (legacy)
   daemon               Start Telegram bot with AI (legacy)
   agent                Chat with AI agent
@@ -378,7 +386,7 @@ async function handleVersion(): Promise<void> {
 async function handleOnboard(): Promise<void> {
   console.log("🚀 KendaliAI Onboarding\n");
 
-  const dbPath = getString("db-path", ".kendaliai/kendaliai.db");
+  const dbPath = getString("db-path", GLOBAL_DB_PATH);
 
   // Initialize database
   console.log("📁 Initializing database...");
@@ -546,7 +554,7 @@ async function handleOnboard(): Promise<void> {
 async function handleGateway(): Promise<void> {
   const port = parseInt(getString("port", "42617"));
   const host = getString("host", "127.0.0.1");
-  const dbPath = getString("db-path", ".kendaliai/kendaliai.db");
+  const dbPath = getString("db-path", GLOBAL_DB_PATH);
 
   console.log(`🚀 Starting KendaliAI Gateway on ${host}:${port}\n`);
 
@@ -906,7 +914,7 @@ async function handleGateway(): Promise<void> {
 async function handleAgent(): Promise<void> {
   const message = getString("message", "");
   const gatewayName = getString("gateway", "");
-  const dbPath = getString("db-path", ".kendaliai/kendaliai.db");
+  const dbPath = getString("db-path", GLOBAL_DB_PATH);
 
   if (!message) {
     console.log("💬 Interactive mode (not implemented in minimal CLI)");
@@ -970,8 +978,29 @@ async function handleAgent(): Promise<void> {
     return;
   }
 
-  if (!gateway.api_key_encrypted) {
-    console.error(`❌ No API key configured for gateway '${gateway.name}'.`);
+  // Determine API key (Decrypt DB key or fallback to ENV)
+  let apiKey: string | undefined;
+  try {
+    apiKey = gateway.api_key_encrypted
+      ? decrypt(gateway.api_key_encrypted)
+      : undefined;
+  } catch {
+    apiKey = gateway.api_key_encrypted || undefined;
+  }
+
+  if (!apiKey) {
+    const provider = gateway.provider.toLowerCase();
+    if (provider === "openai") apiKey = process.env.OPENAI_API_KEY;
+    else if (provider === "deepseek") apiKey = process.env.DEEPSEEK_API_KEY;
+    else if (provider === "anthropic") apiKey = process.env.ANTHROPIC_API_KEY;
+    else if (provider === "zai") apiKey = process.env.ZAI_API_KEY;
+  }
+
+  if (!apiKey) {
+    console.error(
+      `❌ No API key configured for gateway '${gateway.name}' in DB or Environment.`,
+    );
+    console.log(`   Expected ENV: ${gateway.provider.toUpperCase()}_API_KEY`);
     return;
   }
 
@@ -1024,15 +1053,6 @@ async function handleAgent(): Promise<void> {
   console.log(""); // Spacing
   console.log(`💬 Gateway: ${gateway.name} (${gateway.provider})`);
   console.log(`💬 Message: ${message}\n`);
-
-  // Decrypt API key
-  let apiKey: string;
-  try {
-    apiKey = decrypt(gateway.api_key_encrypted);
-  } catch {
-    // Backward compatibility
-    apiKey = gateway.api_key_encrypted;
-  }
 
   // Determine API endpoint based on provider
   let apiUrl = gateway.endpoint;
@@ -1093,8 +1113,21 @@ async function handleAgent(): Promise<void> {
   }
 }
 
+async function handleTUI(): Promise<void> {
+  const dbPath = getString("db-path", GLOBAL_DB_PATH);
+  const database = getDb(dbPath);
+  await initTables(database);
+
+  try {
+    const { launchTUI } = await import("./tui/app");
+    await launchTUI(database);
+  } catch (err) {
+    console.error("❌ Failed to launch TUI:", err);
+  }
+}
+
 async function handlePairing(): Promise<void> {
-  const dbPath = getString("db-path", ".kendaliai/kendaliai.db");
+  const dbPath = getString("db-path", GLOBAL_DB_PATH);
   const database = getDb(dbPath);
 
   const subCommand = positionals[1];
@@ -1151,7 +1184,7 @@ async function handlePairing(): Promise<void> {
 }
 
 async function handleChannel(): Promise<void> {
-  const dbPath = getString("db-path", ".kendaliai/kendaliai.db");
+  const dbPath = getString("db-path", GLOBAL_DB_PATH);
   const database = getDb(dbPath);
   const gatewayName = getString("gateway", "");
 
@@ -1360,7 +1393,7 @@ async function handleChannel(): Promise<void> {
 }
 
 async function handleStatus(): Promise<void> {
-  const dbPath = getString("db-path", ".kendaliai/kendaliai.db");
+  const dbPath = getString("db-path", GLOBAL_DB_PATH);
   const database = getDb(dbPath);
 
   console.log("📊 KendaliAI Status\n");
@@ -1502,7 +1535,7 @@ async function handleDoctor(): Promise<void> {
   }[] = [];
 
   // Initialize database and tables
-  const dbPath = getString("db-path", ".kendaliai/kendaliai.db");
+  const dbPath = getString("db-path", GLOBAL_DB_PATH);
   const database = getDb(dbPath);
   await initTables(database);
 
@@ -1568,7 +1601,7 @@ async function handleDoctor(): Promise<void> {
 }
 
 async function handleReset(): Promise<void> {
-  const dbPath = getString("db-path", ".kendaliai/kendaliai.db");
+  const dbPath = getString("db-path", GLOBAL_DB_PATH);
 
   console.log("⚠️  This will delete all data!");
   console.log(`   Database: ${dbPath}`);
@@ -2017,7 +2050,7 @@ async function startTelegramBot(
 }
 
 async function handleDaemon(): Promise<void> {
-  const dbPath = getString("db-path", ".kendaliai/kendaliai.db");
+  const dbPath = getString("db-path", GLOBAL_DB_PATH);
   const database = getDb(dbPath);
   const gatewayName = getString("gateway", "");
 
@@ -2169,8 +2202,15 @@ async function handleDaemon(): Promise<void> {
 async function main(): Promise<void> {
   const command = positionals[0];
 
-  if (values.help || !command) {
+  if (values.help) {
     return handleHelp();
+  }
+
+  if (!command) {
+    console.log("🚀 Starting KendaliAI Orchestrator...\n");
+    const { startServer } = await import("./server/index");
+    await startServer();
+    return;
   }
 
   if (values.version) {
@@ -2190,7 +2230,7 @@ async function main(): Promise<void> {
       // For gateway creation/list, use the central DB first
       const gatewayNameArg =
         subArgs[0] && !subArgs[0].startsWith("-") ? subArgs[0] : undefined;
-      const database = getDb(getString("db-path", ".kendaliai/kendaliai.db"));
+      const database = getDb(getString("db-path", GLOBAL_DB_PATH));
       await initTables(database);
 
       // Get options from values object
@@ -2240,7 +2280,7 @@ async function main(): Promise<void> {
       // Daemon management
       const subCommand = positionals[1];
       const subArgs = positionals.slice(2);
-      const database = getDb(getString("db-path", ".kendaliai/kendaliai.db"));
+      const database = getDb(getString("db-path", GLOBAL_DB_PATH));
       await initTables(database);
 
       const { handleDaemonCommand } = await import("./cli/daemon");
@@ -2253,7 +2293,7 @@ async function main(): Promise<void> {
       const subArgs = positionals.slice(2);
       const gatewayNameArg = getString("gateway");
       const database = getDb(
-        getString("db-path", ".kendaliai/kendaliai.db"),
+        getString("db-path", GLOBAL_DB_PATH),
         gatewayNameArg,
       );
       await initTables(database);
@@ -2272,7 +2312,7 @@ async function main(): Promise<void> {
       const subArgs = positionals.slice(2);
       const gatewayNameArg = getString("gateway");
       const database = getDb(
-        getString("db-path", ".kendaliai/kendaliai.db"),
+        getString("db-path", GLOBAL_DB_PATH),
         gatewayNameArg,
       );
       await initTables(database);
@@ -2286,7 +2326,7 @@ async function main(): Promise<void> {
       const subArgs = positionals.slice(2);
       const gatewayNameArg = getString("gateway");
       const database = getDb(
-        getString("db-path", ".kendaliai/kendaliai.db"),
+        getString("db-path", GLOBAL_DB_PATH),
         gatewayNameArg,
       );
       await initTables(database);
@@ -2305,6 +2345,9 @@ async function main(): Promise<void> {
     case "agent":
       await handleAgent();
       break;
+    case "tui":
+      await handleTUI();
+      break;
     case "pairing":
       await handlePairing();
       break;
@@ -2317,7 +2360,7 @@ async function main(): Promise<void> {
       const subArgs = positionals.slice(2);
       const gatewayNameArg = getString("gateway");
       const database = getDb(
-        getString("db-path", ".kendaliai/kendaliai.db"),
+        getString("db-path", GLOBAL_DB_PATH),
         gatewayNameArg,
       );
       await initTables(database);
