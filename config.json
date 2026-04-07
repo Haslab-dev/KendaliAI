@@ -1,7 +1,7 @@
 {
   "database": {
-    "path": "./.kendaliai/data/kendaliai.db"
+    "path": "/Users/hy4-mac-002/hasdev/kendaliAI/test-gw/kendaliai.db"
   },
-  "gateways": [],
-  "defaultProvider": "deepseek"
+  "defaultGateway": "default",
+  "version": "0.2.0"
 }

@@ -1,0 +1,13 @@
+# summarize Skill
+name = "summarize"
+version = "0.1.0"
+description = "A custom skill for KendaliAI"
+author = ""
+license = "MIT"
+
+[permissions]
+# file = "read"
+# network = "read"
+
+[tools]
+calculate_area = "Calculate the area of a rectangle"

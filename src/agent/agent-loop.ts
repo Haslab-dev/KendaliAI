@@ -18,58 +18,113 @@ export async function agentLoop(
   },
 ): Promise<string> {
   const maxSteps = options.maxSteps || 5;
-  const DEFAULT_SYSTEM_PROMPT = `You are KendaliAI, an autonomous AI assistant.
-To perform actions or use tools, you MUST use the following format:
+  const skillsManager = await import("../server/skills").then((m) =>
+    m.getSkillsManager(db),
+  );
+  const enabledTools = skillsManager.getEnabledTools(gatewayId);
 
-[ACTION: tool_name]
-\`\`\`
-command or arguments here
-\`\`\`
+  const toolsList =
+    enabledTools.length > 0 ? enabledTools : toolRegistry.list();
 
-Available Tools:
-- shell: Execute bash commands. (e.g., [ACTION: shell]\\n\`\`\`\\nls -la\\n\`\`\`)
-- file: Read or write files.
-- summarize: Summarize content.
-- code-analysis: Analyze code quality.
+  const DEFAULT_SYSTEM_PROMPT = `You are an autonomous AI assistant with tool access.
 
-Always explain what you are doing before using a tool. Wait for the tool result before proceeding.`;
+When asked about system information, files, or commands:
+1. Call the appropriate tool ONCE (e.g., get_system_info for system info)
+2. Wait for the tool result
+3. IMMEDIATELY provide a helpful response to the user based on the result
+
+Do NOT call multiple tools in sequence unless absolutely necessary. After receiving tool results, respond directly to the user in a friendly, helpful way.`;
 
   const messages: ChatMessage[] = [
     { role: "system", content: options.systemPrompt || DEFAULT_SYSTEM_PROMPT },
     { role: "user", content: initialMessage },
   ];
 
+  let allToolResults: string[] = [];
+
   for (let step = 0; step < maxSteps; step++) {
     console.log(`[AgentLoop] Step ${step + 1}/${maxSteps}...`);
 
-    // 1. Get LLM response
+    const toolDefinitions = toolsList.map((t: any) => ({
+      type: "function" as const,
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    }));
+
     const response = await provider.generate({
       model: options.model,
       messages,
-      tools: (provider as any).supportsTools
-        ? toolRegistry.list().map((t) => ({
-            type: "function",
-            function: {
-              name: t.name,
-              description: t.description,
-              parameters: t.parameters,
-            },
-          }))
-        : undefined,
+      tools: toolDefinitions,
+      toolChoice: "auto",
     });
 
-    // 2. Add response to history
+    if (response.toolCalls && response.toolCalls.length > 0) {
+      messages.push({
+        role: "assistant",
+        content: response.text || "",
+        toolCalls: response.toolCalls,
+      });
+
+      console.log(
+        `\n🤖 Tool calls detected: ${response.toolCalls.map((tc) => tc.function.name).join(", ")}`,
+      );
+
+      for (const toolCall of response.toolCalls) {
+        const toolName = toolCall.function.name;
+        let toolArgs: any = {};
+        try {
+          toolArgs = JSON.parse(toolCall.function.arguments);
+        } catch {
+          toolArgs = { command: toolCall.function.arguments };
+        }
+
+        console.log(
+          `⚙️  Executing tool: ${toolName}(${JSON.stringify(toolArgs)})`,
+        );
+
+        try {
+          const result = await toolRegistry.execute(toolName, toolArgs);
+          const resultStr =
+            typeof result === "object"
+              ? JSON.stringify(result, null, 2)
+              : String(result);
+          allToolResults.push(`[${toolName}] ${resultStr}`);
+          console.log(
+            `\n📋 Output:\n${resultStr.slice(0, 500)}${resultStr.length > 500 ? "..." : ""}`,
+          );
+
+          messages.push({
+            role: "tool",
+            toolCallId: toolCall.id,
+            name: toolName,
+            content: resultStr,
+          });
+        } catch (err: any) {
+          console.error(`❌ Tool error: ${err.message}`);
+          messages.push({
+            role: "tool",
+            toolCallId: toolCall.id,
+            name: toolName,
+            content: `Error: ${err.message}`,
+          });
+        }
+      }
+
+      continue;
+    }
+
     messages.push({ role: "assistant", content: response.text });
+
     console.log(`\n🤖 Response:\n${response.text}\n`);
 
-    // 3. Check for tool calls - more flexible regex
-    // Primary: [ACTION: name] or [TOOL: name]
     let match =
       /(?:\[ACTION:|\[TOOL:)\s*([^\]]+)\][\s\S]*?```(?:[a-zA-Z]*)\n([\s\S]*?)```/i.exec(
         response.text,
       );
 
-    // Fallback: <bash>...</bash> style tags
     if (!match) {
       const fallbackMatch =
         /<(bash|shell|terminal|command)>\n?([\s\S]*?)\n?<\/\1>/i.exec(
@@ -87,7 +142,6 @@ Always explain what you are doing before using a tool. Wait for the tool result 
       console.log(`⚙️  Processing action: ${actionName}...`);
 
       try {
-        // Execute the tool with security checks
         const result = await executeToolAction(
           actionName,
           command,
@@ -99,7 +153,6 @@ Always explain what you are doing before using a tool. Wait for the tool result 
           `\n📋 Output:\n${result.slice(0, 500)}${result.length > 500 ? "..." : ""}`,
         );
 
-        // Append result to history
         messages.push({
           role: "user",
           content: `ACTION RESULT (${actionName}):\n${result}`,
@@ -116,8 +169,24 @@ Always explain what you are doing before using a tool. Wait for the tool result 
       }
     }
 
-    // No more actions, return final text
     return response.text;
+  }
+
+  // Max steps reached - generate summary from collected results
+  if (allToolResults.length > 0) {
+    const summaryPrompt = `Based on the following tool results, provide a helpful summary response to the user's question: "${initialMessage}"
+
+Tool Results:
+${allToolResults.join("\n\n")}
+
+Provide a clear, friendly response summarizing the information above.`;
+
+    const finalResponse = await provider.generate({
+      model: options.model,
+      messages: [{ role: "user", content: summaryPrompt }],
+    });
+
+    return finalResponse.text;
   }
 
   return "Agent loop exceeded maximum steps.";

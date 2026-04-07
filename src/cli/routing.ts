@@ -86,6 +86,37 @@ Examples:
 }
 
 /**
+ * Sync skills configuration to gateway-specific local database
+ */
+export function syncSkillsToLocalDb(
+  centralDb: Database,
+  gatewayId: string,
+  localDb: Database,
+): void {
+  localDb.run(`CREATE TABLE IF NOT EXISTS gateway_skills (
+    id TEXT PRIMARY KEY,
+    gateway_id TEXT NOT NULL,
+    skills TEXT NOT NULL,
+    tools TEXT NOT NULL,
+    security_policy TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  )`);
+
+  const skillsConfig = centralDb
+    .query("SELECT * FROM gateway_skills WHERE gateway_id = ?")
+    .get(gatewayId) as any;
+  if (skillsConfig) {
+    const cols = Object.keys(skillsConfig);
+    const placeholders = cols.map(() => "?").join(", ");
+    localDb.run(
+      `INSERT OR REPLACE INTO gateway_skills (${cols.join(", ")}) VALUES (${placeholders})`,
+      Object.values(skillsConfig) as any[],
+    );
+  }
+}
+
+/**
  * Sync channel and bindings to gateway-specific local database
  */
 export function syncGatewayLocalDb(
@@ -182,6 +213,11 @@ export function syncGatewayLocalDb(
         `INSERT INTO channel_bindings (${cols.join(", ")}) VALUES (${placeholders})`,
         Object.values(binding) as any[],
       );
+    }
+
+    // 4. Mirror gateway_skills for this gateway
+    if (gateway) {
+      syncSkillsToLocalDb(centralDb, (gateway as any).id, localDb);
     }
 
     localDb.close();

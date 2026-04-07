@@ -351,52 +351,55 @@ export class RoutingManager {
 
   /**
    * Get channel bindings from database
+   * Uses channels table directly (gateway_id stored in channels, not separate bindings table)
    */
   private getChannelBindings(channelId: string): ChannelBinding[] {
     try {
       const results = this.db
         .query<
           {
-            channel_id: string;
-            gateway_id: string;
-            routing_config: string | null;
-            priority: number;
+            id: string;
+            gateway_id: string | null;
+            config: string | null;
             enabled: number;
           },
           [string]
         >(
           `
-        SELECT cb.channel_id, cb.gateway_id, cb.routing_config, cb.priority, cb.enabled
-        FROM channel_bindings cb
-        WHERE cb.channel_id = ? AND cb.enabled = 1
-        ORDER BY cb.priority ASC
+        SELECT id, gateway_id, config, enabled
+        FROM channels
+        WHERE id = ? AND enabled = 1
       `,
         )
         .all(channelId);
 
-      return results.map((row) => {
-        let routing: RoutingConfig = { mode: "default" };
-        try {
-          if (row.routing_config) {
-            routing = JSON.parse(row.routing_config);
+      return results
+        .filter((row) => row.gateway_id)
+        .map((row) => {
+          let routing: RoutingConfig = { mode: "default" };
+          try {
+            if (row.config) {
+              const config = JSON.parse(row.config);
+              if (config.routing) {
+                routing = config.routing;
+              }
+            }
+          } catch (parseError) {
+            console.warn(
+              `Failed to parse config for channel ${channelId}:`,
+              parseError,
+            );
           }
-        } catch (parseError) {
-          console.warn(
-            `Failed to parse routing config for channel ${channelId}:`,
-            parseError,
-          );
-        }
 
-        return {
-          channelId: row.channel_id,
-          gatewayId: row.gateway_id,
-          routing,
-          priority: row.priority,
-          enabled: row.enabled === 1,
-        };
-      });
+          return {
+            channelId: row.id,
+            gatewayId: row.gateway_id!,
+            routing,
+            priority: 0,
+            enabled: row.enabled === 1,
+          };
+        });
     } catch (error) {
-      // Table might not exist yet - this is expected on first run
       if (error instanceof Error && !error.message.includes("no such table")) {
         console.warn("Unexpected error fetching channel bindings:", error);
       }

@@ -9,4 +9,5 @@ export {
   resetDatabase,
   dbManager,
   schema,
+  getDefaultDbPath,
 } from "./db";

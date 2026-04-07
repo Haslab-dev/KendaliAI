@@ -48,8 +48,7 @@ function color(text: string, colorName: keyof typeof colors): string {
 // ============================================
 
 const KENDALIAI_DIR = join(process.cwd(), ".kendaliai");
-const DATA_DIR = join(KENDALIAI_DIR, "data");
-const DB_PATH = join(DATA_DIR, "kendaliai.db");
+const DB_PATH = join(KENDALIAI_DIR, "kendaliai.db");
 
 let db: Database | null = null;
 
@@ -59,8 +58,8 @@ let db: Database | null = null;
 
 function getDb(): Database {
   if (!db) {
-    if (!existsSync(DATA_DIR)) {
-      mkdirSync(DATA_DIR, { recursive: true });
+    if (!existsSync(KENDALIAI_DIR)) {
+      mkdirSync(KENDALIAI_DIR, { recursive: true });
     }
     db = new Database(DB_PATH);
     db.run("PRAGMA journal_mode = WAL");

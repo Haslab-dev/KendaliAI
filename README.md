@@ -312,6 +312,23 @@ npm run build:binary
 ./dist/kendaliai --version
 ```
 
+### Compressed Distribution (Gzip)
+
+To create a compressed version of the binary (safe for all platforms):
+
+```bash
+# Compresses the binary for your current platform
+npm run build:binary:gz
+
+# Build and compress for all platforms
+npm run build:binary:all:gz
+```
+
+The resulting `.gz` files (e.g., `dist/kendaliai.gz`) are significantly smaller (~15MB). Users can extract them with `gunzip` on Linux/macOS or any archive tool on Windows.
+
+> [!TIP]
+> **Why Gzip?** While executable compression (like UPX) saves space, it can trigger OS security blocks on macOS. Gzip provides equivalent space savings while ensuring the binary remains 100% stable after extraction.
+
 | Command                | Output           |
 | ---------------------- | ---------------- |
 | `npm run build:binary` | `dist/kendaliai` |

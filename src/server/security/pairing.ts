@@ -10,6 +10,7 @@
 
 import { randomBytes, createHash } from "crypto";
 import { Database } from "bun:sqlite";
+import { getDefaultDbPath } from "../database/db";
 
 // ============================================
 // Types
@@ -76,8 +77,8 @@ function getDb(): Database {
   const globalDb = (globalThis as any).__kendaliai_db as Database | undefined;
   if (globalDb) return globalDb;
 
-  // Otherwise create new connection
-  return new Database(".kendaliai/kendaliai.db");
+  // Use default database path
+  return new Database(getDefaultDbPath());
 }
 
 /**

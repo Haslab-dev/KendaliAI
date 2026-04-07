@@ -8,7 +8,12 @@
 
 // Core imports
 import { configLoader } from "./config";
-import { getDatabase, initDatabase, dbManager } from "./database";
+import {
+  getDatabase,
+  initDatabase,
+  dbManager,
+  getDefaultDbPath,
+} from "./database";
 import { eventBus } from "./eventbus";
 import { Database } from "bun:sqlite";
 import os from "os";
@@ -40,6 +45,7 @@ import type {
   GenerateOptions,
   StreamChunk,
   ChatMessage,
+  ToolDefinition,
 } from "./providers";
 
 // Tools
@@ -116,6 +122,30 @@ interface GatewayConfig {
   createdAt: string;
 }
 
+interface ChatCompletionBody {
+  model: string;
+  messages: ChatMessage[];
+  stream?: boolean;
+  tools?: ToolDefinition[];
+  [key: string]: any;
+}
+
+interface ExecuteToolBody {
+  name: string;
+  params: Record<string, unknown>;
+}
+
+interface CreateGatewayBody {
+  id?: string;
+  name: string;
+  description?: string;
+  provider?: GatewayConfig["provider"];
+  agent?: GatewayConfig["agent"];
+  skills?: string[];
+  tools?: string[];
+  channels?: GatewayConfig["channels"];
+}
+
 // ============================================
 // CORS Headers
 // ============================================
@@ -170,28 +200,29 @@ let ragEngineInstance: RAGEngine | null = null;
 async function bootstrap() {
   log.info("Starting KendaliAI Server...");
 
-  // Parse command line arguments early to determine database path
+  // Parse command line arguments early
   const cmdArgs = parseArgs();
-  let dbPath = ".kendaliai/kendaliai.db";
 
-  if (cmdArgs.gateway) {
-    dbPath = join(".kendaliai", cmdArgs.gateway, "data", "kendaliai.db");
-  }
+  // Load configuration
+  await configLoader.load();
+  log.info("Configuration loaded.");
+
+  // Determine database path: CLI arg > Config > Default
+  let dbPath =
+    cmdArgs.dbPath ||
+    (configLoader.get().database as any)?.path ||
+    getDefaultDbPath();
 
   // Initialize database
   const db = initDatabase(dbPath);
   log.info(`Database initialized: ${dbPath}`);
 
-  // Get raw database for routing manager
+  // Get raw database for RAG and skill tools
   const rawDb = dbManager.getRaw();
   if (rawDb) {
     routingManager = new RoutingManager(rawDb);
     log.info("Routing manager initialized.");
   }
-
-  // Load configuration
-  await configLoader.load();
-  log.info("Configuration loaded.");
 
   // Register built-in tools
   registerBuiltinTools(db);
@@ -477,6 +508,9 @@ function setupChannelEvents(db: any) {
       // 4. Route message and call AI
       if (routingManager) {
         const route = routingManager.routeMessage(channelId, text, userId);
+        log.info(
+          `🔍 Route result: matched=${route.matched}, gatewayId=${route.gatewayId}, matchType=${route.matchType}`,
+        );
 
         if (route.matched && route.gatewayId) {
           const instance = gatewayInstances.get(route.gatewayId);
@@ -562,9 +596,13 @@ function setupChannelEvents(db: any) {
               log.info(`✅ Pipeline routed to [${pipelineResult.intent}]`);
 
               // 3. Send final response
+              log.info(
+                `📤 Sending response: ${pipelineResult.response?.slice(0, 100)}...`,
+              );
               await channel.sendMessage(pipelineResult.response, {
                 chatId,
               } as SendMessageOptions);
+              log.info(`✅ Response sent to chat ${chatId}`);
             } catch (err) {
               log.error(`AI call failed for gateway ${route.gatewayId}:`, err);
               await channel.sendMessage(
@@ -572,8 +610,18 @@ function setupChannelEvents(db: any) {
                 { chatId } as SendMessageOptions,
               );
             }
+          } else {
+            log.warn(
+              `⚠️ Gateway instance or channel not found: instance=${!!instance}, channel=${!!channel}`,
+            );
           }
+        } else {
+          log.warn(
+            `⚠️ Route not matched: matched=${route.matched}, gatewayId=${route.gatewayId}`,
+          );
         }
+      } else {
+        log.warn("⚠️ Routing manager not initialized");
       }
     }
   });
@@ -859,8 +907,7 @@ async function loadGatewayAndChannels(db: any, gatewayName?: string) {
       // Load context from markdown files
       const mdContext = loadGatewayContext(gw.name);
       const baseSystemPrompt =
-        agentConfigRaw.system_prompt ||
-        "You are KendaliAI, a powerful AI orchestrator.";
+        agentConfigRaw.system_prompt || "You are a helpful AI assistant.";
       const combinedPrompt = mdContext
         ? `${mdContext}\n\n# Base Instructions\n${baseSystemPrompt}`
         : baseSystemPrompt;
@@ -1025,7 +1072,7 @@ async function handleGetGateways(): Promise<Response> {
 async function handleCreateGateway(req: Request): Promise<Response> {
   try {
     const db = getDatabase();
-    const body = await req.json();
+    const body = (await req.json()) as CreateGatewayBody;
 
     // Create gateway config
     const gatewayConfig: GatewayConfig = {
@@ -1105,7 +1152,7 @@ async function handleGetTools(): Promise<Response> {
 
 async function handleExecuteTool(req: Request): Promise<Response> {
   try {
-    const body = await req.json();
+    const body = (await req.json()) as ExecuteToolBody;
     const { name, params } = body;
 
     const result = await toolRegistry.execute(name, params);
@@ -1149,27 +1196,17 @@ async function handleGetLogs(req: Request): Promise<Response> {
 
 async function handleGetSettings(): Promise<Response> {
   try {
-    const config = configLoader.get();
-    // Return safe config (without sensitive data)
-    return json({
-      server: config.server,
-      database: config.database,
-      providers: Object.keys(config.providers || {}),
-    });
+    return json(configLoader.get());
   } catch (err) {
     log.error("Failed to get settings:", err);
     return error("Failed to get settings");
   }
 }
 
-// ============================================
-// OpenAI-Compatible API Handlers
-// ============================================
-
 async function handleOpenAIChat(req: Request): Promise<Response> {
   try {
-    const body = await req.json();
-    const { model, messages: chatMessages, stream, tools } = body;
+    const body = (await req.json()) as ChatCompletionBody;
+    const { model, messages, stream, tools } = body;
 
     // Find a provider for this model
     const providers = providerRegistry.getAll();
@@ -1199,7 +1236,7 @@ async function handleOpenAIChat(req: Request): Promise<Response> {
     }
 
     const options: GenerateOptions = {
-      messages: chatMessages,
+      messages,
       model,
       tools,
     };
@@ -1401,7 +1438,9 @@ async function handleRequest(req: Request): Promise<Response> {
       return error("RAG engine not initialized", 503);
     }
     try {
-      const body = await req.json();
+      const body = (await req.json()) as {
+        documents: Array<{ content: string; metadata?: any }>;
+      };
       const { documents } = body;
       // Ingest documents one by one
       let indexed = 0;
@@ -1421,7 +1460,7 @@ async function handleRequest(req: Request): Promise<Response> {
       return error("RAG engine not initialized", 503);
     }
     try {
-      const body = await req.json();
+      const body = (await req.json()) as { query: string; topK?: number };
       const { query, topK } = body;
       const results = await ragEngineInstance.search(query, {
         topK: topK || 5,
@@ -1441,9 +1480,19 @@ async function handleRequest(req: Request): Promise<Response> {
 // Parse Command Line Arguments
 // ============================================
 
-function parseArgs(): { port?: number; host?: string; gateway?: string } {
+function parseArgs(): {
+  port?: number;
+  host?: string;
+  gateway?: string;
+  dbPath?: string;
+} {
   const args = process.argv.slice(2);
-  const result: { port?: number; host?: string; gateway?: string } = {};
+  const result: {
+    port?: number;
+    host?: string;
+    gateway?: string;
+    dbPath?: string;
+  } = {};
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--port" && args[i + 1]) {
@@ -1454,6 +1503,9 @@ function parseArgs(): { port?: number; host?: string; gateway?: string } {
       i++;
     } else if (args[i] === "--gateway" && args[i + 1]) {
       result.gateway = args[i + 1];
+      i++;
+    } else if (args[i] === "--db-path" && args[i + 1]) {
+      result.dbPath = args[i + 1];
       i++;
     }
   }

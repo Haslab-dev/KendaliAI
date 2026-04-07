@@ -9,6 +9,7 @@ export async function chatExecutor(
   model?: string,
   systemPrompt?: string,
 ): Promise<string> {
+  console.log(`[ChatExecutor] Calling provider with model: ${model}`);
   const response = await provider.generate({
     model,
     messages: [
@@ -21,6 +22,9 @@ export async function chatExecutor(
       { role: "user", content: message },
     ],
   });
+  console.log(
+    `[ChatExecutor] Response received: ${response.text?.slice(0, 100)}...`,
+  );
 
   return response.text;
 }

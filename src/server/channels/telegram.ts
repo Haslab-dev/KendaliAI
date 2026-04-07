@@ -40,6 +40,9 @@ export class TelegramChannel extends BaseChannel {
   private setupHandlers() {
     // Handle messages
     this.bot.on("message", async (ctx) => {
+      console.log(
+        `[Telegram] Received message from ${ctx.from?.id}: ${ctx.message?.text?.slice(0, 50)}`,
+      );
       const message = this.convertMessage(ctx);
       if (message) {
         await this.handleMessage(message);

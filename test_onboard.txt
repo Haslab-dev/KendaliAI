@@ -1,0 +1,10 @@
+.kendaliai
+KatrinaAI
+deepseek
+deepseek-chat
+sk-proj_xxxx
+TestAPIKey123
+y
+katrina-bot
+Y
+

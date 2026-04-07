@@ -5,9 +5,18 @@
 import { Database } from "bun:sqlite";
 import { drizzle, BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { join } from "path";
+import { homedir } from "os";
 
 // Import schema
 import * as schema from "./schema";
+
+// Default database path - uses root system (~/.kendaliai)
+export function getDefaultDbPath(): string {
+  return (
+    process.env.KENDALIAI_DB_PATH ||
+    join(homedir(), ".kendaliai", "kendaliai.db")
+  );
+}
 
 // Database singleton
 let dbInstance: BunSQLiteDatabase<typeof schema> | null = null;
@@ -27,9 +36,7 @@ export type KendaliDB = BunSQLiteDatabase<typeof schema>;
 /**
  * Initialize database connection
  */
-export function initDatabase(
-  dbPath: string = ".kendaliai/kendaliai.db",
-): KendaliDB {
+export function initDatabase(dbPath: string = getDefaultDbPath()): KendaliDB {
   if (dbInstance && sqlite?.filename === dbPath) return dbInstance;
 
   // Close existing if path changed
@@ -100,7 +107,7 @@ export function closeDatabase(): void {
  * Reset database (drop all tables and recreate)
  */
 export async function resetDatabase(
-  dbPath: string = ".kendaliai/kendaliai.db",
+  dbPath: string = getDefaultDbPath(),
 ): Promise<void> {
   closeDatabase();
 

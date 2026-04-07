@@ -24,12 +24,14 @@ import {
   writeFileSync,
 } from "fs";
 import { join } from "path";
+import { homedir } from "os";
 import { getSkillsManager } from "../server/skills";
 import { initTables } from "./db-init";
 
-// Directory paths - use project-local directory by default
-const PROJECT_DIR = process.cwd();
-const KENDALIAI_DIR = join(PROJECT_DIR, ".kendaliai");
+// Directory paths - use root system (~/.kendaliai) by default
+const HOME_DIR = homedir();
+const KENDALIAI_DIR =
+  process.env.KENDALIAI_DATA_DIR || join(HOME_DIR, ".kendaliai");
 
 /**
  * Get the workspace directory for a specific gateway
@@ -52,12 +54,14 @@ export function getGatewayPaths(name: string) {
     logFile: join(base, "logs", "gateway.log"),
     run: join(base, "run"),
     pidFile: join(base, "run", "gateway.pid"),
-    agents: join(base, "agents.md"),
-    boot: join(base, "boot.md"),
+    // Workspace files
     identity: join(base, "identity.md"),
-    soul: join(base, "soul.md"),
     user: join(base, "user.md"),
+    agents: join(base, "agents.md"),
     tools: join(base, "tools.md"),
+    memory: join(base, "memory.md"),
+    memoryDir: join(base, "memory"),
+    boot: join(base, "boot.md"),
   };
 }
 
@@ -68,14 +72,23 @@ export function loadGatewayContext(name: string): string {
   const paths = getGatewayPaths(name);
   let context = "";
 
+  // Load core files
   const files = [
     { name: "Identity", path: paths.identity },
-    { name: "Soul", path: paths.soul },
     { name: "User", path: paths.user },
-    { name: "Agents", path: paths.agents },
-    { name: "Tools", path: paths.tools },
-    { name: "Boot", path: paths.boot },
+    { name: "LongTermMemory", path: paths.memory },
   ];
+
+  // Load today's memory log
+  const today = new Date();
+  const todayDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const todayLogPath = join(paths.memoryDir, `${todayDate}.md`);
+
+  // Load yesterday's memory log
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayDate = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, "0")}-${String(yesterday.getDate()).padStart(2, "0")}`;
+  const yesterdayLogPath = join(paths.memoryDir, `${yesterdayDate}.md`);
 
   for (const file of files) {
     if (existsSync(file.path)) {
@@ -92,7 +105,39 @@ export function loadGatewayContext(name: string): string {
     }
   }
 
+  // Add recent memory logs
+  if (existsSync(yesterdayLogPath)) {
+    try {
+      const content = readFileSync(yesterdayLogPath, "utf-8").trim();
+      if (content) {
+        context += `\n--- [Yesterday's Memory] ---\n${content}\n`;
+      }
+    } catch {}
+  }
+
+  if (existsSync(todayLogPath)) {
+    try {
+      const content = readFileSync(todayLogPath, "utf-8").trim();
+      if (content) {
+        context += `\n--- [Today's Memory] ---\n${content}\n`;
+      }
+    } catch {}
+  }
+
   return context;
+}
+
+/**
+ * Load behavioral rules (agents.md) - loaded when needed
+ */
+export function loadBehavioralRules(name: string): string {
+  const paths = getGatewayPaths(name);
+  if (existsSync(paths.agents)) {
+    try {
+      return readFileSync(paths.agents, "utf-8").trim();
+    } catch {}
+  }
+  return "";
 }
 
 // Regex for valid gateway names: alphanumeric, underscores, hyphens only
@@ -390,9 +435,8 @@ export async function createGateway(
   // Initialize markdown files
   const templates = {
     agents: `# Agent Guidelines\nThis workspace is your home. Manage memory and continuity here.\n- Use MEMORY.md for long-term insight.\n- Use memory/YYYY-MM-DD.md for daily context.`,
-    boot: `# Startup Instructions\n- Check for BOOTSTRAP.md for first-run setup.\n- Read IDENTITY.md, SOUL.md, and USER.md on boot.\n- Verify workspace state before acting.`,
-    identity: `Fill this in during your first conversation. Make it yours.\nName: ${name}\nCreature: AI\nVibe: Helpful and Precise\nEmoji: 🤖\nAvatar: `,
-    soul: `# Soul & Principles\n- Be genuinely helpful.\n- Have opinions and be resourceful.\n- Earn trust through competence.`,
+    boot: `# Startup Instructions\n- Check for BOOTSTRAP.md for first-run setup.\n- Read identity.md and user.md on boot.\n- Verify workspace state before acting.`,
+    identity: `# Identity\n\nName: ${name}\nRole: AI Assistant\nVibe: Helpful and Precise\n\n## Core Values\n- Be genuinely helpful.\n- Have opinions and be resourceful.\n- Earn trust through competence.\n\n## When asked who you are\nState your name is **${name}** and offer to help. Keep it brief.`,
     user: `# User Profile\nName: User\nNotes: Learning projects and preferences...`,
     tools: `# Environment Tools\nLocal configuration for cameras, SSH hosts, and voice preferences.`,
   };
@@ -400,7 +444,6 @@ export async function createGateway(
   writeFileSync(paths.agents, templates.agents);
   writeFileSync(paths.boot, templates.boot);
   writeFileSync(paths.identity, templates.identity);
-  writeFileSync(paths.soul, templates.soul);
   writeFileSync(paths.user, templates.user);
   writeFileSync(paths.tools, templates.tools);
 
