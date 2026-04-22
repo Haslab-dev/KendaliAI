@@ -2,10 +2,9 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/kendaliai/app/internal/logger"
@@ -37,141 +36,148 @@ func NewCognitionLoop(p Provider, maxSteps int) *CognitionLoop {
 	}
 }
 
-const baseSystemPrompt = `You are a coding assistant whose goal it is to help us solve coding tasks. 
-You have access to a series of tools you can execute. Here are the tools you can execute:
+const baseSystemPrompt = `You are an autonomous, production-grade AI Software Engineer operating inside a controlled execution runtime.
+
+Your role is to PLAN, VALIDATE, and EXECUTE tasks using available tools with high precision and minimal resource usage.
+
+---
+
+## SYSTEM CONTRACT
+
+You operate in discrete cycles:
+
+1. PLAN → decide what to do
+2. VALIDATE → ensure actions are safe and necessary
+3. EXECUTE → call tools (if needed)
+4. COMPLETE → return final answer when no further actions are required
+
+---
+
+## AVAILABLE TOOLS
 
 {tool_list_repr}
 
-When you want to use a tool, reply with exactly one line in the format: 'tool: TOOL_NAME({"arg": "value"})' and nothing else.
-Use compact single-line JSON with double quotes. After receiving a tool_result(...) message, continue the task.
-If no tool is needed, OR if you have completely answered the user's request, simply respond normally with your final answer and DO NOT output any tool prefixes.
+---
 
-HARNESS & EVALUATION GUIDELINES:
-1. When asked to evaluate or summarize a codebase, NEVER read every file blindly.
-2. First use 'list_files' to navigate the directory structure.
-3. Identify and use 'read_file' EXCLUSIVELY on core architectural entry points (e.g., main.go, package.json, go.mod, schema.go) to understand the application logic.
-4. Stop calling tools after reading 2 to 3 main files. Give a detailed response based ONLY on those core files and do not deep-dive into internal utility files.
+## OUTPUT FORMAT (STRICT)
 
-IDENTITY & CONFIG:
+You MUST follow one of these two modes:
+
+### 1. TOOL EXECUTION MODE
+
+If any action is required, output ONLY tool calls:
+
+tool: TOOL_NAME({"arg": "value"})
+tool: TOOL_NAME({"arg": "value"})
+
+Rules:
+- One tool per line
+- No explanations, no extra text
+- Multiple tools = executed in PARALLEL
+- Only call tools that are necessary
+
+---
+
+### 2. FINAL RESPONSE MODE
+
+If the task is complete and NO tools are needed:
+
+- Output ONLY the final answer
+- No tool lines
+- No planning text
+
+---
+
+## EXECUTION RULES
+
+1. MINIMIZE OPERATIONS
+   - Do not call tools unless required
+   - Avoid redundant reads or repeated actions
+
+2. NO BULK SCANS
+   - NEVER scan entire directories blindly
+   - ALWAYS prefer "search_files" before accessing files
+
+3. TARGETED FILE ACCESS
+   - Use "read_file_chunked" instead of full reads
+   - Only access relevant sections
+
+4. CONTROLLED SHELL USAGE
+   - "exec" is a fallback tool, not primary
+   - Avoid chaining shell commands unnecessarily
+
+5. GIT TOOL RESTRICTION
+   - DO NOT use git tools unless explicitly requested
+
+---
+
+## CONTEXT-AWARE SHORT-CIRCUIT
+
+The system may preload high-level context (e.g. README.md, REFACTORING_NOTES.md).
+
+If the user asks:
+- “what is this project?”
+- “explain the codebase”
+- or similar high-level questions
+
+THEN:
+- DO NOT call any tools
+- Answer immediately using provided context
+
+---
+
+## SAFETY & VALIDATION
+
+Before executing tools, ensure:
+
+- The action directly contributes to the task
+- The scope is minimal and precise
+- The command is safe and non-destructive
+
+NEVER:
+- execute destructive commands blindly
+- modify unknown files without reading context first
+
+---
+
+## DECISION HEURISTICS
+
+Prefer:
+
+- search → read → edit → validate
+
+Avoid:
+
+- read → read → read (without narrowing scope)
+- exec for simple file operations
+- large context expansion
+
+---
+
+## IDENTITY
+
 {persona_text}
+
+---
+
+## FINAL DIRECTIVE
+
+Be precise, efficient, and deterministic.
+
+Do not over-explore.
+Do not over-execute.
+Stop immediately when the task is complete.
 `
 
-type ToolDef struct {
-	Name        string
-	Description string
-	Signature   string
-	Execute     func(args map[string]interface{}) string
-}
-
-func (c *CognitionLoop) getToolRegistry(excludeCmds []string) map[string]ToolDef {
-	return map[string]ToolDef{
-		"read_file": {
-			Name:        "read_file",
-			Description: "Gets the full or partial content of a file. Use start_line and end_line to chunk large files.",
-			Signature:   `{"filename": "string", "start_line": "int", "end_line": "int"}`,
-			Execute: func(args map[string]interface{}) string {
-				path, _ := args["filename"].(string)
-				b, err := os.ReadFile(path)
-				if err != nil {
-					return err.Error()
-				}
-				lines := strings.Split(string(b), "\n")
-
-				startLine := 1
-				endLine := len(lines)
-
-				if sl, ok := args["start_line"].(float64); ok && sl > 0 {
-					startLine = int(sl)
-				}
-				if el, ok := args["end_line"].(float64); ok && el > 0 && int(el) <= len(lines) {
-					endLine = int(el)
-				}
-
-				if startLine > endLine || startLine > len(lines) {
-					return "Invalid line range"
-				}
-
-				return strings.Join(lines[startLine-1:endLine], "\n")
-			},
-		},
-		"list_files": {
-			Name:        "list_files",
-			Description: "Lists the files in a directory.",
-			Signature:   `{"path": "string"}`,
-			Execute: func(args map[string]interface{}) string {
-				path, _ := args["path"].(string)
-				entries, err := os.ReadDir(path)
-				if err != nil {
-					return err.Error()
-				}
-				var files []string
-				for _, e := range entries {
-					t := "file"
-					if e.IsDir() {
-						t = "dir"
-					}
-					files = append(files, fmt.Sprintf("%s (%s)", e.Name(), t))
-				}
-				return strings.Join(files, "\n")
-			},
-		},
-		"edit_file": {
-			Name:        "edit_file",
-			Description: "Replaces first occurrence of old_str with new_str in file. If old_str is empty, create/overwrite file.",
-			Signature:   `{"path": "string", "old_str": "string", "new_str": "string"}`,
-			Execute: func(args map[string]interface{}) string {
-				path, _ := args["path"].(string)
-				oldStr, _ := args["old_str"].(string)
-				newStr, _ := args["new_str"].(string)
-				if oldStr == "" {
-					if err := os.WriteFile(path, []byte(newStr), 0644); err != nil {
-						return err.Error()
-					}
-					return "created_file"
-				}
-				b, err := os.ReadFile(path)
-				if err != nil {
-					return err.Error()
-				}
-				content := string(b)
-				if !strings.Contains(content, oldStr) {
-					return "old_str not found"
-				}
-				content = strings.Replace(content, oldStr, newStr, 1)
-				if err := os.WriteFile(path, []byte(content), 0644); err != nil {
-					return err.Error()
-				}
-				return "edited"
-			},
-		},
-		"bash": {
-			Name:        "bash",
-			Description: "Executes a shell command.",
-			Signature:   `{"command": "string"}`,
-			Execute: func(args map[string]interface{}) string {
-				cmd, _ := args["command"].(string)
-				// Native command blocking!
-				for _, excluded := range excludeCmds {
-					ex := strings.TrimSpace(excluded)
-					if ex != "" && strings.Contains(cmd, ex) {
-						return fmt.Sprintf("Error: Command '%s' matches restricted pattern '%s'", cmd, ex)
-					}
-				}
-				out, err := exec.Command("bash", "-c", cmd).CombinedOutput()
-				if err != nil {
-					return fmt.Sprintf("Error: %v\nOutput: %s", err, string(out))
-				}
-				return string(out)
-			},
-		},
-	}
-}
+// (Tools are now extracted into tools.go)
 
 func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, error) {
 	logger.Info("Agent", "🧠 Cognition Loop started")
 
 	personaText, activeToolNames, excludeCmds := c.loadPersonaConfig()
-	reg := c.getToolRegistry(excludeCmds)
+
+	cwd, _ := os.Getwd()
+	reg := GetToolRegistry(excludeCmds, cwd)
 
 	repStr := ""
 	for _, tName := range activeToolNames {
@@ -184,9 +190,33 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 	sysPrompt := strings.Replace(baseSystemPrompt, "{tool_list_repr}", repStr, 1)
 	sysPrompt = strings.Replace(sysPrompt, "{persona_text}", personaText, 1)
 
+	// Inject structural workspace context dynamically (INTERNAL PRE-READ)
+	extContext := ""
+	for _, fn := range []string{"README.md", "Kendali.md", "Agent.md"} {
+		if content, err := os.ReadFile(filepath.Join(cwd, fn)); err == nil {
+			str := string(content)
+			if len(str) > 1500 {
+				str = str[:1500] + "\n...(truncated)"
+			}
+			extContext += fmt.Sprintf("\n--- Context %s ---\n%s\n", fn, str)
+		}
+	}
+
+	if extContext != "" {
+		sysPrompt += "\nWORKSPACE CONTEXT AUTO-LOADED (Internal Read):\n" + extContext
+	} else {
+		sysPrompt += "\nWORKSPACE CONTEXT AUTO-LOADED: None found natively. You must manually utilize 'list_files' or 'search_files' to map context if needed."
+	}
+
 	messages := []Message{{Role: "system", Content: sysPrompt}, {Role: "user", Content: initialQuery}}
 
+	// Spin up a 5-thread worker pool natively executing sandboxed ops
+	engine := NewExecutionEngine(5, reg)
+
 	for i := 0; i < c.MaxSteps; i++ {
+		// Optimize limits before inference (Sliding window / Chunking enforcement)
+		messages = OptimizeContext(messages, 20000)
+
 		response, err := c.Provider.ChatCompletion(ctx, messages)
 		if err != nil {
 			return "", fmt.Errorf("provider err: %v", err)
@@ -194,20 +224,26 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 
 		messages = append(messages, Message{Role: "assistant", Content: response.Content})
 
-		toolName, toolArgs := extractToolInvocations(response.Content)
-		if toolName != "" {
-			if tool, exists := reg[toolName]; exists {
+		// 1. Planning Layer parses parallel commands
+		reqs := ParseActionPlan(response.Content)
+		if len(reqs) > 0 {
+			for _, req := range reqs {
 				if c.OnTool != nil {
-					c.OnTool(toolName, toolArgs)
+					c.OnTool(req.Name, req.Args)
 				}
-				logger.Info("Agent", fmt.Sprintf("🛠 Executing %s args: %v", toolName, toolArgs))
-				respStr := tool.Execute(toolArgs)
-				messages = append(messages, Message{Role: "user", Content: fmt.Sprintf("tool_result(%s)", respStr)})
-				continue
+				logger.Info("Agent", fmt.Sprintf("⚙️ Scheduling %s args: %v", req.Name, req.Args))
 			}
-			messages = append(messages, Message{Role: "user", Content: fmt.Sprintf("tool_result(error: tool '%s' not mapped)", toolName)})
+
+			// 2. Scheduler invokes parallel go-routines execution natively
+			results := engine.ExecuteParallel(ctx, reqs)
+
+			// 3. State Sync / Re-feed
+			for _, res := range results {
+				messages = append(messages, Message{Role: "user", Content: fmt.Sprintf("tool_result(%s):\n%s", res.Name, res.Output)})
+			}
 			continue
 		}
+
 		logger.Info("Agent", "✅ Cognition Loop completed")
 		return response.Content, nil
 	}
@@ -218,11 +254,17 @@ func (c *CognitionLoop) loadPersonaConfig() (string, []string, []string) {
 	homeDir, _ := os.UserHomeDir()
 	content, err := os.ReadFile(homeDir + "/.kendaliai/Persona.md")
 	if err != nil {
-		return "", []string{"bash", "read_file"}, nil
+		return "", []string{"exec", "read_file_chunked"}, nil
 	}
 
 	personaTxt := string(content)
-	tools := []string{"bash", "read_file", "list_files", "edit_file"}
+	// Base required semantic tools expanded to encompass the entire Production 15-system scale
+	tools := []string{
+		"exec", "read_file", "list_files", "search_files",
+		"apply_patch", "replace_range",
+		"git_status", "git_diff", "git_apply_patch",
+		"run_tests", "validate_syntax", "fetch_url",
+	}
 	excludes := []string{}
 
 	lines := strings.Split(personaTxt, "\n")
@@ -237,23 +279,4 @@ func (c *CognitionLoop) loadPersonaConfig() (string, []string, []string) {
 		}
 	}
 	return strings.Join(cleaned, "\n"), tools, excludes
-}
-
-func extractToolInvocations(text string) (string, map[string]interface{}) {
-	for _, rawLine := range strings.Split(text, "\n") {
-		line := strings.TrimSpace(rawLine)
-		if !strings.HasPrefix(line, "tool:") {
-			continue
-		}
-		parts := strings.SplitN(strings.TrimSpace(line[5:]), "(", 2)
-		if len(parts) == 2 {
-			name := strings.TrimSpace(parts[0])
-			jsonStr := strings.TrimSuffix(strings.TrimSpace(parts[1]), ")")
-			var args map[string]interface{}
-			if err := json.Unmarshal([]byte(jsonStr), &args); err == nil {
-				return name, args
-			}
-		}
-	}
-	return "", nil
 }

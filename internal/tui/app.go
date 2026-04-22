@@ -77,15 +77,26 @@ func runAgentTask(cmd string, p *tea.Program) tea.Cmd {
 				if n == "list_files" {
 					argStr = fmt.Sprintf("%v", args["path"])
 				} else if n == "read_file" {
-					if sl, ok := args["start_line"]; ok {
-						argStr = fmt.Sprintf("%v lines:%v-%v", args["filename"], sl, args["end_line"])
+					if off, ok := args["offset"]; ok {
+						argStr = fmt.Sprintf("%v offset:%v lim:%v", args["path"], off, args["limit"])
 					} else {
-						argStr = fmt.Sprintf("%v", args["filename"])
+						argStr = fmt.Sprintf("%v", args["path"])
 					}
-				} else if n == "edit_file" {
+				} else if n == "apply_patch" {
 					argStr = fmt.Sprintf("%v", args["path"])
-				} else if n == "bash" {
+				} else if n == "replace_range" {
+					argStr = fmt.Sprintf("%v lines %v-%v", args["path"], args["start"], args["end"])
+				} else if n == "exec" {
 					argStr = fmt.Sprintf("%v", args["command"])
+				} else if n == "search_files" {
+					argStr = fmt.Sprintf("in %v for '%v'", args["path"], args["query"])
+				} else if strings.HasPrefix(n, "git_") {
+					argStr = "" // Git cmds natively hold context in name
+				} else if n == "run_tests" || n == "validate_syntax" {
+					argStr = fmt.Sprintf("%v", args["path"])
+					if n == "validate_syntax" { argStr = fmt.Sprintf("%v", args["file"]) }
+				} else if n == "fetch_url" {
+					argStr = fmt.Sprintf("%v", args["url"])
 				}
 				p.Send(agentStepMsg(fmt.Sprintf("%s (%s)", n, argStr)))
 			}
