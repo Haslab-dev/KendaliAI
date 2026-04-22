@@ -17,22 +17,29 @@ import (
 )
 
 var (
-	titleStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FAFAFA")).Background(lipgloss.Color("#7D56F4")).Padding(0, 1).MarginBottom(1)
-	inputStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF79C6"))
+	titleStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFFFFF")).Background(lipgloss.Color("#1A1A1A")).Padding(0, 1).MarginBottom(1)
+	inputStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#00FF00"))
 
-	userStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#FAFAFA")).Bold(true) // White
-	toolStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFA500"))             // Orange
-	agentStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#8BE9FD"))             // Cyan/Blue
-	errorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555"))             // Red
+	userStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#FAFAFA")).Bold(true)
+	thoughtStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#CCCCCC"))
+	toolNameStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFA500")).Bold(true)
+	toolDetailStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFA500"))
+	agentStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#8BE9FD"))
+	errorStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555"))
+	footerStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#555555")).Italic(true)
+	processingStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#8BE9FD")).Bold(true)
 )
 
 type model struct {
-	db       *sql.DB
-	cfg      *config.Config
-	ti       textinput.Model
-	vp       viewport.Model
-	logs     []string
-	quitting bool
+	db           *sql.DB
+	cfg          *config.Config
+	ti           textinput.Model
+	vp           viewport.Model
+	logs         []string
+	quitting     bool
+	totalInput   int
+	totalOutput  int
+	isProcessing bool
 }
 
 func initialModel(db *sql.DB, cfg *config.Config) model {
@@ -62,6 +69,8 @@ type agentStepMsg string
 type responseMsg string
 type thoughtMsg string
 type errMsg error
+type statsMsg struct{ In, Out int }
+type progressMsg bool
 
 func runAgentTask(cmd string, p *tea.Program, m model) tea.Cmd {
 	return func() tea.Msg {
@@ -77,7 +86,21 @@ func runAgentTask(cmd string, p *tea.Program, m model) tea.Cmd {
 		loop := agent.NewCognitionLoop(pr, 25, m.cfg)
 		loop.OnTool = func(n string, args map[string]interface{}) {
 			if p != nil {
+				label := "Ran"
 				argStr := ""
+				
+				// Categorize tools based on the AntiGravity pattern
+				switch n {
+				case "list_files", "read_file", "search_files", "fetch_url":
+					label = "Explore"
+				case "apply_patch", "replace_range", "edit_file":
+					label = "Edited"
+				case "mcp_call":
+					label = "mcp call"
+				default:
+					label = "Ran"
+				}
+
 				if n == "list_files" {
 					argStr = fmt.Sprintf("%v", args["path"])
 				} else if n == "read_file" {
@@ -112,16 +135,16 @@ func runAgentTask(cmd string, p *tea.Program, m model) tea.Cmd {
 					
 					argStr = fmt.Sprintf("srv:%v tool:%v ...", srv, tool)
 				}
-				p.Send(agentStepMsg(fmt.Sprintf("%s (%s)", n, argStr)))
+				p.Send(agentStepMsg(fmt.Sprintf("%s (%s %s)", label, n, argStr)))
+			}
+		}
+		loop.OnStats = func(in, out int) {
+			if p != nil {
+				p.Send(statsMsg{In: in, Out: out})
 			}
 		}
 		loop.OnResponse = func(content string) {
 			if p != nil {
-				// Only show thoughts if there are tools to be executed
-				if !strings.Contains(content, "tool:") {
-					return
-				}
-
 				// Extract thoughts (text before any tool: calls)
 				thought := content
 				if idx := strings.Index(content, "tool:"); idx != -1 {
@@ -137,7 +160,9 @@ func runAgentTask(cmd string, p *tea.Program, m model) tea.Cmd {
 			}
 		}
 
+		p.Send(progressMsg(true))
 		res, err := loop.Run(context.Background(), cmd)
+		p.Send(progressMsg(false))
 		if err != nil {
 			return errMsg(err)
 		}
@@ -162,6 +187,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			val := m.ti.Value()
 			if val == "" { return m, nil }
 			m.logs = append(m.logs, userStyle.Render(fmt.Sprintf("> You: %s", val)))
+			m.logs = append(m.logs, processingStyle.Render("Start Thinking..."))
 			m.ti.SetValue("")
 			
 			m.vp.SetContent(strings.Join(m.logs, "\n\n"))
@@ -170,9 +196,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, runAgentTask(val, globalProgram, m)
 		}
 	case thoughtMsg:
-		m.logs = append(m.logs, agentStyle.Render(fmt.Sprintf("💭 Thought: %s", string(msg))))
+		m.logs = append(m.logs, thoughtStyle.Render(fmt.Sprintf("● %s", string(msg))))
 		m.vp.SetContent(strings.Join(m.logs, "\n\n"))
 		m.vp.GotoBottom()
+		return m, nil
+	case statsMsg:
+		m.totalInput = msg.In
+		m.totalOutput = msg.Out
+		return m, nil
+	case progressMsg:
+		m.isProcessing = bool(msg)
 		return m, nil
 	case tea.WindowSizeMsg:
 		m.vp.Width = msg.Width
@@ -181,17 +214,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.vp.GotoBottom()
 		return m, nil
 	case agentStepMsg:
-		m.logs = append(m.logs, toolStyle.Render(fmt.Sprintf("-> %s", string(msg))))
+		m.logs = append(m.logs, toolNameStyle.Render("└ ") + toolDetailStyle.Render(string(msg)))
 		m.vp.SetContent(strings.Join(m.logs, "\n\n"))
 		m.vp.GotoBottom()
 		return m, nil
 	case responseMsg:
-		m.logs = append(m.logs, agentStyle.Render(fmt.Sprintf("> KendaliAI: %s", string(msg))))
+		m.logs = append(m.logs, userStyle.Render("> KendaliAI: ") + agentStyle.Render(string(msg)))
 		m.vp.SetContent(strings.Join(m.logs, "\n\n"))
 		m.vp.GotoBottom()
 		return m, nil
 	case errMsg:
-		m.logs = append(m.logs, errorStyle.Render(fmt.Sprintf("> KendaliAI-Error: %v", msg)))
+		m.logs = append(m.logs, errorStyle.Render(fmt.Sprintf("❌ Error: %v", msg)))
 		m.vp.SetContent(strings.Join(m.logs, "\n\n"))
 		m.vp.GotoBottom()
 		return m, nil
@@ -207,19 +240,30 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	if m.quitting { return "" }
-	var b strings.Builder
-	b.WriteString(titleStyle.Render("KendaliAI Dashboard Workspace"))
-	b.WriteString("\n\n")
+	if m.quitting {
+		return "Exiting KendaliAI..."
+	}
 
-	b.WriteString(m.vp.View())
+	processing := ""
+	if m.isProcessing {
+		processing = processingStyle.Render(" ⚡ Thinking...")
+	}
 
-	b.WriteString("\n\n" + inputStyle.Render(m.ti.View()) + "\n")
-	return b.String()
+	footer := footerStyle.Render(fmt.Sprintf(" Tokens: In %d | Out %d", m.totalInput, m.totalOutput))
+
+	return fmt.Sprintf(
+		"%s\n%s\n\n%s\n\n%s%s\n%s",
+		titleStyle.Render("KendaliAI Dashboard Workspace"),
+		m.vp.View(),
+		userStyle.Render("> ") + m.ti.View(),
+		processing,
+		footer,
+		footerStyle.Render(" [Esc/Ctrl+C to quit | ? for shortcuts]"),
+	)
 }
 
 func StartDynamicTUI(db *sql.DB, cfg *config.Config) error {
-	p := tea.NewProgram(initialModel(db, cfg), tea.WithAltScreen(), tea.WithMouseCellMotion())
+	p := tea.NewProgram(initialModel(db, cfg), tea.WithAltScreen())
 	globalProgram = p
 	if _, err := p.Run(); err != nil {
 		return err

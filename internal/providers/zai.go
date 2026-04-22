@@ -52,6 +52,8 @@ func (p *ZAIProvider) ChatCompletion(ctx context.Context, msgs []agent.Message) 
 	}
 
 	return &agent.Response{
-		Content: resp.Choices[0].Message.Content,
+		Content:      resp.Choices[0].Message.Content,
+		InputTokens:  resp.Usage.PromptTokens,
+		OutputTokens: resp.Usage.CompletionTokens,
 	}, nil
 }

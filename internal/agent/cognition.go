@@ -21,7 +21,9 @@ type Message struct {
 }
 
 type Response struct {
-	Content string `json:"content"`
+	Content      string `json:"content"`
+	InputTokens  int    `json:"input_tokens"`
+	OutputTokens int    `json:"output_tokens"`
 }
 
 type CognitionLoop struct {
@@ -30,6 +32,7 @@ type CognitionLoop struct {
 	Config     *config.Config
 	OnTool     func(toolName string, args map[string]interface{})
 	OnResponse func(content string)
+	OnStats    func(totalInput, totalOutput int)
 }
 
 func NewCognitionLoop(p Provider, maxSteps int, cfg *config.Config) *CognitionLoop {
@@ -235,6 +238,9 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 	// Spin up a 5-thread worker pool natively executing sandboxed ops
 	engine := NewExecutionEngine(5, reg)
 
+	totalInput := 0
+	totalOutput := 0
+
 	for i := 0; i < c.MaxSteps; i++ {
 		// Optimize limits before inference (Sliding window / Chunking enforcement)
 		messages = OptimizeContext(messages, 20000)
@@ -242,6 +248,12 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 		response, err := c.Provider.ChatCompletion(ctx, messages)
 		if err != nil {
 			return "", fmt.Errorf("provider err: %v", err)
+		}
+
+		totalInput += response.InputTokens
+		totalOutput += response.OutputTokens
+		if c.OnStats != nil {
+			c.OnStats(totalInput, totalOutput)
 		}
 
 		truncated := response.Content
