@@ -5,9 +5,10 @@ KendaliAI is a self-hosted, autonomous AI coding agent and orchestration gateway
 ## Features
 
 - **Autonomous Cognition Loop**: Recursive OS-level operations (`read_file`, `list_files`, `edit_file`, `bash`) executed dynamically by models like DeepSeek.
+- **Custom Skills System**: Extend the agent's capabilities with on-demand Markdown instructions or custom shell-based tools.
 - **Dynamic Configured Persona**: Your AI's identity and restricted commands are defined dynamically in `~/.kendaliai/Persona.md`.
-- **Local TUI Dashboard**: An interactive, mouse-scrollable Terminal User Interface using BubbleTea for typing commands directly to the core autonomous agent.
-- **Telegram Gateway Polling**: Bind your Telegram bot to execute local terminal commands securely from your phone.
+- **Local TUI Dashboard**: An interactive Terminal User Interface using BubbleTea for direct agent interaction.
+- **Telegram Gateway**: Execute local terminal commands securely from your phone.
 - **Centralized Telemetry Logging**: Stream OS Agent logs from all channels seamlessly.
 
 ## Quickstart
@@ -60,6 +61,60 @@ go run ./cmd/kendaliai tui
 The primary server that handles all incoming requests from channels and executes the autonomous agent.
 
 ![KendaliAI MCP Execution](./mcp.png)
+
+### Custom Skills
+
+KendaliAI supports two types of custom skills located in `~/.kendaliai/skills/`.
+
+#### 1. Instructional Skills (.md)
+Add specialized knowledge or guidelines by creating a Markdown file with YAML frontmatter. These are registered as "on-demand" tools that the agent calls to load expert instructions when needed.
+
+**Example: `~/.kendaliai/skills/frontend-design.md`**
+```markdown
+---
+name: frontend-design
+description: Create distinctive, production-grade frontend interfaces.
+---
+## Principles
+- Use modern typography (Outfit, Roboto).
+- Avoid generic "AI slop" aesthetics.
+- Prioritize CSS-only motion effects.
+```
+
+#### 2. Execution Skills (.sh + skills.json)
+Add functional tools that execute shell scripts. These must be defined in `~/.kendaliai/skills/skills.json`.
+
+**Example: `~/.kendaliai/skills/weather.sh`**
+```bash
+#!/bin/bash
+curl -s "wttr.in/$1?format=3"
+```
+
+**Registering in `skills.json`:**
+```json
+{
+  "skills": [
+    {
+      "id": "weather",
+      "name": "Get Weather",
+      "description": "Fetch current weather for a city.",
+      "input_schema": {
+        "type": "object",
+        "properties": { "city": { "type": "string" } }
+      },
+      "execution": {
+        "type": "shell",
+        "command": "./weather.sh",
+        "args_mapping": { "city": "$1" }
+      },
+      "installed": true
+    }
+  ]
+}
+```
+
+
+![KendaliAI SKILLS](./skills.png)
 
 ### Headless Gateway (Telegram Bot)
 

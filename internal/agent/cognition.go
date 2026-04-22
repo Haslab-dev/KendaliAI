@@ -76,10 +76,12 @@ You MUST follow one of these two modes:
 If any action is required, output ONLY tool calls:
 
 tool: TOOL_NAME({"arg": "value"})
-tool: TOOL_NAME({"arg": "value"})
+tool: SKILL_NAME({})
 
 Rules:
 - One tool per line
+- ALWAYS start with "tool:" prefix
+- ALWAYS include parentheses with JSON args (use {} if no args)
 - No explanations, no extra text
 - Multiple tools = executed in PARALLEL
 - Only call tools that are necessary
@@ -210,12 +212,27 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 
 	// Inject Markdown Skills (System Instructions)
 	if entries, err := os.ReadDir(filepath.Join(homeDir, ".kendaliai", "skills")); err == nil {
-		mdSkills := "\nACTIVE SYSTEM SKILLS (Instruction Extensions):\n"
+		mdSkills := "\nAVAILABLE SPECIALIZED SKILLS (Call the tool to load full guidelines):\n"
 		hasMd := false
 		for _, e := range entries {
 			if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") {
 				if content, err := os.ReadFile(filepath.Join(homeDir, ".kendaliai", "skills", e.Name())); err == nil {
-					mdSkills += fmt.Sprintf("\n--- Skill: %s ---\n%s\n", e.Name(), string(content))
+					parts := strings.SplitN(string(content), "---", 3)
+					skillName := e.Name()
+					skillDesc := "Expert guidelines and principles."
+					if len(parts) >= 3 {
+						// Extract name and description from frontmatter
+						for _, line := range strings.Split(parts[1], "\n") {
+							line = strings.TrimSpace(line)
+							if strings.HasPrefix(line, "name:") {
+								skillName = strings.TrimSpace(line[5:])
+							} else if strings.HasPrefix(line, "description:") {
+								skillDesc = strings.TrimSpace(line[12:])
+							}
+						}
+					}
+					mdSkills += fmt.Sprintf("- %s: %s\n", skillName, skillDesc)
+					activeToolNames = append(activeToolNames, skillName)
 					hasMd = true
 				}
 			}

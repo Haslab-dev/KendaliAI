@@ -582,12 +582,32 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 							cmdArgs = append(cmdArgs, skillPath)
 
 							// A simple mapping: we just append all matched arg values in order of keys
-							// For robust production use, we would sort by the $1, $2 mapping values
-							if props, ok := currentSkill.InputSchema["properties"].(map[string]interface{}); ok {
-								for key := range props {
-									if val, exists := args[key]; exists {
-										cmdArgs = append(cmdArgs, fmt.Sprintf("%v", val))
+							// For robust production use, we sort by the args_mapping values if present
+							// For now, we'll try to follow the order defined in InputSchema properties
+							// but since it's a map, we should probably check args_mapping.
+							
+							type argMapping struct {
+								key string
+								pos int
+							}
+							var mappings []argMapping
+							for k, v := range currentSkill.Execution.ArgsMapping {
+								var pos int
+								fmt.Sscanf(v, "$%d", &pos)
+								mappings = append(mappings, argMapping{k, pos})
+							}
+							// Simple bubble sort for mappings
+							for i := 0; i < len(mappings); i++ {
+								for j := i + 1; j < len(mappings); j++ {
+									if mappings[i].pos > mappings[j].pos {
+										mappings[i], mappings[j] = mappings[j], mappings[i]
 									}
+								}
+							}
+
+							for _, m := range mappings {
+								if val, exists := args[m.key]; exists {
+									cmdArgs = append(cmdArgs, fmt.Sprintf("%v", val))
 								}
 							}
 
@@ -608,6 +628,40 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 							}
 							return string(out)
 						},
+					}
+				}
+			}
+		}
+
+		// Also load .md files as Instructional Skills
+		if entries, err := os.ReadDir(filepath.Join(homeDir, ".kendaliai", "skills")); err == nil {
+			for _, e := range entries {
+				if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") {
+					path := filepath.Join(homeDir, ".kendaliai", "skills", e.Name())
+					if content, err := os.ReadFile(path); err == nil {
+						parts := strings.SplitN(string(content), "---", 3)
+						if len(parts) >= 3 {
+							var name, desc string
+							for _, line := range strings.Split(parts[1], "\n") {
+								line = strings.TrimSpace(line)
+								if strings.HasPrefix(line, "name:") {
+									name = strings.TrimSpace(line[5:])
+								} else if strings.HasPrefix(line, "description:") {
+									desc = strings.TrimSpace(line[12:])
+								}
+							}
+							if name != "" && desc != "" {
+								registry[name] = ToolDef{
+									Name:        name,
+									Description: desc,
+									Signature:   "{}",
+									Category:    "Skill",
+									Execute: func(ctx context.Context, args map[string]interface{}) string {
+										return strings.TrimSpace(parts[2])
+									},
+								}
+							}
+						}
 					}
 				}
 			}
