@@ -38,3 +38,10 @@ func Warn(component, msg string) {
 	}
 	sysLogger.Printf("⚠️ [%s] %s", component, msg)
 }
+
+func Error(component, msg string) {
+	if sysLogger == nil {
+		InitLogger()
+	}
+	sysLogger.Printf("❌ [%s] %s", component, msg)
+}

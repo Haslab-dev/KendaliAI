@@ -10,6 +10,7 @@ import (
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/kendaliai/app/internal/agent"
+	"github.com/kendaliai/app/internal/config"
 	"github.com/kendaliai/app/internal/logger"
 	"github.com/kendaliai/app/internal/providers"
 )
@@ -27,11 +28,12 @@ type Channel struct {
 }
 
 type TelegramManager struct {
-	db *sql.DB
+	db     *sql.DB
+	config *config.Config
 }
 
-func NewTelegramManager(db *sql.DB) *TelegramManager {
-	return &TelegramManager{db: db}
+func NewTelegramManager(db *sql.DB, cfg *config.Config) *TelegramManager {
+	return &TelegramManager{db: db, config: cfg}
 }
 
 func (tm *TelegramManager) LoadActiveChannels() ([]Channel, error) {
@@ -95,7 +97,7 @@ func (tm *TelegramManager) StartPolling(c Channel) {
 			}
 
 			go func(upd tgbotapi.Update, tMsg tgbotapi.Message) {
-				loop := agent.NewCognitionLoop(p, 25)
+				loop := agent.NewCognitionLoop(p, 25, tm.config)
 				finalResp, err := loop.Run(context.Background(), upd.Message.Text)
 
 				replyText := ""

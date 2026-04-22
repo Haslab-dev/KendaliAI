@@ -10,7 +10,16 @@ type Config struct {
 	Database struct {
 		Path string `json:"path"`
 	} `json:"database"`
-	DefaultProvider string `json:"defaultProvider"`
+	DefaultProvider string                     `json:"defaultProvider"`
+	MCPServers      map[string]MCPServerConfig `json:"mcpServers"`
+}
+
+type MCPServerConfig struct {
+	Command   string            `json:"command,omitempty"`
+	Args      []string          `json:"args,omitempty"`
+	ServerURL string            `json:"serverUrl,omitempty"`
+	Headers   map[string]string `json:"headers,omitempty"`
+	Disabled  bool              `json:"disabled"`
 }
 
 func LoadConfig() *Config {

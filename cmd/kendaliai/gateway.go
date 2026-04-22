@@ -39,7 +39,7 @@ var gatewayCmd = &cobra.Command{
 		importServer := server.NewServer(database, cfg)
 
 		// Start polling in background
-		tm := channels.NewTelegramManager(database)
+		tm := channels.NewTelegramManager(database, cfg)
 		activeChannels, _ := tm.LoadActiveChannels()
 		for _, c := range activeChannels {
 			go tm.StartPolling(c)

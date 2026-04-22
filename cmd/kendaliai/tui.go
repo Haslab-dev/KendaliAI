@@ -20,7 +20,7 @@ var tuiCmd = &cobra.Command{
 		}
 		defer database.Close()
 
-		if err := tui.StartDynamicTUI(database); err != nil {
+		if err := tui.StartDynamicTUI(database, cfg); err != nil {
 			fmt.Printf("TUI Error: %v\n", err)
 			os.Exit(1)
 		}

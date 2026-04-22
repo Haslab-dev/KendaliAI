@@ -156,7 +156,7 @@ func (s *Server) handleChatCompletions() http.HandlerFunc {
 			lastMsg = payload.Messages[len(payload.Messages)-1].Content
 		}
 
-		loop := agent.NewCognitionLoop(p, 25)
+		loop := agent.NewCognitionLoop(p, 25, s.config)
 		finalResp, err := loop.Run(r.Context(), lastMsg)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("AI error: %v", err), http.StatusInternalServerError)

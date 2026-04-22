@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/kendaliai/app/internal/config"
 	"github.com/kendaliai/app/internal/logger"
 )
 
@@ -24,15 +25,18 @@ type Response struct {
 }
 
 type CognitionLoop struct {
-	Provider Provider
-	MaxSteps int
-	OnTool   func(toolName string, args map[string]interface{})
+	Provider   Provider
+	MaxSteps   int
+	Config     *config.Config
+	OnTool     func(toolName string, args map[string]interface{})
+	OnResponse func(content string)
 }
 
-func NewCognitionLoop(p Provider, maxSteps int) *CognitionLoop {
+func NewCognitionLoop(p Provider, maxSteps int, cfg *config.Config) *CognitionLoop {
 	return &CognitionLoop{
 		Provider: p,
 		MaxSteps: maxSteps,
+		Config:   cfg,
 	}
 }
 
@@ -146,6 +150,9 @@ Prefer:
 
 - search → read → edit → validate
 
+- fetch_url → Use this for standard websites. NEVER use this for MCP server URLs (e.g. mcp.exa.ai).
+- mcp_call → Use this for all MCP servers listed in the CONFIGURED MCP SERVERS section.
+
 Avoid:
 
 - read → read → read (without narrowing scope)
@@ -177,7 +184,7 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 	personaText, activeToolNames, excludeCmds := c.loadPersonaConfig()
 
 	cwd, _ := os.Getwd()
-	reg := GetToolRegistry(excludeCmds, cwd)
+	reg := GetToolRegistry(c.Config, excludeCmds, cwd)
 
 	repStr := ""
 	for _, tName := range activeToolNames {
@@ -208,6 +215,21 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 		sysPrompt += "\nWORKSPACE CONTEXT AUTO-LOADED: None found natively. You must manually utilize 'list_files' or 'search_files' to map context if needed."
 	}
 
+	if c.Config != nil && len(c.Config.MCPServers) > 0 {
+		mcpDesc := "\nCONFIGURED MCP SERVERS (Use 'mcp_call' to invoke tools from these servers):\n"
+		for name, srv := range c.Config.MCPServers {
+			if srv.Disabled {
+				continue
+			}
+			if srv.ServerURL != "" {
+				mcpDesc += fmt.Sprintf("- %s: (SSE) %s\n", name, srv.ServerURL)
+			} else {
+				mcpDesc += fmt.Sprintf("- %s: (Stdio) %s %v\n", name, srv.Command, srv.Args)
+			}
+		}
+		sysPrompt += mcpDesc
+	}
+
 	messages := []Message{{Role: "system", Content: sysPrompt}, {Role: "user", Content: initialQuery}}
 
 	// Spin up a 5-thread worker pool natively executing sandboxed ops
@@ -222,7 +244,17 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 			return "", fmt.Errorf("provider err: %v", err)
 		}
 
+		truncated := response.Content
+		if len(truncated) > 100 {
+			truncated = truncated[:100] + "..."
+		}
+		logger.Info("Agent", fmt.Sprintf("🤖 Response: %s", strings.ReplaceAll(truncated, "\n", " ")))
+
 		messages = append(messages, Message{Role: "assistant", Content: response.Content})
+
+		if c.OnResponse != nil {
+			c.OnResponse(response.Content)
+		}
 
 		// 1. Planning Layer parses parallel commands
 		reqs := ParseActionPlan(response.Content)

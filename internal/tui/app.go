@@ -12,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/kendaliai/app/internal/agent"
+	"github.com/kendaliai/app/internal/config"
 	"github.com/kendaliai/app/internal/providers"
 )
 
@@ -27,13 +28,14 @@ var (
 
 type model struct {
 	db       *sql.DB
+	cfg      *config.Config
 	ti       textinput.Model
 	vp       viewport.Model
 	logs     []string
 	quitting bool
 }
 
-func initialModel(db *sql.DB) model {
+func initialModel(db *sql.DB, cfg *config.Config) model {
 	ti := textinput.New()
 	ti.Placeholder = "Ask KendaliAI native agent..."
 	ti.Focus()
@@ -45,6 +47,7 @@ func initialModel(db *sql.DB) model {
 
 	return model{
 		db:   db,
+		cfg:  cfg,
 		ti:   ti,
 		vp:   vp,
 		logs: []string{},
@@ -57,9 +60,10 @@ func (m model) Init() tea.Cmd {
 
 type agentStepMsg string
 type responseMsg string
+type thoughtMsg string
 type errMsg error
 
-func runAgentTask(cmd string, p *tea.Program) tea.Cmd {
+func runAgentTask(cmd string, p *tea.Program, m model) tea.Cmd {
 	return func() tea.Msg {
 		var pr agent.Provider
 		if d := os.Getenv("DEEPSEEK_API_KEY"); d != "" {
@@ -70,7 +74,7 @@ func runAgentTask(cmd string, p *tea.Program) tea.Cmd {
 			return errMsg(fmt.Errorf("No DEEPSEEK_API_KEY or ZAI_API_KEY exported in environment"))
 		}
 
-		loop := agent.NewCognitionLoop(pr, 25)
+		loop := agent.NewCognitionLoop(pr, 25, m.cfg)
 		loop.OnTool = func(n string, args map[string]interface{}) {
 			if p != nil {
 				argStr := ""
@@ -97,8 +101,39 @@ func runAgentTask(cmd string, p *tea.Program) tea.Cmd {
 					if n == "validate_syntax" { argStr = fmt.Sprintf("%v", args["file"]) }
 				} else if n == "fetch_url" {
 					argStr = fmt.Sprintf("%v", args["url"])
+				} else if n == "mcp_call" {
+					srv := args["server"]
+					if srv == nil { srv = args["server_name"] }
+					if srv == nil { srv = args["server_url"] }
+					if srv == nil { srv = args["server_cmd"] }
+					
+					tool := args["tool_name"]
+					if tool == nil { tool = args["tool"] }
+					
+					argStr = fmt.Sprintf("srv:%v tool:%v ...", srv, tool)
 				}
 				p.Send(agentStepMsg(fmt.Sprintf("%s (%s)", n, argStr)))
+			}
+		}
+		loop.OnResponse = func(content string) {
+			if p != nil {
+				// Only show thoughts if there are tools to be executed
+				if !strings.Contains(content, "tool:") {
+					return
+				}
+
+				// Extract thoughts (text before any tool: calls)
+				thought := content
+				if idx := strings.Index(content, "tool:"); idx != -1 {
+					thought = content[:idx]
+				}
+				thought = strings.TrimSpace(thought)
+				if thought != "" {
+					if len(thought) > 200 {
+						thought = thought[:200] + "..."
+					}
+					p.Send(thoughtMsg(thought))
+				}
 			}
 		}
 
@@ -132,8 +167,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.vp.SetContent(strings.Join(m.logs, "\n\n"))
 			m.vp.GotoBottom()
 			
-			return m, runAgentTask(val, globalProgram)
+			return m, runAgentTask(val, globalProgram, m)
 		}
+	case thoughtMsg:
+		m.logs = append(m.logs, agentStyle.Render(fmt.Sprintf("💭 Thought: %s", string(msg))))
+		m.vp.SetContent(strings.Join(m.logs, "\n\n"))
+		m.vp.GotoBottom()
+		return m, nil
 	case tea.WindowSizeMsg:
 		m.vp.Width = msg.Width
 		m.vp.Height = msg.Height - 8 // Reserve room for title and input area
@@ -178,8 +218,8 @@ func (m model) View() string {
 	return b.String()
 }
 
-func StartDynamicTUI(db *sql.DB) error {
-	p := tea.NewProgram(initialModel(db), tea.WithAltScreen(), tea.WithMouseCellMotion())
+func StartDynamicTUI(db *sql.DB, cfg *config.Config) error {
+	p := tea.NewProgram(initialModel(db, cfg), tea.WithAltScreen(), tea.WithMouseCellMotion())
 	globalProgram = p
 	if _, err := p.Run(); err != nil {
 		return err

@@ -13,6 +13,7 @@ KendaliAI is a self-hosted, autonomous AI coding agent and orchestration gateway
 ## Quickstart
 
 ### 1. Build and Run
+
 Ensure you have Go 1.24+ installed.
 
 ```bash
@@ -20,18 +21,22 @@ go mod tidy
 ```
 
 ### 2. Export API Keys
+
 KendaliAI uses DeepSeek by default, with an optional fallback to ZAI.
+
 ```bash
 export DEEPSEEK_API_KEY="your-api-key"
 export ZAI_API_KEY="your-zai-key"
 ```
 
 ### 3. Initialize Gateway Database (Optional)
+
 ```bash
 go run ./cmd/kendaliai onboard
 ```
 
 ### 4. Bind a Telegram Channel (Optional)
+
 ```bash
 go run ./cmd/kendaliai channel bind-telegram --bot-token "YOUR_TOKEN"
 ```
@@ -41,23 +46,35 @@ go run ./cmd/kendaliai channel bind-telegram --bot-token "YOUR_TOKEN"
 KendaliAI operates in natively decoupled environments. You can run one or multiple components completely asynchronously.
 
 ### Standalone Interactive TUI (Offline Agent)
+
 Access the autonomous agent locally through a beautiful BubbleTea interface. Fully actionable terminal environment with live streaming output.
 
 ![KendaliAI Terminal Dashboard](./tui.png)
+
 ```bash
 go run ./cmd/kendaliai tui
 ```
 
+### MCP (Master Control Program)
+
+The primary server that handles all incoming requests from channels and executes the autonomous agent.
+
+![KendaliAI MCP Execution](./mcp.png)
+
 ### Headless Gateway (Telegram Bot)
+
 Starts the primary server and polls attached Telegram bots.
 
 ![KendaliAI Telegram Gateway](./telegram.png)
+
 ```bash
 go run ./cmd/kendaliai gateway
 ```
 
 ### Centralized Logistics Stream
+
 Watch the autonomous agent think, execute tools, and respond in real-time across the entire platform.
+
 ```bash
 go run ./cmd/kendaliai logs
 ```
@@ -87,6 +104,7 @@ To restrict commands from being blindly executed natively by the agent, define t
 
 ```markdown
 # Agent Identity
+
 **Name:** KendaliAI
 
 tools: read_file, list_files, edit_file, bash
