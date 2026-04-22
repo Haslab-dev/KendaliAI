@@ -42,12 +42,16 @@ KendaliAI operates in natively decoupled environments. You can run one or multip
 
 ### Standalone Interactive TUI (Offline Agent)
 Access the autonomous agent locally through a beautiful BubbleTea interface. Fully actionable terminal environment with live streaming output.
+
+![KendaliAI Terminal Dashboard](./tui.png)
 ```bash
 go run ./cmd/kendaliai tui
 ```
 
 ### Headless Gateway (Telegram Bot)
 Starts the primary server and polls attached Telegram bots.
+
+![KendaliAI Telegram Gateway](./telegram.png)
 ```bash
 go run ./cmd/kendaliai gateway
 ```
