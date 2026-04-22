@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -30,7 +31,7 @@ type CognitionLoop struct {
 	Provider   Provider
 	MaxSteps   int
 	Config     *config.Config
-	OnTool     func(toolName string, args map[string]interface{})
+	OnTool     func(toolName string, category string, args map[string]interface{})
 	OnResponse func(content string)
 	OnStats    func(totalInput, totalOutput int)
 }
@@ -187,7 +188,42 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 	personaText, activeToolNames, excludeCmds := c.loadPersonaConfig()
 
 	cwd, _ := os.Getwd()
+	homeDir, _ := os.UserHomeDir()
+	if homeDir == "" {
+		homeDir = "."
+	}
+	skillsJsonPath := filepath.Join(homeDir, ".kendaliai", "skills", "skills.json")
+	if content, err := os.ReadFile(skillsJsonPath); err == nil {
+		var config SkillConfig
+		if err := json.Unmarshal(content, &config); err == nil {
+			for _, skill := range config.Skills {
+				if skill.Installed {
+					activeToolNames = append(activeToolNames, skill.ID)
+				}
+			}
+		}
+	}
+
 	reg := GetToolRegistry(c.Config, excludeCmds, cwd)
+
+	effectiveBasePrompt := baseSystemPrompt
+
+	// Inject Markdown Skills (System Instructions)
+	if entries, err := os.ReadDir(filepath.Join(homeDir, ".kendaliai", "skills")); err == nil {
+		mdSkills := "\nACTIVE SYSTEM SKILLS (Instruction Extensions):\n"
+		hasMd := false
+		for _, e := range entries {
+			if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") {
+				if content, err := os.ReadFile(filepath.Join(homeDir, ".kendaliai", "skills", e.Name())); err == nil {
+					mdSkills += fmt.Sprintf("\n--- Skill: %s ---\n%s\n", e.Name(), string(content))
+					hasMd = true
+				}
+			}
+		}
+		if hasMd {
+			effectiveBasePrompt += "\n" + mdSkills
+		}
+	}
 
 	repStr := ""
 	for _, tName := range activeToolNames {
@@ -197,7 +233,7 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 			repStr += fmt.Sprintf("Name: %s\nDescription: %s\nSignature: %s\n\n", tool.Name, tool.Description, tool.Signature)
 		}
 	}
-	sysPrompt := strings.Replace(baseSystemPrompt, "{tool_list_repr}", repStr, 1)
+	sysPrompt := strings.Replace(effectiveBasePrompt, "{tool_list_repr}", repStr, 1)
 	sysPrompt = strings.Replace(sysPrompt, "{persona_text}", personaText, 1)
 
 	// Inject structural workspace context dynamically (INTERNAL PRE-READ)
@@ -272,8 +308,12 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 		reqs := ParseActionPlan(response.Content)
 		if len(reqs) > 0 {
 			for _, req := range reqs {
+				cat := "Ran"
+				if t, ok := reg[req.Name]; ok {
+					cat = t.Category
+				}
 				if c.OnTool != nil {
-					c.OnTool(req.Name, req.Args)
+					c.OnTool(req.Name, cat, req.Args)
 				}
 				logger.Info("Agent", fmt.Sprintf("⚙️ Scheduling %s args: %v", req.Name, req.Args))
 			}

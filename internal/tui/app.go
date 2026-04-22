@@ -44,6 +44,7 @@ type model struct {
 
 func initialModel(db *sql.DB, cfg *config.Config) model {
 	ti := textinput.New()
+	ti.Prompt = "" // Remove default > to avoid double arrows
 	ti.Placeholder = "Ask KendaliAI native agent..."
 	ti.Focus()
 	ti.CharLimit = 156
@@ -84,23 +85,11 @@ func runAgentTask(cmd string, p *tea.Program, m model) tea.Cmd {
 		}
 
 		loop := agent.NewCognitionLoop(pr, 25, m.cfg)
-		loop.OnTool = func(n string, args map[string]interface{}) {
+		loop.OnTool = func(n string, cat string, args map[string]interface{}) {
 			if p != nil {
-				label := "Ran"
+				label := cat
 				argStr := ""
 				
-				// Categorize tools based on the AntiGravity pattern
-				switch n {
-				case "list_files", "read_file", "search_files", "fetch_url":
-					label = "Explore"
-				case "apply_patch", "replace_range", "edit_file":
-					label = "Edited"
-				case "mcp_call":
-					label = "mcp call"
-				default:
-					label = "Ran"
-				}
-
 				if n == "list_files" {
 					argStr = fmt.Sprintf("%v", args["path"])
 				} else if n == "read_file" {
@@ -124,6 +113,8 @@ func runAgentTask(cmd string, p *tea.Program, m model) tea.Cmd {
 					if n == "validate_syntax" { argStr = fmt.Sprintf("%v", args["file"]) }
 				} else if n == "fetch_url" {
 					argStr = fmt.Sprintf("%v", args["url"])
+				} else if n == "run_skill" {
+					argStr = fmt.Sprintf("%v %v", args["skill_name"], args["args"])
 				} else if n == "mcp_call" {
 					srv := args["server"]
 					if srv == nil { srv = args["server_name"] }
@@ -134,6 +125,8 @@ func runAgentTask(cmd string, p *tea.Program, m model) tea.Cmd {
 					if tool == nil { tool = args["tool"] }
 					
 					argStr = fmt.Sprintf("srv:%v tool:%v ...", srv, tool)
+				} else {
+					argStr = fmt.Sprintf("%v", args)
 				}
 				p.Send(agentStepMsg(fmt.Sprintf("%s (%s %s)", label, n, argStr)))
 			}
@@ -209,7 +202,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.WindowSizeMsg:
 		m.vp.Width = msg.Width
-		m.vp.Height = msg.Height - 8 // Reserve room for title and input area
+		h := msg.Height - 8 // Reserve room for title and input area
+		if h < 0 {
+			h = 0
+		}
+		m.vp.Height = h
 		m.vp.SetContent(strings.Join(m.logs, "\n\n"))
 		m.vp.GotoBottom()
 		return m, nil

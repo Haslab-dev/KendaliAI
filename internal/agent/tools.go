@@ -22,7 +22,30 @@ type ToolDef struct {
 	Name        string
 	Description string
 	Signature   string
+	Category    string
 	Execute     func(ctx context.Context, args map[string]interface{}) string
+}
+
+type SkillDef struct {
+	ID          string                 `json:"id"`
+	Name        string                 `json:"name"`
+	Description string                 `json:"description"`
+	Entrypoint  string                 `json:"entrypoint"`
+	InputSchema map[string]interface{} `json:"input_schema"`
+	Execution   struct {
+		Type        string            `json:"type"`
+		Command     string            `json:"command"`
+		ArgsMapping map[string]string `json:"args_mapping"`
+	} `json:"execution"`
+	Constraints struct {
+		TimeoutMs int  `json:"timeout_ms"`
+		Safe      bool `json:"safe"`
+	} `json:"constraints"`
+	Installed bool `json:"installed"`
+}
+
+type SkillConfig struct {
+	Skills []SkillDef `json:"skills"`
 }
 
 // GetToolRegistry fully implements blueprint Rule 3 (Full Semantic Tooling)
@@ -33,6 +56,7 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 			Name:        "read_file",
 			Description: "Gets the chunked partial content of a file. Use offset and limit. E.g. offset:0 limit:50, then offset:50 limit:50.",
 			Signature:   `{"path": "string", "offset": "int", "limit": "int"}`,
+			Category:    "Explore",
 			Execute: func(ctx context.Context, args map[string]interface{}) string {
 				path, _ := args["path"].(string)
 
@@ -374,6 +398,7 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 			Name:        "run_skill",
 			Description: "Executes a custom shell script or executable from the ~/.kendaliai/skills directory. Useful for custom workflows.",
 			Signature:   `{"skill_name": "string", "args": "string"}`,
+			Category:    "Skill",
 			Execute: func(ctx context.Context, args map[string]interface{}) string {
 				skillName, _ := args["skill_name"].(string)
 				skillArgs, _ := args["args"].(string)
@@ -406,11 +431,13 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 			Signature:   `{"server": "string", "server_cmd": "string", "server_args": "array", "server_url": "string", "tool_name": "string", "tool_args": "object"}`,
 			Execute: func(ctx context.Context, args map[string]interface{}) string {
 				serverName, _ := args["server"].(string)
-				if serverName == "" { serverName, _ = args["server_name"].(string) }
+				if serverName == "" {
+					serverName, _ = args["server_name"].(string)
+				}
 				serverCmd, _ := args["server_cmd"].(string)
 				serverURL, _ := args["server_url"].(string)
 				var serverArgs []string
-				
+
 				if rawArgs, ok := args["server_args"].([]interface{}); ok {
 					for _, a := range rawArgs {
 						serverArgs = append(serverArgs, fmt.Sprint(a))
@@ -418,10 +445,16 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 				}
 
 				toolName, _ := args["tool_name"].(string)
-				if toolName == "" { toolName, _ = args["tool"].(string) } // Alias
+				if toolName == "" {
+					toolName, _ = args["tool"].(string)
+				} // Alias
 				toolArgs := args["tool_args"]
-				if toolArgs == nil { toolArgs = args["args"] }      // Alias
-				if toolArgs == nil { toolArgs = args["arguments"] } // Alias
+				if toolArgs == nil {
+					toolArgs = args["args"]
+				} // Alias
+				if toolArgs == nil {
+					toolArgs = args["arguments"]
+				} // Alias
 
 				logger.Info("MCP", fmt.Sprintf("mcp_call lookup: serverName=%s, toolName=%s", serverName, toolName))
 
@@ -518,10 +551,66 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 			if srv.Disabled {
 				continue
 			}
-			// Here we could dynamically add tools from the server,
-			// but that requires connecting to them during registry creation.
-			// Instead, let's provide a way for the AI to know about them.
-			// Or just keep mcp_call as the primary interface for now.
+		}
+	}
+
+	// Dynamically load installed skills as native tools
+	homeDir, _ := os.UserHomeDir()
+	if homeDir != "" {
+		skillsJsonPath := filepath.Join(homeDir, ".kendaliai", "skills", "skills.json")
+		if content, err := os.ReadFile(skillsJsonPath); err == nil {
+			var config SkillConfig
+			if err := json.Unmarshal(content, &config); err == nil {
+				for _, skill := range config.Skills {
+					if !skill.Installed {
+						continue
+					}
+
+					currentSkill := skill // capture loop var
+					signatureBytes, _ := json.Marshal(currentSkill.InputSchema)
+
+					registry[currentSkill.ID] = ToolDef{
+						Name:        currentSkill.ID,
+						Description: currentSkill.Description,
+						Signature:   string(signatureBytes),
+						Category:    "Skill",
+						Execute: func(ctx context.Context, args map[string]interface{}) string {
+							skillPath := filepath.Join(homeDir, ".kendaliai", "skills", strings.TrimPrefix(currentSkill.Execution.Command, "./"))
+
+							// Extract args based on input_schema properties
+							var cmdArgs []string
+							cmdArgs = append(cmdArgs, skillPath)
+
+							// A simple mapping: we just append all matched arg values in order of keys
+							// For robust production use, we would sort by the $1, $2 mapping values
+							if props, ok := currentSkill.InputSchema["properties"].(map[string]interface{}); ok {
+								for key := range props {
+									if val, exists := args[key]; exists {
+										cmdArgs = append(cmdArgs, fmt.Sprintf("%v", val))
+									}
+								}
+							}
+
+							cmdStr := strings.Join(cmdArgs, " ")
+
+							timeoutMs := currentSkill.Constraints.TimeoutMs
+							if timeoutMs == 0 {
+								timeoutMs = 30000
+							}
+
+							timeoutCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
+							defer cancel()
+
+							cmd := exec.CommandContext(timeoutCtx, "bash", "-c", cmdStr)
+							out, err := cmd.CombinedOutput()
+							if err != nil {
+								return fmt.Sprintf("Error: %v\nOutput: %s", err, string(out))
+							}
+							return string(out)
+						},
+					}
+				}
+			}
 		}
 	}
 
