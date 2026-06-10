@@ -2,13 +2,16 @@ package agent
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/kendaliai/app/internal/config"
+	"github.com/kendaliai/app/internal/embedding"
 	"github.com/kendaliai/app/internal/logger"
 )
 
@@ -31,6 +34,7 @@ type CognitionLoop struct {
 	Provider   Provider
 	MaxSteps   int
 	Config     *config.Config
+	DB         *sql.DB
 	OnTool     func(toolName string, category string, args map[string]interface{})
 	OnResponse func(content string)
 	OnStats    func(totalInput, totalOutput int)
@@ -41,6 +45,15 @@ func NewCognitionLoop(p Provider, maxSteps int, cfg *config.Config) *CognitionLo
 		Provider: p,
 		MaxSteps: maxSteps,
 		Config:   cfg,
+	}
+}
+
+func NewCognitionLoopWithDB(p Provider, maxSteps int, cfg *config.Config, db *sql.DB) *CognitionLoop {
+	return &CognitionLoop{
+		Provider: p,
+		MaxSteps: maxSteps,
+		Config:   cfg,
+		DB:       db,
 	}
 }
 
@@ -206,7 +219,11 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 		}
 	}
 
-	reg := GetToolRegistry(c.Config, excludeCmds, cwd)
+	reg := GetToolRegistry(c.Config, excludeCmds, cwd, c.DB)
+
+	if c.DB != nil {
+		activeToolNames = append(activeToolNames, "store_memory", "search_memory")
+	}
 
 	effectiveBasePrompt := baseSystemPrompt
 
@@ -286,7 +303,16 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 		sysPrompt += mcpDesc
 	}
 
-	messages := []Message{{Role: "system", Content: sysPrompt}, {Role: "user", Content: initialQuery}}
+	messages := []Message{{Role: "system", Content: sysPrompt}}
+
+	if c.DB != nil {
+		memContext := c.retrieveMemories(ctx, initialQuery)
+		if memContext != "" {
+			messages = append(messages, Message{Role: "system", Content: memContext})
+		}
+	}
+
+	messages = append(messages, Message{Role: "user", Content: initialQuery})
 
 	// Spin up a 5-thread worker pool natively executing sandboxed ops
 	engine := NewExecutionEngine(5, reg)
@@ -346,6 +372,7 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 		}
 
 		logger.Info("Agent", "✅ Cognition Loop completed")
+		c.autoStore(ctx, initialQuery, response.Content)
 		return response.Content, nil
 	}
 	return "I hit my maximum reasoning steps limits.", nil
@@ -380,4 +407,63 @@ func (c *CognitionLoop) loadPersonaConfig() (string, []string, []string) {
 		}
 	}
 	return strings.Join(cleaned, "\n"), tools, excludes
+}
+
+func (c *CognitionLoop) retrieveMemories(ctx context.Context, query string) string {
+	if c.DB == nil || config.Cfg == nil || config.Cfg.Embedding.APIKey == "" {
+		return ""
+	}
+
+	client := embedding.NewClient()
+	store := embedding.NewStore(c.DB, client)
+
+	results, err := store.Search(ctx, query, 5)
+	if err != nil || len(results) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString("RELEVANT MEMORIES (auto-retrieved, always consider these before answering):\n")
+	for _, r := range results {
+		if r.Score < 0.3 {
+			continue
+		}
+		sb.WriteString(fmt.Sprintf("- [%.2f] %s\n", r.Score, r.Content))
+	}
+
+	text := sb.String()
+	if text == "RELEVANT MEMORIES (auto-retrieved, always consider these before answering):\n" {
+		return ""
+	}
+	return text
+}
+
+func (c *CognitionLoop) autoStore(ctx context.Context, query, response string) {
+	if c.DB == nil || config.Cfg == nil || config.Cfg.Embedding.APIKey == "" {
+		return
+	}
+
+	lowerQ := strings.ToLower(query)
+	skip := []string{"what is the weather", "hello", "hi ", "thanks", "thank you", "ok", "yes", "no"}
+	for _, s := range skip {
+		if strings.HasPrefix(lowerQ, s) && len(query) < 30 {
+			return
+		}
+	}
+
+	content := fmt.Sprintf("Q: %s\nA: %s", query, response)
+	if len(content) > 2000 {
+		content = content[:2000]
+	}
+
+	client := embedding.NewClient()
+	store := embedding.NewStore(c.DB, client)
+
+	go func() {
+		bgCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if _, err := store.Store(bgCtx, content, "auto", 0.3); err != nil {
+			logger.Info("Memory", fmt.Sprintf("auto-store skipped: %v", err))
+		}
+	}()
 }

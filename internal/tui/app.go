@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -32,7 +31,6 @@ var (
 
 type model struct {
 	db           *sql.DB
-	cfg          *config.Config
 	ti           textinput.Model
 	vp           viewport.Model
 	logs         []string
@@ -42,7 +40,7 @@ type model struct {
 	isProcessing bool
 }
 
-func initialModel(db *sql.DB, cfg *config.Config) model {
+func initialModel(db *sql.DB) model {
 	ti := textinput.New()
 	ti.Prompt = "" // Remove default > to avoid double arrows
 	ti.Placeholder = "Ask KendaliAI native agent..."
@@ -55,7 +53,6 @@ func initialModel(db *sql.DB, cfg *config.Config) model {
 
 	return model{
 		db:   db,
-		cfg:  cfg,
 		ti:   ti,
 		vp:   vp,
 		logs: []string{},
@@ -75,16 +72,14 @@ type progressMsg bool
 
 func runAgentTask(cmd string, p *tea.Program, m model) tea.Cmd {
 	return func() tea.Msg {
-		var pr agent.Provider
-		if d := os.Getenv("DEEPSEEK_API_KEY"); d != "" {
-			pr = providers.NewDeepSeekProvider(d, "deepseek-chat")
-		} else if z := os.Getenv("ZAI_API_KEY"); z != "" {
-			pr = providers.NewZAIProvider(z, "zai-1")
-		} else {
-			return errMsg(fmt.Errorf("No DEEPSEEK_API_KEY or ZAI_API_KEY exported in environment"))
+		cfg := config.Cfg
+		if cfg == nil || cfg.ChatProvider.APIKey == "" {
+			return errMsg(fmt.Errorf("No chat provider configured in config.json"))
 		}
 
-		loop := agent.NewCognitionLoop(pr, 25, m.cfg)
+		pr := providers.NewProviderFromConfig()
+
+		loop := agent.NewCognitionLoopWithDB(pr, 25, cfg, m.db)
 		loop.OnTool = func(n string, cat string, args map[string]interface{}) {
 			if p != nil {
 				label := cat
@@ -259,8 +254,8 @@ func (m model) View() string {
 	)
 }
 
-func StartDynamicTUI(db *sql.DB, cfg *config.Config) error {
-	p := tea.NewProgram(initialModel(db, cfg), tea.WithAltScreen())
+func StartDynamicTUI(db *sql.DB) error {
+	p := tea.NewProgram(initialModel(db), tea.WithAltScreen())
 	globalProgram = p
 	if _, err := p.Run(); err != nil {
 		return err

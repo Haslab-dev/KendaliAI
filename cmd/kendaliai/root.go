@@ -16,8 +16,8 @@ var rootCmd = &cobra.Command{
 	Short:   "KendaliAI - Multi-Gateway AI Orchestration Platform",
 	Version: "0.2.0",
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		// Load config once for all subcommands
-		cfg = config.LoadConfig()
+		config.Init()
+		cfg = config.Cfg
 	},
 }
 

@@ -21,6 +21,12 @@ dist-ssr
 .env.*
 !.env.example
 
+# Config with secrets (use config.example.json as template)
+config.json
+
+# Build output
+build/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -37,3 +43,4 @@ src/server/database/kendaliai.sqlite
 # Gateway configurations (contain sensitive credentials)
 gateways/
 kendaliai
+config.json

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/kendaliai/app/internal/agent"
@@ -17,14 +16,12 @@ import (
 
 type Server struct {
 	db     *sql.DB
-	config *config.Config
 	router *http.ServeMux
 }
 
-func NewServer(db *sql.DB, cfg *config.Config) *Server {
+func NewServer(db *sql.DB) *Server {
 	s := &Server{
 		db:     db,
-		config: cfg,
 		router: http.NewServeMux(),
 	}
 	s.routes()
@@ -135,28 +132,18 @@ func (s *Server) handleChatCompletions() http.HandlerFunc {
 		var aiResponse *agent.Response
 
 		var p agent.Provider
-		if len(modelRequested) >= 3 && modelRequested[:3] == "zai" {
-			apiKey := os.Getenv("ZAI_API_KEY")
-			if apiKey == "" {
-				http.Error(w, "ZAI_API_KEY not found in environment", http.StatusUnauthorized)
-				return
-			}
-			p = providers.NewZAIProvider(apiKey, modelRequested)
-		} else {
-			apiKey := os.Getenv("DEEPSEEK_API_KEY")
-			if apiKey == "" {
-				http.Error(w, "DEEPSEEK_API_KEY not found in environment", http.StatusUnauthorized)
-				return
-			}
-			p = providers.NewDeepSeekProvider(apiKey, modelRequested)
+		if config.Cfg == nil || config.Cfg.ChatProvider.APIKey == "" {
+			http.Error(w, "No chat provider configured in config.json", http.StatusUnauthorized)
+			return
 		}
+		p = providers.NewProviderFromConfig()
 
 		lastMsg := ""
 		if len(payload.Messages) > 0 {
 			lastMsg = payload.Messages[len(payload.Messages)-1].Content
 		}
 
-		loop := agent.NewCognitionLoop(p, 25, s.config)
+		loop := agent.NewCognitionLoopWithDB(p, 25, config.Cfg, s.db)
 		finalResp, err := loop.Run(r.Context(), lastMsg)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("AI error: %v", err), http.StatusInternalServerError)

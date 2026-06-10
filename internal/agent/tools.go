@@ -12,7 +12,10 @@ import (
 	"strings"
 	"time"
 
+	"database/sql"
+
 	"github.com/kendaliai/app/internal/config"
+	"github.com/kendaliai/app/internal/embedding"
 	"github.com/kendaliai/app/internal/logger"
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -49,7 +52,7 @@ type SkillConfig struct {
 }
 
 // GetToolRegistry fully implements blueprint Rule 3 (Full Semantic Tooling)
-func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot string) map[string]ToolDef {
+func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot string, db *sql.DB) map[string]ToolDef {
 	registry := map[string]ToolDef{
 		// 📁 FILESYSTEM
 		"read_file": {
@@ -390,6 +393,73 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 					content = content[:8000] + "\n...(truncated)"
 				}
 				return content
+			},
+		},
+
+		// 🧠 MEMORY (Embedding-backed)
+		"store_memory": {
+			Name:        "store_memory",
+			Description: "Stores a piece of information in long-term memory using embeddings. Use this to remember important facts, decisions, user preferences, or learned knowledge for future retrieval.",
+			Signature:   `{"content": "string", "source": "string", "importance": "float"}`,
+			Category:    "Memory",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				if db == nil {
+					return "error: database not available"
+				}
+				content, _ := args["content"].(string)
+				source, _ := args["source"].(string)
+				importance := 0.5
+				if imp, ok := args["importance"].(float64); ok {
+					importance = imp
+				}
+
+				if content == "" {
+					return "error: content is required"
+				}
+
+				client := embedding.NewClient()
+				store := embedding.NewStore(db, client)
+				id, err := store.Store(ctx, content, source, importance)
+				if err != nil {
+					return fmt.Sprintf("error storing memory: %v", err)
+				}
+				return fmt.Sprintf("Memory stored successfully [id=%s]", id)
+			},
+		},
+		"search_memory": {
+			Name:        "search_memory",
+			Description: "Searches long-term memory using semantic similarity. Returns the most relevant stored memories for a given query. Use this to recall past decisions, facts, or context before answering.",
+			Signature:   `{"query": "string", "top_k": "int"}`,
+			Category:    "Memory",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				if db == nil {
+					return "error: database not available"
+				}
+				query, _ := args["query"].(string)
+				topK := 5
+				if k, ok := args["top_k"].(float64); ok && k > 0 {
+					topK = int(k)
+				}
+
+				if query == "" {
+					return "error: query is required"
+				}
+
+				client := embedding.NewClient()
+				store := embedding.NewStore(db, client)
+				results, err := store.Search(ctx, query, topK)
+				if err != nil {
+					return fmt.Sprintf("error searching memory: %v", err)
+				}
+				if len(results) == 0 {
+					return "No relevant memories found."
+				}
+
+				var sb strings.Builder
+				for i, r := range results {
+					sb.WriteString(fmt.Sprintf("%d. [%.2f] %s\n", i+1, r.Score, r.Content))
+				}
+				return sb.String()
 			},
 		},
 

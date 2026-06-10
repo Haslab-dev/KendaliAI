@@ -5,6 +5,7 @@ KendaliAI is a self-hosted, autonomous AI coding agent and orchestration gateway
 ## Features
 
 - **Autonomous Cognition Loop**: Recursive OS-level operations (`read_file`, `list_files`, `edit_file`, `bash`) executed dynamically by models like DeepSeek.
+- **OpenAI-Compatible Provider**: Works with any OpenAI-compatible endpoint (DeepSeek, OpenAI, Groq, Ollama, etc.) — just change `config.json`.
 - **Custom Skills System**: Extend the agent's capabilities with on-demand Markdown instructions or custom shell-based tools.
 - **Dynamic Configured Persona**: Your AI's identity and restricted commands are defined dynamically in `~/.kendaliai/Persona.md`.
 - **Local TUI Dashboard**: An interactive Terminal User Interface using BubbleTea for direct agent interaction.
@@ -13,54 +14,143 @@ KendaliAI is a self-hosted, autonomous AI coding agent and orchestration gateway
 
 ## Quickstart
 
-### 1. Build and Run
+### Prerequisites
 
-Ensure you have Go 1.24+ installed.
+- Go 1.24+
+- CGO (required by `go-sqlite3`)
 
-```bash
-go mod tidy
-```
+### 1. Configure
 
-### 2. Export API Keys
-
-KendaliAI uses DeepSeek by default, with an optional fallback to ZAI.
+All configuration lives in `config.json`. Copy the example and fill in your credentials:
 
 ```bash
-export DEEPSEEK_API_KEY="your-api-key"
-export ZAI_API_KEY="your-zai-key"
+cp config.example.json config.json
 ```
 
-### 3. Initialize Gateway Database (Optional)
+```json
+{
+  "chatProvider": {
+    "type": "deepseek",
+    "endpoint": "https://api.deepseek.com/v1",
+    "model": "deepseek-v4-flash",
+    "apiKey": "your-api-key"
+  },
+  "embedding": {
+    "endpoint": "https://api.openai.com/v1",
+    "model": "text-embedding-3-small",
+    "apiKey": "your-embedding-api-key"
+  },
+  "channel": {
+    "type": "telegram",
+    "botToken": "your-telegram-bot-token"
+  }
+}
+```
+
+**Config resolution order:**
+1. `KENDALIAI_CONFIG` env var (explicit override)
+2. `./config.json` (development — local file)
+3. `~/.kendaliai/config.json` (production — home directory)
+
+> **`channel` is optional.** Without it, only TUI mode works. When you run `onboard` or `gateway`, you'll see instructions on how to add a channel.
+
+### 2. Install Dependencies
 
 ```bash
-go run ./cmd/kendaliai onboard
+make tidy
 ```
 
-### 4. Bind a Telegram Channel (Optional)
+### 3. Onboard
+
+Creates the gateway database and auto-binds the channel from config:
 
 ```bash
-go run ./cmd/kendaliai channel bind-telegram --bot-token "YOUR_TOKEN"
+make dev-onboard
 ```
 
-## Running the Architecture
+## Running
+
+### Development
+
+Uses `./config.json` automatically (no install needed):
+
+```bash
+# Run TUI dashboard
+make dev-tui
+
+# Run headless gateway (Telegram bot + API server)
+make dev-gateway
+
+# Run any command
+make dev-<command>
+```
+
+### Production
+
+```bash
+# Build optimized binary
+make build-prod
+
+# Install binary + config to system
+make install
+
+# Run
+kendaliai tui
+kendaliai gateway
+```
+
+`make install` copies the binary to `/usr/local/bin/` and `config.json` to `~/.kendaliai/config.json` (if not already present).
+
+## Makefile Targets
+
+| Target | Description |
+|---|---|
+| `make build` | Build debug binary to `./build/` |
+| `make build-prod` | Build optimized binary (stripped, no symbols) |
+| `make install` | Build + install to `/usr/local/bin/` + copy config |
+| `make dev` | Run via `go run` (no build step) |
+| `make dev-tui` | Run TUI dashboard |
+| `make dev-gateway` | Run headless gateway |
+| `make dev-onboard` | Initialize gateway + bind channel from config |
+| `make dev-logs` | Run log streamer |
+| `make tidy` | Run `go mod tidy` |
+| `make lint` | Run `go vet` |
+| `make clean` | Remove build artifacts |
+
+## Architecture
 
 KendaliAI operates in natively decoupled environments. You can run one or multiple components completely asynchronously.
 
 ### Standalone Interactive TUI (Offline Agent)
 
-Access the autonomous agent locally through a beautiful BubbleTea interface. Fully actionable terminal environment with live streaming output.
+Access the autonomous agent locally through a BubbleTea interface. Fully actionable terminal environment with live streaming output.
 
 ![KendaliAI Terminal Dashboard](./tui.png)
 
 ```bash
-go run ./cmd/kendaliai tui
+make dev-tui        # development
+kendaliai tui       # production
 ```
 
-### MCP (Master Control Program)
+### Headless Gateway (Telegram Bot)
 
-The primary server that handles all incoming requests from channels and executes the autonomous agent.
+Starts the primary server and polls attached Telegram bots.
 
-![KendaliAI MCP Execution](./mcp.png)
+![KendaliAI Telegram Gateway](./telegram.png)
+
+```bash
+make dev-gateway    # development
+kendaliai gateway   # production
+```
+
+### Centralized Logistics Stream
+
+Watch the autonomous agent think, execute tools, and respond in real-time across the entire platform.
+
+```bash
+make dev-logs       # development
+kendaliai logs      # production
+```
 
 ### Custom Skills
 
@@ -113,39 +203,18 @@ curl -s "wttr.in/$1?format=3"
 }
 ```
 
-
-![KendaliAI SKILLS](./skills.png)
-
-### Headless Gateway (Telegram Bot)
-
-Starts the primary server and polls attached Telegram bots.
-
-![KendaliAI Telegram Gateway](./telegram.png)
-
-```bash
-go run ./cmd/kendaliai gateway
-```
-
-### Centralized Logistics Stream
-
-Watch the autonomous agent think, execute tools, and respond in real-time across the entire platform.
-
-```bash
-go run ./cmd/kendaliai logs
-```
-
 ## System Structure
 
 ```text
 cmd/kendaliai/       # Primary CLI entrypoints (root, tui, gateway, logs)
 internal/
 ├── agent/           # The Core Cognition Loop & Native Tool Registry
-├── channels/        # external polling wrappers (Telegram)
-├── config/          # Viper environment mapping
+├── channels/        # External polling wrappers (Telegram)
+├── config/          # Config singleton (config.json)
 ├── db/              # SQLite workspace storage
 ├── gateways/        # State handlers
 ├── logger/          # Central syslog mapping
-├── providers/       # LLM abstraction (DeepSeek, ZAI)
+├── providers/       # OpenAI-compatible provider (any endpoint)
 ├── security/        # Identity security
 ├── server/          # REST Gateway wrappers
 └── tui/             # Charmbracelet Bubbletea reactive loop
@@ -165,3 +234,20 @@ To restrict commands from being blindly executed natively by the agent, define t
 tools: read_file, list_files, edit_file, bash
 exclude_cmd: rm, ls ., modify root file
 ```
+
+## Switching Providers
+
+KendaliAI uses a single OpenAI-compatible provider. To switch models or providers, just edit `config.json`:
+
+```json
+{
+  "chatProvider": {
+    "type": "openai",
+    "endpoint": "https://api.openai.com/v1",
+    "model": "gpt-4o",
+    "apiKey": "sk-..."
+  }
+}
+```
+
+Works with any OpenAI-compatible API: DeepSeek, OpenAI, Groq, Together, Ollama, LM Studio, etc.

@@ -1,7 +1,0 @@
-{
-  "database": {
-    "path": "/Users/hy4-mac-002/hasdev/kendaliAI/test-gw/kendaliai.db"
-  },
-  "defaultGateway": "default",
-  "version": "0.2.0"
-}

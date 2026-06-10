@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/kendaliai/app/internal/channels"
+	"github.com/kendaliai/app/internal/config"
 	"github.com/kendaliai/app/internal/db"
 	"github.com/kendaliai/app/internal/server"
 	"github.com/spf13/cobra"
@@ -36,13 +37,32 @@ var gatewayCmd = &cobra.Command{
 		database.Exec("UPDATE gateways SET status = 'running', updated_at = ? WHERE id = ?",
 			time.Now().UnixMilli(), id)
 
-		importServer := server.NewServer(database, cfg)
+		importServer := server.NewServer(database)
 
-		// Start polling in background
-		tm := channels.NewTelegramManager(database, cfg)
+		tm := channels.NewTelegramManager(database)
 		activeChannels, _ := tm.LoadActiveChannels()
-		for _, c := range activeChannels {
-			go tm.StartPolling(c)
+		if len(activeChannels) == 0 {
+			c := config.Cfg
+			if len(c.Channels) > 0 {
+				fmt.Print("\nℹ️  Channels configured but not in DB. Run 'kendaliai onboard' to bind.\n\n")
+			} else {
+				fmt.Print("\nℹ️  No channels configured. Running API-only mode.\n")
+				fmt.Print("   To enable channels, add to config.json:\n\n")
+				fmt.Print(`     "channels": [
+       {
+         "id": "telegram-main",
+         "channelName": "My Bot",
+         "channelType": "telegram",
+         "token": "your-bot-token"
+       }
+     ]
+`)
+				fmt.Print("\n   Then run: kendaliai onboard && kendaliai gateway\n\n")
+			}
+		} else {
+			for _, c := range activeChannels {
+				go tm.StartPolling(c)
+			}
 		}
 
 		if err := importServer.Start(port); err != nil {

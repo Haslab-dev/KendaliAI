@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/kendaliai/app/internal/agent"
@@ -28,12 +27,11 @@ type Channel struct {
 }
 
 type TelegramManager struct {
-	db     *sql.DB
-	config *config.Config
+	db *sql.DB
 }
 
-func NewTelegramManager(db *sql.DB, cfg *config.Config) *TelegramManager {
-	return &TelegramManager{db: db, config: cfg}
+func NewTelegramManager(db *sql.DB) *TelegramManager {
+	return &TelegramManager{db: db}
 }
 
 func (tm *TelegramManager) LoadActiveChannels() ([]Channel, error) {
@@ -82,8 +80,7 @@ func (tm *TelegramManager) StartPolling(c Channel) {
 	u.Timeout = 60
 	updates := bot.GetUpdatesChan(u)
 
-	// Determine AI Provider mapped to env for now for simplicity
-	p := getFallbackProvider()
+	p := providers.NewProviderFromConfig()
 
 	for update := range updates {
 		if update.Message != nil {
@@ -97,7 +94,7 @@ func (tm *TelegramManager) StartPolling(c Channel) {
 			}
 
 			go func(upd tgbotapi.Update, tMsg tgbotapi.Message) {
-				loop := agent.NewCognitionLoop(p, 25, tm.config)
+				loop := agent.NewCognitionLoopWithDB(p, 25, config.Cfg, tm.db)
 				finalResp, err := loop.Run(context.Background(), upd.Message.Text)
 
 				replyText := ""
@@ -118,23 +115,4 @@ func (tm *TelegramManager) StartPolling(c Channel) {
 			}(update, thinkingMsg)
 		}
 	}
-}
-
-type agentProvider interface {
-	ChatCompletion(ctx context.Context, msgs []agent.Message) (*agent.Response, error)
-}
-
-func getFallbackProvider() agentProvider {
-	deepKey := os.Getenv("DEEPSEEK_API_KEY")
-	if deepKey != "" {
-		return providers.NewDeepSeekProvider(deepKey, "deepseek-chat")
-	}
-
-	zaiKey := os.Getenv("ZAI_API_KEY")
-	if zaiKey != "" {
-		return providers.NewZAIProvider(zaiKey, "zai-1") // Maybe model should be 'glm-4.6' or 'gpt-4o' eventually
-	}
-
-	log.Printf("Warning: No AI Keys found for bot polling!")
-	return nil
 }
