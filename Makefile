@@ -1,9 +1,9 @@
 BINARY    := kendaliai
 CMD       := ./cmd/kendaliai
 BUILD_DIR := ./build
-VERSION   := 0.2.0
+VERSION   := $(shell cat VERSION 2>/dev/null || echo "0.2.0")
 
-.PHONY: dev dev-tui dev-gateway dev-onboard dev-logs build build-prod install run clean tidy lint
+.PHONY: dev dev-tui dev-gateway dev-onboard dev-logs build build-prod install run clean tidy lint bump-version
 
 build:
 	mkdir -p $(BUILD_DIR)
@@ -38,6 +38,9 @@ dev-logs:
 
 run: build
 	$(BUILD_DIR)/$(BINARY)
+
+bump-version:
+	@python3 -c "v='$(VERSION)'.split('.'); print('.'.join([v[0],v[1],str(int(v[2])+1)]))" > VERSION && echo "Version bumped to $$(cat VERSION)"
 
 clean:
 	rm -rf $(BUILD_DIR)

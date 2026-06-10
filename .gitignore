@@ -15,6 +15,7 @@ dist-ssr
 *.local
 .tanstack
 .kendaliai
+test-gw
 
 # Environment files (contain sensitive credentials)
 .env

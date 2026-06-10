@@ -1,0 +1,104 @@
+name: Build Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump type"
+        required: true
+        default: "patch"
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y gcc libc6-dev
+
+      - name: Bump version
+        id: version
+        run: |
+          CURRENT=$(cat VERSION)
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          if [ "${{ inputs.bump }}" = "major" ]; then
+            MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0
+          elif [ "${{ inputs.bump }}" = "minor" ]; then
+            MINOR=$((MINOR + 1)); PATCH=0
+          else
+            PATCH=$((PATCH + 1))
+          fi
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "$NEW_VERSION" > VERSION
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "Bumping $CURRENT -> $NEW_VERSION"
+
+      - name: Build Linux amd64
+        env:
+          CGO_ENABLED: 1
+          GOOS: linux
+          GOARCH: amd64
+        run: |
+          go build -ldflags="-s -w -X main.version=${{ steps.version.outputs.version }}" \
+            -o build/kendaliai-linux-amd64 ./cmd/kendaliai
+
+      - name: Build Linux arm64
+        env:
+          CGO_ENABLED: 0
+          GOOS: linux
+          GOARCH: arm64
+        run: |
+          go build -ldflags="-s -w -X main.version=${{ steps.version.outputs.version }}" \
+            -o build/kendaliai-linux-arm64 ./cmd/kendaliai
+
+      - name: Build macOS arm64
+        env:
+          CGO_ENABLED: 0
+          GOOS: darwin
+          GOARCH: arm64
+        run: |
+          go build -ldflags="-s -w -X main.version=${{ steps.version.outputs.version }}" \
+            -o build/kendaliai-darwin-arm64 ./cmd/kendaliai
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kendaliai-v${{ steps.version.outputs.version }}
+          path: build/
+          retention-days: 30
+
+      - name: Commit version bump and tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add VERSION
+          git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
+          git tag "v${{ steps.version.outputs.version }}"
+          git push && git push --tags
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: KendaliAI v${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          files: |
+            build/kendaliai-linux-amd64
+            build/kendaliai-linux-arm64
+            build/kendaliai-darwin-arm64
+            config.example.json
+            Makefile

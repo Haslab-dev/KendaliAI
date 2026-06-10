@@ -14,7 +14,7 @@ var cfg *config.Config
 var rootCmd = &cobra.Command{
 	Use:     "kendaliai",
 	Short:   "KendaliAI - Multi-Gateway AI Orchestration Platform",
-	Version: "0.2.0",
+	Version: version,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		config.Init()
 		cfg = config.Cfg
