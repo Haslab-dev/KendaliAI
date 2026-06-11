@@ -132,7 +132,7 @@ func (s *Server) handleChatCompletions() http.HandlerFunc {
 		var aiResponse *agent.Response
 
 		var p agent.Provider
-		if config.Cfg == nil || config.Cfg.ChatProvider.APIKey == "" {
+		if config.Cfg == nil || len(config.Cfg.ChatProviders) == 0 || config.Cfg.ChatProviders[0].APIKey == "" {
 			http.Error(w, "No chat provider configured in config.json", http.StatusUnauthorized)
 			return
 		}

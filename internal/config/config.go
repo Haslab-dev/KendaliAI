@@ -32,7 +32,7 @@ type Config struct {
 		Path string `json:"path"`
 	} `json:"database"`
 	DefaultProvider string                     `json:"defaultProvider"`
-	ChatProvider    ProviderConfig             `json:"chatProvider"`
+	ChatProviders   []ProviderConfig           `json:"chatProviders"`
 	Embedding       EmbeddingConfig            `json:"embedding"`
 	Channels        []ChannelConfig            `json:"channels"`
 	MCPServers      map[string]MCPServerConfig `json:"mcpServers"`
@@ -51,8 +51,8 @@ var Cfg *Config
 func Init() {
 	Cfg = load()
 	Cfg.applyDefaults()
-	log.Printf("Config loaded: chat=%s (%s), embedding=%s (%s)",
-		Cfg.ChatProvider.Model, Cfg.ChatProvider.Endpoint,
+	log.Printf("Config loaded: providers=%d, embedding=%s (%s)",
+		len(Cfg.ChatProviders),
 		Cfg.Embedding.Model, Cfg.Embedding.Endpoint,
 	)
 }
@@ -78,6 +78,10 @@ func load() *Config {
 }
 
 func resolveConfigPath() string {
+	return ResolveConfigPath()
+}
+
+func ResolveConfigPath() string {
 	if envPath := os.Getenv("KENDALIAI_CONFIG"); envPath != "" {
 		return envPath
 	}
@@ -94,15 +98,31 @@ func resolveConfigPath() string {
 	return filepath.Join(homeDir, ".kendaliai", "config.json")
 }
 
+func (c *Config) Save(path string) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+
+	data, err := json.MarshalIndent(c, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(path, data, 0600)
+}
+
 func (c *Config) applyDefaults() {
-	if c.ChatProvider.Type == "" {
-		c.ChatProvider.Type = "deepseek"
-	}
-	if c.ChatProvider.Model == "" {
-		c.ChatProvider.Model = "deepseek-v4-flash"
-	}
-	if c.ChatProvider.Endpoint == "" {
-		c.ChatProvider.Endpoint = "https://api.deepseek.com/v1"
+	for i := range c.ChatProviders {
+		if c.ChatProviders[i].Type == "" {
+			c.ChatProviders[i].Type = "deepseek"
+		}
+		if c.ChatProviders[i].Model == "" {
+			c.ChatProviders[i].Model = "deepseek-v4-flash"
+		}
+		if c.ChatProviders[i].Endpoint == "" {
+			c.ChatProviders[i].Endpoint = "https://api.deepseek.com/v1"
+		}
 	}
 
 	if c.Embedding.Model == "" {
@@ -111,4 +131,11 @@ func (c *Config) applyDefaults() {
 	if c.Embedding.Endpoint == "" {
 		c.Embedding.Endpoint = "https://api.openai.com/v1"
 	}
+}
+
+func (c *Config) DefaultChatProvider() *ProviderConfig {
+	if len(c.ChatProviders) == 0 {
+		return nil
+	}
+	return &c.ChatProviders[0]
 }

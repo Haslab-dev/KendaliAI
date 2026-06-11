@@ -12,20 +12,21 @@ import (
 
 func HandleOnboard(db *sql.DB) {
 	c := config.Cfg
+	p := c.DefaultChatProvider()
 	fmt.Print("🚀 KendaliAI Onboarding\n\n")
 
-	if c.ChatProvider.APIKey == "" {
+	if p == nil || p.APIKey == "" {
 		fmt.Println("❌ Error: chatProvider.apiKey is required in config.json")
 		return
 	}
 
-	encryptedKey, err := security.Encrypt(c.ChatProvider.APIKey)
+	encryptedKey, err := security.Encrypt(p.APIKey)
 	if err != nil {
 		fmt.Printf("❌ Failed to encrypt API Key: %v\n", err)
 		return
 	}
 
-	fmt.Printf("🔧 Creating gateway with provider: %s, model: %s\n", c.ChatProvider.Type, c.ChatProvider.Model)
+	fmt.Printf("🔧 Creating gateway with provider: %s, model: %s\n", p.Type, p.Model)
 
 	now := time.Now().UnixMilli()
 
@@ -35,7 +36,7 @@ func HandleOnboard(db *sql.DB) {
 		_, err := db.Exec(`
 			UPDATE gateways SET
 				provider = ?, default_model = ?, updated_at = ?, api_key_encrypted = ?
-			WHERE id = ?`, c.ChatProvider.Type, c.ChatProvider.Model, now, encryptedKey, existingId)
+			WHERE id = ?`, p.Type, p.Model, now, encryptedKey, existingId)
 		if err != nil {
 			fmt.Printf("❌ Failed to update gateway: %v\n", err)
 			return
@@ -49,7 +50,7 @@ func HandleOnboard(db *sql.DB) {
 				require_pairing, allow_public_bind, workspace_only, status,
 				created_at, updated_at
 			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			gatewayId, "default", c.ChatProvider.Type, c.ChatProvider.Model, encryptedKey,
+			gatewayId, "default", p.Type, p.Model, encryptedKey,
 			1, 0, 1, "stopped", now, now)
 		if err != nil {
 			fmt.Printf("❌ Failed to create gateway: %v\n", err)

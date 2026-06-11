@@ -17,7 +17,7 @@ func main() {
 	config.Init()
 	c := config.Cfg
 
-	if c.ChatProvider.APIKey == "" {
+	if len(c.ChatProviders) == 0 || c.ChatProviders[0].APIKey == "" {
 		fmt.Println("❌ No chat provider configured")
 		os.Exit(1)
 	}

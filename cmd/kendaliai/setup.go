@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -24,14 +23,32 @@ var setupCmd = &cobra.Command{
 		fmt.Println("╚══════════════════════════════════════════╝")
 		fmt.Println()
 
-		fmt.Println("── Chat Provider ──")
-		cfg.ChatProvider.Type = prompt(scanner, "  Provider type", "deepseek")
-		cfg.ChatProvider.Endpoint = prompt(scanner, "  Endpoint URL", "https://api.deepseek.com/v1")
-		cfg.ChatProvider.Model = prompt(scanner, "  Model", "deepseek-v4-flash")
-		cfg.ChatProvider.APIKey = prompt(scanner, "  API Key", "")
+		fmt.Println("── Chat Providers ──")
+		fmt.Println("  (Add at least one provider)")
+		provType := prompt(scanner, "  Provider type", "deepseek")
+		for provType != "" {
+			provEndpoint := prompt(scanner, "  Endpoint URL", "https://api.deepseek.com/v1")
+			provModel := prompt(scanner, "  Model", "deepseek-v4-flash")
+			provAPIKey := prompt(scanner, "  API Key", "")
+
+			cfg.ChatProviders = append(cfg.ChatProviders, config.ProviderConfig{
+				Type:     provType,
+				Endpoint: provEndpoint,
+				Model:    provModel,
+				APIKey:   provAPIKey,
+			})
+			fmt.Printf("\n  -> Added provider '%s' (%s)\n", provType, provModel)
+
+			provType = promptOptional(scanner, "  Add another? Enter type (press Enter to finish)", "")
+		}
+
+		if len(cfg.ChatProviders) == 0 {
+			fmt.Println("❌ At least one chat provider is required.")
+			os.Exit(1)
+		}
+		cfg.DefaultProvider = cfg.ChatProviders[0].Type
 
 		fmt.Println()
-
 		fmt.Println("── Embedding (optional, press Enter to skip) ──")
 		fmt.Printf("\n  Endpoint URL [(skip)]: ")
 		if scanner.Scan() && strings.TrimSpace(scanner.Text()) != "" {
@@ -59,35 +76,25 @@ var setupCmd = &cobra.Command{
 			chName = promptOptional(scanner, "  Add another? Enter name (press Enter to finish)", "")
 		}
 
-		cfg.DefaultProvider = cfg.ChatProvider.Type
-
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
 			homeDir = "."
 		}
 		cfg.Database.Path = filepath.Join(homeDir, ".kendaliai", "kendaliai.db")
 
-		configPath := resolveSetupPath()
-		dir := filepath.Dir(configPath)
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			fmt.Printf("Error creating config directory: %v\n", err)
-			os.Exit(1)
-		}
-
-		data, err := json.MarshalIndent(cfg, "", "  ")
-		if err != nil {
-			fmt.Printf("Error marshaling config: %v\n", err)
-			os.Exit(1)
-		}
-
-		if err := os.WriteFile(configPath, data, 0600); err != nil {
-			fmt.Printf("Error writing config: %v\n", err)
+		configPath := config.ResolveConfigPath()
+		if err := cfg.Save(configPath); err != nil {
+			fmt.Printf("Error saving config: %v\n", err)
 			os.Exit(1)
 		}
 
 		fmt.Printf("\nConfiguration saved to: %s\n", configPath)
 		fmt.Println("Run 'kendaliai onboard' to initialize the database.")
 	},
+}
+
+func scanner() *bufio.Scanner {
+	return bufio.NewScanner(os.Stdin)
 }
 
 func prompt(scanner *bufio.Scanner, label, defaultVal string) string {
@@ -120,17 +127,6 @@ func toChannelID(name string) string {
 	id := strings.ToLower(name)
 	id = strings.ReplaceAll(id, " ", "-")
 	return id
-}
-
-func resolveSetupPath() string {
-	if envPath := os.Getenv("KENDALIAI_CONFIG"); envPath != "" {
-		return envPath
-	}
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return filepath.Join(".", "config.json")
-	}
-	return filepath.Join(homeDir, ".kendaliai", "config.json")
 }
 
 func init() {

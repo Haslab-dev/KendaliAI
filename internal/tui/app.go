@@ -73,7 +73,7 @@ type progressMsg bool
 func runAgentTask(cmd string, p *tea.Program, m model) tea.Cmd {
 	return func() tea.Msg {
 		cfg := config.Cfg
-		if cfg == nil || cfg.ChatProvider.APIKey == "" {
+		if cfg == nil || len(cfg.ChatProviders) == 0 || cfg.ChatProviders[0].APIKey == "" {
 			return errMsg(fmt.Errorf("No chat provider configured in config.json"))
 		}
 

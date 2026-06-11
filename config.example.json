@@ -2,12 +2,14 @@
   "database": {
     "path": "kendaliai.db"
   },
-  "chatProvider": {
-    "type": "deepseek",
-    "endpoint": "https://api.deepseek.com/v1",
-    "model": "deepseek-v4-flash",
-    "apiKey": "your-api-key"
-  },
+  "chatProviders": [
+    {
+      "type": "deepseek",
+      "endpoint": "https://api.deepseek.com/v1",
+      "model": "deepseek-v4-flash",
+      "apiKey": "your-api-key"
+    }
+  ],
   "embedding": {
     "endpoint": "https://api.openai.com/v1",
     "model": "text-embedding-3-small",
