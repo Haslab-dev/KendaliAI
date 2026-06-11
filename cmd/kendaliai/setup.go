@@ -29,10 +29,11 @@ var setupCmd = &cobra.Command{
 		cfg.ChatProvider.Endpoint = prompt(scanner, "  Endpoint URL", "https://api.deepseek.com/v1")
 		cfg.ChatProvider.Model = prompt(scanner, "  Model", "deepseek-v4-flash")
 		cfg.ChatProvider.APIKey = prompt(scanner, "  API Key", "")
+
 		fmt.Println()
 
 		fmt.Println("── Embedding (optional, press Enter to skip) ──")
-		fmt.Printf("  Endpoint URL [(skip)]: ")
+		fmt.Printf("\n  Endpoint URL [(skip)]: ")
 		if scanner.Scan() && strings.TrimSpace(scanner.Text()) != "" {
 			cfg.Embedding.Endpoint = strings.TrimSpace(scanner.Text())
 			cfg.Embedding.Model = prompt(scanner, "  Model", "text-embedding-3-small")
@@ -40,13 +41,10 @@ var setupCmd = &cobra.Command{
 		}
 		fmt.Println()
 
-		fmt.Println("── Channels (optional, press Enter on Channel Name to skip) ──")
-		for {
-			chName := promptOptional(scanner, "  Channel Name", "")
-			if chName == "" {
-				break
-			}
-			chType := prompt(scanner, "  Channel Type (telegram)", "telegram")
+		fmt.Println("── Channels (optional, press Enter to skip) ──")
+		chName := promptOptional(scanner, "  Channel Name", "")
+		for chName != "" {
+			chType := prompt(scanner, "  Channel Type", "telegram")
 			chToken := prompt(scanner, "  Token", "")
 			chID := toChannelID(chName)
 
@@ -56,9 +54,18 @@ var setupCmd = &cobra.Command{
 				ChannelType: chType,
 				Token:       chToken,
 			})
-			fmt.Printf("  -> Added channel '%s' (id: %s)\n", chName, chID)
-			fmt.Println()
+			fmt.Printf("\n  -> Added channel '%s' (id: %s)\n", chName, chID)
+
+			chName = promptOptional(scanner, "  Add another? Enter name (press Enter to finish)", "")
 		}
+
+		cfg.DefaultProvider = cfg.ChatProvider.Type
+
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			homeDir = "."
+		}
+		cfg.Database.Path = filepath.Join(homeDir, ".kendaliai", "kendaliai.db")
 
 		configPath := resolveSetupPath()
 		dir := filepath.Dir(configPath)
@@ -84,7 +91,7 @@ var setupCmd = &cobra.Command{
 }
 
 func prompt(scanner *bufio.Scanner, label, defaultVal string) string {
-	fmt.Printf("%s [%s]: ", label, defaultVal)
+	fmt.Printf("\n%s [%s]: ", label, defaultVal)
 	if scanner.Scan() {
 		input := strings.TrimSpace(scanner.Text())
 		if input != "" {
@@ -99,7 +106,7 @@ func promptOptional(scanner *bufio.Scanner, label, defaultVal string) string {
 	if defaultVal == "" {
 		defaultDisplay = "(skip)"
 	}
-	fmt.Printf("%s [%s]: ", label, defaultDisplay)
+	fmt.Printf("\n%s [%s]: ", label, defaultDisplay)
 	if scanner.Scan() {
 		input := strings.TrimSpace(scanner.Text())
 		if input != "" {
