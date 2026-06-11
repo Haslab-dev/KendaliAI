@@ -2,16 +2,6 @@ name: Build Release
 
 on:
   workflow_dispatch:
-    inputs:
-      bump:
-        description: "Version bump type"
-        required: true
-        default: "patch"
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
 
 permissions:
   contents: write
@@ -30,22 +20,10 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y gcc libc6-dev
 
-      - name: Bump version
+      - name: Read version
         id: version
         run: |
-          CURRENT=$(cat VERSION)
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
-          if [ "${{ inputs.bump }}" = "major" ]; then
-            MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0
-          elif [ "${{ inputs.bump }}" = "minor" ]; then
-            MINOR=$((MINOR + 1)); PATCH=0
-          else
-            PATCH=$((PATCH + 1))
-          fi
-          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
-          echo "$NEW_VERSION" > VERSION
-          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "Bumping $CURRENT -> $NEW_VERSION"
+          echo "version=$(cat VERSION)" >> $GITHUB_OUTPUT
 
       - name: Build Linux amd64
         env:
@@ -80,15 +58,6 @@ jobs:
           name: kendaliai-v${{ steps.version.outputs.version }}
           path: build/
           retention-days: 30
-
-      - name: Commit version bump and tag
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add VERSION
-          git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
-          git tag "v${{ steps.version.outputs.version }}"
-          git push && git push --tags
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
