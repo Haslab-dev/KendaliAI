@@ -133,6 +133,26 @@ If the task is complete and NO tools are needed:
 5. GIT TOOL RESTRICTION
    - DO NOT use git tools unless explicitly requested
 
+6. GOAL PRESERVATION (CRITICAL)
+   - Your ACTIVE GOAL is injected at the start. NEVER deviate from it.
+   - Do NOT install unrelated packages, libraries, or tools.
+   - Do NOT explore tangents, start new topics, or research unrelated things.
+   - If a step fails, try an ALTERNATIVE approach that still serves the SAME goal.
+   - After every tool call, verify: does this serve my ACTIVE GOAL?
+
+7. TOOL ROUTING
+   - MCP tools: ALWAYS list available tools first. Context7 uses "resolve-library-id" and "get-library-docs".
+   - Exa uses "web_search_exa", "web_fetch_exa", "web_search_advanced_exa".
+   - fetch_url is for KNOWN URLs only, NOT for searching.
+   - exec is for shell commands on the local system.
+   - If an MCP tool fails with "authorization", immediately fall back to fetch_url or exec.
+
+8. INTERACTIVE COMMANDS
+   - NEVER run commands that require user input (stdin prompts).
+   - Add --yes, -y, --no-prompt, or non-interactive flags.
+   - Add "2>&1" to silence prompts. Pipe "yes |" or "</dev/null" if needed.
+   - If a tool requests input, ABORT and report the error.
+
 ---
 
 ## CONTEXT-AWARE SHORT-CIRCUIT
@@ -336,6 +356,10 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 
 	messages := []Message{{Role: "system", Content: sysPrompt}}
 
+	goal := ExtractGoal(initialQuery)
+	messages = append(messages, Message{Role: "system", Content: goal.Prompt()})
+	logger.Info("Agent", fmt.Sprintf("🎯 Goal: %s", goal.Summary))
+
 	if c.DB != nil {
 		memContext := c.retrieveMemories(ctx, initialQuery)
 		if memContext != "" {
@@ -365,7 +389,6 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 	totalOutput := 0
 
 	for i := 0; i < c.MaxSteps; i++ {
-		// Optimize limits before inference (Sliding window / Chunking enforcement)
 		messages = OptimizeContext(messages, 20000)
 
 		response, err := c.Provider.ChatCompletion(ctx, messages)
@@ -391,38 +414,49 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 			c.OnResponse(response.Content)
 		}
 
-		// 1. Planning Layer parses parallel commands
 		reqs := ParseActionPlan(response.Content)
-		if len(reqs) > 0 {
-			for _, req := range reqs {
-				cat := "Ran"
-				if t, ok := reg[req.Name]; ok {
-					cat = t.Category
-				}
-				if c.OnTool != nil {
-					c.OnTool(req.Name, cat, req.Args)
-				}
-				logger.Info("Agent", fmt.Sprintf("⚙️ Scheduling %s args: %v", req.Name, req.Args))
+		if len(reqs) == 0 {
+			logger.Info("Agent", "✅ Cognition Loop completed")
+			c.autoStore(ctx, initialQuery, response.Content)
+			return response.Content, nil
+		}
+
+		var validReqs []ToolRequest
+		for _, req := range reqs {
+			cat := "Ran"
+			if t, ok := reg[req.Name]; ok {
+				cat = t.Category
+			}
+			if c.OnTool != nil {
+				c.OnTool(req.Name, cat, req.Args)
 			}
 
-			// 2. Scheduler invokes parallel go-routines execution natively
-			results := engine.ExecuteParallel(ctx, reqs)
-
-			// 3. State Sync / Re-feed
-			for _, res := range results {
-				truncResult := res.Output
-				if len(truncResult) > 200 {
-					truncResult = truncResult[:200] + "...(truncated)"
-				}
-				logger.Info("Agent", fmt.Sprintf("📦 Tool result [%s]: %s", res.Name, strings.ReplaceAll(truncResult, "\n", " ")))
-				messages = append(messages, Message{Role: "user", Content: fmt.Sprintf("tool_result(%s):\n%s", res.Name, res.Output)})
+			if allowed, reason := goal.VerifyAction(req.Name, req.Args); !allowed {
+				logger.Info("Agent", fmt.Sprintf("🛑 Goal violation: %s", reason))
+				messages = append(messages, Message{Role: "user", Content: fmt.Sprintf("GOAL VIOLATION: %s\n%s", reason, goal.Prompt())})
+				continue
 			}
+
+			logger.Info("Agent", fmt.Sprintf("⚙️ Scheduling %s args: %v", req.Name, req.Args))
+			validReqs = append(validReqs, req)
+		}
+
+		if len(validReqs) == 0 {
 			continue
 		}
 
-		logger.Info("Agent", "✅ Cognition Loop completed")
-		c.autoStore(ctx, initialQuery, response.Content)
-		return response.Content, nil
+		results := engine.ExecuteParallel(ctx, validReqs)
+
+			// State Sync / Re-feed
+		for _, res := range results {
+			truncResult := res.Output
+			if len(truncResult) > 200 {
+				truncResult = truncResult[:200] + "...(truncated)"
+			}
+			logger.Info("Agent", fmt.Sprintf("📦 Tool result [%s]: %s", res.Name, strings.ReplaceAll(truncResult, "\n", " ")))
+			feedback := fmt.Sprintf("tool_result(%s):\n%s\n\nReminder: %s", res.Name, res.Output, goal.Prompt())
+			messages = append(messages, Message{Role: "user", Content: feedback})
+		}
 	}
 	return "I hit my maximum reasoning steps limits.", nil
 }
