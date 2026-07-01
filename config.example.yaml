@@ -57,3 +57,9 @@ permissions:
       permissions: [read, write, update, delete]
     - path: ./
       permissions: [read]
+
+# Daily reflection daemon — runs at midnight, generates timeline and auto-skills
+reflection:
+  enabled: true
+  schedule: "0 0 * * *"
+  timezone: Asia/Jakarta

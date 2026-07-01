@@ -17,6 +17,7 @@ import (
 	"github.com/kendaliai/app/internal/config"
 	"github.com/kendaliai/app/internal/embedding"
 	"github.com/kendaliai/app/internal/logger"
+	"github.com/kendaliai/app/internal/reflection"
 	"github.com/kendaliai/app/internal/skills"
 	"github.com/kendaliai/app/internal/storage"
 	"github.com/mark3labs/mcp-go/client"
@@ -576,6 +577,54 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 				var sb strings.Builder
 				for i, r := range results {
 					sb.WriteString(fmt.Sprintf("%d. [%.2f] %s\n", i+1, r.Score, r.Content))
+				}
+				return sb.String()
+			},
+		},
+		"remember_timeline": {
+			Name:        "remember_timeline",
+			Description: "Queries the daily reflection timeline. Use for: 'What did I do yesterday?', 'What was I working on last week?', 'What happened on <date>?'. Accepts: 'yesterday', 'today', 'last week', or a date like '2026-06-20'.",
+			Signature:   `{"date": "string"}`,
+			Category:    "Memory",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				date, _ := args["date"].(string)
+				if date == "" {
+					date = "yesterday"
+				}
+
+				summary, err := reflection.QueryTimeline(date)
+				if err != nil {
+					return fmt.Sprintf("No timeline data for '%s'. Reflections are generated daily at midnight.", date)
+				}
+
+				var sb strings.Builder
+				sb.WriteString(fmt.Sprintf("📅 %s\n\n", summary.Date))
+				sb.WriteString(fmt.Sprintf("Summary: %s\n\n", summary.Summary))
+				if len(summary.Activities) > 0 {
+					sb.WriteString("Activities:\n")
+					for _, a := range summary.Activities {
+						sb.WriteString(fmt.Sprintf("  • %s\n", a))
+					}
+					sb.WriteString("\n")
+				}
+				if len(summary.Projects) > 0 {
+					sb.WriteString(fmt.Sprintf("Projects: %s\n", strings.Join(summary.Projects, ", ")))
+				}
+				if len(summary.SkillsCreated) > 0 {
+					sb.WriteString(fmt.Sprintf("Skills created: %s\n", strings.Join(summary.SkillsCreated, ", ")))
+				}
+				if len(summary.TopTopics) > 0 {
+					sb.WriteString("Top topics: ")
+					for i, t := range summary.TopTopics {
+						if i > 0 {
+							sb.WriteString(", ")
+						}
+						sb.WriteString(fmt.Sprintf("%s (x%d)", t.Topic, t.Count))
+						if i >= 5 {
+							break
+						}
+					}
+					sb.WriteString("\n")
 				}
 				return sb.String()
 			},

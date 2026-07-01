@@ -43,6 +43,13 @@ type Config struct {
 	MCPServers      map[string]MCPServerConfig `json:"mcpServers" yaml:"mcpServers"`
 	Storage         StorageConfig              `json:"storage" yaml:"storage"`
 	Permissions     PermissionsConfig          `json:"permissions" yaml:"permissions"`
+	Reflection      ReflectionConfig           `json:"reflection" yaml:"reflection"`
+}
+
+type ReflectionConfig struct {
+	Enabled  bool   `json:"enabled" yaml:"enabled"`
+	Schedule string `json:"schedule" yaml:"schedule"`
+	Timezone string `json:"timezone" yaml:"timezone"`
 }
 
 type R2Config struct {

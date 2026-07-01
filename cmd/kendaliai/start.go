@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -13,6 +14,7 @@ import (
 	"github.com/kendaliai/app/internal/config"
 	"github.com/kendaliai/app/internal/db"
 	"github.com/kendaliai/app/internal/gateways"
+	"github.com/kendaliai/app/internal/reflection"
 	"github.com/kendaliai/app/internal/server"
 	"github.com/kendaliai/app/internal/skills"
 	"github.com/kendaliai/app/internal/storage"
@@ -104,6 +106,20 @@ func runStart(cmd *cobra.Command, args []string) {
 	}
 
 	skills.Init()
+
+	reflectionCfg := reflection.ReflectionConfig{
+		Enabled:  true,
+		Schedule: "0 0 * * *",
+		Timezone: "Asia/Jakarta",
+	}
+	if cfg.Reflection.Timezone != "" {
+		reflectionCfg.Timezone = cfg.Reflection.Timezone
+	}
+	if !cfg.Reflection.Enabled {
+		reflectionCfg.Enabled = false
+	}
+	daemon := reflection.NewDaemon(database, reflectionCfg)
+	go daemon.Start(context.Background())
 
 	// 1. Auto-onboard gateway/channels database configurations
 	gateways.HandleOnboard(database)

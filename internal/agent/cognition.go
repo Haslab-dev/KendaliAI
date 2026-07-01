@@ -435,6 +435,7 @@ func (c *CognitionLoop) loadPersonaConfig() (string, []string, []string) {
 			"apply_patch", "replace_range",
 			"upload_object", "download_object", "list_objects", "delete_object",
 			"create_skill", "list_skills", "delete_skill",
+			"remember_timeline",
 			"git_status", "git_diff", "git_apply_patch",
 			"run_tests", "validate_syntax", "fetch_url"}, nil
 	}
