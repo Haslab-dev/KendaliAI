@@ -146,9 +146,11 @@ If the task is complete and NO tools are needed:
    - Known URLs: fetch_url only
    - Local files: read_file → search_files → exec
    - Shell commands: exec
-   - Context7 MCP tools: "resolve-library-id" (takes "libraryName") then "query-docs" (takes "libraryId", "query")
-   - Exa MCP tools: "web_search_exa", "web_fetch_exa", "web_search_advanced_exa"
-   - NEVER guess MCP tool names. If a tool returns "not found", try only ONCE more then fall back.
+   - MCP servers MUST be called via: mcp_call({"server": "context7", "tool": "resolve-library-id", ...})
+   - NEVER call MCP tool names as direct tools (web_search_exa, query-docs, etc. are NOT standalone)
+   - Context7 args: resolve-library-id takes "libraryName" (string), query-docs takes "libraryId" and "query"
+   - Exa args: web_search_exa takes "query" (string), web_fetch_exa takes "url" (string)
+   - If an MCP tool returns validation error, retry ONCE with corrected args. Then fall back.
    - If Exa returns "authorization required", immediately fall back to fetch_url. Do NOT retry Exa.
 
 8. INTERACTIVE COMMANDS

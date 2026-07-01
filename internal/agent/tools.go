@@ -72,20 +72,40 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 				if err := CheckFilePermission(path, workspaceRoot, PermRead); err != nil {
 					return err.Error()
 				}
-				entries, err := os.ReadDir(path)
+				b, err := os.ReadFile(path)
 				if err != nil {
 					return err.Error()
 				}
+				lines := strings.Split(string(b), "\n")
 
-				var files []string
-				for _, e := range entries {
-					t := "file"
-					if e.IsDir() {
-						t = "dir"
-					}
-					files = append(files, fmt.Sprintf("%s (%s)", e.Name(), t))
+				offset := 0
+				limit := 50
+
+				if o, ok := args["offset"].(float64); ok && o >= 0 {
+					offset = int(o)
 				}
-				return strings.Join(files, "\n")
+				if l, ok := args["limit"].(float64); ok && l > 0 {
+					limit = int(l)
+				}
+
+				if limit > 100 {
+					limit = 100
+				}
+
+				quarter := len(lines) / 4
+				if quarter >= 25 && limit > quarter {
+					limit = quarter
+				}
+
+				if offset >= len(lines) {
+					return "offset beyond EOF"
+				}
+				end := offset + limit
+				if end > len(lines) {
+					end = len(lines)
+				}
+
+				return strings.Join(lines[offset:end], "\n")
 			},
 		},
 		"search_files": {
