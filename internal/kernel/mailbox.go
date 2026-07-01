@@ -22,24 +22,26 @@ const (
 	MsgArtifact  MessageType = "artifact"
 )
 
-type Message struct {
-	ID        string      `json:"id"`
-	From      string      `json:"from"` // PID
-	To        string      `json:"to"`   // PID
-	Type      MessageType `json:"type"`
-	Payload   interface{} `json:"payload"`
-	Timestamp time.Time   `json:"timestamp"`
+type Envelope struct {
+	ID            string      `json:"id"`
+	CorrelationID string      `json:"correlationId"`
+	ParentProcess string      `json:"parentProcess,omitempty"`
+	TargetProcess string      `json:"targetProcess"`
+	ReplyTo       string      `json:"replyTo,omitempty"`
+	Type          MessageType `json:"type"`
+	Payload       interface{} `json:"payload"`
+	Timestamp     time.Time   `json:"timestamp"`
 }
 
 type Mailbox struct {
 	mu        sync.RWMutex
-	queues    map[string]chan *Message
+	queues    map[string]chan *Envelope
 	queueSize int
 }
 
 func NewMailbox(queueSize int) *Mailbox {
 	return &Mailbox{
-		queues:    make(map[string]chan *Message),
+		queues:    make(map[string]chan *Envelope),
 		queueSize: queueSize,
 	}
 }
@@ -48,7 +50,7 @@ func (m *Mailbox) Register(pid string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, exists := m.queues[pid]; !exists {
-		m.queues[pid] = make(chan *Message, m.queueSize)
+		m.queues[pid] = make(chan *Envelope, m.queueSize)
 	}
 }
 
@@ -61,26 +63,26 @@ func (m *Mailbox) Unregister(pid string) {
 	}
 }
 
-func (m *Mailbox) Send(ctx context.Context, msg *Message) error {
+func (m *Mailbox) Send(ctx context.Context, env *Envelope) error {
 	m.mu.RLock()
-	q, ok := m.queues[msg.To]
+	q, ok := m.queues[env.TargetProcess]
 	m.mu.RUnlock()
 
 	if !ok {
-		return fmt.Errorf("mailbox for PID %s not registered", msg.To)
+		return fmt.Errorf("mailbox for PID %s not registered", env.TargetProcess)
 	}
 
 	select {
-	case q <- msg:
+	case q <- env:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-time.After(5 * time.Second):
-		return fmt.Errorf("message delivery timeout to PID %s", msg.To)
+		return fmt.Errorf("envelope delivery timeout to PID %s", env.TargetProcess)
 	}
 }
 
-func (m *Mailbox) Receive(ctx context.Context, pid string) (*Message, error) {
+func (m *Mailbox) Receive(ctx context.Context, pid string) (*Envelope, error) {
 	m.mu.RLock()
 	q, ok := m.queues[pid]
 	m.mu.RUnlock()
@@ -90,11 +92,11 @@ func (m *Mailbox) Receive(ctx context.Context, pid string) (*Message, error) {
 	}
 
 	select {
-	case msg, open := <-q:
+	case env, open := <-q:
 		if !open {
 			return nil, fmt.Errorf("mailbox for PID %s closed", pid)
 		}
-		return msg, nil
+		return env, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}

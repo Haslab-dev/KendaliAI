@@ -35,8 +35,8 @@ type Kernel interface {
 	ListProcesses(ctx context.Context) ([]*Process, error)
 
 	// Inter-Process Communication (Mailbox)
-	Send(ctx context.Context, msg *Message) error
-	Receive(ctx context.Context, pid string) (*Message, error)
+	Send(ctx context.Context, env *Envelope) error
+	Receive(ctx context.Context, pid string) (*Envelope, error)
 
 	// Events
 	PublishEvent(ctx context.Context, ev *Event)
@@ -209,11 +209,11 @@ func (ak *AgentKernel) ListProcesses(ctx context.Context) ([]*Process, error) {
 	return ak.processes.List(), nil
 }
 
-func (ak *AgentKernel) Send(ctx context.Context, msg *Message) error {
-	return ak.mailbox.Send(ctx, msg)
+func (ak *AgentKernel) Send(ctx context.Context, env *Envelope) error {
+	return ak.mailbox.Send(ctx, env)
 }
 
-func (ak *AgentKernel) Receive(ctx context.Context, pid string) (*Message, error) {
+func (ak *AgentKernel) Receive(ctx context.Context, pid string) (*Envelope, error) {
 	return ak.mailbox.Receive(ctx, pid)
 }
 

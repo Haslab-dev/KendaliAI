@@ -10,8 +10,9 @@ import (
 	"github.com/kendaliai/app/internal/db"
 	"github.com/kendaliai/app/internal/events"
 	"github.com/kendaliai/app/internal/kernel"
-	"github.com/kendaliai/app/internal/providers"
-	"github.com/kendaliai/app/internal/telemetry"
+	"github.com/kendaliai/app/internal/resource"
+	"github.com/kendaliai/app/internal/runtime/executor"
+	"github.com/kendaliai/app/internal/sandbox"
 )
 
 type MockProvider struct{}
@@ -20,8 +21,19 @@ func (m *MockProvider) ChatCompletion(ctx context.Context, msgs []agent.Message)
 	return &agent.Response{Content: "Done"}, nil
 }
 
+type MockExecutor struct{}
+
+func (me *MockExecutor) Run(ctx context.Context, env sandbox.RuntimeEnvironment, args map[string]interface{}) (string, error) {
+	cmd, _ := args["command"].(string)
+	res, err := env.Execute(ctx, sandbox.ExecutionRequest{Command: cmd})
+	if err != nil {
+		return "", err
+	}
+	return res.Stdout, nil
+}
+
 func main() {
-	fmt.Println("🚀 Starting Minimum Autonomous Kernel (MAK) Phase 7 Integration Test...")
+	fmt.Println("🚀 Starting Minimum Autonomous Kernel (MAK) v1.0 Integration Test...")
 
 	// 1. Setup configuration
 	config.Init()
@@ -37,83 +49,107 @@ func main() {
 	_ = ak.Start(ctx)
 	defer ak.Stop(ctx)
 
-	// 3. Initialize Phase 7 components
-	mb := providers.NewModelBroker()
-	_ = ak.RegisterComponent("model_broker", mb)
+	// 3. Initialize v1.0 pipeline services
+	mb := kernel.NewMailbox(10)
+	_ = ak.RegisterComponent("mailbox", mb)
 
-	es := events.NewEventStore(database)
-	_ = ak.RegisterComponent("event_store", es)
+	lm := resource.NewLeaseManager()
+	_ = ak.RegisterComponent("lease_manager", lm)
 
-	ss := kernel.NewSupervisorService()
-	_ = ak.RegisterComponent("supervisor_service", ss)
+	env := sandbox.NewLocalRuntimeEnvironment()
+	_ = ak.RegisterComponent("runtime_environment", env)
 
-	ts := telemetry.NewTelemetryService()
-	_ = ak.RegisterComponent("telemetry_service", ts)
+	er := executor.NewExecutorRegistry()
+	_ = ak.RegisterComponent("executor_registry", er)
 
-	fmt.Println("✅ All Phase 7 pipeline services registered successfully.")
+	pr := events.NewProjectionRegistry()
+	_ = ak.RegisterComponent("projection_registry", pr)
 
-	// 4. Verify Model Broker fallback resolution
-	profile := providers.TaskProfile{
-		TaskType:    "plan",
-		ContextSize: 120000,
+	fmt.Println("✅ All v1.0 OS primitives registered successfully.")
+
+	// 4. Verify IPC Message Envelopes
+	pid := "agent-coder-pid"
+	mb.Register(pid)
+	defer mb.Unregister(pid)
+
+	envelope := &kernel.Envelope{
+		ID:            "env-100",
+		CorrelationID: "corr-999",
+		ParentProcess: "agent-planner-pid",
+		TargetProcess: pid,
+		ReplyTo:       "agent-planner-pid",
+		Type:          kernel.MsgSpawn,
+		Payload:       map[string]interface{}{"role": "coder"},
 	}
-	chain, err := mb.Resolve(profile)
+
+	err := mb.Send(ctx, envelope)
 	if err != nil {
-		fmt.Printf("❌ Model Broker resolution failed: %v\n", err)
-		os.Exit(1)
-	}
-	fmt.Printf("🤖 Model Broker resolved fallback chain: %v\n", chain)
-
-	// 5. Verify Event Sourcing Store persistence & replays
-	sessionID := "sess-p7-test"
-	goalID := "goal-p7-test"
-	_ = es.SaveEvent(ctx, sessionID, goalID, "TaskStarted", `{"taskId":"task-1"}`)
-	_ = es.SaveEvent(ctx, sessionID, goalID, "TaskCompleted", `{"taskId":"task-1","status":"success"}`)
-
-	evs, err := es.ReplaySession(sessionID)
-	if err != nil || len(evs) != 2 {
-		fmt.Printf("❌ Event Store ReplaySession failed: %v, len=%d\n", err, len(evs))
-		os.Exit(1)
-	}
-	fmt.Printf("⏳ Event Store: Replayed %d events for session %s\n", len(evs), sessionID)
-
-	goalEvs, err := es.ReplayGoal(goalID)
-	if err != nil || len(goalEvs) != 2 {
-		fmt.Printf("❌ Event Store ReplayGoal failed: %v, len=%d\n", err, len(goalEvs))
-		os.Exit(1)
-	}
-	fmt.Printf("🎯 Event Store: Replayed %d events for goal %s\n", len(goalEvs), goalID)
-
-	// 6. Verify Supervisor Service Failure Classification
-	strategy1, _ := ss.ClassifyFailure("agent-1", kernel.FailWaitingApp)
-	strategy2, _ := ss.ClassifyFailure("agent-1", kernel.FailHeartbeatLost)
-	_, _ = ss.ClassifyFailure("agent-1", kernel.FailHeartbeatLost)
-	_, _ = ss.ClassifyFailure("agent-1", kernel.FailHeartbeatLost)
-	strategy5, _ := ss.ClassifyFailure("agent-1", kernel.FailHeartbeatLost)
-	fmt.Printf("🛡️ Supervisor: Failure strategies: WaitingApp=%s, HeartbeatLost_1=%s, HeartbeatLost_4=%s\n", strategy1, strategy2, strategy5)
-
-	if strategy5 != kernel.StrategyCircuitBreaker {
-		fmt.Println("❌ Supervisor Service failure: repeated crash did not circuit break.")
+		fmt.Printf("❌ Envelope IPC send failed: %v\n", err)
 		os.Exit(1)
 	}
 
-	// 7. Verify Telemetry & Distributed Tracing
-	ts.RecordTokens(goalID, 1200)
-	ts.RecordCost(goalID, 0.054)
-	tokens, cost := ts.GetMetrics(goalID)
-	fmt.Printf("📊 Telemetry Metrics: Tokens=%d, Cost=$%f\n", tokens, cost)
+	received, err := mb.Receive(ctx, pid)
+	if err != nil || received.ID != "env-100" || received.CorrelationID != "corr-999" {
+		fmt.Printf("❌ Envelope IPC receive failed or corrupted: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("📦 Mailbox IPC Correlation Envelope: ID=%s, CorrelationID=%s, Payload=%+v\n", received.ID, received.CorrelationID, received.Payload)
 
-	traceID := "trace-999"
-	parentSpan := ts.StartSpan(traceID, "span-parent", "", "GoalResolution")
-	childSpan := ts.StartSpan(traceID, "span-child", "span-parent", "CodeGeneration")
+	// 5. Verify Resource Lease locks bounds
+	resourcePath := "/workspace/auth.go"
+	success1, _ := lm.Acquire(resourcePath, "agent-coder-pid", resource.LeaseWrite)
+	success2, err2 := lm.Acquire(resourcePath, "agent-reviewer-pid", resource.LeaseExclusive)
+	fmt.Printf("🔒 Resource Locks: Write lease: %v, Exclusive lease: %v (Error: %v)\n", success1, success2, err2)
 
-	recoveredSpan, exists := ts.GetSpan(childSpan.SpanID)
-	fmt.Printf("🕸️ Trace Spans: ParentSpanID of '%s' resolved to '%s' (exists=%v)\n", recoveredSpan.Name, recoveredSpan.ParentSpanID, exists)
+	lm.Release(resourcePath, "agent-coder-pid")
+	success3, err3 := lm.Acquire(resourcePath, "agent-reviewer-pid", resource.LeaseExclusive)
+	fmt.Printf("🔓 Lock released. Exclusive lock secondary check: %v (Error: %v)\n", success3, err3)
 
-	if !exists || recoveredSpan.ParentSpanID != parentSpan.SpanID {
-		fmt.Println("❌ Distributed Tracing failure: Trace span hierarchy incorrect.")
+	// 6. Verify Capability Descriptors & Executor Registry
+	desc := executor.CapabilityDescriptor{
+		Name:             "exec_shell",
+		RequiredPolicies: []string{"allow_read_only"},
+		TimeoutSeconds:   10,
+	}
+	er.Register(desc, &MockExecutor{})
+
+	resolvedDesc, exec, err := er.Get("exec_shell")
+	if err != nil {
+		fmt.Printf("❌ Executor registry resolution failed: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("🛠️ Executor Registry: Resolved '%s' with Policies: %v\n", resolvedDesc.Name, resolvedDesc.RequiredPolicies)
+
+	runResult, err := exec.Run(ctx, env, map[string]interface{}{"command": "go test ./..."})
+	if err != nil {
+		fmt.Printf("❌ Executor Run failed: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("⚙️ Executor Execution output: %s\n", runResult)
+
+	// 7. Verify Pluggable Projection Registry
+	goalProj := events.NewGoalProjection()
+	metricsProj := events.NewMetricsProjection()
+
+	pr.Register(goalProj)
+	pr.Register(metricsProj)
+
+	sessionID := "session-p8"
+	goalID := "goal-p8"
+
+	pr.Apply(events.Event{Type: "GoalUpdated", SessionID: sessionID, GoalID: goalID})
+	pr.Apply(events.Event{Type: "TaskStarted", SessionID: sessionID, GoalID: goalID})
+	pr.Apply(events.Event{Type: "MetricsRecorded", SessionID: sessionID, GoalID: goalID})
+	pr.Apply(events.Event{Type: "TaskCompleted", SessionID: sessionID, GoalID: goalID})
+
+	projectedStatus := goalProj.Status[goalID]
+	fmt.Printf("📈 Pluggable Projections: Projected Goal state: '%s'\n", projectedStatus)
+	fmt.Printf("📊 Pluggable Projections: Projected Metrics: Tokens=%d, Cost=$%f\n", metricsProj.TokenUsage, metricsProj.CostSummary)
+
+	if projectedStatus != "Completed" || metricsProj.TokenUsage != 100 {
+		fmt.Println("❌ Projections failure: state accumulation incorrect.")
 		os.Exit(1)
 	}
 
-	fmt.Println("🎉 Minimum Autonomous Kernel (MAK) Phase 7 Integration Test: PASS")
+	fmt.Println("🎉 Minimum Autonomous Kernel (MAK) v1.0 Integration Test: PASS")
 }
