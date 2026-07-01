@@ -169,7 +169,7 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 		// ✏️ EDITING
 		"apply_patch": {
 			Name:        "apply_patch",
-			Description: "Replaces exact target block with new block.",
+			Description: "Replaces exact target block with new block. When old_str is empty, creates a NEW file with new_str content.",
 			Signature:   `{"path": "string", "old_str": "string", "new_str": "string"}`,
 			Execute: func(ctx context.Context, args map[string]interface{}) string {
 				path, _ := args["path"].(string)
