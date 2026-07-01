@@ -69,5 +69,5 @@ jobs:
             build/kendaliai-linux-amd64
             build/kendaliai-linux-arm64
             build/kendaliai-darwin-arm64
-            config.example.json
+            config.example.yaml
             Makefile
