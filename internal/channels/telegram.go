@@ -13,6 +13,7 @@ import (
 	"github.com/kendaliai/app/internal/config"
 	"github.com/kendaliai/app/internal/logger"
 	"github.com/kendaliai/app/internal/providers"
+	"github.com/kendaliai/app/internal/session"
 )
 
 const telegramMaxLength = 4000
@@ -97,6 +98,7 @@ func (tm *TelegramManager) StartPolling(c Channel) {
 			}
 
 			go func(upd tgbotapi.Update, tMsg tgbotapi.Message) {
+				chatID := fmt.Sprintf("%d", upd.Message.Chat.ID)
 				loop := agent.NewCognitionLoopWithDB(p, 25, config.Cfg, tm.db)
 
 				loop.OnTool = func(toolName, category string, args map[string]interface{}) {
@@ -104,6 +106,8 @@ func (tm *TelegramManager) StartPolling(c Channel) {
 					edit := tgbotapi.NewEditMessageText(upd.Message.Chat.ID, tMsg.MessageID, status)
 					bot.Send(edit)
 				}
+
+				historyContext := session.DefaultBuffer.Context(chatID)
 
 				wrappedQuery := fmt.Sprintf(`[CHANNEL: Telegram Bot — Short Response Mode]
 You are responding via a Telegram chat interface. Follow these rules strictly:
@@ -130,7 +134,10 @@ You are responding via a Telegram chat interface. Follow these rules strictly:
 9. INTERACTIVE COMMANDS — NEVER run commands that need user input. Add --yes, -y, </dev/null, or 2>&1. If a command hangs requesting input, ABORT and report the error.
 10. SKILL UPDATES — Use update_skill to modify an existing skill (auto-increments version). NEVER delete+create to update a skill.
 
-User message: %s`, upd.Message.Text)
+%s
+User message: %s`, historyContext, upd.Message.Text)
+
+				session.DefaultBuffer.Add(chatID, "user", upd.Message.Text)
 
 				finalResp, err := loop.Run(context.Background(), wrappedQuery)
 
@@ -143,6 +150,8 @@ User message: %s`, upd.Message.Text)
 				} else {
 					replyText = finalResp
 				}
+
+				session.DefaultBuffer.Add(chatID, "assistant", replyText)
 
 				// Chunk the response to avoid Telegram MESSAGE_TOO_LONG
 				chunks := chunkText(replyText, telegramMaxLength)

@@ -384,17 +384,19 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 	}
 
 	if skills.DefaultRouter != nil {
-		if matchedSpec, score, _ := skills.DefaultRouter.Match(ctx, initialQuery); matchedSpec != nil && score > 0.6 {
-			pkg, err := skills.DefaultManager.Get(matchedSpec.ID)
+		matchSpec, matchScore, _ := skills.DefaultRouter.Match(ctx, initialQuery)
+		logger.Info("Agent", fmt.Sprintf("🔍 Router check: spec=%v score=%.2f", matchSpec, matchScore))
+		if matchSpec != nil && matchScore > 0.6 {
+			pkg, err := skills.DefaultManager.Get(matchSpec.ID)
 			if err == nil && pkg.Prompt != "" {
-				identityOverride := fmt.Sprintf("🎯 ROUTED TO SKILL: %s (confidence: %.2f)\n\n⚠️ YOUR PRIMARY IDENTITY IS NOW: %s\n\nOverride the default Software Engineer persona. Follow this identity first. Do NOT search code, read project files, or use engineering tools unless the skill explicitly asks for it.\n\n%s",
-					matchedSpec.Name, score, matchedSpec.Name, pkg.Prompt)
-				messages[0] = Message{Role: "system", Content: identityOverride + "\n\n---\n\n" + messages[0].Content}
-				messages = append(messages, Message{Role: "system", Content: fmt.Sprintf("SKILL BEHAVIOR: You are a %s. Act like it. Do NOT search files, read code, or use exec unless directly relevant to %s tasks.", matchedSpec.Name, matchedSpec.Name)})
+				identityOverride := fmt.Sprintf("🎯 ROUTED TO SKILL: %s (confidence: %.2f)\n\n⚠️ YOUR PRIMARY IDENTITY IS NOW: %s\n\nIMPORTANT: You are NO LONGER a Software Engineer. Do NOT search files, read code, or use engineering tools. Act as a %s using ONLY your knowledge and the tools listed below.\n\n%s",
+					matchSpec.Name, matchScore, matchSpec.Name, matchSpec.Name, pkg.Prompt)
+				messages[0] = Message{Role: "system", Content: identityOverride + "\n\n---\nBASE CAPABILITIES (use only if relevant to your role):\n" + messages[0].Content}
+				messages = append(messages, Message{Role: "system", Content: fmt.Sprintf("SKILL BEHAVIOR: You are a %s. Respond as a %s would. Do NOT search files, list directories, read code, or run shell commands unless essential to %s tasks.", matchSpec.Name, matchSpec.Name, matchSpec.Name)})
 				if pkg.Examples != "" {
-					messages = append(messages, Message{Role: "system", Content: "Skill examples:\n" + pkg.Examples})
+					messages = append(messages, Message{Role: "system", Content: "SKILL EXAMPLES:\n" + pkg.Examples})
 				}
-				logger.Info("Agent", fmt.Sprintf("🎯 Routed to skill: %s (%.2f)", matchedSpec.Name, score))
+				logger.Info("Agent", fmt.Sprintf("🎯 Routed to skill: %s (%.2f)", matchSpec.Name, matchScore))
 			}
 		}
 	}

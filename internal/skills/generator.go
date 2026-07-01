@@ -69,26 +69,37 @@ func (g *Generator) Generate(req GenerateRequest) (*SkillPackage, error) {
 }
 
 func (g *Generator) buildKeywords(req GenerateRequest) []string {
-	keywords := []string{req.Name}
-	keywords = append(keywords, strings.Fields(req.Description)...)
+	var raw []string
+	raw = append(raw, strings.Fields(req.Name)...)
+	raw = append(raw, strings.Fields(req.Description)...)
 	for _, r := range req.Responsibilities {
-		keywords = append(keywords, strings.Fields(r)...)
+		raw = append(raw, strings.Fields(r)...)
 	}
 	if req.Category != "" {
-		keywords = append(keywords, req.Category)
+		raw = append(raw, strings.Fields(req.Category)...)
 	}
+
+	domainWords := []string{"add", "update", "list", "done", "todo", "task", "progress", "status"}
+	raw = append(raw, domainWords...)
+
+	stopWords := map[string]bool{
+		"dan": true, "ini": true, "akan": true, "serta": true, "itu": true,
+		"yang": true, "dari": true, "untuk": true, "dengan": true, "pada": true,
+	}
+
 	seen := map[string]bool{}
 	var unique []string
-	for _, kw := range keywords {
+	for _, kw := range raw {
 		kw = strings.ToLower(strings.TrimSpace(kw))
-		if kw == "" || len(kw) < 3 || seen[kw] {
+		kw = strings.Trim(kw, ".,;:()[]{}!@#$%^&*\"'")
+		if kw == "" || len(kw) < 2 || seen[kw] || stopWords[kw] {
 			continue
 		}
 		seen[kw] = true
 		unique = append(unique, kw)
 	}
-	if len(unique) > 20 {
-		unique = unique[:20]
+	if len(unique) > 25 {
+		unique = unique[:25]
 	}
 	return unique
 }

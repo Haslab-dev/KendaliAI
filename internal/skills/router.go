@@ -28,32 +28,32 @@ func (r *Router) Match(ctx context.Context, message string) (*SkillSpec, float64
 		return nil, 0, nil
 	}
 
-	if r.client == nil {
-		r.client = embedding.NewClient()
-	}
-
-	vecs, err := r.client.Embed(ctx, []string{message})
-	if err != nil || len(vecs) == 0 {
-		return nil, 0, nil
-	}
-	msgEmb := vecs[0]
-
 	var bestSpec *SkillSpec
 	bestScore := 0.0
 
 	for _, spec := range specs {
 		score := r.keywordScore(message, spec)
-		embScore := r.embeddingScore(msgEmb, spec.ID)
-		combined := score*0.3 + embScore*0.7
 
-		if combined > bestScore {
-			bestScore = combined
+		if score >= 0.85 {
 			s := spec
 			bestSpec = &s
+			bestScore = score
+			break
+		}
+
+		if score > 0.2 {
+			embScore := r.embeddingScore(message, spec)
+			combined := score*0.5 + embScore*0.5
+
+			if combined > bestScore {
+				bestScore = combined
+				s := spec
+				bestSpec = &s
+			}
 		}
 	}
 
-	threshold := 0.6
+	threshold := 0.35
 	if bestSpec != nil && bestSpec.Routing.Threshold > 0 {
 		threshold = bestSpec.Routing.Threshold
 	}
@@ -67,35 +67,80 @@ func (r *Router) Match(ctx context.Context, message string) (*SkillSpec, float64
 
 func (r *Router) keywordScore(message string, spec SkillSpec) float64 {
 	lower := strings.ToLower(message)
+	lower = strings.ReplaceAll(lower, ",", " ")
+	lower = strings.ReplaceAll(lower, ".", " ")
+	specID := strings.ToLower(spec.ID)
+	specName := strings.ToLower(spec.Name)
+	specNameClean := strings.ReplaceAll(specName, "-", " ")
+	specIDClean := strings.ReplaceAll(specID, "-", " ")
+
+	if strings.Contains(lower, strings.ReplaceAll("gunakan skill "+specName, "-", " ")) ||
+		strings.Contains(lower, strings.ReplaceAll("gunakan skill "+specID, "-", " ")) ||
+		strings.Contains(lower, strings.ReplaceAll("use skill "+specName, "-", " ")) ||
+		strings.Contains(lower, strings.ReplaceAll("use skill "+specID, "-", " ")) {
+		return 0.95
+	}
+
+	if strings.Contains(lower, specNameClean) || strings.Contains(lower, specIDClean) {
+		return 0.85
+	}
+
 	matches := 0
 	total := len(spec.Routing.Keywords)
 
-	if total == 0 {
-		return 0.2
-	}
-
 	for _, kw := range spec.Routing.Keywords {
-		if strings.Contains(lower, strings.ToLower(kw)) {
+		kw = strings.TrimSpace(strings.ToLower(kw))
+		kw = strings.Trim(kw, ".,;:()[]{}!@#$%^&*\"'")
+		if len(kw) < 2 {
+			continue
+		}
+		if strings.Contains(lower, kw) {
 			matches++
 		}
 	}
 
-	if matches == 0 {
-		return 0.1
+	effectiveTotal := total
+	if effectiveTotal == 0 {
+		return 0.15
 	}
 
-	score := float64(matches) / float64(total)
-	nameLower := strings.ToLower(spec.Name)
-	if strings.Contains(lower, nameLower) {
-		score += 0.2
+	if matches == 0 {
+		shortWords := 0
+		for _, kw := range spec.Routing.Keywords {
+			kw = strings.TrimSpace(strings.ToLower(kw))
+			kw = strings.Trim(kw, ".,;:()[]{}!@#$%^&*\"'")
+			if len(kw) >= 2 && strings.Contains(lower, kw) {
+				shortWords++
+			}
+		}
+		if shortWords > 0 {
+			return 0.35
+		}
+		return 0.0
 	}
-	if score > 1.0 {
-		score = 1.0
+
+	score := float64(matches) / float64(effectiveTotal)
+	if score < 0.1 && matches >= 2 {
+		score = 0.3
+	}
+	if score > 0.95 {
+		score = 0.95
 	}
 	return score
 }
 
-func (r *Router) embeddingScore(msgEmb embedding.Vector, skillID string) float64 {
+func (r *Router) embeddingScore(message string, spec SkillSpec) float64 {
+	if r.client == nil {
+		r.client = embedding.NewClient()
+	}
+
+	vecs, err := r.client.Embed(context.Background(), []string{message})
+	if err != nil || len(vecs) == 0 {
+		return 0.0
+	}
+	msgEmb := vecs[0]
+
+	skillID := spec.ID
 	r.mu.RLock()
 	skillEmb, ok := r.cache[skillID]
 	r.mu.RUnlock()
