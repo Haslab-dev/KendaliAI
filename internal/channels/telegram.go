@@ -14,6 +14,8 @@ import (
 	"github.com/kendaliai/app/internal/providers"
 )
 
+const telegramMaxLength = 4000
+
 type TelegramConfig struct {
 	BotToken string `json:"botToken"`
 }
@@ -107,14 +109,57 @@ func (tm *TelegramManager) StartPolling(c Channel) {
 					replyText = finalResp
 				}
 
-				editMsg := tgbotapi.NewEditMessageText(upd.Message.Chat.ID, tMsg.MessageID, replyText)
-				// Markdown optionally
-				// editMsg.ParseMode = "markdown"
+				// Chunk the response to avoid Telegram MESSAGE_TOO_LONG
+				chunks := chunkText(replyText, telegramMaxLength)
 
+				// Edit the "Thinking..." message with the first chunk
+				editMsg := tgbotapi.NewEditMessageText(upd.Message.Chat.ID, tMsg.MessageID, chunks[0])
 				if _, err := bot.Send(editMsg); err != nil {
 					log.Printf("Error editing telegram message: %v", err)
+				}
+
+				// Send remaining chunks as new messages
+				for i := 1; i < len(chunks); i++ {
+					followUp := tgbotapi.NewMessage(upd.Message.Chat.ID, chunks[i])
+					followUp.ReplyToMessageID = tMsg.MessageID
+					if _, err := bot.Send(followUp); err != nil {
+						log.Printf("Error sending follow-up message chunk %d: %v", i+1, err)
+					}
 				}
 			}(update, thinkingMsg)
 		}
 	}
+}
+
+// chunkText splits text into chunks of maxLen characters, breaking at newlines when possible.
+func chunkText(text string, maxLen int) []string {
+	if len(text) <= maxLen {
+		return []string{text}
+	}
+
+	var chunks []string
+	for len(text) > 0 {
+		if len(text) <= maxLen {
+			chunks = append(chunks, text)
+			break
+		}
+
+		// Try to break at the last newline within maxLen
+		cutPoint := maxLen
+		lastNewline := -1
+		for i := maxLen - 1; i > maxLen/2; i-- {
+			if text[i] == '\n' {
+				lastNewline = i
+				break
+			}
+		}
+		if lastNewline > 0 {
+			cutPoint = lastNewline + 1
+		}
+
+		chunks = append(chunks, text[:cutPoint])
+		text = text[cutPoint:]
+	}
+
+	return chunks
 }

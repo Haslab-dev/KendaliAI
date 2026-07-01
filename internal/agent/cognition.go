@@ -366,6 +366,11 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 
 			// 3. State Sync / Re-feed
 			for _, res := range results {
+				truncResult := res.Output
+				if len(truncResult) > 200 {
+					truncResult = truncResult[:200] + "...(truncated)"
+				}
+				logger.Info("Agent", fmt.Sprintf("📦 Tool result [%s]: %s", res.Name, strings.ReplaceAll(truncResult, "\n", " ")))
 				messages = append(messages, Message{Role: "user", Content: fmt.Sprintf("tool_result(%s):\n%s", res.Name, res.Output)})
 			}
 			continue
