@@ -87,16 +87,13 @@ channels:
 }
 
 func runConfigValidate(cmd *cobra.Command, args []string) {
-	configPath := config.ResolveConfigPath()
-	if configPath == "" {
+	resolvedPath := config.ResolveConfigPath()
+	if resolvedPath == "" {
 		fmt.Println("❌ No configuration file resolved.")
 		os.Exit(1)
 	}
 
-	config.Init()
-	cfg := config.Cfg
-
-	fmt.Printf("🔍 Validating configuration file: %s...\n\n", configPath)
+	fmt.Printf("🔍 Validating configuration file: %s...\n\n", resolvedPath)
 
 	errorsCount := 0
 	warningsCount := 0

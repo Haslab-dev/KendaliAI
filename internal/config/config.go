@@ -57,9 +57,6 @@ var ConfigOverridePath string
 func Init() {
 	Cfg = load()
 	Cfg.applyDefaults()
-	log.Printf("Config loaded: version=%d, providers=%d, embedding=%s",
-		Cfg.Version, len(Cfg.ChatProviders), Cfg.Embedding.Model,
-	)
 }
 
 func load() *Config {

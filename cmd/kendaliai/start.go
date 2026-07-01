@@ -2,20 +2,22 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"syscall"
 
+	"github.com/kendaliai/app/internal/channels"
 	"github.com/kendaliai/app/internal/config"
 	"github.com/kendaliai/app/internal/db"
+	"github.com/kendaliai/app/internal/gateways"
 	"github.com/kendaliai/app/internal/server"
 	"github.com/spf13/cobra"
 )
 
 var daemonMode bool
-var configPath string
 
 var startCmd = &cobra.Command{
 	Use:   "start",
@@ -25,17 +27,11 @@ var startCmd = &cobra.Command{
 
 func init() {
 	startCmd.Flags().BoolVarP(&daemonMode, "daemon", "d", false, "Start gateway in the background as a daemon")
-	startCmd.Flags().StringVarP(&configPath, "config", "c", "", "Path to configuration file")
 	rootCmd.AddCommand(startCmd)
 }
 
 func runStart(cmd *cobra.Command, args []string) {
-	if configPath != "" {
-		config.ConfigOverridePath = configPath
-	}
-	config.Init()
 	cfg := config.Cfg
-
 	pidFile := resolvePIDFile()
 
 	if daemonMode {
@@ -78,12 +74,39 @@ func runStart(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	fmt.Println("🚀 Starting KendaliAI Gateway in foreground...")
+	// Foreground start: setup log output
+	logFile := resolveLogFile()
+	_ = os.MkdirAll(filepath.Dir(logFile), 0755)
+	logOut, logErr := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if logErr == nil {
+		// Check if stdout is a terminal (interactive) vs redirected (daemon child)
+		if fileInfo, _ := os.Stdout.Stat(); fileInfo != nil && (fileInfo.Mode()&os.ModeCharDevice) != 0 {
+			// Interactive terminal: write to both stdout and log file
+			mw := io.MultiWriter(os.Stdout, logOut)
+			log.SetOutput(mw)
+		} else {
+			// Daemon child: stdout already points to log file, write to file only
+			log.SetOutput(logOut)
+		}
+	}
+
+	log.Println("🚀 Starting KendaliAI Gateway in foreground...")
 	database, err := db.Initialize(cfg)
 	if err != nil {
 		log.Fatalf("❌ Database connection failed: %v", err)
 	}
 	defer database.Close()
+
+	// 1. Auto-onboard gateway/channels database configurations
+	gateways.HandleOnboard(database)
+
+	// 2. Poll configured gateways
+	tm := channels.NewTelegramManager(database)
+	activeChannels, _ := tm.LoadActiveChannels()
+	for _, c := range activeChannels {
+		log.Printf("🔌 Starting polling channel: %s (%s)", c.ID, c.Type)
+		go tm.StartPolling(c)
+	}
 
 	srv := server.NewServer(database)
 	_ = os.WriteFile(pidFile, []byte(fmt.Sprintf("%d", os.Getpid())), 0644)

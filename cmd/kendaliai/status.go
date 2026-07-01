@@ -20,8 +20,6 @@ func init() {
 }
 
 func runStatus(cmd *cobra.Command, args []string) {
-	config.Init()
-	cfg := config.Cfg
 	if cfg == nil {
 		fmt.Println("❌ Configuration not loaded.")
 		os.Exit(1)

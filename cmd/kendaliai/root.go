@@ -10,6 +10,7 @@ import (
 )
 
 var cfg *config.Config
+var configPath string
 
 var rootCmd = &cobra.Command{
 	Use:               "kendaliai",
@@ -17,13 +18,16 @@ var rootCmd = &cobra.Command{
 	Version:           version,
 	CompletionOptions: cobra.CompletionOptions{DisableDefaultCmd: true},
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		if configPath != "" {
+			config.ConfigOverridePath = configPath
+		}
 		config.Init()
 		cfg = config.Cfg
 	},
 }
 
 func init() {
-	// Setup Viper for environment variables
+	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "", "Path to configuration file")
 	viper.AutomaticEnv()
 	viper.SetEnvPrefix("KENDALIAI")
 }

@@ -14,7 +14,6 @@ var restartCmd = &cobra.Command{
 }
 
 func init() {
-	restartCmd.Flags().StringVarP(&configPath, "config", "c", "", "Path to configuration file")
 	rootCmd.AddCommand(restartCmd)
 }
 
