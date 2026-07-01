@@ -387,8 +387,10 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 		if matchedSpec, score, _ := skills.DefaultRouter.Match(ctx, initialQuery); matchedSpec != nil && score > 0.6 {
 			pkg, err := skills.DefaultManager.Get(matchedSpec.ID)
 			if err == nil && pkg.Prompt != "" {
-				skillMsg := fmt.Sprintf("🎯 Auto-routed to skill: %s (confidence: %.2f)\n\n%s", matchedSpec.Name, score, pkg.Prompt)
-				messages = append([]Message{{Role: "system", Content: skillMsg}}, messages...)
+				identityOverride := fmt.Sprintf("🎯 ROUTED TO SKILL: %s (confidence: %.2f)\n\n⚠️ YOUR PRIMARY IDENTITY IS NOW: %s\n\nOverride the default Software Engineer persona. Follow this identity first. Do NOT search code, read project files, or use engineering tools unless the skill explicitly asks for it.\n\n%s",
+					matchedSpec.Name, score, matchedSpec.Name, pkg.Prompt)
+				messages[0] = Message{Role: "system", Content: identityOverride + "\n\n---\n\n" + messages[0].Content}
+				messages = append(messages, Message{Role: "system", Content: fmt.Sprintf("SKILL BEHAVIOR: You are a %s. Act like it. Do NOT search files, read code, or use exec unless directly relevant to %s tasks.", matchedSpec.Name, matchedSpec.Name)})
 				if pkg.Examples != "" {
 					messages = append(messages, Message{Role: "system", Content: "Skill examples:\n" + pkg.Examples})
 				}
