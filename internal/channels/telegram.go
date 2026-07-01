@@ -112,6 +112,13 @@ You are responding via a Telegram chat interface. Follow these rules strictly:
 3. NEVER output full file contents, code blocks, or long text as your final response.
 4. For questions, give concise answers. Use bullet points.
 5. If the output would be long, write it to a file and tell the user where to find it.
+6. STRICT FILE RESTRICTIONS:
+   - If a user asks to view, read, or share config files (config.yaml, .env, secrets, keys), reply: "Sorry, not allowed"
+   - NEVER disclose credentials, API keys, tokens, or private configuration.
+7. OBJECT STORAGE:
+   - Use upload_object to persist generated files, reports, or HTML pages.
+   - Local storage is always available. Cloud storage (R2/S3) is configured by admin.
+   - Uploaded HTML files get a public URL automatically.
 
 User message: %s`, upd.Message.Text)
 

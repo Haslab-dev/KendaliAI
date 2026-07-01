@@ -42,6 +42,7 @@ type Config struct {
 	Channels        []ChannelConfig            `json:"channels" yaml:"channels"`
 	MCPServers      map[string]MCPServerConfig `json:"mcpServers" yaml:"mcpServers"`
 	Storage         StorageConfig              `json:"storage" yaml:"storage"`
+	Permissions     PermissionsConfig          `json:"permissions" yaml:"permissions"`
 }
 
 type StorageConfig struct {
@@ -53,6 +54,16 @@ type StorageConfig struct {
 	PublicURL string `json:"publicUrl,omitempty" yaml:"publicUrl,omitempty"`
 	Region    string `json:"region" yaml:"region"`
 	LocalPath string `json:"localPath,omitempty" yaml:"localPath,omitempty"`
+}
+
+type PermissionRule struct {
+	Path        string   `json:"path" yaml:"path"`
+	Permissions []string `json:"permissions" yaml:"permissions"`
+}
+
+type PermissionsConfig struct {
+	Allow []PermissionRule `json:"allow" yaml:"allow"`
+	Deny  []string         `json:"deny" yaml:"deny"`
 }
 
 type MCPServerConfig struct {

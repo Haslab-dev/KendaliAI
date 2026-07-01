@@ -67,56 +67,9 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 				if err := ValidateSandboxedPath(path, workspaceRoot); err != nil {
 					return err.Error()
 				}
-
-				b, err := os.ReadFile(path)
-				if err != nil {
+				if err := CheckFilePermission(path, workspaceRoot, PermRead); err != nil {
 					return err.Error()
 				}
-				lines := strings.Split(string(b), "\n")
-
-				offset := 0
-				limit := 50 // default buffer baseline
-
-				if o, ok := args["offset"].(float64); ok && o >= 0 {
-					offset = int(o)
-				}
-				if l, ok := args["limit"].(float64); ok && l > 0 {
-					limit = int(l)
-				}
-
-				// Enforce extreme strict token safeguards across the execution pool
-				if limit > 100 {
-					limit = 100
-				} // Hard-cap override
-
-				// Secondary guard: never dump more than 1/4 of massive file arrays at once unless absolute edge cases
-				quarter := len(lines) / 4
-				if quarter >= 25 && limit > quarter {
-					limit = quarter
-				}
-
-				if offset >= len(lines) {
-					return "offset beyond EOF"
-				}
-				end := offset + limit
-				if end > len(lines) {
-					end = len(lines)
-				}
-
-				return strings.Join(lines[offset:end], "\n")
-			},
-		},
-		"list_files": {
-			Name:        "list_files",
-			Description: "Lists files safely in a directory.",
-			Signature:   `{"path": "string", "depth": "int"}`,
-			Execute: func(ctx context.Context, args map[string]interface{}) string {
-				path, _ := args["path"].(string)
-				if err := ValidateSandboxedPath(path, workspaceRoot); err != nil {
-					return err.Error()
-				}
-
-				// Optional depth filter could be added via WalkDir
 				entries, err := os.ReadDir(path)
 				if err != nil {
 					return err.Error()
@@ -181,6 +134,14 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 				oldStr, _ := args["old_str"].(string)
 				newStr, _ := args["new_str"].(string)
 
+				op := PermWrite
+				if oldStr != "" {
+					op = PermUpdate
+				}
+				if err := CheckFilePermission(path, workspaceRoot, op); err != nil {
+					return err.Error()
+				}
+
 				if oldStr == "" {
 					_ = os.WriteFile(path, []byte(newStr), 0644)
 					return "created_file"
@@ -208,6 +169,9 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 			Execute: func(ctx context.Context, args map[string]interface{}) string {
 				path, _ := args["path"].(string)
 				if err := ValidateSandboxedPath(path, workspaceRoot); err != nil {
+					return err.Error()
+				}
+				if err := CheckFilePermission(path, workspaceRoot, PermUpdate); err != nil {
 					return err.Error()
 				}
 
@@ -357,7 +321,6 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 				if err := ValidateSandboxedPath(file, workspaceRoot); err != nil {
 					return err.Error()
 				}
-
 				if strings.HasSuffix(file, ".go") {
 					cmd := exec.CommandContext(ctx, "go", "build", "-o", "/dev/null", file)
 					out, err := cmd.CombinedOutput()
@@ -416,6 +379,10 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 				}
 				if !filepath.IsAbs(path) {
 					path = filepath.Join(workspaceRoot, path)
+				}
+
+				if err := CheckFilePermission(path, workspaceRoot, PermRead); err != nil {
+					return err.Error()
 				}
 
 				f, err := os.Open(path)

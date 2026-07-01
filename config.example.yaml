@@ -41,3 +41,18 @@ storage:
   # secretKey: your-secret-key
   # publicUrl: https://cdn.example.com
   # region: auto
+
+# File access permissions. Deny-list takes priority over allow-list.
+# Built-in sensitive patterns (config.yaml, .env, .git/, .ssh/, *.key, *.pem, etc.) are ALWAYS denied.
+permissions:
+  deny:
+    - secrets/
+    - credentials/
+    - tokens/
+  allow:
+    - path: example/
+      permissions: [read, write, update, delete]
+    - path: public/
+      permissions: [read, write, update, delete]
+    - path: ./
+      permissions: [read]
