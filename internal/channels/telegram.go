@@ -101,6 +101,8 @@ func (tm *TelegramManager) StartPolling(c Channel) {
 				if err != nil {
 					log.Printf("AI error: %v", err)
 					replyText = fmt.Sprintf("Sorry, I ran into an error: %v", err)
+				} else if finalResp == "" {
+					replyText = "No response generated"
 				} else {
 					replyText = finalResp
 				}
