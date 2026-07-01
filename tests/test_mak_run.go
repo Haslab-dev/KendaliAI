@@ -9,12 +9,12 @@ import (
 
 	"github.com/kendaliai/app/internal/agent"
 	"github.com/kendaliai/app/internal/capability"
+	"github.com/kendaliai/app/internal/channels"
 	"github.com/kendaliai/app/internal/config"
 	"github.com/kendaliai/app/internal/db"
-	"github.com/kendaliai/app/internal/index"
-	"github.com/kendaliai/app/internal/intent"
+	"github.com/kendaliai/app/internal/git"
 	"github.com/kendaliai/app/internal/kernel"
-	"github.com/kendaliai/app/internal/workflow"
+	"github.com/kendaliai/app/internal/review"
 	"github.com/kendaliai/app/internal/workspace"
 )
 
@@ -41,7 +41,7 @@ func (m *MockProvider) ChatCompletion(ctx context.Context, msgs []agent.Message)
 }
 
 func main() {
-	fmt.Println("🚀 Starting Minimum Autonomous Kernel (MAK) Phase 5 Integration Test...")
+	fmt.Println("🚀 Starting Minimum Autonomous Kernel (MAK) Phase 6 Integration Test...")
 
 	// 1. Setup configuration
 	config.Init()
@@ -60,114 +60,89 @@ func main() {
 	_ = ak.Start(ctx)
 	defer ak.Stop(ctx)
 
-	// 3. Initialize Phase 5 components
-	ir := intent.NewIntentResolver()
-	_ = ak.RegisterComponent("intent_resolver", ir)
+	// 3. Initialize Phase 6 components
+	ga := git.NewLocalGitAdapter(cwd)
+	_ = ak.RegisterComponent("git_adapter", ga)
 
-	cg := index.NewCodeIntelligenceGraph()
-	wi := index.NewWorkspaceIndexer(cg)
-	_ = ak.RegisterComponent("workspace_indexer", wi)
+	tc := channels.NewTelegramChannelAdapter("bot-token-123", "chat-id-456")
+	_ = ak.RegisterComponent("telegram_channel", tc)
 
-	cb := capability.NewCapabilityBroker()
-	_ = ak.RegisterComponent("capability_broker", cb)
+	rb := kernel.NewRuntimeBus()
+	_ = ak.RegisterComponent("runtime_bus", rb)
 
-	ob := kernel.NewObservationBus()
-	_ = ak.RegisterComponent("observation_bus", ob)
+	re := review.NewReviewEngine()
+	_ = ak.RegisterComponent("review_engine", re)
 
-	fmt.Println("✅ All Phase 5 pipeline services registered successfully.")
-
-	// 4. Verify Intent Resolution Engine
-	textQuery := "Fix the error in compiler module"
-	res := ir.Resolve(textQuery)
-	fmt.Printf("💬 Intent resolved: Intent=%s, GoalID=%s, Constraints=%+v\n", res.Intent, res.GoalID, res.Constraints)
-
-	textQuery2 := "Design landing page"
-	res2 := ir.Resolve(textQuery2)
-	fmt.Printf("💬 Intent resolved: Intent=%s, RequiresClarification=%v, Missing=%v\n", res2.Intent, res2.RequiresClarification, res2.Missing)
-
-	// 5. Verify Workspace Indexer & Go AST parsing
 	wsBaseDir := filepath.Join(cwd, "build", "workspaces")
 	wsm := workspace.NewWorkspaceManager(wsBaseDir)
-	ws, _ := wsm.Create(ctx, "session-p5-test")
+	ws, _ := wsm.Create(ctx, "session-p6-test")
 	defer os.RemoveAll(ws.RootPath)
 
-	dummyGoFile := filepath.Join(ws.RootPath, "dummy.go")
-	dummyGoContent := `package main
-import "fmt"
-type Config struct {
-	Port int
-}
-func RunServer() {
-	fmt.Println("Running server")
-}
-`
-	_ = os.WriteFile(dummyGoFile, []byte(dummyGoContent), 0644)
+	fe := capability.NewFilesystemExecutor(ws.RootPath)
+	_ = ak.RegisterComponent("filesystem_executor", fe)
 
-	err := wi.IndexFile(dummyGoFile)
+	fmt.Println("✅ All Phase 6 pipeline services registered successfully.")
+
+	// 4. Verify Git Adapter & conventional commit formatting
+	_ = ga.CreateBranch("feat/authentication")
+	commitMsg, err := ga.Commit(git.GitCommit{
+		Type:    "feat",
+		Scope:   "auth",
+		Message: "add local authentication gate",
+	})
 	if err != nil {
-		fmt.Printf("❌ Go AST Indexer failed: %v\n", err)
+		fmt.Printf("❌ Git commit failed: %v\n", err)
 		os.Exit(1)
 	}
+	fmt.Printf("📦 Git Engine commit output: %s\n", commitMsg)
 
-	sym1, exists1 := cg.GetSymbol("RunServer")
-	sym2, exists2 := cg.GetSymbol("Config")
-	fmt.Printf("🕸️ Go AST parsed symbols: RunServer exists=%v (type=%v), Config exists=%v (type=%v)\n", exists1, sym1.Type, exists2, sym2.Type)
+	// 5. Verify Channel Abstraction (Telegram Channel)
+	msg, _ := tc.Receive(ctx)
+	_ = tc.Typing(ctx)
+	_ = tc.Reply(ctx, "Hello back from agent kernel gateway!")
+	approved, _ := tc.RequestApproval(ctx, "Capability Request: exec shell script")
+	fmt.Printf("💬 Channel Gateway Dialog Flow: Received='%s', Approved=%v\n", msg, approved)
 
-	// 6. Verify Execution Graph (Stateful branch runs)
-	eg := workflow.NewExecutionGraph()
-	step1Ran := false
-	step2Ran := false
-
-	node1 := &workflow.ExecutionNode{
-		ID: "node-1",
-		Execute: func(c context.Context) error {
-			step1Ran = true
-			return nil
-		},
+	// 6. Verify Capability Executors
+	execResult, err := fe.Execute(ctx, map[string]interface{}{
+		"path":    "hello.txt",
+		"content": "Hello World Phase 6",
+	})
+	if err != nil {
+		fmt.Printf("❌ Filesystem Executor failed: %v\n", err)
+		os.Exit(1)
 	}
-	node2 := &workflow.ExecutionNode{
-		ID:       "node-2",
-		Requires: []string{"node-1"},
-		Execute: func(c context.Context) error {
-			step2Ran = true
-			return nil
-		},
-	}
+	fmt.Printf("⚙️ Capability Executor output: %s\n", execResult)
 
-	eg.AddNode(node1)
-	eg.AddNode(node2)
-
-	_ = eg.Execute(ctx)
-	fmt.Printf("⚙️ Execution Graph results: Step1Ran=%v, Step2Ran=%v\n", step1Ran, step2Ran)
-
-	// 7. Verify Capability Broker & Approvals
-	req := capability.CapabilityRequest{
-		Capability: "write_files",
-		Args:       map[string]interface{}{"path": "hello.go"},
-		PID:        "agent-coder-pid",
-	}
-	approved, err := cb.RequestApproval(ctx, "task-write-1", req)
-	fmt.Printf("🔒 Capability approval request: Approved=%v, Error=%v\n", approved, err)
-
-	cb.GrantApproval("task-write-1")
-	approved2, err2 := cb.RequestApproval(ctx, "task-write-1", req)
-	fmt.Printf("🔓 Approval granted. Secondary request: Approved=%v, Error=%v\n", approved2, err2)
-
-	// 8. Verify Observation Bus pub/sub
-	obsChan := ob.Subscribe()
-	ob.Publish(kernel.ObservationEvent{
-		Type:      kernel.ObsBuildFailed,
-		SessionID: "session-p5-test",
-		Source:    "compiler",
+	// 7. Verify Semantic Runtime Bus
+	rtChan := rb.Subscribe()
+	rb.Publish(kernel.RuntimeEvent{
+		Type:      kernel.EvCheckpointCreated,
+		SessionID: "session-p6-test",
+		Payload:   map[string]interface{}{"checkpoint_id": "cp-123"},
 	})
 
 	select {
-	case event := <-obsChan:
-		fmt.Printf("📢 Observation Bus stream: Received event of type: %s from source: %s\n", event.Type, event.Source)
+	case event := <-rtChan:
+		fmt.Printf("📢 Runtime Bus: Received event: %s, session: %s, payload: %+v\n", event.Type, event.SessionID, event.Payload)
 	default:
-		fmt.Println("❌ Did not receive observation event.")
+		fmt.Println("❌ Did not receive runtime event.")
 		os.Exit(1)
 	}
 
-	fmt.Println("🎉 Minimum Autonomous Kernel (MAK) Phase 5 Integration Test: PASS")
+	// 8. Verify Review Engine static credentials scanner
+	leakFile := filepath.Join(ws.RootPath, "leaked_secret.go")
+	_ = os.WriteFile(leakFile, []byte("package main\n\nconst token = \"my api_key is secret-token\"\n"), 0644)
+
+	issues, err := re.Scan(leakFile)
+	if err != nil {
+		fmt.Printf("❌ Review Engine scan failed: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("🛡️ Review Engine static scanning issue counts: %d\n", len(issues))
+	for _, issue := range issues {
+		fmt.Printf("   ├─ Alert message: %s (Severity: %s)\n", issue.Message, issue.Severity)
+	}
+
+	fmt.Println("🎉 Minimum Autonomous Kernel (MAK) Phase 6 Integration Test: PASS")
 }
