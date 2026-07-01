@@ -712,6 +712,67 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 				return fmt.Sprintf("✅ Deleted skill '%s'", id)
 			},
 		},
+		"update_skill": {
+			Name:        "update_skill",
+			Description: "Updates an existing skill by ID. Preserves the old version (auto-increments). Use this instead of delete+create.",
+			Signature:   `{"skill_id": "string", "name": "string", "description": "string", "responsibilities": "string"}`,
+			Category:    "Skill",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				if skills.DefaultManager == nil {
+					return "error: skill manager not initialized"
+				}
+				id, _ := args["skill_id"].(string)
+				if id == "" {
+					return "error: 'skill_id' is required"
+				}
+				name, _ := args["name"].(string)
+				desc, _ := args["description"].(string)
+				respStr, _ := args["responsibilities"].(string)
+
+				existing, err := skills.DefaultManager.Get(id)
+				if err != nil {
+					return fmt.Sprintf("skill '%s' not found. Use list_skills to see available skills.", id)
+				}
+
+				if name == "" {
+					name = existing.Spec.Name
+				}
+				if desc == "" {
+					desc = existing.Spec.Description
+				}
+
+				var responsibilities []string
+				for _, r := range strings.Split(respStr, ",") {
+					r = strings.TrimSpace(r)
+					if r != "" {
+						responsibilities = append(responsibilities, r)
+					}
+				}
+
+				gen := skills.NewGenerator(skills.DefaultManager)
+				pkg, err := gen.Generate(skills.GenerateRequest{
+					Name:             name,
+					Description:      desc,
+					Responsibilities: responsibilities,
+				})
+				if err != nil {
+					return fmt.Sprintf("error generating updated skill: %v", err)
+				}
+
+				pkg.Spec.ID = existing.Spec.ID
+				pkg.Spec.Version = bumpVersion(existing.Spec.Version)
+				pkg.Spec.PromptFile = existing.Spec.PromptFile
+
+				if err := skills.DefaultManager.Delete(id); err != nil {
+					return fmt.Sprintf("error removing old version: %v", err)
+				}
+				if err := skills.DefaultManager.Create(*pkg); err != nil {
+					return fmt.Sprintf("error saving updated skill: %v", err)
+				}
+
+				return fmt.Sprintf("✅ Updated '%s' %s → v%s", name, existing.Spec.Version, pkg.Spec.Version)
+			},
+		},
 		"run_skill": {
 			Name:        "run_skill",
 			Description: "Executes a custom shell script or executable from the ~/.kendaliai/skills directory. Useful for custom workflows.",
@@ -987,4 +1048,15 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 	}
 
 	return registry
+}
+
+func bumpVersion(version string) string {
+	parts := strings.Split(version, ".")
+	if len(parts) >= 2 {
+		minor := 0
+		fmt.Sscanf(parts[1], "%d", &minor)
+		minor++
+		return fmt.Sprintf("%s.%d.%s", parts[0], minor, "0")
+	}
+	return "1.0.0"
 }

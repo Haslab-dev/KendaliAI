@@ -128,6 +128,7 @@ You are responding via a Telegram chat interface. Follow these rules strictly:
    - Use upload_object with provider: "local" (default) or provider: "r2" for remote.
    - Uploaded HTML files get a public URL automatically when R2 is configured.
 9. INTERACTIVE COMMANDS — NEVER run commands that need user input. Add --yes, -y, </dev/null, or 2>&1. If a command hangs requesting input, ABORT and report the error.
+10. SKILL UPDATES — Use update_skill to modify an existing skill (auto-increments version). NEVER delete+create to update a skill.
 
 User message: %s`, upd.Message.Text)
 

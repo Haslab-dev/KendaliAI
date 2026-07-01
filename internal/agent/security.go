@@ -94,6 +94,10 @@ func matchPath(path, pattern string) bool {
 	path = strings.ToLower(filepath.ToSlash(path))
 	pattern = strings.ToLower(filepath.ToSlash(pattern))
 
+	if pattern == "." || pattern == "./" || pattern == "" {
+		return true
+	}
+
 	if strings.HasSuffix(pattern, "/") {
 		return strings.HasPrefix(path, pattern) || strings.Contains(path, "/"+strings.TrimSuffix(pattern, "/")+"/")
 	}
@@ -103,6 +107,10 @@ func matchPath(path, pattern string) bool {
 			return true
 		}
 		return strings.HasSuffix(path, pattern)
+	}
+
+	if strings.HasPrefix(path, pattern) {
+		return true
 	}
 
 	return strings.Contains(path, pattern)

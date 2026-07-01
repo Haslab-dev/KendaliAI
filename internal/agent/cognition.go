@@ -140,18 +140,32 @@ If the task is complete and NO tools are needed:
    - If a step fails, try an ALTERNATIVE approach that still serves the SAME goal.
    - After every tool call, verify: does this serve my ACTIVE GOAL?
 
-7. TOOL ROUTING
-   - MCP tools: ALWAYS list available tools first. Context7 uses "resolve-library-id" and "get-library-docs".
-   - Exa uses "web_search_exa", "web_fetch_exa", "web_search_advanced_exa".
-   - fetch_url is for KNOWN URLs only, NOT for searching.
-   - exec is for shell commands on the local system.
-   - If an MCP tool fails with "authorization", immediately fall back to fetch_url or exec.
+7. TOOL ROUTING & CAPABILITY RANKING
+   - Documentation tasks: Context7 (resolve-library-id → query-docs) → Exa → fetch_url
+   - Latest news/search: Exa → fetch_url (GitHub API, direct URLs)
+   - Known URLs: fetch_url only
+   - Local files: read_file → search_files → exec
+   - Shell commands: exec
+   - Context7 MCP tools: "resolve-library-id" (takes "libraryName") then "query-docs" (takes "libraryId", "query")
+   - Exa MCP tools: "web_search_exa", "web_fetch_exa", "web_search_advanced_exa"
+   - NEVER guess MCP tool names. If a tool returns "not found", try only ONCE more then fall back.
+   - If Exa returns "authorization required", immediately fall back to fetch_url. Do NOT retry Exa.
 
 8. INTERACTIVE COMMANDS
    - NEVER run commands that require user input (stdin prompts).
    - Add --yes, -y, --no-prompt, or non-interactive flags.
    - Add "2>&1" to silence prompts. Pipe "yes |" or "</dev/null" if needed.
    - If a tool requests input, ABORT and report the error.
+
+9. BOUNDED REASONING
+   - If a read_file or search_files returns an error 3 times in a row, STOP and report the limitation.
+   - Do NOT retry the same failing operation endlessly.
+   - If permissions block a read 3 times, ask the user to adjust permissions.
+   - Maximum 3 MCP retries per server per task.
+
+10. CLEAN SLATE
+   - Each conversation ISOLATED. Do NOT reference previous chat turns unless explicitly asked.
+   - Start fresh with only the ACTIVE GOAL as context.
 
 ---
 
@@ -468,7 +482,7 @@ func (c *CognitionLoop) loadPersonaConfig() (string, []string, []string) {
 		return "", []string{"exec", "read_file", "list_files", "search_files",
 			"apply_patch", "replace_range",
 			"upload_object", "download_object", "list_objects", "delete_object",
-			"create_skill", "list_skills", "delete_skill",
+			"create_skill", "list_skills", "delete_skill", "update_skill",
 			"remember_timeline",
 			"git_status", "git_diff", "git_apply_patch",
 			"run_tests", "validate_syntax", "fetch_url"}, nil
