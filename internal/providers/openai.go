@@ -26,6 +26,9 @@ func NewProvider(apiKey, model, endpoint string) *OpenAIProvider {
 
 func NewProviderFromConfig() *OpenAIProvider {
 	c := config.Cfg
+	if c == nil || len(c.ChatProviders) == 0 {
+		return NewProvider("", "", "")
+	}
 	return NewProvider(c.ChatProviders[0].APIKey, c.ChatProviders[0].Model, c.ChatProviders[0].Endpoint)
 }
 

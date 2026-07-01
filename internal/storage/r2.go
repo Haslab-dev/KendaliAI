@@ -23,16 +23,24 @@ type R2Storage struct {
 }
 
 func NewR2Storage(cfg storagecfg.StorageConfig) (*R2Storage, error) {
+	endpoint := cfg.R2.Endpoint
+	accessKey := cfg.R2.AccessKey
+	secretKey := cfg.R2.SecretKey
+	region := cfg.R2.Region
+	if region == "" {
+		region = "auto"
+	}
+
 	resolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
 		return aws.Endpoint{
-			URL:           cfg.Endpoint,
-			SigningRegion: cfg.Region,
+			URL:           endpoint,
+			SigningRegion: region,
 		}, nil
 	})
 
 	awsCfg, err := config.LoadDefaultConfig(context.Background(),
-		config.WithRegion(cfg.Region),
-		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(cfg.AccessKey, cfg.SecretKey, "")),
+		config.WithRegion(region),
+		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessKey, secretKey, "")),
 		config.WithEndpointResolverWithOptions(resolver),
 	)
 	if err != nil {
@@ -45,8 +53,8 @@ func NewR2Storage(cfg storagecfg.StorageConfig) (*R2Storage, error) {
 
 	return &R2Storage{
 		client: client,
-		bucket: cfg.Bucket,
-		region: cfg.Region,
+		bucket: cfg.R2.Bucket,
+		region: region,
 	}, nil
 }
 

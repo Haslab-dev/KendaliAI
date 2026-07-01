@@ -28,19 +28,20 @@ channels:
     token: your-telegram-token-here
 
 # Object storage for generated artifacts, uploads, and session data.
-# Provider options: local (filesystem), r2 (Cloudflare R2 / S3-compatible)
+# Local storage is ALWAYS auto-available — no config needed.
+# Cloudflare R2 / S3-compatible is optional, added on top of local.
 storage:
   provider: local
-  bucket: kendaliai
   localPath: ./storage
 
-  # For Cloudflare R2 or S3-compatible providers, use:
-  # provider: r2
-  # endpoint: https://xxxxx.r2.cloudflarestorage.com
-  # accessKey: your-access-key
-  # secretKey: your-secret-key
-  # publicUrl: https://cdn.example.com
-  # region: auto
+  # Optional: add Cloudflare R2 on top of local storage
+  # r2:
+  #   bucket: kendaliai
+  #   endpoint: https://xxxxx.r2.cloudflarestorage.com
+  #   accessKey: your-access-key
+  #   secretKey: your-secret-key
+  #   publicUrl: https://cdn.example.com
+  #   region: auto
 
 # File access permissions. Deny-list takes priority over allow-list.
 # Built-in sensitive patterns (config.yaml, .env, .git/, .ssh/, *.key, *.pem, etc.) are ALWAYS denied.

@@ -45,15 +45,19 @@ type Config struct {
 	Permissions     PermissionsConfig          `json:"permissions" yaml:"permissions"`
 }
 
-type StorageConfig struct {
-	Provider  string `json:"provider" yaml:"provider"`
-	Bucket    string `json:"bucket" yaml:"bucket"`
+type R2Config struct {
 	Endpoint  string `json:"endpoint" yaml:"endpoint"`
 	AccessKey string `json:"accessKey" yaml:"accessKey"`
 	SecretKey string `json:"secretKey" yaml:"secretKey"`
 	PublicURL string `json:"publicUrl,omitempty" yaml:"publicUrl,omitempty"`
 	Region    string `json:"region" yaml:"region"`
-	LocalPath string `json:"localPath,omitempty" yaml:"localPath,omitempty"`
+	Bucket    string `json:"bucket" yaml:"bucket"`
+}
+
+type StorageConfig struct {
+	Provider  string   `json:"provider" yaml:"provider"`
+	LocalPath string   `json:"localPath,omitempty" yaml:"localPath,omitempty"`
+	R2        R2Config `json:"r2,omitempty" yaml:"r2,omitempty"`
 }
 
 type PermissionRule struct {
@@ -167,9 +171,6 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Storage.Provider == "" {
 		c.Storage.Provider = "local"
-	}
-	if c.Storage.Region == "" {
-		c.Storage.Region = "auto"
 	}
 	if c.Storage.LocalPath == "" {
 		c.Storage.LocalPath = "./storage"

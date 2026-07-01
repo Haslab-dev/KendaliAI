@@ -31,52 +31,41 @@ func ResolveProvider(name string) string {
 }
 
 func NewManagerFromConfig(cfg *config.Config) (*Manager, error) {
-	storageCfg := cfg.Storage
-	provider := ResolveProvider(storageCfg.Provider)
-	if provider == "" {
-		provider = "local"
+	sc := cfg.Storage
+
+	localPath := sc.LocalPath
+	if localPath == "" {
+		localPath = "./storage"
 	}
 
-	var backend ObjectStorage
-	var err error
-
-	switch provider {
-	case "local":
-		path := storageCfg.LocalPath
-		if path == "" {
-			path = "./storage"
-		}
-		backend, err = NewLocalStorage(path)
-	case "r2":
-		if storageCfg.Endpoint == "" || storageCfg.AccessKey == "" {
-			logger.Info("Storage", "R2 config incomplete, falling back to local storage")
-			path := storageCfg.LocalPath
-			if path == "" {
-				path = "./storage"
-			}
-			backend, err = NewLocalStorage(path)
-			provider = "local"
-		} else {
-			backend, err = NewR2Storage(storageCfg)
-		}
-	default:
-		logger.Info("Storage", fmt.Sprintf("unknown provider '%s', falling back to local storage", provider))
-		path := storageCfg.LocalPath
-		if path == "" {
-			path = "./storage"
-		}
-		backend, err = NewLocalStorage(path)
-		provider = "local"
-	}
-
+	local, err := NewLocalStorage(localPath)
 	if err != nil {
-		logger.Info("Storage", fmt.Sprintf("provider init failed: %v, falling back to local", err))
-		backend, err = NewLocalStorage("./storage")
-		if err != nil {
-			return nil, fmt.Errorf("local storage fallback failed: %w", err)
-		}
+		return nil, fmt.Errorf("local storage init: %w", err)
 	}
 
-	logger.Info("Storage", fmt.Sprintf("initialized provider: %s", provider))
-	return NewManager(backend, &storageCfg), nil
+	mgr := &Manager{
+		local: local,
+		cfg:   &sc,
+	}
+
+	if sc.R2.Endpoint != "" && sc.R2.AccessKey != "" {
+		if sc.R2.Bucket == "" {
+			sc.R2.Bucket = "kendaliai"
+		}
+		if sc.R2.Region == "" {
+			sc.R2.Region = "auto"
+		}
+		r2Cfg := config.StorageConfig{R2: sc.R2}
+		r2Storage, r2Err := NewR2Storage(r2Cfg)
+		if r2Err != nil {
+			logger.Info("Storage", fmt.Sprintf("R2 init failed (local only): %v", r2Err))
+		} else {
+			mgr.remote = r2Storage
+			logger.Info("Storage", "local + R2 initialized")
+		}
+	} else {
+		logger.Info("Storage", "local only (no R2 configured)")
+	}
+
+	return mgr, nil
 }

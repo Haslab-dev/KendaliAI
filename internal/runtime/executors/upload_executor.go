@@ -51,15 +51,20 @@ func (e *UploadExecutor) Run(ctx context.Context, env sandbox.RuntimeEnvironment
 	sessionID, _ := args["session_id"].(string)
 	key := e.manager.BuildKey(sessionID, bucket, filepath.Base(path))
 
+	provider, _ := args["provider"].(string)
+	if provider == "" {
+		provider = "local"
+	}
+
 	result, err := e.manager.Upload(ctx, storage.UploadRequest{
 		Key:  key,
 		Body: f,
 		Size: fi.Size(),
-	})
+	}, provider)
 	if err != nil {
 		return "", fmt.Errorf("upload: %w", err)
 	}
 
 	return fmt.Sprintf(`{"artifact_id":"%s","url":"%s","checksum":"%s","size":%d,"key":"%s"}`,
-		key, e.manager.PublicURL(key), result.Checksum, result.Size, result.Key), nil
+		key, e.manager.PublicURL(key, provider), result.Checksum, result.Size, result.Key), nil
 }
