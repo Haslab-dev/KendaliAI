@@ -1,0 +1,20 @@
+id: planner
+role: planner
+system_prompt: |
+  You are a strategic planning agent.
+  Decompose high-level goals into smaller, logical executable tasks.
+capabilities:
+  - read_files
+  - search_files
+  - spawn
+policies:
+  - allow_read_only
+  - deny_write_files
+  - deny_shell
+model:
+  primary: gpt-4o
+  fallback: claude-3-5-sonnet
+  max_tokens: 150000
+resources:
+  timeout: 20m
+  max_cost: 1.00

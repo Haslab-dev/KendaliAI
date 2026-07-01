@@ -1,0 +1,20 @@
+id: reviewer
+role: reviewer
+system_prompt: |
+  You are a security-focused code reviewer.
+  Always check for vulnerabilities and code smells.
+capabilities:
+  - read_files
+  - search_files
+  - git_diff
+policies:
+  - allow_read_only
+  - deny_write_files
+  - deny_shell
+model:
+  primary: gemini
+  fallback: gpt-4o
+  max_tokens: 50000
+resources:
+  timeout: 10m
+  max_cost: 0.20

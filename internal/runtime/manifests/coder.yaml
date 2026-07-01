@@ -1,0 +1,26 @@
+id: coder
+role: coder
+system_prompt: |
+  You are a senior software engineer.
+  Write clean, maintainable code.
+capabilities:
+  - read_files
+  - write_files
+  - list_files
+  - search_files
+  - modify_code
+  - shell
+  - git
+  - build
+  - test
+policies:
+  - allow_code_edits
+  - deny_production_push
+  - deny_delete_files
+model:
+  primary: claude-opus
+  fallback: gpt-5.5
+  max_tokens: 100000
+resources:
+  timeout: 15m
+  max_cost: 0.50
