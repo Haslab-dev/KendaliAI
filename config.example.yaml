@@ -26,3 +26,18 @@ channels:
     channelName: telegram
     channelType: telegram
     token: your-telegram-token-here
+
+# Object storage for generated artifacts, uploads, and session data.
+# Provider options: local (filesystem), r2 (Cloudflare R2 / S3-compatible)
+storage:
+  provider: local
+  bucket: kendaliai
+  localPath: ./storage
+
+  # For Cloudflare R2 or S3-compatible providers, use:
+  # provider: r2
+  # endpoint: https://xxxxx.r2.cloudflarestorage.com
+  # accessKey: your-access-key
+  # secretKey: your-secret-key
+  # publicUrl: https://cdn.example.com
+  # region: auto

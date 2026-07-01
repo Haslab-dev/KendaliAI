@@ -190,4 +190,16 @@ var schemaQueries = []string{
 		created_at INTEGER,
 		updated_at INTEGER
 	)`,
+	`CREATE TABLE IF NOT EXISTS objects (
+		id TEXT PRIMARY KEY,
+		session_id TEXT,
+		bucket TEXT NOT NULL,
+		key TEXT NOT NULL,
+		checksum TEXT,
+		mime TEXT,
+		size INTEGER DEFAULT 0,
+		url TEXT,
+		metadata TEXT,
+		created_at INTEGER
+	)`,
 }

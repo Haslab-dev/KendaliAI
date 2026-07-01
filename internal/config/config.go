@@ -41,6 +41,18 @@ type Config struct {
 	Embedding       EmbeddingConfig            `json:"embedding" yaml:"embedding"`
 	Channels        []ChannelConfig            `json:"channels" yaml:"channels"`
 	MCPServers      map[string]MCPServerConfig `json:"mcpServers" yaml:"mcpServers"`
+	Storage         StorageConfig              `json:"storage" yaml:"storage"`
+}
+
+type StorageConfig struct {
+	Provider  string `json:"provider" yaml:"provider"`
+	Bucket    string `json:"bucket" yaml:"bucket"`
+	Endpoint  string `json:"endpoint" yaml:"endpoint"`
+	AccessKey string `json:"accessKey" yaml:"accessKey"`
+	SecretKey string `json:"secretKey" yaml:"secretKey"`
+	PublicURL string `json:"publicUrl,omitempty" yaml:"publicUrl,omitempty"`
+	Region    string `json:"region" yaml:"region"`
+	LocalPath string `json:"localPath,omitempty" yaml:"localPath,omitempty"`
 }
 
 type MCPServerConfig struct {
@@ -141,6 +153,15 @@ func (c *Config) Save(path string) error {
 func (c *Config) applyDefaults() {
 	if c.Version == 0 {
 		c.Version = 1
+	}
+	if c.Storage.Provider == "" {
+		c.Storage.Provider = "local"
+	}
+	if c.Storage.Region == "" {
+		c.Storage.Region = "auto"
+	}
+	if c.Storage.LocalPath == "" {
+		c.Storage.LocalPath = "./storage"
 	}
 	for i := range c.ChatProviders {
 		if c.ChatProviders[i].Type == "" {

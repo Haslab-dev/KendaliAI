@@ -17,6 +17,7 @@ import (
 	"github.com/kendaliai/app/internal/config"
 	"github.com/kendaliai/app/internal/embedding"
 	"github.com/kendaliai/app/internal/logger"
+	"github.com/kendaliai/app/internal/storage"
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
 )
@@ -393,6 +394,150 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 					content = content[:8000] + "\n...(truncated)"
 				}
 				return content
+			},
+		},
+
+		// ☁️ OBJECT STORAGE
+		"upload_object": {
+			Name:        "upload_object",
+			Description: "Uploads a local file to object storage (R2/S3/local). Returns the object key, URL, checksum, and size. Use this to persist generated artifacts, reports, or user uploads.",
+			Signature:   `{"path": "string", "session_id": "string", "bucket": "string"}`,
+			Category:    "Storage",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				if storage.DefaultManager == nil {
+					return "error: storage not configured"
+				}
+				path, _ := args["path"].(string)
+				if path == "" {
+					path, _ = args["file"].(string)
+				}
+				if path == "" {
+					return "error: missing required arg 'path'"
+				}
+				if !filepath.IsAbs(path) {
+					path = filepath.Join(workspaceRoot, path)
+				}
+
+				f, err := os.Open(path)
+				if err != nil {
+					return fmt.Sprintf("error opening file: %v", err)
+				}
+				defer f.Close()
+
+				fi, err := f.Stat()
+				if err != nil {
+					return fmt.Sprintf("error stat file: %v", err)
+				}
+
+				sessionID, _ := args["session_id"].(string)
+				bucket, _ := args["bucket"].(string)
+				if bucket == "" {
+					bucket = "uploads"
+				}
+				key := storage.DefaultManager.BuildKey(sessionID, bucket, filepath.Base(path))
+
+				result, err := storage.DefaultManager.Upload(ctx, storage.UploadRequest{
+					Key:  key,
+					Body: f,
+					Size: fi.Size(),
+				})
+				if err != nil {
+					return fmt.Sprintf("error uploading: %v", err)
+				}
+
+				return fmt.Sprintf(`{"artifact_id":"%s","url":"%s","checksum":"%s","size":%d,"key":"%s"}`,
+					key, storage.DefaultManager.PublicURL(key), result.Checksum, result.Size, result.Key)
+			},
+		},
+		"download_object": {
+			Name:        "download_object",
+			Description: "Downloads an object from storage to the workspace. Returns the local destination path and size.",
+			Signature:   `{"key": "string", "dest": "string"}`,
+			Category:    "Storage",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				if storage.DefaultManager == nil {
+					return "error: storage not configured"
+				}
+				key, _ := args["key"].(string)
+				if key == "" {
+					return "error: missing required arg 'key'"
+				}
+				dest, _ := args["dest"].(string)
+				if dest == "" {
+					dest, _ = args["path"].(string)
+				}
+				if dest == "" {
+					dest = filepath.Base(key)
+				}
+				if !filepath.IsAbs(dest) {
+					dest = filepath.Join(workspaceRoot, dest)
+				}
+
+				reader, err := storage.DefaultManager.Download(ctx, key)
+				if err != nil {
+					return fmt.Sprintf("error downloading: %v", err)
+				}
+				defer reader.Close()
+
+				if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+					return fmt.Sprintf("error creating dest dir: %v", err)
+				}
+
+				f, err := os.Create(dest)
+				if err != nil {
+					return fmt.Sprintf("error creating dest file: %v", err)
+				}
+				defer f.Close()
+
+				written, err := io.Copy(f, reader)
+				if err != nil {
+					return fmt.Sprintf("error writing file: %v", err)
+				}
+
+				return fmt.Sprintf(`{"dest":"%s","size":%d,"key":"%s"}`, dest, written, key)
+			},
+		},
+		"list_objects": {
+			Name:        "list_objects",
+			Description: "Lists objects in storage with a given prefix.",
+			Signature:   `{"prefix": "string"}`,
+			Category:    "Storage",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				if storage.DefaultManager == nil {
+					return "error: storage not configured"
+				}
+				prefix, _ := args["prefix"].(string)
+				objects, err := storage.DefaultManager.List(ctx, prefix)
+				if err != nil {
+					return fmt.Sprintf("error listing objects: %v", err)
+				}
+				if len(objects) == 0 {
+					return "no objects found"
+				}
+				var sb strings.Builder
+				for _, obj := range objects {
+					sb.WriteString(fmt.Sprintf("%s (%d bytes, %s)\n", obj.Key, obj.Size, obj.LastModified.Format(time.RFC3339)))
+				}
+				return sb.String()
+			},
+		},
+		"delete_object": {
+			Name:        "delete_object",
+			Description: "Deletes an object from storage by key.",
+			Signature:   `{"key": "string"}`,
+			Category:    "Storage",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				if storage.DefaultManager == nil {
+					return "error: storage not configured"
+				}
+				key, _ := args["key"].(string)
+				if key == "" {
+					return "error: missing required arg 'key'"
+				}
+				if err := storage.DefaultManager.Delete(ctx, key); err != nil {
+					return fmt.Sprintf("error deleting object: %v", err)
+				}
+				return fmt.Sprintf("deleted '%s'", key)
 			},
 		},
 

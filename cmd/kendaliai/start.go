@@ -14,6 +14,7 @@ import (
 	"github.com/kendaliai/app/internal/db"
 	"github.com/kendaliai/app/internal/gateways"
 	"github.com/kendaliai/app/internal/server"
+	"github.com/kendaliai/app/internal/storage"
 	"github.com/spf13/cobra"
 )
 
@@ -96,6 +97,10 @@ func runStart(cmd *cobra.Command, args []string) {
 		log.Fatalf("❌ Database connection failed: %v", err)
 	}
 	defer database.Close()
+
+	if err := storage.Init(cfg); err != nil {
+		log.Printf("⚠️  Storage initialization failed (non-fatal): %v", err)
+	}
 
 	// 1. Auto-onboard gateway/channels database configurations
 	gateways.HandleOnboard(database)
