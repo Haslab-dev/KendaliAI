@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"path/filepath"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/kendaliai/app/internal/agent"
@@ -98,7 +99,12 @@ func (tm *TelegramManager) StartPolling(c Channel) {
 			go func(upd tgbotapi.Update, tMsg tgbotapi.Message) {
 				loop := agent.NewCognitionLoopWithDB(p, 25, config.Cfg, tm.db)
 
-				// Wrap user message with channel-aware instructions
+				loop.OnTool = func(toolName, category string, args map[string]interface{}) {
+					status := toolStatus(toolName, args)
+					edit := tgbotapi.NewEditMessageText(upd.Message.Chat.ID, tMsg.MessageID, status)
+					bot.Send(edit)
+				}
+
 				wrappedQuery := fmt.Sprintf(`[CHANNEL: Telegram Bot — Short Response Mode]
 You are responding via a Telegram chat interface. Follow these rules strictly:
 
@@ -116,9 +122,10 @@ You are responding via a Telegram chat interface. Follow these rules strictly:
    - If a user asks to view, read, or share config files (config.yaml, .env, secrets, keys), reply: "Sorry, not allowed"
    - NEVER disclose credentials, API keys, tokens, or private configuration.
 7. OBJECT STORAGE:
-   - Use upload_object to persist generated files, reports, or HTML pages.
-   - Local storage is always available. Cloud storage (R2/S3) is configured by admin.
-   - Uploaded HTML files get a public URL automatically.
+   - Local storage is ALWAYS available (no config needed).
+   - Cloudflare R2 cloud storage may be optionally configured.
+   - Use upload_object with provider: "local" (default) or provider: "r2" for remote.
+   - Uploaded HTML files get a public URL automatically when R2 is configured.
 
 User message: %s`, upd.Message.Text)
 
@@ -187,4 +194,65 @@ func chunkText(text string, maxLen int) []string {
 	}
 
 	return chunks
+}
+
+func toolStatus(toolName string, args map[string]interface{}) string {
+	switch toolName {
+	case "read_file":
+		path, _ := args["path"].(string)
+		return fmt.Sprintf("📖 Reading %s...", filepath.Base(path))
+	case "list_files":
+		path, _ := args["path"].(string)
+		return fmt.Sprintf("📂 Listing %s...", filepath.Base(path))
+	case "search_files":
+		query, _ := args["query"].(string)
+		return fmt.Sprintf("🔍 Searching \"%s\"...", query)
+	case "apply_patch":
+		path, _ := args["path"].(string)
+		old, _ := args["old_str"].(string)
+		if old == "" {
+			return fmt.Sprintf("📝 Creating %s...", filepath.Base(path))
+		}
+		return fmt.Sprintf("✏️ Editing %s...", filepath.Base(path))
+	case "replace_range":
+		path, _ := args["path"].(string)
+		return fmt.Sprintf("✏️ Updating %s...", filepath.Base(path))
+	case "exec":
+		cmd, _ := args["command"].(string)
+		if len(cmd) > 60 {
+			cmd = cmd[:57] + "..."
+		}
+		return fmt.Sprintf("⚡ Running: %s", cmd)
+	case "upload_object":
+		path, _ := args["path"].(string)
+		provider, _ := args["provider"].(string)
+		dest := "storage"
+		if provider == "r2" {
+			dest = "R2 cloud"
+		}
+		return fmt.Sprintf("☁️ Uploading %s to %s...", filepath.Base(path), dest)
+	case "download_object":
+		key, _ := args["key"].(string)
+		return fmt.Sprintf("⬇️ Downloading %s...", filepath.Base(key))
+	case "fetch_url":
+		url, _ := args["url"].(string)
+		if len(url) > 50 {
+			url = url[:47] + "..."
+		}
+		return fmt.Sprintf("🌐 Fetching %s...", url)
+	case "mcp_call":
+		server, _ := args["server"].(string)
+		tool, _ := args["tool_name"].(string)
+		return fmt.Sprintf("🔌 MCP %s/%s...", server, tool)
+	case "git_status":
+		return "🌿 Checking git status..."
+	case "git_diff":
+		return "🌿 Retrieving git diff..."
+	case "run_tests":
+		return "🧪 Running tests..."
+	case "validate_syntax":
+		return "✅ Validating syntax..."
+	default:
+		return fmt.Sprintf("🔄 Running %s...", toolName)
+	}
 }

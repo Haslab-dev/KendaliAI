@@ -17,6 +17,7 @@ import (
 	"github.com/kendaliai/app/internal/config"
 	"github.com/kendaliai/app/internal/embedding"
 	"github.com/kendaliai/app/internal/logger"
+	"github.com/kendaliai/app/internal/skills"
 	"github.com/kendaliai/app/internal/storage"
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -363,8 +364,8 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 		// ☁️ OBJECT STORAGE
 		"upload_object": {
 			Name:        "upload_object",
-			Description: "Uploads a local file to object storage (R2/S3/local). Returns the object key, URL, checksum, and size. Use this to persist generated artifacts, reports, or user uploads.",
-			Signature:   `{"path": "string", "session_id": "string", "bucket": "string"}`,
+			Description: "Uploads a local file to object storage. Use provider: 'local' (default, always available) or 'r2'/'cloudflare' for remote. Returns object key, URL, checksum, and size.",
+			Signature:   `{"path": "string", "session_id": "string", "bucket": "string", "provider": "string"}`,
 			Category:    "Storage",
 			Execute: func(ctx context.Context, args map[string]interface{}) string {
 				if storage.DefaultManager == nil {
@@ -401,19 +402,24 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 				if bucket == "" {
 					bucket = "uploads"
 				}
+				provider, _ := args["provider"].(string)
+				if provider == "" {
+					provider = "local"
+				}
 				key := storage.DefaultManager.BuildKey(sessionID, bucket, filepath.Base(path))
 
 				result, err := storage.DefaultManager.Upload(ctx, storage.UploadRequest{
 					Key:  key,
 					Body: f,
 					Size: fi.Size(),
-				})
+				}, provider)
 				if err != nil {
 					return fmt.Sprintf("error uploading: %v", err)
 				}
 
-				return fmt.Sprintf(`{"artifact_id":"%s","url":"%s","checksum":"%s","size":%d,"key":"%s"}`,
-					key, storage.DefaultManager.PublicURL(key), result.Checksum, result.Size, result.Key)
+				summary := fmt.Sprintf(`{"artifact_id":"%s","url":"%s","checksum":"%s","size":%d,"key":"%s","provider":"%s"}`,
+					key, storage.DefaultManager.PublicURL(key, provider), result.Checksum, result.Size, result.Key, provider)
+				return summary
 			},
 		},
 		"download_object": {
@@ -576,6 +582,87 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 		},
 
 		// 🛠️ SKILLS AND MCP
+		"create_skill": {
+			Name:        "create_skill",
+			Description: "Creates a new reusable skill from a description. The skill will be saved with prompt, routing keywords, and examples. The system auto-routes future matching conversations to this skill.",
+			Signature:   `{"name": "string", "description": "string", "responsibilities": "string", "research": "boolean"}`,
+			Category:    "Skill",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				if skills.DefaultManager == nil {
+					return "error: skill manager not initialized"
+				}
+				name, _ := args["name"].(string)
+				desc, _ := args["description"].(string)
+				respStr, _ := args["responsibilities"].(string)
+
+				if name == "" {
+					return "error: 'name' is required"
+				}
+
+				var responsibilities []string
+				for _, r := range strings.Split(respStr, ",") {
+					r = strings.TrimSpace(r)
+					if r != "" {
+						responsibilities = append(responsibilities, r)
+					}
+				}
+
+				gen := skills.NewGenerator(skills.DefaultManager)
+				pkg, err := gen.Generate(skills.GenerateRequest{
+					Name:             name,
+					Description:      desc,
+					Responsibilities: responsibilities,
+					Research:         false,
+				})
+				if err != nil {
+					return fmt.Sprintf("error creating skill: %v", err)
+				}
+				return fmt.Sprintf("✅ Skill '%s' created [%s v%s]. Keywords: %v",
+					pkg.Spec.Name, pkg.Spec.ID, pkg.Spec.Version, pkg.Spec.Routing.Keywords[:min(5, len(pkg.Spec.Routing.Keywords))])
+			},
+		},
+		"list_skills": {
+			Name:        "list_skills",
+			Description: "Lists all installed generated skills with their IDs, versions, and routing keywords.",
+			Signature:   `{}`,
+			Category:    "Skill",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				if skills.DefaultManager == nil {
+					return "error: skill manager not initialized"
+				}
+				specs, err := skills.DefaultManager.List()
+				if err != nil {
+					return fmt.Sprintf("error listing skills: %v", err)
+				}
+				if len(specs) == 0 {
+					return "No skills installed. Create one with create_skill."
+				}
+				var sb strings.Builder
+				for _, s := range specs {
+					sb.WriteString(fmt.Sprintf("- %s [%s] v%s: %s\n", s.Name, s.ID, s.Version, s.Description))
+				}
+				return sb.String()
+			},
+		},
+		"delete_skill": {
+			Name:        "delete_skill",
+			Description: "Deletes a generated skill by ID.",
+			Signature:   `{"skill_id": "string"}`,
+			Category:    "Skill",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				if skills.DefaultManager == nil {
+					return "error: skill manager not initialized"
+				}
+				id, _ := args["skill_id"].(string)
+				if id == "" {
+					return "error: 'skill_id' is required"
+				}
+				if err := skills.DefaultManager.Delete(id); err != nil {
+					return fmt.Sprintf("error deleting skill: %v", err)
+				}
+				return fmt.Sprintf("✅ Deleted skill '%s'", id)
+			},
+		},
 		"run_skill": {
 			Name:        "run_skill",
 			Description: "Executes a custom shell script or executable from the ~/.kendaliai/skills directory. Useful for custom workflows.",

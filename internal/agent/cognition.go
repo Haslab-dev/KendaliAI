@@ -13,6 +13,7 @@ import (
 	"github.com/kendaliai/app/internal/config"
 	"github.com/kendaliai/app/internal/embedding"
 	"github.com/kendaliai/app/internal/logger"
+	"github.com/kendaliai/app/internal/skills"
 )
 
 type Provider interface {
@@ -180,12 +181,16 @@ If a user asks to show, read, or share any restricted file:
 
 ## OBJECT STORAGE
 
-Available storage providers (use upload_object / download_object):
-- **local storage**: always available, files stored in ./storage/
-- **cloud storage** (R2/S3/Cloudflare): configured via admin
+Local storage is ALWAYS auto-available. Store files, artifacts, and generated content here.
 
-When you upload HTML files, the system provides a public URL.
-Use upload_object to persist generated artifacts.
+Cloudflare R2 / S3 storage is an OPTIONAL additional layer (configured by admin).
+
+Use upload_object with:
+- provider: "local" → local filesystem (default, always works)
+- provider: "r2" → remote cloud storage (if configured)
+- provider: "both" → uploads to both
+
+Uploaded HTML files are served with a public URL when remote storage is configured.
 
 ---
 
@@ -338,9 +343,22 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 		}
 	}
 
+	if skills.DefaultRouter != nil {
+		if matchedSpec, score, _ := skills.DefaultRouter.Match(ctx, initialQuery); matchedSpec != nil && score > 0.6 {
+			pkg, err := skills.DefaultManager.Get(matchedSpec.ID)
+			if err == nil && pkg.Prompt != "" {
+				skillMsg := fmt.Sprintf("🎯 Auto-routed to skill: %s (confidence: %.2f)\n\n%s", matchedSpec.Name, score, pkg.Prompt)
+				messages = append([]Message{{Role: "system", Content: skillMsg}}, messages...)
+				if pkg.Examples != "" {
+					messages = append(messages, Message{Role: "system", Content: "Skill examples:\n" + pkg.Examples})
+				}
+				logger.Info("Agent", fmt.Sprintf("🎯 Routed to skill: %s (%.2f)", matchedSpec.Name, score))
+			}
+		}
+	}
+
 	messages = append(messages, Message{Role: "user", Content: initialQuery})
 
-	// Spin up a 5-thread worker pool natively executing sandboxed ops
 	engine := NewExecutionEngine(5, reg)
 
 	totalInput := 0
@@ -413,14 +431,19 @@ func (c *CognitionLoop) loadPersonaConfig() (string, []string, []string) {
 	homeDir, _ := os.UserHomeDir()
 	content, err := os.ReadFile(homeDir + "/.kendaliai/Persona.md")
 	if err != nil {
-		return "", []string{"exec", "read_file_chunked"}, nil
+		return "", []string{"exec", "read_file", "list_files", "search_files",
+			"apply_patch", "replace_range",
+			"upload_object", "download_object", "list_objects", "delete_object",
+			"create_skill", "list_skills", "delete_skill",
+			"git_status", "git_diff", "git_apply_patch",
+			"run_tests", "validate_syntax", "fetch_url"}, nil
 	}
 
 	personaTxt := string(content)
-	// Base required semantic tools expanded to encompass the entire Production 15-system scale
 	tools := []string{
 		"exec", "read_file", "list_files", "search_files",
 		"apply_patch", "replace_range",
+		"upload_object", "download_object", "list_objects", "delete_object",
 		"git_status", "git_diff", "git_apply_patch",
 		"run_tests", "validate_syntax", "fetch_url",
 	}
