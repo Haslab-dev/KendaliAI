@@ -52,17 +52,18 @@ func runConfigInit(cmd *cobra.Command, args []string) {
 database:
   path: ./build/kendaliai.db
 
-defaultProvider: deepseek
+defaultProvider: openai-compatible
 
 chatProviders:
+  - name: openai-compatible
+    type: openai
+    apiKey: ${OPENAI_API_KEY}
+    endpoint: https://api.openai.com/v1
+    model: gpt-4o
   - name: deepseek
     type: deepseek
     apiKey: ${DEEPSEEK_API_KEY}
     model: deepseek-chat
-  - name: openai
-    type: openai
-    apiKey: ${OPENAI_API_KEY}
-    model: gpt-4o
 
 embedding:
   apiKey: ${OPENAI_API_KEY}

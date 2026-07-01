@@ -1,0 +1,28 @@
+version: 1
+
+database:
+  path: ./build/kendaliai.db
+
+defaultProvider: openai-compatible
+
+chatProviders:
+  - name: openai-compatible
+    type: openai
+    apiKey: your-openai-key-here
+    endpoint: https://api.openai.com/v1
+    model: gpt-4o
+  - name: deepseek
+    type: deepseek
+    apiKey: your-deepseek-key-here
+    model: deepseek-chat
+
+embedding:
+  apiKey: your-openai-key-here
+  endpoint: https://api.openai.com/v1
+  model: text-embedding-3-small
+
+channels:
+  - id: telegram-main
+    channelName: telegram
+    channelType: telegram
+    token: your-telegram-token-here

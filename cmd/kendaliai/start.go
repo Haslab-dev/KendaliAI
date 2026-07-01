@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"os"
@@ -86,14 +85,11 @@ func runStart(cmd *cobra.Command, args []string) {
 	}
 	defer database.Close()
 
-	srv := server.NewServer(cfg, database)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
+	srv := server.NewServer(database)
 	_ = os.WriteFile(pidFile, []byte(fmt.Sprintf("%d", os.Getpid())), 0644)
 	defer os.Remove(pidFile)
 
-	if err := srv.Start(ctx); err != nil {
+	if err := srv.Start("8080"); err != nil {
 		log.Fatalf("❌ Server error: %v", err)
 	}
 

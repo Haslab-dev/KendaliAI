@@ -43,4 +43,5 @@ src/server/database/kendaliai.sqlite
 
 
 config.json
+config.yaml
 /kendaliai
