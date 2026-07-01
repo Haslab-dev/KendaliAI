@@ -4,51 +4,28 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/kendaliai/app/internal/agent"
-	"github.com/kendaliai/app/internal/capability"
-	"github.com/kendaliai/app/internal/channels"
 	"github.com/kendaliai/app/internal/config"
 	"github.com/kendaliai/app/internal/db"
-	"github.com/kendaliai/app/internal/git"
+	"github.com/kendaliai/app/internal/events"
 	"github.com/kendaliai/app/internal/kernel"
-	"github.com/kendaliai/app/internal/review"
-	"github.com/kendaliai/app/internal/workspace"
+	"github.com/kendaliai/app/internal/providers"
+	"github.com/kendaliai/app/internal/telemetry"
 )
 
 type MockProvider struct{}
 
 func (m *MockProvider) ChatCompletion(ctx context.Context, msgs []agent.Message) (*agent.Response, error) {
-	lastMsg := msgs[len(msgs)-1].Content
-
-	if strings.Contains(lastMsg, "HelloWorld Go module") || strings.Contains(lastMsg, "hello.go function") || strings.Contains(lastMsg, "Design") {
-		return &agent.Response{
-			Content: `tool: spawn({"role": "coder", "goal": "Write the hello.go code"})`,
-		}, nil
-	}
-
-	if strings.Contains(lastMsg, "hello.go") || strings.Contains(lastMsg, "code") || strings.Contains(lastMsg, "coder") {
-		return &agent.Response{
-			Content: `tool: write_files({"path": "hello.go", "content": "package main\n\nfunc main() {\n\tprintln(\"Hello World\")\n}\n"})`,
-		}, nil
-	}
-
-	return &agent.Response{
-		Content: "Done! Verification finished.",
-	}, nil
+	return &agent.Response{Content: "Done"}, nil
 }
 
 func main() {
-	fmt.Println("🚀 Starting Minimum Autonomous Kernel (MAK) Phase 6 Integration Test...")
+	fmt.Println("🚀 Starting Minimum Autonomous Kernel (MAK) Phase 7 Integration Test...")
 
 	// 1. Setup configuration
 	config.Init()
 	cfg := config.Cfg
-
-	cwd, _ := os.Getwd()
-	fmt.Printf("📂 Workspace root: %s\n", cwd)
 
 	database, _ := db.Initialize(cfg)
 	defer database.Close()
@@ -60,89 +37,83 @@ func main() {
 	_ = ak.Start(ctx)
 	defer ak.Stop(ctx)
 
-	// 3. Initialize Phase 6 components
-	ga := git.NewLocalGitAdapter(cwd)
-	_ = ak.RegisterComponent("git_adapter", ga)
+	// 3. Initialize Phase 7 components
+	mb := providers.NewModelBroker()
+	_ = ak.RegisterComponent("model_broker", mb)
 
-	tc := channels.NewTelegramChannelAdapter("bot-token-123", "chat-id-456")
-	_ = ak.RegisterComponent("telegram_channel", tc)
+	es := events.NewEventStore(database)
+	_ = ak.RegisterComponent("event_store", es)
 
-	rb := kernel.NewRuntimeBus()
-	_ = ak.RegisterComponent("runtime_bus", rb)
+	ss := kernel.NewSupervisorService()
+	_ = ak.RegisterComponent("supervisor_service", ss)
 
-	re := review.NewReviewEngine()
-	_ = ak.RegisterComponent("review_engine", re)
+	ts := telemetry.NewTelemetryService()
+	_ = ak.RegisterComponent("telemetry_service", ts)
 
-	wsBaseDir := filepath.Join(cwd, "build", "workspaces")
-	wsm := workspace.NewWorkspaceManager(wsBaseDir)
-	ws, _ := wsm.Create(ctx, "session-p6-test")
-	defer os.RemoveAll(ws.RootPath)
+	fmt.Println("✅ All Phase 7 pipeline services registered successfully.")
 
-	fe := capability.NewFilesystemExecutor(ws.RootPath)
-	_ = ak.RegisterComponent("filesystem_executor", fe)
-
-	fmt.Println("✅ All Phase 6 pipeline services registered successfully.")
-
-	// 4. Verify Git Adapter & conventional commit formatting
-	_ = ga.CreateBranch("feat/authentication")
-	commitMsg, err := ga.Commit(git.GitCommit{
-		Type:    "feat",
-		Scope:   "auth",
-		Message: "add local authentication gate",
-	})
+	// 4. Verify Model Broker fallback resolution
+	profile := providers.TaskProfile{
+		TaskType:    "plan",
+		ContextSize: 120000,
+	}
+	chain, err := mb.Resolve(profile)
 	if err != nil {
-		fmt.Printf("❌ Git commit failed: %v\n", err)
+		fmt.Printf("❌ Model Broker resolution failed: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("📦 Git Engine commit output: %s\n", commitMsg)
+	fmt.Printf("🤖 Model Broker resolved fallback chain: %v\n", chain)
 
-	// 5. Verify Channel Abstraction (Telegram Channel)
-	msg, _ := tc.Receive(ctx)
-	_ = tc.Typing(ctx)
-	_ = tc.Reply(ctx, "Hello back from agent kernel gateway!")
-	approved, _ := tc.RequestApproval(ctx, "Capability Request: exec shell script")
-	fmt.Printf("💬 Channel Gateway Dialog Flow: Received='%s', Approved=%v\n", msg, approved)
+	// 5. Verify Event Sourcing Store persistence & replays
+	sessionID := "sess-p7-test"
+	goalID := "goal-p7-test"
+	_ = es.SaveEvent(ctx, sessionID, goalID, "TaskStarted", `{"taskId":"task-1"}`)
+	_ = es.SaveEvent(ctx, sessionID, goalID, "TaskCompleted", `{"taskId":"task-1","status":"success"}`)
 
-	// 6. Verify Capability Executors
-	execResult, err := fe.Execute(ctx, map[string]interface{}{
-		"path":    "hello.txt",
-		"content": "Hello World Phase 6",
-	})
-	if err != nil {
-		fmt.Printf("❌ Filesystem Executor failed: %v\n", err)
+	evs, err := es.ReplaySession(sessionID)
+	if err != nil || len(evs) != 2 {
+		fmt.Printf("❌ Event Store ReplaySession failed: %v, len=%d\n", err, len(evs))
 		os.Exit(1)
 	}
-	fmt.Printf("⚙️ Capability Executor output: %s\n", execResult)
+	fmt.Printf("⏳ Event Store: Replayed %d events for session %s\n", len(evs), sessionID)
 
-	// 7. Verify Semantic Runtime Bus
-	rtChan := rb.Subscribe()
-	rb.Publish(kernel.RuntimeEvent{
-		Type:      kernel.EvCheckpointCreated,
-		SessionID: "session-p6-test",
-		Payload:   map[string]interface{}{"checkpoint_id": "cp-123"},
-	})
+	goalEvs, err := es.ReplayGoal(goalID)
+	if err != nil || len(goalEvs) != 2 {
+		fmt.Printf("❌ Event Store ReplayGoal failed: %v, len=%d\n", err, len(goalEvs))
+		os.Exit(1)
+	}
+	fmt.Printf("🎯 Event Store: Replayed %d events for goal %s\n", len(goalEvs), goalID)
 
-	select {
-	case event := <-rtChan:
-		fmt.Printf("📢 Runtime Bus: Received event: %s, session: %s, payload: %+v\n", event.Type, event.SessionID, event.Payload)
-	default:
-		fmt.Println("❌ Did not receive runtime event.")
+	// 6. Verify Supervisor Service Failure Classification
+	strategy1, _ := ss.ClassifyFailure("agent-1", kernel.FailWaitingApp)
+	strategy2, _ := ss.ClassifyFailure("agent-1", kernel.FailHeartbeatLost)
+	_, _ = ss.ClassifyFailure("agent-1", kernel.FailHeartbeatLost)
+	_, _ = ss.ClassifyFailure("agent-1", kernel.FailHeartbeatLost)
+	strategy5, _ := ss.ClassifyFailure("agent-1", kernel.FailHeartbeatLost)
+	fmt.Printf("🛡️ Supervisor: Failure strategies: WaitingApp=%s, HeartbeatLost_1=%s, HeartbeatLost_4=%s\n", strategy1, strategy2, strategy5)
+
+	if strategy5 != kernel.StrategyCircuitBreaker {
+		fmt.Println("❌ Supervisor Service failure: repeated crash did not circuit break.")
 		os.Exit(1)
 	}
 
-	// 8. Verify Review Engine static credentials scanner
-	leakFile := filepath.Join(ws.RootPath, "leaked_secret.go")
-	_ = os.WriteFile(leakFile, []byte("package main\n\nconst token = \"my api_key is secret-token\"\n"), 0644)
+	// 7. Verify Telemetry & Distributed Tracing
+	ts.RecordTokens(goalID, 1200)
+	ts.RecordCost(goalID, 0.054)
+	tokens, cost := ts.GetMetrics(goalID)
+	fmt.Printf("📊 Telemetry Metrics: Tokens=%d, Cost=$%f\n", tokens, cost)
 
-	issues, err := re.Scan(leakFile)
-	if err != nil {
-		fmt.Printf("❌ Review Engine scan failed: %v\n", err)
+	traceID := "trace-999"
+	parentSpan := ts.StartSpan(traceID, "span-parent", "", "GoalResolution")
+	childSpan := ts.StartSpan(traceID, "span-child", "span-parent", "CodeGeneration")
+
+	recoveredSpan, exists := ts.GetSpan(childSpan.SpanID)
+	fmt.Printf("🕸️ Trace Spans: ParentSpanID of '%s' resolved to '%s' (exists=%v)\n", recoveredSpan.Name, recoveredSpan.ParentSpanID, exists)
+
+	if !exists || recoveredSpan.ParentSpanID != parentSpan.SpanID {
+		fmt.Println("❌ Distributed Tracing failure: Trace span hierarchy incorrect.")
 		os.Exit(1)
 	}
-	fmt.Printf("🛡️ Review Engine static scanning issue counts: %d\n", len(issues))
-	for _, issue := range issues {
-		fmt.Printf("   ├─ Alert message: %s (Severity: %s)\n", issue.Message, issue.Severity)
-	}
 
-	fmt.Println("🎉 Minimum Autonomous Kernel (MAK) Phase 6 Integration Test: PASS")
+	fmt.Println("🎉 Minimum Autonomous Kernel (MAK) Phase 7 Integration Test: PASS")
 }
