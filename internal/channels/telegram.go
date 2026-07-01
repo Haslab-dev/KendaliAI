@@ -97,7 +97,22 @@ func (tm *TelegramManager) StartPolling(c Channel) {
 
 			go func(upd tgbotapi.Update, tMsg tgbotapi.Message) {
 				loop := agent.NewCognitionLoopWithDB(p, 25, config.Cfg, tm.db)
-				finalResp, err := loop.Run(context.Background(), upd.Message.Text)
+
+				// Wrap user message with channel-aware instructions
+				wrappedQuery := fmt.Sprintf(`[CHANNEL: Telegram Bot — Short Response Mode]
+You are responding via a Telegram chat interface. Follow these rules strictly:
+
+1. KEEP RESPONSES SHORT — maximum 500 characters in your final reply.
+2. If the user asks to create, write, or generate any content (code, documents, presentations, etc.):
+   - Use tools (apply_patch, replace_range, exec) to WRITE the content to files on disk.
+   - Then respond with a SHORT SUMMARY of what you created and where. Example: "✅ Created deck_1.md with 10 slides covering the KendaliAI architecture."
+3. NEVER output full file contents, code blocks, or long text as your final response.
+4. For questions, give concise answers. Use bullet points.
+5. If the output would be long, write it to a file and tell the user where to find it.
+
+User message: %s`, upd.Message.Text)
+
+				finalResp, err := loop.Run(context.Background(), wrappedQuery)
 
 				replyText := ""
 				if err != nil {
