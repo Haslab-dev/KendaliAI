@@ -9,8 +9,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var tuiCmd = &cobra.Command{
-	Use:   "tui",
+var dashboardCmd = &cobra.Command{
+	Use:   "dashboard",
 	Short: "Launch Terminal User Interface (Dashboard)",
 	Run: func(cmd *cobra.Command, args []string) {
 		database, err := db.Initialize(cfg)
@@ -28,5 +28,5 @@ var tuiCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(tuiCmd)
+	rootCmd.AddCommand(dashboardCmd)
 }
