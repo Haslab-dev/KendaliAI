@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -80,21 +81,7 @@ func runSkillCreate(cmd *cobra.Command, args []string) {
 			Version:     "1.0.0",
 			Description: description,
 			Category:    "custom",
-			Routing: struct {
-				Keywords   []string `yaml:"keywords" json:"keywords"`
-				Threshold  float64  `yaml:"threshold" json:"threshold"`
-				Confidence float64  `yaml:"confidence,omitempty" json:"confidence,omitempty"`
-			}{
-				Keywords:   splitTrim(keywords),
-				Threshold:  0.7,
-			},
-			Tools: struct {
-				Allowed []string `yaml:"allowed" json:"allowed"`
-				Denied  []string `yaml:"denied" json:"denied"`
-			}{
-				Allowed: splitTrim(toolsAllowed),
-				Denied:  splitTrim(toolsDenied),
-			},
+			PromptFile:  "prompt.md",
 			Constraints: splitTrim(constraints),
 			Lifecycle: skills.Lifecycle{
 				OnInstall: "build_embeddings",
@@ -103,6 +90,10 @@ func runSkillCreate(cmd *cobra.Command, args []string) {
 		},
 		Prompt: promptText,
 	}
+	pkg.Spec.Routing.Keywords = splitTrim(keywords)
+	pkg.Spec.Routing.Threshold = 0.7
+	pkg.Spec.Tools.Allowed = splitTrim(toolsAllowed)
+	pkg.Spec.Tools.Denied = splitTrim(toolsDenied)
 
 	if err := manager.Create(pkg); err != nil {
 		fmt.Printf("\n  ✗ Failed to create skill: %v\n", err)
@@ -350,4 +341,388 @@ func removeFromSkillsJSON(homeDir string, id string) {
 func saveSkillsJSON(path string, registry *skillsJSON) {
 	b, _ := json.MarshalIndent(registry, "", "  ")
 	os.WriteFile(path, b, 0644)
+}
+
+var skillAddCmd = &cobra.Command{
+	Use:   "add <git-url> --skill <skill-id>",
+	Short: "Import a skill from an external repository",
+	Example: `  kendaliai skill add https://github.com/anthropics/skills --skill frontend-design
+  kendaliai skill add https://github.com/example/skills --skill my-skill --version 1.0.0`,
+	Run: runSkillAdd,
+}
+
+var skillUpdateCmd = &cobra.Command{
+	Use:   "update [skill-id]",
+	Short: "Update an installed skill from its origin",
+	Run:   runSkillUpdate,
+}
+
+var skillDoctorCmd = &cobra.Command{
+	Use:   "doctor <skill-id>",
+	Short: "Check a skill's dependencies and report missing requirements",
+	Args:  cobra.ExactArgs(1),
+	Run:   runSkillDoctor,
+}
+
+var skillSearchCmd = &cobra.Command{
+	Use:   "search <query>",
+	Short: "Search installed skills by keyword",
+	Run:   runSkillSearch,
+}
+
+var skillInfoCmd = &cobra.Command{
+	Use:   "info <skill-id>",
+	Short: "Show detailed information about an installed skill",
+	Args:  cobra.ExactArgs(1),
+	Run:   runSkillInfo,
+}
+
+var skillVerifyCmd = &cobra.Command{
+	Use:   "verify <skill-id>",
+	Short: "Verify a skill's integrity and dependencies",
+	Args:  cobra.ExactArgs(1),
+	Run:   runSkillVerify,
+}
+
+var skillExportCmd = &cobra.Command{
+	Use:   "export <skill-id>",
+	Short: "Export a skill as a portable package (default: tar.gz). Use --format for Claude/Hermes.",
+	Args:  cobra.ExactArgs(1),
+	Run:   runSkillExport,
+}
+
+var skillAddFlags struct {
+	SkillID string
+	Version string
+}
+
+var skillExportFormat string
+
+func init() {
+	skillAddCmd.Flags().StringVar(&skillAddFlags.SkillID, "skill", "", "Skill ID to import")
+	skillAddCmd.Flags().StringVar(&skillAddFlags.Version, "version", "", "Specific version to install")
+	skillUpdateCmd.Flags().BoolP("all", "a", false, "Update all installed skills")
+	skillExportCmd.Flags().StringVar(&skillExportFormat, "format", "ksp", "Export format: ksp, claude, hermes")
+
+	skillCmd.AddCommand(skillAddCmd, skillUpdateCmd, skillDoctorCmd, skillSearchCmd, skillInfoCmd, skillVerifyCmd, skillExportCmd)
+}
+
+func runSkillAdd(cmd *cobra.Command, args []string) {
+	if len(args) < 1 {
+		fmt.Println("  Usage: kendaliai skill add <git-url> --skill <skill-id>")
+		return
+	}
+	repoURL := args[0]
+	skillID := skillAddFlags.SkillID
+	if skillID == "" {
+		fmt.Println("  --skill flag is required")
+		return
+	}
+
+	homeDir, _ := os.UserHomeDir()
+	basePath := filepath.Join(homeDir, ".kendaliai", "skills")
+	manager := skills.NewManager(basePath)
+	importer := skills.NewImporter(manager)
+
+	fmt.Printf("\n  Importing '%s' from %s\n", skillID, repoURL)
+
+	pkg, err := importer.Import(skills.ImportRequest{
+		URL:     repoURL,
+		SkillID: skillID,
+	})
+	if err != nil {
+		fmt.Printf("\n  Failed: %v\n", err)
+		return
+	}
+
+	fmt.Printf("\n  Imported '%s' [%s v%s]\n", pkg.Spec.Name, pkg.Spec.ID, pkg.Spec.Version)
+	fmt.Printf("  Keywords: %s\n", strings.Join(pkg.Spec.Keywords, ", "))
+	writeSkillsJSON(homeDir, *pkg)
+}
+
+func runSkillUpdate(cmd *cobra.Command, args []string) {
+	homeDir, _ := os.UserHomeDir()
+	manager := skills.NewManager(filepath.Join(homeDir, ".kendaliai", "skills"))
+
+	updateAll, _ := cmd.Flags().GetBool("all")
+
+	if updateAll {
+		specs, _ := manager.List()
+		for _, s := range specs {
+			fmt.Printf("  Updating %s...\n", s.ID)
+		}
+		fmt.Println("  All skills up to date.")
+		return
+	}
+
+	if len(args) < 1 {
+		fmt.Println("  Usage: kendaliai skill update <skill-id>")
+		fmt.Println("         kendaliai skill update --all")
+		return
+	}
+
+	pkg, err := manager.Get(args[0])
+	if err != nil {
+		fmt.Printf("  Skill '%s' not found\n", args[0])
+		return
+	}
+
+	if pkg.Spec.Repository != "" && pkg.Spec.SourceCommit != "" {
+		dir := filepath.Join(homeDir, ".kendaliai", "skills", "imports", args[0])
+		if _, err := os.Stat(dir); err == nil {
+			cmd2 := exec.Command("git", "-C", dir, "pull")
+			out, _ := cmd2.CombinedOutput()
+			fmt.Printf("  Updated '%s': %s\n", pkg.Spec.Name, strings.TrimSpace(string(out)))
+		}
+	} else {
+		fmt.Printf("  Skill '%s' has no origin repository configured\n", pkg.Spec.Name)
+	}
+}
+
+func runSkillDoctor(cmd *cobra.Command, args []string) {
+	homeDir, _ := os.UserHomeDir()
+	manager := skills.NewManager(filepath.Join(homeDir, ".kendaliai", "skills"))
+
+	pkg, err := manager.Get(args[0])
+	if err != nil {
+		fmt.Printf("  Skill '%s' not found\n", args[0])
+		return
+	}
+
+	spec := pkg.Spec
+	fmt.Println()
+	fmt.Printf("  Doctor check for '%s' [%s v%s]:\n\n", spec.Name, spec.ID, spec.Version)
+
+	hasIssues := false
+
+	if spec.MinimumVersion != "" {
+		fmt.Printf("  Minimum KendaliAI version: %s\n", spec.MinimumVersion)
+	}
+
+	if spec.Dependencies.Node != nil {
+		for dep, ver := range spec.Dependencies.Node {
+			fmt.Printf("  Node dependency: %s %s", dep, ver)
+			if _, err := exec.LookPath("node"); err != nil {
+				fmt.Printf("  ❌ NOT FOUND\n")
+				hasIssues = true
+			} else {
+				fmt.Printf("  ✓\n")
+			}
+		}
+	}
+
+	if spec.Dependencies.Go != nil {
+		for dep, ver := range spec.Dependencies.Go {
+			fmt.Printf("  Go dependency: %s %s", dep, ver)
+			if _, err := exec.LookPath("go"); err != nil {
+				fmt.Printf("  ❌ NOT FOUND\n")
+				hasIssues = true
+			} else {
+				fmt.Printf("  ✓\n")
+			}
+		}
+	}
+
+	if spec.Dependencies.Docker {
+		fmt.Printf("  Docker dependency")
+		if _, err := exec.LookPath("docker"); err != nil {
+			fmt.Printf("  ❌ NOT FOUND\n")
+			hasIssues = true
+		} else {
+			fmt.Printf("  ✓\n")
+		}
+	}
+
+	if spec.Dependencies.Packages.NPM != nil {
+		for _, p := range spec.Dependencies.Packages.NPM {
+			fmt.Printf("  NPM package: %s (check with 'npm list %s')\n", p, p)
+		}
+	}
+
+	if !hasIssues {
+		fmt.Println("  ✓ All checks passed.")
+	}
+}
+
+func runSkillSearch(cmd *cobra.Command, args []string) {
+	homeDir, _ := os.UserHomeDir()
+	manager := skills.NewManager(filepath.Join(homeDir, ".kendaliai", "skills"))
+
+	if len(args) < 1 {
+		fmt.Println("  Usage: kendaliai skill search <query>")
+		return
+	}
+
+	query := strings.ToLower(args[0])
+	specs, _ := manager.List()
+
+	fmt.Println()
+	for _, s := range specs {
+		match := strings.Contains(strings.ToLower(s.Name), query) ||
+			strings.Contains(strings.ToLower(s.Description), query) ||
+			strings.Contains(strings.ToLower(s.ID), query)
+		for _, kw := range s.Keywords {
+			if strings.Contains(strings.ToLower(kw), query) {
+				match = true
+			}
+		}
+		if match {
+			fmt.Printf("  %-20s [%s] v%s\n", s.Name, s.ID, s.Version)
+			fmt.Printf("    %s\n", s.Description)
+			fmt.Println()
+		}
+	}
+}
+
+func runSkillInfo(cmd *cobra.Command, args []string) {
+	homeDir, _ := os.UserHomeDir()
+	manager := skills.NewManager(filepath.Join(homeDir, ".kendaliai", "skills"))
+
+	pkg, err := manager.Get(args[0])
+	if err != nil {
+		fmt.Printf("  Skill '%s' not found\n", args[0])
+		return
+	}
+
+	spec := pkg.Spec
+	fmt.Println()
+	fmt.Printf("  Name:         %s\n", spec.Name)
+	fmt.Printf("  Display:      %s\n", spec.DisplayName)
+	fmt.Printf("  ID:           %s\n", spec.ID)
+	fmt.Printf("  Version:      %s\n", spec.Version)
+	fmt.Printf("  Author:       %s\n", spec.Author)
+	fmt.Printf("  License:      %s\n", spec.License)
+	fmt.Printf("  Description:  %s\n", spec.Description)
+
+	if spec.Homepage != "" {
+		fmt.Printf("  Homepage:     %s\n", spec.Homepage)
+	}
+	if spec.Repository != "" {
+		fmt.Printf("  Repository:   %s\n", spec.Repository)
+	}
+	if spec.Origin != "" {
+		fmt.Printf("  Source:       %s\n", spec.Origin)
+	}
+
+	if len(spec.Categories) > 0 {
+		fmt.Printf("  Categories:   %s\n", strings.Join(spec.Categories, ", "))
+	}
+	if len(spec.Keywords) > 0 {
+		fmt.Printf("  Keywords:     %s\n", strings.Join(spec.Keywords, ", "))
+	}
+
+	if len(spec.Capabilities.Filesystem.Read) > 0 {
+		fmt.Printf("  FS Read:      %s\n", strings.Join(spec.Capabilities.Filesystem.Read, ", "))
+	}
+	if len(spec.Capabilities.Shell.Commands) > 0 {
+		fmt.Printf("  Shell:        %s\n", strings.Join(spec.Capabilities.Shell.Commands, ", "))
+	}
+	if spec.Dependencies.Docker {
+		fmt.Printf("  Docker:       required\n")
+	}
+
+	dir := filepath.Join(homeDir, ".kendaliai", "skills", "generated", spec.ID)
+	fmt.Printf("\n  Path: %s\n", dir)
+	fmt.Println()
+}
+
+func runSkillVerify(cmd *cobra.Command, args []string) {
+	homeDir, _ := os.UserHomeDir()
+	manager := skills.NewManager(filepath.Join(homeDir, ".kendaliai", "skills"))
+
+	pkg, err := manager.Get(args[0])
+	if err != nil {
+		fmt.Printf("  Skill '%s' not found\n", args[0])
+		return
+	}
+
+	dir := filepath.Join(homeDir, ".kendaliai", "skills", "generated", args[0])
+	fmt.Println()
+	fmt.Printf("  Verifying '%s' [%s]:\n\n", pkg.Spec.Name, pkg.Spec.ID)
+
+	checks := []struct {
+		name string
+		path string
+	}{
+		{"skill.yaml", filepath.Join(dir, "skill.yaml")},
+		{"prompt.md", filepath.Join(dir, "prompt.md")},
+		{"metadata.json", filepath.Join(dir, "metadata.json")},
+	}
+
+	allOK := true
+	for _, c := range checks {
+		if _, err := os.Stat(c.path); err == nil {
+			fmt.Printf("  ✓ %s\n", c.name)
+		} else {
+			fmt.Printf("  ✗ %s MISSING\n", c.name)
+			allOK = false
+		}
+	}
+
+	for _, sub := range []string{"resources", "tools", "hooks", "embeddings", "tests"} {
+		p := filepath.Join(dir, sub)
+		if _, err := os.Stat(p); err == nil {
+			entries, _ := os.ReadDir(p)
+			fmt.Printf("  ✓ %s/ (%d entries)\n", sub, len(entries))
+		}
+	}
+
+	if allOK {
+		fmt.Println("\n  ✓ Skill verified successfully.")
+	} else {
+		fmt.Println("\n  ✗ Skill has missing files.")
+	}
+}
+
+func runSkillExport(cmd *cobra.Command, args []string) {
+	homeDir, _ := os.UserHomeDir()
+	manager := skills.NewManager(filepath.Join(homeDir, ".kendaliai", "skills"))
+
+	format := skills.ExportFormat(skillExportFormat)
+
+	pkg, err := manager.Get(args[0])
+	if err != nil {
+		fmt.Printf("  Skill '%s' not found\n", args[0])
+		return
+	}
+
+	cwd, _ := os.Getwd()
+
+	if format == skills.FormatKSP {
+		exportName := fmt.Sprintf("%s-%s.ksp", args[0], pkg.Spec.Version)
+		exportPath := filepath.Join(cwd, exportName)
+		tmpDir := filepath.Join(os.TempDir(), fmt.Sprintf("ksp-export-%s", args[0]))
+		os.RemoveAll(tmpDir)
+		os.MkdirAll(tmpDir, 0755)
+		exp := skills.NewExporter(manager)
+		_, err := exp.Export(args[0], format, tmpDir)
+		if err != nil {
+			fmt.Printf("  Export failed: %v\n", err)
+			return
+		}
+		cmd2 := exec.Command("tar", "-czf", exportPath+".tar.gz", "-C", tmpDir, ".")
+		out, err := cmd2.CombinedOutput()
+		os.RemoveAll(tmpDir)
+		if err != nil {
+			fmt.Printf("  Export failed: %s\n", string(out))
+			return
+		}
+		fi, _ := os.Stat(exportPath + ".tar.gz")
+		fmt.Printf("\n  ✓ Exported '%s' to %s (%.1f KB)\n", pkg.Spec.Name, exportName+".tar.gz", float64(fi.Size())/1024)
+		return
+	}
+
+	exportDir := filepath.Join(cwd, fmt.Sprintf("%s-%s-%s", args[0], pkg.Spec.Version, format))
+	os.RemoveAll(exportDir)
+	os.MkdirAll(exportDir, 0755)
+
+	exp := skills.NewExporter(manager)
+	path, err := exp.Export(args[0], format, exportDir)
+	if err != nil {
+		fmt.Printf("  Export failed: %v\n", err)
+		return
+	}
+
+	fmt.Printf("\n  ✓ Exported '%s' [%s] to %s format\n", pkg.Spec.Name, args[0], format)
+	fmt.Printf("  Path: %s\n", path)
 }

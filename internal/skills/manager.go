@@ -42,6 +42,10 @@ func (m *Manager) Create(pkg SkillPackage) error {
 		return fmt.Errorf("create skill dir: %w", err)
 	}
 
+	for _, sub := range []string{"resources/templates", "resources/snippets", "resources/assets", "resources/docs", "tools", "hooks", "embeddings", "tests"} {
+		os.MkdirAll(filepath.Join(dir, sub), 0755)
+	}
+
 	if pkg.Spec.Version == "" {
 		pkg.Spec.Version = "1.0.0"
 	}
@@ -96,6 +100,8 @@ func (m *Manager) Create(pkg SkillPackage) error {
 	_ = os.WriteFile(versionPath, versionData, 0644)
 
 	_ = m.executeHooks(pkg.Spec.ID, pkg.Spec.Lifecycle.OnInstall, dir)
+
+	m.writeLockfile()
 
 	return nil
 }
@@ -222,7 +228,7 @@ func (m *Manager) executeHooks(id, hook, dir string) error {
 				return fmt.Errorf("build_embeddings: %w", err)
 			}
 		case "remove_embeddings":
-			embPath := filepath.Join(dir, "embeddings.bin")
+			embPath := filepath.Join(dir, "vectors.bin")
 			os.Remove(embPath)
 		case "regenerate_examples":
 		}
@@ -247,7 +253,7 @@ func (m *Manager) buildEmbeddings(id, dir string) error {
 		dummyEmb[i] = float32(hashByte(text, i)) / 255.0
 	}
 
-	return saveEmbeddings(filepath.Join(dir, "embeddings.bin"), dummyEmb)
+	return saveEmbeddings(filepath.Join(dir, "vectors.bin"), dummyEmb)
 }
 
 func hashByte(s string, offset int) byte {
@@ -272,7 +278,7 @@ func saveEmbeddings(path string, vec []float32) error {
 
 func (m *Manager) LoadEmbeddings(id string) ([]float32, error) {
 	dir := m.skillDir(id)
-	path := filepath.Join(dir, "embeddings.bin")
+	path := filepath.Join(dir, "vectors.bin")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -287,4 +293,33 @@ func (m *Manager) LoadEmbeddings(id string) ([]float32, error) {
 		vec[i] = math.Float32frombits(bits)
 	}
 	return vec, nil
+}
+
+func (m *Manager) writeLockfile() {
+	specs, err := m.List()
+	if err != nil {
+		return
+	}
+
+	type lockEntry struct {
+		Version      string `yaml:"version"`
+		Source       string `yaml:"source,omitempty"`
+		SourceCommit string `yaml:"sourceCommit,omitempty"`
+		Checksum     string `yaml:"checksum,omitempty"`
+		InstalledAt  string `yaml:"installedAt"`
+	}
+
+	lock := map[string]lockEntry{}
+	for _, s := range specs {
+		entry := lockEntry{
+			Version:      s.Version,
+			Source:       s.Origin,
+			SourceCommit: s.SourceCommit,
+			InstalledAt:  time.Now().Format(time.RFC3339),
+		}
+		lock[s.ID] = entry
+	}
+
+	data, _ := yaml.Marshal(lock)
+	os.WriteFile(filepath.Join(m.basePath, "skills.lock"), data, 0644)
 }

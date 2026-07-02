@@ -906,6 +906,34 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 					pkg.Spec.Name, pkg.Spec.ID, pkg.Spec.Version, pkg.Spec.Routing.Keywords[:min(5, len(pkg.Spec.Routing.Keywords))])
 			},
 		},
+		"install_skill": {
+			Name:        "install_skill",
+			Description: "Installs an external skill from a GitHub repository URL. Supports Anthropic Skills format, generic git repos, and direct skill directories. Example: tool: install_skill({\"url\": \"https://github.com/anthropics/skills\", \"skill_id\": \"docx\"})",
+			Signature:   `{"url": "string", "skill_id": "string"}`,
+			Category:    "Skill",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				if skills.DefaultManager == nil {
+					return "error: skill manager not initialized"
+				}
+				url, _ := args["url"].(string)
+				skillID, _ := args["skill_id"].(string)
+				if url == "" {
+					return "error: 'url' is required (GitHub repo URL)"
+				}
+
+				importer := skills.NewImporter(skills.DefaultManager)
+				pkg, err := importer.Import(skills.ImportRequest{
+					URL:     url,
+					SkillID: skillID,
+				})
+				if err != nil {
+					return fmt.Sprintf("error installing skill: %v", err)
+				}
+				registerSkillJSON(pkg.Spec.ID, pkg.Spec.Name, pkg.Spec.Description)
+				return fmt.Sprintf("✅ Skill '%s' installed [%s v%s] from %s. Keywords: %v",
+					pkg.Spec.Name, pkg.Spec.ID, pkg.Spec.Version, url, pkg.Spec.Routing.Keywords[:min(5, len(pkg.Spec.Routing.Keywords))])
+			},
+		},
 		"list_skills": {
 			Name:        "list_skills",
 			Description: "Lists all installed generated skills with their IDs, versions, and routing keywords.",
