@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/kendaliai/app/internal/config"
+	"github.com/kendaliai/app/internal/data"
 	"github.com/kendaliai/app/internal/embedding"
 	"github.com/kendaliai/app/internal/intelligence"
 	"github.com/kendaliai/app/internal/logger"
@@ -150,19 +151,19 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 			Signature:   `{}`,
 			Category:    "Intelligence",
 			Execute: func(ctx context.Context, args map[string]interface{}) string {
-				engine, err := intelligence.NewEngine(workspaceRoot)
+				intelEngine, err := intelligence.NewEngine(workspaceRoot)
 				if err != nil {
-					return fmt.Sprintf("error initializing intelligence engine: %v", err)
+					return fmt.Sprintf("error: %v", err)
 				}
-				defer engine.Close()
+				defer intelEngine.Close()
 
-				engine.AnalyzeFull()
-				return engine.FormatAnalysisJSON()
+				intelEngine.AnalyzeFull()
+				return intelEngine.FormatAnalysisJSON()
 			},
 		},
 		"resolve_symbol": {
 			Name:        "resolve_symbol",
-			Description: "Finds the file location of a named symbol (component, function, class, type). Returns file path and line number. Use this instead of search_files for known symbol names.",
+			Description: "Finds the file location of a named symbol using Tree-sitter workspace graph. Returns file path and line number.",
 			Signature:   `{"name": "string"}`,
 			Category:    "Intelligence",
 			Execute: func(ctx context.Context, args map[string]interface{}) string {
@@ -170,21 +171,62 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 				if name == "" {
 					return "error: 'name' is required"
 				}
-				engine, err := intelligence.NewEngine(workspaceRoot)
+
+				core, err := data.NewCore(workspaceRoot)
+				if err != nil {
+					intelEngine, err2 := intelligence.NewEngine(workspaceRoot)
+					if err2 == nil {
+						defer intelEngine.Close()
+						intelEngine.AnalyzeFull()
+						entries := intelEngine.ResolveSymbol(name)
+						if len(entries) > 0 {
+							b, _ := json.MarshalIndent(entries, "", "  ")
+							return string(b)
+						}
+					}
+					return fmt.Sprintf("error: %v", err)
+				}
+				defer core.Close()
+
+				core.Reindex(ctx)
+				results, err := core.ResolveSymbol(ctx, name)
+				if err != nil || len(results) == 0 {
+					return fmt.Sprintf("Symbol '%s' not found", name)
+				}
+				b, _ := json.MarshalIndent(results, "", "  ")
+				return string(b)
+			},
+		},
+		"search_code": {
+			Name:        "search_code",
+			Description: "Full-text search across the codebase using Bleve search engine (BM25 ranking). Use this for finding code patterns, function usage, or text across files.",
+			Signature:   `{"query": "string", "top_k": "int"}`,
+			Category:    "Intelligence",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				query, _ := args["query"].(string)
+				if query == "" {
+					return "error: 'query' is required"
+				}
+				topK := 10
+				if k, ok := args["top_k"].(float64); ok && k > 0 {
+					topK = int(k)
+				}
+
+				core, err := data.NewCore(workspaceRoot)
 				if err != nil {
 					return fmt.Sprintf("error: %v", err)
 				}
-				defer engine.Close()
+				defer core.Close()
 
-				engine.AnalyzeFull()
-				entries := engine.ResolveSymbol(name)
-				if len(entries) == 0 {
-					entries = engine.SearchSymbol(name)
+				core.Reindex(ctx)
+				results, err := core.SearchCode(ctx, query, topK)
+				if err != nil {
+					return fmt.Sprintf("search error: %v", err)
 				}
-				if len(entries) == 0 {
-					return fmt.Sprintf("Symbol '%s' not found in repository index", name)
+				if len(results) == 0 {
+					return "No results found."
 				}
-				b, _ := json.MarshalIndent(entries, "", "  ")
+				b, _ := json.MarshalIndent(results, "", "  ")
 				return string(b)
 			},
 		},
@@ -238,6 +280,19 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 
 				vp := intelligence.NewVerificationPipeline(workspaceRoot, engine.AnalyzeProject(), sessionID)
 				return vp.FormatResult(result)
+			},
+		},
+		"request_reads": {
+			Name:        "request_reads",
+			Description: "Request additional file reads when the read budget is exhausted. Must provide a justification.",
+			Signature:   `{"justification": "string"}`,
+			Category:    "Intelligence",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				justification, _ := args["justification"].(string)
+				if justification == "" {
+					return "error: justify why you need more reads"
+				}
+				return fmt.Sprintf("read_budget_extension: justification accepted. 5 additional reads granted.")
 			},
 		},
 
@@ -781,10 +836,12 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 					Description:      desc,
 					Responsibilities: responsibilities,
 					Research:         false,
+					WorkspaceRoot:    workspaceRoot,
 				})
 				if err != nil {
 					return fmt.Sprintf("error creating skill: %v", err)
 				}
+				registerSkillJSON(pkg.Spec.ID, pkg.Spec.Name, pkg.Spec.Description)
 				return fmt.Sprintf("✅ Skill '%s' created [%s v%s]. Keywords: %v",
 					pkg.Spec.Name, pkg.Spec.ID, pkg.Spec.Version, pkg.Spec.Routing.Keywords[:min(5, len(pkg.Spec.Routing.Keywords))])
 			},
@@ -1178,4 +1235,44 @@ func bumpVersion(version string) string {
 		return fmt.Sprintf("%s.%d.%s", parts[0], minor, "0")
 	}
 	return "1.0.0"
+}
+
+type skillRegistryEntry struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Installed   bool   `json:"installed"`
+}
+
+type skillRegistry struct {
+	Skills []skillRegistryEntry `json:"skills"`
+}
+
+func registerSkillJSON(id, name, description string) {
+	homeDir, _ := os.UserHomeDir()
+	path := filepath.Join(homeDir, ".kendaliai", "skills", "skills.json")
+
+	var registry skillRegistry
+	data, _ := os.ReadFile(path)
+	json.Unmarshal(data, &registry)
+
+	for i, s := range registry.Skills {
+		if s.ID == id {
+			registry.Skills[i].Installed = true
+			registry.Skills[i].Name = name
+			registry.Skills[i].Description = description
+			b, _ := json.MarshalIndent(registry, "", "  ")
+			os.WriteFile(path, b, 0644)
+			return
+		}
+	}
+
+	registry.Skills = append(registry.Skills, skillRegistryEntry{
+		ID:          id,
+		Name:        name,
+		Description: description,
+		Installed:   true,
+	})
+	b, _ := json.MarshalIndent(registry, "", "  ")
+	os.WriteFile(path, b, 0644)
 }

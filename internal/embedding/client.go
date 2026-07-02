@@ -38,6 +38,12 @@ func NewClientFromConfig(apiKey, endpoint, model string) *Client {
 
 type Vector []float32
 
+type EmbeddingProvider interface {
+	Embed(ctx context.Context, texts []string) ([]Vector, error)
+}
+
+var _ EmbeddingProvider = (*Client)(nil)
+
 func (c *Client) Embed(ctx context.Context, texts []string) ([]Vector, error) {
 	resp, err := c.client.CreateEmbeddings(ctx, openai.EmbeddingRequest{
 		Input: texts,

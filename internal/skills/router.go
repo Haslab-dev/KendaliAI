@@ -146,12 +146,19 @@ func (r *Router) embeddingScore(message string, spec SkillSpec) float64 {
 	r.mu.RUnlock()
 
 	if !ok {
-		pkg, err := r.manager.Get(skillID)
-		if err != nil {
-			return 0.0
+		skillEmb, _ = r.manager.LoadEmbeddings(skillID)
+		if skillEmb != nil {
+			r.mu.Lock()
+			r.cache[skillID] = skillEmb
+			r.mu.Unlock()
+			ok = true
 		}
-		if r.client == nil {
-			r.client = embedding.NewClient()
+	}
+
+	if !ok || skillEmb == nil {
+		pkg, err2 := r.manager.Get(skillID)
+		if err2 != nil {
+			return 0.0
 		}
 
 		text := pkg.Spec.Name + " " + pkg.Spec.Description + " " + pkg.Prompt
@@ -159,8 +166,8 @@ func (r *Router) embeddingScore(message string, spec SkillSpec) float64 {
 			text = text[:500]
 		}
 
-		vecs, err := r.client.Embed(context.Background(), []string{text})
-		if err != nil || len(vecs) == 0 {
+		vecs, err2 := r.client.Embed(context.Background(), []string{text})
+		if err2 != nil || len(vecs) == 0 {
 			return 0.0
 		}
 

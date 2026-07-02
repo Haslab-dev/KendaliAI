@@ -411,6 +411,52 @@ prompt_cache
 execution_cache
 ```
 
+
+
+---
+
+# Per-Recipe Token Budgeting
+
+Context recipes (RFC-0040) control how budget is allocated across cache layers.
+
+Example — `code_edit` recipe with 4000 token budget:
+
+```
+Prefix Cache:     1200 tokens (system prompt, persona, tools)
+Workspace Cache:   400 tokens (framework, entrypoints)
+Retrieval Cache:   800 tokens (symbol lookups, memory)
+File Context:     1200 tokens (target files with code)
+Conversation:      400 tokens (last 2 turns)
+```
+
+The recipe determines per-layer allocation. Different intents receive different budgets.
+
+---
+
+# Provider Prefix Caching
+
+For providers with native prefix caching (Anthropic, Google Vertex AI):
+
+1. Send long system prompt on first request
+2. Identify constant prefix portion (persona + tools + workspace meta)
+3. On subsequent requests, the provider reuses the cached prefix automatically
+
+Agent-level caching avoids rebuilding the prompt. Provider prefix caching avoids re-processing the constant prefix at the model boundary. The two are complementary.
+
+---
+
+# Implementation Status
+
+| Layer | RFC Table | Data Layer Table | Status |
+|---|---|---|---|
+| Repository Cache | `repository_cache` | `workspace_meta` | Implemented |
+| Working Set Cache | `working_sets` | `working_set` | Implemented |
+| File Summary Cache | `file_summaries` | `file_cache` | Implemented |
+| Symbol Cache | `symbol_cache` | `symbols` | Implemented |
+| Plan Cache | `plan_cache` | `plans` | Implemented |
+| Prompt/Context Cache | `prompt_cache` | `context_cache` (renamed) | Implemented |
+| Execution Cache | `execution_cache` | `plans` (execution variant) | Implemented |
+
 ---
 
 # Benefits

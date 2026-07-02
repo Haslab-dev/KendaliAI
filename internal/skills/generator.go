@@ -2,17 +2,21 @@ package skills
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/google/uuid"
 )
 
 type GenerateRequest struct {
-	Name            string
-	Description     string
+	Name             string
+	Description      string
 	Responsibilities []string
-	Research        bool
-	Category        string
+	Research         bool
+	Category         string
+	SkillID          string
+	WorkspaceRoot    string
 }
 
 type Generator struct {
@@ -33,6 +37,11 @@ func (g *Generator) Generate(req GenerateRequest) (*SkillPackage, error) {
 		id = id + "_" + uuid.New().String()[:4]
 	}
 
+	req.SkillID = id
+
+	storageDir := filepath.Join(req.WorkspaceRoot, "storage", "skills", id)
+	os.MkdirAll(storageDir, 0755)
+
 	spec := SkillSpec{
 		ID:          id,
 		Name:        req.Name,
@@ -51,6 +60,10 @@ func (g *Generator) Generate(req GenerateRequest) (*SkillPackage, error) {
 	spec.Memory.Enabled = true
 	spec.Examples.Enabled = true
 	spec.PromptFile = "prompt.md"
+	spec.Lifecycle = Lifecycle{
+		OnInstall: "build_embeddings",
+		OnDelete:  "remove_embeddings",
+	}
 
 	prompt := g.buildPrompt(req)
 	examples := g.buildExamples(req)
@@ -115,6 +128,10 @@ func (g *Generator) buildPrompt(req GenerateRequest) string {
 		}
 		sb.WriteString("\n")
 	}
+	sb.WriteString("File Storage:\n\n")
+	sb.WriteString(fmt.Sprintf("- ALL files you create MUST be saved to: storage/skills/%s/\n", req.SkillID))
+	sb.WriteString("- Use this directory for tasks, notes, reports, transactions, or any skill-related data.\n")
+	sb.WriteString("- NEVER write skill documents outside this directory.\n\n")
 	sb.WriteString("Guidelines:\n\n")
 	sb.WriteString("- Provide accurate, up-to-date information.\n")
 	sb.WriteString("- Structure answers clearly with steps when appropriate.\n")

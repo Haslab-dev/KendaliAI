@@ -44,6 +44,17 @@ type Config struct {
 	Storage         StorageConfig              `json:"storage" yaml:"storage"`
 	Permissions     PermissionsConfig          `json:"permissions" yaml:"permissions"`
 	Reflection      ReflectionConfig           `json:"reflection" yaml:"reflection"`
+	Search          SearchConfig               `json:"search,omitempty" yaml:"search,omitempty"`
+	Vector          VectorConfig               `json:"vector,omitempty" yaml:"vector,omitempty"`
+}
+
+type SearchConfig struct {
+	Provider string `json:"provider" yaml:"provider"`
+	Index    string `json:"index,omitempty" yaml:"index,omitempty"`
+}
+
+type VectorConfig struct {
+	Provider string `json:"provider" yaml:"provider"`
 }
 
 type ReflectionConfig struct {

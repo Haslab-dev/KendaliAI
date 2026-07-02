@@ -111,7 +111,7 @@ var repoSchema = []string{
 }
 
 func OpenRepoDB(rootPath string) (*RepoDB, error) {
-	repoDBPath := filepath.Join(rootPath, ".kendaliai", "repo.db")
+	repoDBPath := filepath.Join(rootPath, ".kendaliai", "kendaliai.db")
 	dir := filepath.Dir(repoDBPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, err

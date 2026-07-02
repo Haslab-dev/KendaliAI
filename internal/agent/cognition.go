@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/kendaliai/app/internal/config"
+	"github.com/kendaliai/app/internal/data"
 	"github.com/kendaliai/app/internal/embedding"
 	"github.com/kendaliai/app/internal/intelligence"
 	"github.com/kendaliai/app/internal/logger"
@@ -43,6 +44,7 @@ type CognitionLoop struct {
 	OnResponse     func(content string)
 	OnStats        func(totalInput, totalOutput int)
 	intelEngine    *intelligence.Engine
+	dataLayer      *data.Core
 	stateMachine   *intelligence.StateMachine
 	readBudget     int
 	readCount      int
@@ -63,6 +65,15 @@ func NewCognitionLoopWithDB(p Provider, maxSteps int, cfg *config.Config, db *sq
 		MaxSteps: maxSteps,
 		Config:   cfg,
 		DB:       db,
+	}
+}
+
+func NewCognitionLoopWithDataLayer(p Provider, maxSteps int, cfg *config.Config, core *data.Core) *CognitionLoop {
+	return &CognitionLoop{
+		Provider:  p,
+		MaxSteps:  maxSteps,
+		Config:    cfg,
+		dataLayer: core,
 	}
 }
 
@@ -505,11 +516,20 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 			return response.Content, nil
 		}
 
-		c.enforceReadBudget(ctx, reqs, messages, goal)
+		reqs = c.enforceReadBudget(ctx, reqs, &messages, goal)
 
 		var validReqs []ToolRequest
 		for _, req := range reqs {
 			c.recordToolRead(req)
+
+			if req.Name == "request_reads" {
+				justification, _ := req.Args["justification"].(string)
+				c.stateMachine.RequestAdditionalReads(justification)
+				logger.Info("Agent", fmt.Sprintf("📊 Read budget extended: %s (%d/%d)", justification, c.stateMachine.ReadCount, c.stateMachine.MaxReads))
+				messages = append(messages, Message{Role: "user", Content: fmt.Sprintf("Read budget extended. %d reads remaining.", c.stateMachine.MaxReads-c.stateMachine.ReadCount)})
+				continue
+			}
+
 			toolSequence = append(toolSequence, req.Name)
 
 			cat := "Ran"
@@ -575,6 +595,22 @@ func (c *CognitionLoop) initIntelEngine(cwd string) {
 	c.readCount = 0
 	c.stateMachine = intelligence.NewStateMachine(c.readBudget)
 
+	if c.dataLayer != nil {
+		logger.Info("Agent", "📊 Using IntelligenceLayer (WorkspaceGraph + Recipes + Search)")
+
+		go func() {
+			ctx := context.Background()
+			if err := c.dataLayer.Intelligence.Reindex(ctx); err != nil {
+				logger.Info("Agent", fmt.Sprintf("⚠️ Index: %v", err))
+				return
+			}
+			logger.Info("Agent", fmt.Sprintf("📊 Workspace indexed: %d files, %d symbols",
+				c.dataLayer.Intelligence.Graph.FileCount(), c.dataLayer.Intelligence.Graph.SymbolCount()))
+		}()
+		c.stateMachine.Transition(intelligence.PhaseAnalyzeProject)
+		return
+	}
+
 	engine, err := intelligence.NewEngine(cwd)
 	if err != nil {
 		logger.Info("Agent", fmt.Sprintf("⚠️ Intelligence engine init skipped: %v", err))
@@ -611,15 +647,33 @@ func (c *CognitionLoop) appendIntelContext(basePrompt *string, wsContext, fileCo
 	}
 }
 
-func (c *CognitionLoop) enforceReadBudget(ctx context.Context, reqs []ToolRequest, messages []Message, goal *ActiveGoal) {
+func (c *CognitionLoop) enforceReadBudget(ctx context.Context, reqs []ToolRequest, messages *[]Message, goal *ActiveGoal) []ToolRequest {
+	var allowed []ToolRequest
+	var blocked []string
+
 	for _, req := range reqs {
 		if req.Name == "read_file" || req.Name == "search_files" {
 			canRead, msg := c.stateMachine.CanRead()
 			if !canRead {
-				logger.Info("Agent", fmt.Sprintf("📊 Read budget exhausted: %s", msg))
+				path, _ := req.Args["path"].(string)
+				if path == "" {
+					path, _ = req.Args["query"].(string)
+				}
+				blocked = append(blocked, fmt.Sprintf("%s (%s)", req.Name, path))
+				logger.Info("Agent", fmt.Sprintf("📊 Read budget exhausted blocking %s: %s", req.Name, msg))
+				continue
 			}
 		}
+		allowed = append(allowed, req)
 	}
+
+	if len(blocked) > 0 {
+		*messages = append(*messages, Message{Role: "user", Content: fmt.Sprintf(
+			"READ BUDGET EXHAUSTED (%d/%d). Blocked: %s\n\nUse working set cache or request additional reads with justification: tool: request_reads({\"justification\": \"why you need more file reads\"})",
+			c.stateMachine.ReadCount, c.stateMachine.MaxReads, strings.Join(blocked, ", "))})
+	}
+
+	return allowed
 }
 
 func (c *CognitionLoop) recordToolRead(req ToolRequest) {

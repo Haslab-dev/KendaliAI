@@ -267,15 +267,15 @@ func (e *Engine) CompileContext(query string, workingSet *WorkingSet, fileConten
 
 	ctx.WriteString(fmt.Sprintf("GOAL: %s\n\n", query))
 
+	if workingSet != nil && len(workingSet.Files) > 0 {
+		ctx.WriteString(FormatWorkingSetContext(workingSet.Files, fileContents))
+		ctx.WriteString("\n")
+	}
+
 	if e.info != nil {
 		ctx.WriteString("REPOSITORY METADATA:\n")
 		ctx.WriteString(fmt.Sprintf("  Framework: %s | Language: %s | Build: %s | CSS: %s | Routing: %s\n\n",
 			e.info.Framework, e.info.Language, e.info.BuildTool, e.info.CSS, e.info.Routing))
-	}
-
-	if workingSet != nil && len(workingSet.Files) > 0 {
-		ctx.WriteString(FormatWorkingSetContext(workingSet.Files, fileContents))
-		ctx.WriteString("\n")
 	}
 
 	if len(fileContents) > 0 {
