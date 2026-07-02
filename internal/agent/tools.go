@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	"crypto/sha256"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,10 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"database/sql"
-
 	"github.com/kendaliai/app/internal/config"
 	"github.com/kendaliai/app/internal/embedding"
+	"github.com/kendaliai/app/internal/intelligence"
 	"github.com/kendaliai/app/internal/logger"
 	"github.com/kendaliai/app/internal/reflection"
 	"github.com/kendaliai/app/internal/skills"
@@ -139,6 +140,104 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 					res = res[:2000] + "\n...(truncated)"
 				}
 				return res
+			},
+		},
+
+		// 🧠 REPOSITORY INTELLIGENCE
+		"analyze_project": {
+			Name:        "analyze_project",
+			Description: "Analyzes the current project: detects framework, entrypoints, CSS system, routing, and existing components. Use this FIRST before any coding task. Replaces 20+ individual search_files calls.",
+			Signature:   `{}`,
+			Category:    "Intelligence",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				engine, err := intelligence.NewEngine(workspaceRoot)
+				if err != nil {
+					return fmt.Sprintf("error initializing intelligence engine: %v", err)
+				}
+				defer engine.Close()
+
+				engine.AnalyzeFull()
+				return engine.FormatAnalysisJSON()
+			},
+		},
+		"resolve_symbol": {
+			Name:        "resolve_symbol",
+			Description: "Finds the file location of a named symbol (component, function, class, type). Returns file path and line number. Use this instead of search_files for known symbol names.",
+			Signature:   `{"name": "string"}`,
+			Category:    "Intelligence",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				name, _ := args["name"].(string)
+				if name == "" {
+					return "error: 'name' is required"
+				}
+				engine, err := intelligence.NewEngine(workspaceRoot)
+				if err != nil {
+					return fmt.Sprintf("error: %v", err)
+				}
+				defer engine.Close()
+
+				engine.AnalyzeFull()
+				entries := engine.ResolveSymbol(name)
+				if len(entries) == 0 {
+					entries = engine.SearchSymbol(name)
+				}
+				if len(entries) == 0 {
+					return fmt.Sprintf("Symbol '%s' not found in repository index", name)
+				}
+				b, _ := json.MarshalIndent(entries, "", "  ")
+				return string(b)
+			},
+		},
+		"get_imports": {
+			Name:        "get_imports",
+			Description: "Returns all imports of a file or all files that import it. Use this to understand dependencies between components.",
+			Signature:   `{"file": "string", "direction": "string"}`,
+			Category:    "Intelligence",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				file, _ := args["file"].(string)
+				direction, _ := args["direction"].(string)
+				if file == "" {
+					return "error: 'file' is required"
+				}
+				engine, err := intelligence.NewEngine(workspaceRoot)
+				if err != nil {
+					return fmt.Sprintf("error: %v", err)
+				}
+				defer engine.Close()
+
+				engine.AnalyzeFull()
+
+				var edges []intelligence.ImportEdge
+				if direction == "imported_by" {
+					edges = engine.GetRepoDB().GetImportedBy(file)
+				} else {
+					edges = engine.GetImportsOf(file)
+				}
+
+				if len(edges) == 0 {
+					return fmt.Sprintf("No imports found for '%s'", file)
+				}
+				b, _ := json.MarshalIndent(edges, "", "  ")
+				return string(b)
+			},
+		},
+		"verify_build": {
+			Name:        "verify_build",
+			Description: "Runs the verification pipeline: build, lint, and test. Use this after making code changes to confirm everything works.",
+			Signature:   `{}`,
+			Category:    "Verification",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				engine, err := intelligence.NewEngine(workspaceRoot)
+				if err != nil {
+					return fmt.Sprintf("error: %v", err)
+				}
+				defer engine.Close()
+
+				sessionID := fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("verify-%d", time.Now().UnixNano()))))[:16]
+				result := engine.Verify(ctx, sessionID)
+
+				vp := intelligence.NewVerificationPipeline(workspaceRoot, engine.AnalyzeProject(), sessionID)
+				return vp.FormatResult(result)
 			},
 		},
 

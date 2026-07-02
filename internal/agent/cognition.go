@@ -2,7 +2,9 @@ package agent
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/kendaliai/app/internal/config"
 	"github.com/kendaliai/app/internal/embedding"
+	"github.com/kendaliai/app/internal/intelligence"
 	"github.com/kendaliai/app/internal/logger"
 	"github.com/kendaliai/app/internal/skills"
 )
@@ -32,13 +35,18 @@ type Response struct {
 }
 
 type CognitionLoop struct {
-	Provider   Provider
-	MaxSteps   int
-	Config     *config.Config
-	DB         *sql.DB
-	OnTool     func(toolName string, category string, args map[string]interface{})
-	OnResponse func(content string)
-	OnStats    func(totalInput, totalOutput int)
+	Provider       Provider
+	MaxSteps       int
+	Config         *config.Config
+	DB             *sql.DB
+	OnTool         func(toolName string, category string, args map[string]interface{})
+	OnResponse     func(content string)
+	OnStats        func(totalInput, totalOutput int)
+	intelEngine    *intelligence.Engine
+	stateMachine   *intelligence.StateMachine
+	readBudget     int
+	readCount      int
+	sessionID      string
 }
 
 func NewCognitionLoop(p Provider, maxSteps int, cfg *config.Config) *CognitionLoop {
@@ -114,17 +122,20 @@ If the task is complete and NO tools are needed:
 
 ## EXECUTION RULES
 
-1. MINIMIZE OPERATIONS
-   - Do not call tools unless required
-   - Avoid redundant reads or repeated actions
+1. ANALYZE FIRST
+   - Use "analyze_project" as your FIRST tool call for any coding task
+   - It returns framework, entrypoints, components, CSS, and routing info
+   - This REPLACES 20+ individual search_files calls
 
-2. NO BULK SCANS
-   - NEVER scan entire directories blindly
-   - ALWAYS prefer "search_files" before accessing files
+2. MINIMIZE SEARCHES
+   - Use "resolve_symbol" to find component/function locations (not search_files)
+   - Use "get_imports" to understand file dependencies
+   - Only use search_files for unknown text patterns
 
 3. TARGETED FILE ACCESS
-   - Use "read_file_chunked" instead of full reads
+   - Use "read_file" with offset/limit instead of full reads
    - Only access relevant sections
+   - Prefer working set over random searching
 
 4. CONTROLLED SHELL USAGE
    - "exec" is a fallback tool, not primary
@@ -144,7 +155,7 @@ If the task is complete and NO tools are needed:
    - Documentation tasks: Context7 (resolve-library-id → query-docs) → Exa → fetch_url
    - Latest news/search: Exa → fetch_url (GitHub API, direct URLs)
    - Known URLs: fetch_url only
-   - Local files: read_file → search_files → exec
+   - Local files: analyze_project → resolve_symbol → read_file → search_files
    - Shell commands: exec
    - MCP servers MUST be called via: mcp_call({"server": "context7", "tool": "resolve-library-id", ...})
    - NEVER call MCP tool names as direct tools (web_search_exa, query-docs, etc. are NOT standalone)
@@ -153,19 +164,25 @@ If the task is complete and NO tools are needed:
    - If an MCP tool returns validation error, retry ONCE with corrected args. Then fall back.
    - If Exa returns "authorization required", immediately fall back to fetch_url. Do NOT retry Exa.
 
-8. INTERACTIVE COMMANDS
+8. READ BUDGET
+   - You have a limited number of reads per task
+   - The working set provides pre-cached context — use it
+   - Only read files you will actually edit
+   - Do NOT browse or explore files unnecessarily
+
+9. INTERACTIVE COMMANDS
    - NEVER run commands that require user input (stdin prompts).
    - Add --yes, -y, --no-prompt, or non-interactive flags.
    - Add "2>&1" to silence prompts. Pipe "yes |" or "</dev/null" if needed.
    - If a tool requests input, ABORT and report the error.
 
-9. BOUNDED REASONING
+10. BOUNDED REASONING
    - If a read_file or search_files returns an error 3 times in a row, STOP and report the limitation.
    - Do NOT retry the same failing operation endlessly.
    - If permissions block a read 3 times, ask the user to adjust permissions.
    - Maximum 3 MCP retries per server per task.
 
-10. CLEAN SLATE
+11. CLEAN SLATE
    - Each conversation ISOLATED. Do NOT reference previous chat turns unless explicitly asked.
    - Start fresh with only the ACTIVE GOAL as context.
 
@@ -267,9 +284,13 @@ Stop immediately when the task is complete.
 func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, error) {
 	logger.Info("Agent", "🧠 Cognition Loop started")
 
+	cwd, _ := os.Getwd()
+	c.sessionID = fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("%s-%d", initialQuery, time.Now().UnixNano()))))[:16]
+
+	c.initIntelEngine(cwd)
+
 	personaText, activeToolNames, excludeCmds := c.loadPersonaConfig()
 
-	cwd, _ := os.Getwd()
 	homeDir, _ := os.UserHomeDir()
 	if homeDir == "" {
 		homeDir = "."
@@ -294,7 +315,6 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 
 	effectiveBasePrompt := baseSystemPrompt
 
-	// Inject Markdown Skills (System Instructions)
 	if entries, err := os.ReadDir(filepath.Join(homeDir, ".kendaliai", "skills")); err == nil {
 		mdSkills := "\nAVAILABLE SPECIALIZED SKILLS (Call the tool to load full guidelines):\n"
 		hasMd := false
@@ -305,7 +325,6 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 					skillName := e.Name()
 					skillDesc := "Expert guidelines and principles."
 					if len(parts) >= 3 {
-						// Extract name and description from frontmatter
 						for _, line := range strings.Split(parts[1], "\n") {
 							line = strings.TrimSpace(line)
 							if strings.HasPrefix(line, "name:") {
@@ -337,7 +356,31 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 	sysPrompt := strings.Replace(effectiveBasePrompt, "{tool_list_repr}", repStr, 1)
 	sysPrompt = strings.Replace(sysPrompt, "{persona_text}", personaText, 1)
 
-	// Inject structural workspace context dynamically (INTERNAL PRE-READ)
+	workingSetContext := ""
+	if c.intelEngine != nil && c.intelEngine.IsIndexed() {
+		c.intelEngine.CheckAndInvalidateStaleCaches()
+
+		ws := c.intelEngine.BuildWorkingSet(c.sessionID, initialQuery)
+		c.stateMachine.WorkingSet = ws
+
+		if dag, toolSeq, found := c.intelEngine.LookupPlan(initialQuery); found {
+			logger.Info("Agent", fmt.Sprintf("📋 Plan cache hit: %d tool steps", len(strings.Split(toolSeq, ","))))
+			effectiveBasePrompt += fmt.Sprintf("\n\nCACHED EXECUTION STRATEGY:\n%s\n\nSuggested tools: %s\nReuse this plan if it still applies.\n", dag, toolSeq)
+		}
+
+		if len(ws.Files) > 0 {
+			contents := c.intelEngine.GetFileContents(ws.Files)
+			workingSetContext = c.intelEngine.FormatWorkingSetForPrompt()
+
+			fileCtx := c.intelEngine.FormatFilesForContext(ws.Files, contents)
+			compiledCtx := c.intelEngine.CompileContext(initialQuery, ws, contents)
+			c.appendIntelContext(&effectiveBasePrompt, workingSetContext, fileCtx, c.intelEngine.AnalyzeProject())
+			effectiveBasePrompt += "\n\nCOMPILED CONTEXT:\n" + compiledCtx
+		}
+		c.stateMachine.Transition(intelligence.PhaseBuildWorkingSet)
+		c.stateMachine.Transition(intelligence.PhasePlan)
+	}
+
 	extContext := ""
 	for _, fn := range []string{"README.md", "Kendali.md", "Agent.md"} {
 		if content, err := os.ReadFile(filepath.Join(cwd, fn)); err == nil {
@@ -349,10 +392,10 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 		}
 	}
 
-	if extContext != "" {
+	if extContext != "" && workingSetContext == "" {
 		sysPrompt += "\nWORKSPACE CONTEXT AUTO-LOADED (Internal Read):\n" + extContext
-	} else {
-		sysPrompt += "\nWORKSPACE CONTEXT AUTO-LOADED: None found natively. You must manually utilize 'list_files' or 'search_files' to map context if needed."
+	} else if workingSetContext == "" {
+		sysPrompt += "\nWORKSPACE CONTEXT AUTO-LOADED: None found natively. Use analyze_project FIRST to map the codebase."
 	}
 
 	if c.Config != nil && len(c.Config.MCPServers) > 0 {
@@ -368,6 +411,12 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 			}
 		}
 		sysPrompt += mcpDesc
+	}
+
+	sessionHash := c.computeSessionHash(sysPrompt, initialQuery, workingSetContext)
+	if cached := c.checkSemanticCache(sessionHash); cached != "" {
+		logger.Info("Agent", "⚡ Semantic cache hit, returning cached response")
+		return cached, nil
 	}
 
 	messages := []Message{{Role: "system", Content: sysPrompt}}
@@ -401,14 +450,27 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 		}
 	}
 
+	phasePrompt := ""
+	if c.stateMachine != nil {
+		phasePrompt = c.stateMachine.PhasePrompt()
+		if phasePrompt != "" {
+			messages = append(messages, Message{Role: "system", Content: phasePrompt})
+		}
+	}
+
 	messages = append(messages, Message{Role: "user", Content: initialQuery})
 
 	engine := NewExecutionEngine(5, reg)
 
 	totalInput := 0
 	totalOutput := 0
+	var toolSequence []string
 
 	for i := 0; i < c.MaxSteps; i++ {
+		if c.readCount > 0 && c.readCount%5 == 0 && c.stateMachine != nil {
+			messages = append(messages, Message{Role: "system", Content: fmt.Sprintf("READ BUDGET: %d/%d reads used. Prefer working set cache when possible.", c.readCount, c.readBudget)})
+		}
+
 		messages = OptimizeContext(messages, 20000)
 
 		response, err := c.Provider.ChatCompletion(ctx, messages)
@@ -438,11 +500,18 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 		if len(reqs) == 0 {
 			logger.Info("Agent", "✅ Cognition Loop completed")
 			c.autoStore(ctx, initialQuery, response.Content)
+			c.storeSemanticCache(sessionHash, sysPrompt, response.Content, toolSequence)
+			c.storePlanAndExecution(initialQuery, response.Content, toolSequence)
 			return response.Content, nil
 		}
 
+		c.enforceReadBudget(ctx, reqs, messages, goal)
+
 		var validReqs []ToolRequest
 		for _, req := range reqs {
+			c.recordToolRead(req)
+			toolSequence = append(toolSequence, req.Name)
+
 			cat := "Ran"
 			if t, ok := reg[req.Name]; ok {
 				cat = t.Category
@@ -467,18 +536,148 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 
 		results := engine.ExecuteParallel(ctx, validReqs)
 
-			// State Sync / Re-feed
 		for _, res := range results {
 			truncResult := res.Output
 			if len(truncResult) > 200 {
 				truncResult = truncResult[:200] + "...(truncated)"
 			}
 			logger.Info("Agent", fmt.Sprintf("📦 Tool result [%s]: %s", res.Name, strings.ReplaceAll(truncResult, "\n", " ")))
-			feedback := fmt.Sprintf("tool_result(%s):\n%s\n\nReminder: %s", res.Name, res.Output, goal.Prompt())
+
+			reminder := goal.Prompt()
+			if c.stateMachine != nil {
+				reminder += "\n" + c.stateMachine.PhasePrompt()
+			}
+			feedback := fmt.Sprintf("tool_result(%s):\n%s\n\nReminder: %s", res.Name, res.Output, reminder)
 			messages = append(messages, Message{Role: "user", Content: feedback})
 		}
+
+		if c.stateMachine != nil && c.stateMachine.CurrentPhase() == intelligence.PhasePlan {
+			for _, req := range validReqs {
+				if req.Name == "apply_patch" || req.Name == "replace_range" {
+					c.stateMachine.Transition(intelligence.PhaseGenerateDiff)
+					c.stateMachine.Transition(intelligence.PhaseApplyPatch)
+					break
+				}
+			}
+		}
+
+		if c.stateMachine != nil && c.stateMachine.CurrentPhase() == intelligence.PhaseApplyPatch {
+			c.stateMachine.Transition(intelligence.PhaseVerifyBuild)
+		}
 	}
+
+	c.storeSemanticCache(sessionHash, sysPrompt, "I hit my maximum reasoning steps limits.", toolSequence)
 	return "I hit my maximum reasoning steps limits.", nil
+}
+
+func (c *CognitionLoop) initIntelEngine(cwd string) {
+	c.readBudget = 10
+	c.readCount = 0
+	c.stateMachine = intelligence.NewStateMachine(c.readBudget)
+
+	engine, err := intelligence.NewEngine(cwd)
+	if err != nil {
+		logger.Info("Agent", fmt.Sprintf("⚠️ Intelligence engine init skipped: %v", err))
+		return
+	}
+	c.intelEngine = engine
+
+	if !engine.IsIndexed() {
+		logger.Info("Agent", "📊 Indexing repository (first run)...")
+		go func() {
+			symbols, imports := engine.AnalyzeFull()
+			logger.Info("Agent", fmt.Sprintf("📊 Repository indexed: %d symbols, %d imports", len(symbols), len(imports)))
+
+			files := engine.AnalyzeProject().Entrypoints
+			if len(files) > 0 {
+				engine.CacheFiles(files)
+			}
+		}()
+	}
+
+	c.stateMachine.Transition(intelligence.PhaseAnalyzeProject)
+}
+
+func (c *CognitionLoop) appendIntelContext(basePrompt *string, wsContext, fileContext string, info *intelligence.ProjectInfo) {
+	*basePrompt += "\n## REPOSITORY INTELLIGENCE (pre-indexed)\n"
+	*basePrompt += fmt.Sprintf("Framework: %s | Language: %s | CSS: %s | Build: %s\n",
+		info.Framework, info.Language, info.CSS, info.BuildTool)
+	if len(info.Entrypoints) > 0 {
+		*basePrompt += fmt.Sprintf("Entrypoints: %s\n", strings.Join(info.Entrypoints, ", "))
+	}
+	*basePrompt += fmt.Sprintf("\n%s\n", wsContext)
+	if fileContext != "" {
+		*basePrompt += fileContext
+	}
+}
+
+func (c *CognitionLoop) enforceReadBudget(ctx context.Context, reqs []ToolRequest, messages []Message, goal *ActiveGoal) {
+	for _, req := range reqs {
+		if req.Name == "read_file" || req.Name == "search_files" {
+			canRead, msg := c.stateMachine.CanRead()
+			if !canRead {
+				logger.Info("Agent", fmt.Sprintf("📊 Read budget exhausted: %s", msg))
+			}
+		}
+	}
+}
+
+func (c *CognitionLoop) recordToolRead(req ToolRequest) {
+	if req.Name == "read_file" || req.Name == "search_files" {
+		path, _ := req.Args["path"].(string)
+		if path == "" {
+			path, _ = req.Args["query"].(string)
+		}
+		c.readCount++
+		c.stateMachine.RecordRead(path)
+	}
+}
+
+func (c *CognitionLoop) computeSessionHash(sysPrompt, query, wsContext string) string {
+	h := sha256.New()
+	h.Write([]byte(sysPrompt))
+	h.Write([]byte(query))
+	h.Write([]byte(wsContext))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func (c *CognitionLoop) checkSemanticCache(hash string) string {
+	if c.intelEngine == nil {
+		return ""
+	}
+	entry := c.intelEngine.GetSemanticCache().Lookup(hash)
+	if entry != nil {
+		return entry.Response
+	}
+	return ""
+}
+
+func (c *CognitionLoop) storeSemanticCache(hash, prompt, response string, toolSequence []string) {
+	if c.intelEngine == nil || len(toolSequence) == 0 {
+		return
+	}
+	sc := c.intelEngine.GetSemanticCache()
+	if sc != nil {
+		sc.Store(hash, prompt, response, toolSequence)
+	}
+}
+
+func (c *CognitionLoop) storePlanAndExecution(goal, response string, toolSequence []string) {
+	if c.intelEngine == nil {
+		return
+	}
+	dag := strings.Join(toolSequence, " → ")
+	c.intelEngine.StorePlan(goal, dag, strings.Join(toolSequence, ","), response)
+
+	execEntry := &intelligence.ExecutionCacheEntry{
+		SessionID:   c.sessionID,
+		Goal:        goal,
+		Phases:      c.stateMachine.CurrentPhase().String(),
+		ToolTrace:   strings.Join(toolSequence, ","),
+		FilesEdited: strings.Join(c.stateMachine.FilesReadSlice(), ","),
+		Success:     true,
+	}
+	c.intelEngine.StoreExecution(execEntry)
 }
 
 func (c *CognitionLoop) loadPersonaConfig() (string, []string, []string) {
@@ -491,7 +690,8 @@ func (c *CognitionLoop) loadPersonaConfig() (string, []string, []string) {
 			"create_skill", "list_skills", "delete_skill", "update_skill",
 			"remember_timeline",
 			"git_status", "git_diff", "git_apply_patch",
-			"run_tests", "validate_syntax", "fetch_url"}, nil
+			"run_tests", "validate_syntax", "fetch_url",
+			"analyze_project", "resolve_symbol", "get_imports", "verify_build"}, nil
 	}
 
 	personaTxt := string(content)
@@ -501,6 +701,7 @@ func (c *CognitionLoop) loadPersonaConfig() (string, []string, []string) {
 		"upload_object", "download_object", "list_objects", "delete_object",
 		"git_status", "git_diff", "git_apply_patch",
 		"run_tests", "validate_syntax", "fetch_url",
+		"analyze_project", "resolve_symbol", "get_imports", "verify_build",
 	}
 	excludes := []string{}
 
