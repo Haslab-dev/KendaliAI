@@ -93,6 +93,12 @@ func extractGoSymbols(absPath, rootPath string) []SymbolEntry {
 	lines := strings.Split(string(data), "\n")
 	for i, line := range lines {
 		line = strings.TrimSpace(line)
+		if matches := goMethodRE.FindStringSubmatch(line); matches != nil {
+			symbols = append(symbols, SymbolEntry{
+				Name: matches[3], Kind: "method", File: rel, Line: i + 1, Parent: matches[2], Exported: isExported(matches[3]),
+			})
+			continue
+		}
 		if matches := goFuncRE.FindStringSubmatch(line); matches != nil {
 			exported := isExported(matches[1])
 			symbols = append(symbols, SymbolEntry{

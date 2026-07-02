@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 var projectPatterns = map[string]ProjectPattern{
@@ -120,9 +121,9 @@ var projectPatterns = map[string]ProjectPattern{
 		DefaultCSS:      "",
 	},
 	"Django": {
-		ConfigMatchers:  []string{"manage.py", "requirements.txt"},
+		ConfigMatchers:  []string{"manage.py"},
 		RootMatchers:    []string{"*/settings.py", "*/urls.py", "*/wsgi.py"},
-		PackageDep:      "",
+		PackageDep:      "django",
 		Language:        "Python",
 		DefaultEntry:    []string{"manage.py", "requirements.txt", "settings.py", "urls.py"},
 		DefaultCSS:      "",
@@ -186,9 +187,15 @@ func DetectProject(rootPath string) *ProjectInfo {
 }
 
 func matchPattern(rootPath string, pkg map[string]interface{}, name string, pattern ProjectPattern) bool {
-	if pattern.PackageDep != "" && pkg != nil {
-		if !hasDependency(pkg, pattern.PackageDep) && !hasDevDependency(pkg, pattern.PackageDep) {
-			return false
+	if pattern.PackageDep != "" {
+		if pkg != nil {
+			if !hasDependency(pkg, pattern.PackageDep) && !hasDevDependency(pkg, pattern.PackageDep) {
+				return false
+			}
+		} else if isPythonFramework(name) {
+			if !hasPythonPackage(rootPath, pattern.PackageDep) {
+				return false
+			}
 		}
 	}
 	for _, m := range pattern.ConfigMatchers {
@@ -232,6 +239,28 @@ func hasDevDependency(pkg map[string]interface{}, name string) bool {
 	if deps, ok := pkg["devDependencies"].(map[string]interface{}); ok {
 		_, exists := deps[name]
 		return exists
+	}
+	return false
+}
+
+var pythonFrameworks = map[string]bool{"Django": true, "FastAPI": true}
+
+func isPythonFramework(name string) bool {
+	return pythonFrameworks[name]
+}
+
+func hasPythonPackage(rootPath, name string) bool {
+	paths := []string{"requirements.txt", "requirements-dev.txt", "pyproject.toml"}
+	for _, p := range paths {
+		abs := filepath.Join(rootPath, p)
+		data, err := os.ReadFile(abs)
+		if err != nil {
+			continue
+		}
+		content := strings.ToLower(string(data))
+		if strings.Contains(content, strings.ToLower(name)) {
+			return true
+		}
 	}
 	return false
 }

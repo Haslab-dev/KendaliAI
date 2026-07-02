@@ -193,8 +193,12 @@ func (wsb *WorkingSetBuilder) getGeneralWorkingSet(query string) []string {
 
 func classifyIntent(query string) string {
 	lower := strings.ToLower(query)
+
+	uiVerbs := strings.Contains(lower, "create") || strings.Contains(lower, "add") || strings.Contains(lower, "make") || strings.Contains(lower, "build")
+	uiTargets := strings.Contains(lower, "page") || strings.Contains(lower, "component") || strings.Contains(lower, "landing") || strings.Contains(lower, "section") || strings.Contains(lower, "hero") || strings.Contains(lower, "navbar") || strings.Contains(lower, "footer") || strings.Contains(lower, "pricing") || strings.Contains(lower, "header") || strings.Contains(lower, "nav") || strings.Contains(lower, "button") || strings.Contains(lower, "card") || strings.Contains(lower, "form") || strings.Contains(lower, "modal") || strings.Contains(lower, "sidebar") || strings.Contains(lower, "layout") || strings.Contains(lower, "dashboard")
+
 	switch {
-	case strings.Contains(lower, "create") && (strings.Contains(lower, "page") || strings.Contains(lower, "component") || strings.Contains(lower, "landing") || strings.Contains(lower, "section") || strings.Contains(lower, "hero") || strings.Contains(lower, "navbar") || strings.Contains(lower, "footer") || strings.Contains(lower, "pricing") || strings.Contains(lower, "header")):
+	case uiVerbs && uiTargets:
 		return "ui_generation"
 	case strings.Contains(lower, "edit") || strings.Contains(lower, "fix") || strings.Contains(lower, "update") || strings.Contains(lower, "change") || strings.Contains(lower, "modify") || strings.Contains(lower, "refactor"):
 		return "code_edit"
