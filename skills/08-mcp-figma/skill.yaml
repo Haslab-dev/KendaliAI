@@ -1,0 +1,33 @@
+{
+  "id": "mcp-figma",
+  "name": "MCP Figma",
+  "displayName": "Figma via MCP",
+  "version": "1.0.0",
+  "description": "Wraps Figma MCP server to enable AI-assisted Figma design workflows.",
+  "author": "KendaliAI",
+  "license": "MIT",
+  "category": "example",
+  "keywords": ["figma", "design", "mcp", "ui", "prototype"],
+  "routing": {
+    "keywords": ["figma", "design", "ui", "mockup", "prototype", "component"],
+    "threshold": 0.65
+  },
+  "tools": {
+    "allowed": ["read_file", "write_file"],
+    "denied": ["exec"]
+  },
+  "mcp": {
+    "servers": ["figma"]
+  },
+  "memory": {
+    "enabled": true
+  },
+  "examples": {
+    "enabled": true
+  },
+  "lifecycle": {
+    "onInstall": "build_embeddings",
+    "onDelete": "remove_embeddings"
+  },
+  "prompt": "prompt.md"
+}

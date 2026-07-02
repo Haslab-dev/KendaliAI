@@ -1,0 +1,48 @@
+id: python-project
+name: Python Project
+displayName: Python Project Setup
+version: 1.0.0
+description: Demonstrates KSP lifecycle hooks for Python project initialization and cleanup.
+author: KendaliAI
+license: MIT
+category: example
+keywords:
+  - python
+  - hooks
+  - lifecycle
+  - setup
+routing:
+  keywords:
+    - python
+    - project
+    - setup
+    - init
+    - virtualenv
+  threshold: 0.65
+tools:
+  allowed:
+    - exec
+    - read_file
+    - write_file
+  denied: []
+hooks:
+  install:
+    pre: hooks/pre_install.sh
+    post: hooks/post_install.sh
+  execution:
+    pre: hooks/pre_run.sh
+    post: hooks/post_run.sh
+memory:
+  enabled: false
+examples:
+  enabled: true
+lifecycle:
+  onInstall: build_embeddings
+  onDelete: remove_embeddings
+prompt: prompt.md
+dependencies:
+  packages:
+    apt:
+      - python3
+      - python3-pip
+      - python3-venv

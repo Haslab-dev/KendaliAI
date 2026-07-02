@@ -1,0 +1,30 @@
+{
+  "id": "landing-page",
+  "name": "Landing Page Generator",
+  "displayName": "Landing Page Generator",
+  "version": "1.0.0",
+  "description": "AI-powered landing page generator with component creation and visual testing.",
+  "author": "KendaliAI",
+  "license": "MIT",
+  "category": "example",
+  "keywords": ["landing", "page", "website", "html", "css", "generator"],
+  "routing": {
+    "keywords": ["landing", "page", "website", "create page", "build page", "landing page"],
+    "threshold": 0.6
+  },
+  "tools": {
+    "allowed": ["exec", "read_file", "write_file"],
+    "denied": []
+  },
+  "memory": {
+    "enabled": true
+  },
+  "examples": {
+    "enabled": true
+  },
+  "lifecycle": {
+    "onInstall": "build_embeddings",
+    "onDelete": "remove_embeddings"
+  },
+  "prompt": "prompt.md"
+}

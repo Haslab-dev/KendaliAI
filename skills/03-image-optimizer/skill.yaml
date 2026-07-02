@@ -1,0 +1,39 @@
+id: image-optimizer
+name: Image Optimizer
+displayName: Image Optimizer
+version: 1.0.0
+description: Demonstrates KSP tools with a shell script that optimizes images.
+author: KendaliAI
+license: MIT
+category: example
+keywords:
+  - image
+  - optimize
+  - compress
+  - tools
+routing:
+  keywords:
+    - image
+    - optimize
+    - compress
+    - png
+    - jpg
+    - webp
+    - resize
+  threshold: 0.65
+tools:
+  allowed:
+    - exec
+    - read_file
+  denied:
+    - write_file
+  defs:
+    optimize-image: tools/optimize.sh
+memory:
+  enabled: false
+examples:
+  enabled: true
+lifecycle:
+  onInstall: build_embeddings
+  onDelete: remove_embeddings
+prompt: prompt.md

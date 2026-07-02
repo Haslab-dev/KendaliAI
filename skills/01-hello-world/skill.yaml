@@ -1,0 +1,31 @@
+id: hello-world
+name: Hello World
+displayName: Hello World
+version: 1.0.0
+description: Smallest valid KSP skill. Demonstrates prompt-only capabilities.
+author: KendaliAI
+license: MIT
+category: example
+keywords:
+  - hello
+  - minimal
+  - starter
+routing:
+  keywords:
+    - hello
+    - greet
+    - hi
+    - welcome
+  threshold: 0.6
+tools:
+  allowed:
+    - read_file
+  denied: []
+memory:
+  enabled: false
+examples:
+  enabled: true
+lifecycle:
+  onInstall: build_embeddings
+  onDelete: remove_embeddings
+prompt: prompt.md
