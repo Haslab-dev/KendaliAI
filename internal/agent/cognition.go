@@ -503,6 +503,8 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 			return "", fmt.Errorf("provider err: %v", err)
 		}
 
+		response.Content = sanitizeModelOutput(response.Content)
+
 		totalInput += response.InputTokens
 		totalOutput += response.OutputTokens
 		if c.OnStats != nil {
@@ -749,6 +751,25 @@ func (c *CognitionLoop) storePlanAndExecution(goal, response string, toolSequenc
 		Success:     true,
 	}
 	c.intelEngine.StoreExecution(execEntry)
+}
+
+func sanitizeModelOutput(content string) string {
+	stripTags := []string{"ClaudeThought", "AlignedMCPAnalyze", "environment_details", "ClaudeAnswer"}
+	for _, tag := range stripTags {
+		content = strings.ReplaceAll(content, "<"+tag+">", "")
+		content = strings.ReplaceAll(content, "</"+tag+">", "")
+		content = strings.ReplaceAll(content, "<"+tag+"/>", "")
+	}
+	lines := strings.Split(content, "\n")
+	var cleaned []string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "<") && strings.HasSuffix(line, "/>") && !strings.HasPrefix(line, "tool:") {
+			continue
+		}
+		cleaned = append(cleaned, line)
+	}
+	return strings.Join(cleaned, "\n")
 }
 
 func (c *CognitionLoop) loadPersonaConfig() (string, []string, []string) {

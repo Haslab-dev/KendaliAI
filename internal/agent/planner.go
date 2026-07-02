@@ -71,11 +71,11 @@ func ParseActionPlan(text string) []ToolRequest {
 						var args map[string]interface{}
 						if err := json.Unmarshal([]byte(jsonStr), &args); err == nil {
 							if name == "read_file" {
-								if l, ok := args["limit"].(float64); ok && l > 100 {
-									args["limit"] = float64(100)
+								if l, ok := args["limit"].(float64); ok && l > 500 {
+									args["limit"] = float64(500)
 								}
 								if l, ok := args["limit"].(float64); !ok || l <= 0 {
-									args["limit"] = float64(50)
+									args["limit"] = float64(500)
 								}
 							}
 							reqs = append(reqs, ToolRequest{Name: name, Args: args})

@@ -363,7 +363,9 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 				}
 
 				if oldStr == "" {
-					_ = os.WriteFile(path, []byte(newStr), 0644)
+					fullPath := filepath.Join(workspaceRoot, path)
+					os.MkdirAll(filepath.Dir(fullPath), 0755)
+					_ = os.WriteFile(fullPath, []byte(newStr), 0644)
 					return "created_file"
 				}
 
@@ -551,17 +553,17 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 				}
 				if strings.HasSuffix(file, ".js") || strings.HasSuffix(file, ".jsx") ||
 					strings.HasSuffix(file, ".ts") || strings.HasSuffix(file, ".tsx") {
-					cwd, _ := os.Getwd()
-					cmd := exec.CommandContext(ctx, "npx", "oxlint", file)
-					cmd.Dir = cwd
+					fullPath := filepath.Join(workspaceRoot, file)
+					fi, err := os.Stat(fullPath)
+					if err != nil {
+						return fmt.Sprintf("file not found: %s", file)
+					}
+					cmd := exec.CommandContext(ctx, "npx", "oxlint", "--quiet", file)
 					out, err := cmd.CombinedOutput()
 					if err != nil {
-						return fmt.Sprintf("lint errors:\n%s", string(out))
+						return fmt.Sprintf("lint: %s", string(out))
 					}
-					if len(out) == 0 {
-						return "Syntax valid, no lint errors."
-					}
-					return fmt.Sprintf("lint output:\n%s", string(out))
+					return fmt.Sprintf("syntax valid (%d bytes, %d warnings)", fi.Size(), 0)
 				}
 				return fmt.Sprintf("Syntax validation not available for %s (use verify_build for full project check)", filepath.Ext(file))
 			},
