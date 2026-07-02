@@ -133,29 +133,43 @@ If the task is complete and NO tools are needed:
 
 ## EXECUTION RULES
 
-1. ANALYZE FIRST
-   - Use "analyze_project" as your FIRST tool call for any coding task
-   - It returns framework, entrypoints, components, CSS, and routing info
-   - This REPLACES 20+ individual search_files calls
+1. ANALYZE FIRST — ALWAYS
+   - For ANY coding task, your FIRST and ONLY first call MUST be:
+     tool: analyze_project({"path": "<subdirectory>"})
+   - If the task mentions "projects/sample-app", call analyze_project({"path":"projects/sample-app"})
+   - If no subdirectory is specified, call analyze_project({})
+   - This returns framework, entrypoints, components, CSS, routing — in ONE call
+   - You now know EXACTLY which files matter. No more guessing.
 
-2. MINIMIZE SEARCHES
-   - Use "resolve_symbol" to find component/function locations (not search_files)
-   - Use "get_imports" to understand file dependencies
-   - Only use search_files for unknown text patterns
+2. PINPOINT — read only target files, ONCE
+   - After analyze_project, you know every source file with exact paths
+   - Read ONLY the 1-3 files you plan to edit. Full file, one call each
+   - DO NOT crawl with offset/limit. Read offset=0, limit=500 to get the whole file
+   - DO NOT re-read files after writing them — use verify_build instead
+   - Copy-paste file paths EXACTLY from analyze_project's source_files
 
-3. TARGETED FILE ACCESS
-   - Use "read_file" with offset/limit instead of full reads
-   - Only access relevant sections
-   - Prefer working set over random searching
+3. NEVER WANDER
+   - DO NOT use exec("ls") or exec("find") to explore directories
+   - DO NOT use search_files to list files (use the entrypoints from analyze_project)
+   - DO NOT re-read the same file twice. Read it once, then edit it.
+   - DO NOT read files you don't plan to edit
+   - DO NOT call analyze_project more than once per request
 
-4. CONTROLLED SHELL USAGE
+4. SMART EDITS
+   - Use "write_file" to overwrite ENTIRE files (no old_str matching — much simpler)
+   - Use "apply_patch" ONLY for small targeted edits (< 10 lines of old_str)
+   - If apply_patch fails with "old_str not found": retry once with a smaller unique anchor (like "function App() {")
+   - NEVER use apply_patch with the entire file as old_str — it will fail due to whitespace differences
+   - After editing, call verify_build to check
+
+5. CONTROLLED SHELL USAGE
    - "exec" is a fallback tool, not primary
    - Avoid chaining shell commands unnecessarily
 
-5. GIT TOOL RESTRICTION
+6. GIT TOOL RESTRICTION
    - DO NOT use git tools unless explicitly requested
 
-6. GOAL PRESERVATION (CRITICAL)
+7. GOAL PRESERVATION (CRITICAL)
    - Your ACTIVE GOAL is injected at the start. NEVER deviate from it.
    - Do NOT install unrelated packages, libraries, or tools.
    - Do NOT explore tangents, start new topics, or research unrelated things.
@@ -650,11 +664,13 @@ func (c *CognitionLoop) appendIntelContext(basePrompt *string, wsContext, fileCo
 func (c *CognitionLoop) enforceReadBudget(ctx context.Context, reqs []ToolRequest, messages *[]Message, goal *ActiveGoal) []ToolRequest {
 	var allowed []ToolRequest
 	var blocked []string
+	pending := 0
 
 	for _, req := range reqs {
 		if req.Name == "read_file" || req.Name == "search_files" {
 			canRead, msg := c.stateMachine.CanRead()
-			if !canRead {
+			effective := c.stateMachine.ReadCount + pending
+			if !canRead || effective >= c.stateMachine.MaxReads {
 				path, _ := req.Args["path"].(string)
 				if path == "" {
 					path, _ = req.Args["query"].(string)
@@ -663,6 +679,7 @@ func (c *CognitionLoop) enforceReadBudget(ctx context.Context, reqs []ToolReques
 				logger.Info("Agent", fmt.Sprintf("📊 Read budget exhausted blocking %s: %s", req.Name, msg))
 				continue
 			}
+			pending++
 		}
 		allowed = append(allowed, req)
 	}
@@ -739,7 +756,7 @@ func (c *CognitionLoop) loadPersonaConfig() (string, []string, []string) {
 	content, err := os.ReadFile(homeDir + "/.kendaliai/Persona.md")
 	if err != nil {
 		return "", []string{"exec", "read_file", "list_files", "search_files",
-			"apply_patch", "replace_range",
+			"apply_patch", "replace_range", "write_file",
 			"upload_object", "download_object", "list_objects", "delete_object",
 			"create_skill", "list_skills", "delete_skill", "update_skill",
 			"remember_timeline",
@@ -751,7 +768,7 @@ func (c *CognitionLoop) loadPersonaConfig() (string, []string, []string) {
 	personaTxt := string(content)
 	tools := []string{
 		"exec", "read_file", "list_files", "search_files",
-		"apply_patch", "replace_range",
+		"apply_patch", "replace_range", "write_file",
 		"upload_object", "download_object", "list_objects", "delete_object",
 		"git_status", "git_diff", "git_apply_patch",
 		"run_tests", "validate_syntax", "fetch_url",

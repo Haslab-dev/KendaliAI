@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -130,6 +131,7 @@ func (e *Engine) FormatAnalysisJSON() string {
 		CSS         string   `json:"css"`
 		Routing     string   `json:"routing"`
 		Entrypoints []string `json:"entrypoints"`
+		SourceFiles []string `json:"source_files"`
 		Components  []string `json:"components,omitempty"`
 	}
 
@@ -139,7 +141,8 @@ func (e *Engine) FormatAnalysisJSON() string {
 		BuildTool:   e.info.BuildTool,
 		CSS:         e.info.CSS,
 		Routing:     e.info.Routing,
-		Entrypoints: e.info.Entrypoints,
+		Entrypoints: relativizePaths(e.root, e.info.Entrypoints),
+		SourceFiles: scanSourceFiles(e.root),
 	}
 
 	var components []string
@@ -352,4 +355,50 @@ func truncate(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + "\n...(truncated)"
+}
+
+func relativizePaths(root string, paths []string) []string {
+	var result []string
+	for _, p := range paths {
+		rel, err := filepath.Rel(root, p)
+		if err == nil {
+			result = append(result, rel)
+		} else {
+			result = append(result, p)
+		}
+	}
+	return result
+}
+
+func scanSourceFiles(root string) []string {
+	var files []string
+	exts := map[string]bool{
+		".tsx": true, ".jsx": true, ".ts": true, ".js": true,
+		".css": true, ".html": true, ".vue": true,
+	}
+
+	filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if info.IsDir() {
+			name := info.Name()
+			if name == "node_modules" || name == ".git" || name == "dist" ||
+				name == "build" || name == ".next" || name == "assets" ||
+				strings.HasPrefix(name, ".") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		ext := filepath.Ext(info.Name())
+		if exts[ext] && !strings.Contains(path, "node_modules") {
+			rel, err := filepath.Rel(root, path)
+			if err == nil {
+				files = append(files, rel)
+			}
+		}
+		return nil
+	})
+
+	return files
 }

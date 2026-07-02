@@ -62,7 +62,7 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 		// 📁 FILESYSTEM
 		"read_file": {
 			Name:        "read_file",
-			Description: "Gets the chunked partial content of a file. Use offset and limit. E.g. offset:0 limit:50, then offset:50 limit:50.",
+			Description: "Reads a file. Use offset:0 to get the complete file (default 500 lines). Read each file ONCE. Shows total line count so you know if more reads are needed.",
 			Signature:   `{"path": "string", "offset": "int", "limit": "int"}`,
 			Category:    "Explore",
 			Execute: func(ctx context.Context, args map[string]interface{}) string {
@@ -81,7 +81,7 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 				lines := strings.Split(string(b), "\n")
 
 				offset := 0
-				limit := 50
+				limit := 500
 
 				if o, ok := args["offset"].(float64); ok && o >= 0 {
 					offset = int(o)
@@ -90,13 +90,8 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 					limit = int(l)
 				}
 
-				if limit > 100 {
-					limit = 100
-				}
-
-				quarter := len(lines) / 4
-				if quarter >= 25 && limit > quarter {
-					limit = quarter
+				if limit > 500 {
+					limit = 500
 				}
 
 				if offset >= len(lines) {
@@ -107,7 +102,15 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 					end = len(lines)
 				}
 
-				return strings.Join(lines[offset:end], "\n")
+				content := strings.Join(lines[offset:end], "\n")
+
+				if offset+limit < len(lines) {
+					content += fmt.Sprintf("\n\n[Showing lines %d-%d of %d total. Read offset:%d for next chunk.]", offset+1, end, len(lines), end)
+				} else if len(lines) > 10 {
+					content += fmt.Sprintf("\n\n[All %d lines shown.]", len(lines))
+				}
+
+				return content
 			},
 		},
 		"search_files": {
@@ -147,18 +150,30 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 		// 🧠 REPOSITORY INTELLIGENCE
 		"analyze_project": {
 			Name:        "analyze_project",
-			Description: "Analyzes the current project: detects framework, entrypoints, CSS system, routing, and existing components. Use this FIRST before any coding task. Replaces 20+ individual search_files calls.",
-			Signature:   `{}`,
+			Description: "Analyzes a project directory: detects framework, entrypoints, CSS, routing, and components. Pass 'path' for a subdirectory. ALWAYS use this first — it replaces 20+ exec/search_files/read_file calls.",
+			Signature:   `{"path": "string"}`,
 			Category:    "Intelligence",
 			Execute: func(ctx context.Context, args map[string]interface{}) string {
-				intelEngine, err := intelligence.NewEngine(workspaceRoot)
+				analysisRoot := workspaceRoot
+				if p, ok := args["path"].(string); ok && p != "" {
+					analysisRoot = filepath.Join(workspaceRoot, p)
+				}
+
+				intelEngine, err := intelligence.NewEngine(analysisRoot)
 				if err != nil {
 					return fmt.Sprintf("error: %v", err)
 				}
 				defer intelEngine.Close()
 
 				intelEngine.AnalyzeFull()
-				return intelEngine.FormatAnalysisJSON()
+				result := intelEngine.FormatAnalysisJSON()
+
+				subdirs := scanSubdirs(workspaceRoot)
+				if len(subdirs) > 0 && args["path"] == nil {
+					result = result[:len(result)-1] + fmt.Sprintf(`, "available_subdirs": %s}`, subdirs)
+				}
+
+				return result
 			},
 		},
 		"resolve_symbol": {
@@ -297,10 +312,39 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 		},
 
 		// ✏️ EDITING
+		"write_file": {
+			Name:        "write_file",
+			Description: "Writes or overwrites an entire file with new content. Use this when creating new files or replacing ALL content in a file. Much simpler than apply_patch — no old_str matching needed. Use apply_patch for targeted edits within a file.",
+			Signature:   `{"path": "string", "content": "string"}`,
+			Category:    "Editing",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				path, _ := args["path"].(string)
+				content, _ := args["content"].(string)
+				if path == "" {
+					return "error: 'path' is required"
+				}
+				if content == "" {
+					return "error: 'content' is required"
+				}
+				fullPath := filepath.Join(workspaceRoot, path)
+				if err := CheckFilePermission(fullPath, workspaceRoot, "write"); err != nil {
+					return fmt.Sprintf("Sorry, not allowed: %v", err)
+				}
+				dir := filepath.Dir(fullPath)
+				if err := os.MkdirAll(dir, 0755); err != nil {
+					return fmt.Sprintf("error creating directory: %v", err)
+				}
+				if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
+					return fmt.Sprintf("error writing file: %v", err)
+				}
+				return fmt.Sprintf("file written: %s (%d bytes)", path, len(content))
+			},
+		},
 		"apply_patch": {
 			Name:        "apply_patch",
-			Description: "Replaces exact target block with new block. When old_str is empty, creates a NEW file with new_str content.",
+			Description: "Replaces exact target block with new block. old_str must match exactly (copy-paste from read_file output). When old_str is empty, creates a NEW file with new_str content. For full file replacements, prefer write_file.",
 			Signature:   `{"path": "string", "old_str": "string", "new_str": "string"}`,
+			Category:    "Editing",
 			Execute: func(ctx context.Context, args map[string]interface{}) string {
 				path, _ := args["path"].(string)
 				if err := ValidateSandboxedPath(path, workspaceRoot); err != nil {
@@ -490,7 +534,7 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 		},
 		"validate_syntax": {
 			Name:        "validate_syntax",
-			Description: "Validates syntax via compilation natively without altering state.",
+			Description: "Validates syntax of a file. For .go: go build. For .js/.jsx/.ts/.tsx: runs the project's lint command if available.",
 			Signature:   `{"file": "string"}`,
 			Execute: func(ctx context.Context, args map[string]interface{}) string {
 				file, _ := args["file"].(string)
@@ -498,14 +542,28 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 					return err.Error()
 				}
 				if strings.HasSuffix(file, ".go") {
-					cmd := exec.CommandContext(ctx, "go", "build", "-o", "/dev/null", file)
+					cmd := exec.CommandContext(ctx, "go", "build", "-o", os.DevNull, file)
 					out, err := cmd.CombinedOutput()
 					if err != nil {
 						return string(out)
 					}
 					return "Syntax valid."
 				}
-				return "Unsupported syntax validation format natively."
+				if strings.HasSuffix(file, ".js") || strings.HasSuffix(file, ".jsx") ||
+					strings.HasSuffix(file, ".ts") || strings.HasSuffix(file, ".tsx") {
+					cwd, _ := os.Getwd()
+					cmd := exec.CommandContext(ctx, "npx", "oxlint", file)
+					cmd.Dir = cwd
+					out, err := cmd.CombinedOutput()
+					if err != nil {
+						return fmt.Sprintf("lint errors:\n%s", string(out))
+					}
+					if len(out) == 0 {
+						return "Syntax valid, no lint errors."
+					}
+					return fmt.Sprintf("lint output:\n%s", string(out))
+				}
+				return fmt.Sprintf("Syntax validation not available for %s (use verify_build for full project check)", filepath.Ext(file))
 			},
 		},
 
@@ -1275,4 +1333,29 @@ func registerSkillJSON(id, name, description string) {
 	})
 	b, _ := json.MarshalIndent(registry, "", "  ")
 	os.WriteFile(path, b, 0644)
+}
+
+func scanSubdirs(root string) string {
+	dirs := []string{"projects", "apps", "services", "packages"}
+	var results []string
+	for _, d := range dirs {
+		full := filepath.Join(root, d)
+		entries, err := os.ReadDir(full)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
+				subPath := filepath.Join(d, e.Name())
+				info := intelligence.DetectProject(filepath.Join(root, subPath))
+				if info != nil && info.Framework != "Unknown" {
+					results = append(results, fmt.Sprintf(`"%s": "%s"`, subPath, info.Framework))
+				} else {
+					results = append(results, fmt.Sprintf(`"%s": "unknown"`, subPath))
+				}
+			}
+		}
+	}
+	b, _ := json.Marshal(results)
+	return string(b)
 }

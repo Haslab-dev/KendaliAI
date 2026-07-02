@@ -67,66 +67,64 @@ func (r *Router) Match(ctx context.Context, message string) (*SkillSpec, float64
 
 func (r *Router) keywordScore(message string, spec SkillSpec) float64 {
 	lower := strings.ToLower(message)
-	lower = strings.ReplaceAll(lower, ",", " ")
-	lower = strings.ReplaceAll(lower, ".", " ")
-	specID := strings.ToLower(spec.ID)
 	specName := strings.ToLower(spec.Name)
 	specNameClean := strings.ReplaceAll(specName, "-", " ")
-	specIDClean := strings.ReplaceAll(specID, "-", " ")
+	specIDClean := strings.ReplaceAll(strings.ToLower(spec.ID), "-", " ")
 
-	if strings.Contains(lower, strings.ReplaceAll("gunakan skill "+specName, "-", " ")) ||
-		strings.Contains(lower, strings.ReplaceAll("gunakan skill "+specID, "-", " ")) ||
-		strings.Contains(lower, strings.ReplaceAll("use skill "+specName, "-", " ")) ||
-		strings.Contains(lower, strings.ReplaceAll("use skill "+specID, "-", " ")) {
+	if containsPhrase(lower, "gunakan skill "+specName) ||
+		containsPhrase(lower, "gunakan skill "+specIDClean) ||
+		containsPhrase(lower, "use skill "+specName) ||
+		containsPhrase(lower, "use skill "+specIDClean) {
 		return 0.95
 	}
 
-	if strings.Contains(lower, specNameClean) || strings.Contains(lower, specIDClean) {
+	if containsPhrase(lower, specNameClean) || containsPhrase(lower, specIDClean) {
 		return 0.85
 	}
 
 	matches := 0
-	total := len(spec.Routing.Keywords)
+	effectiveTotal := 0
 
 	for _, kw := range spec.Routing.Keywords {
 		kw = strings.TrimSpace(strings.ToLower(kw))
 		kw = strings.Trim(kw, ".,;:()[]{}!@#$%^&*\"'")
-		if len(kw) < 2 {
+		if len(kw) < 3 {
 			continue
 		}
-		if strings.Contains(lower, kw) {
+		effectiveTotal++
+		if containsPhrase(lower, kw) {
 			matches++
 		}
 	}
 
-	effectiveTotal := total
 	if effectiveTotal == 0 {
-		return 0.15
-	}
-
-	if matches == 0 {
-		shortWords := 0
-		for _, kw := range spec.Routing.Keywords {
-			kw = strings.TrimSpace(strings.ToLower(kw))
-			kw = strings.Trim(kw, ".,;:()[]{}!@#$%^&*\"'")
-			if len(kw) >= 2 && strings.Contains(lower, kw) {
-				shortWords++
-			}
-		}
-		if shortWords > 0 {
-			return 0.35
-		}
-		return 0.0
+		return 0.05
 	}
 
 	score := float64(matches) / float64(effectiveTotal)
-	if score < 0.1 && matches >= 2 {
-		score = 0.3
-	}
 	if score > 0.95 {
 		score = 0.95
 	}
 	return score
+}
+
+func containsPhrase(text, phrase string) bool {
+	if phrase == "" {
+		return false
+	}
+	idx := strings.Index(text, phrase)
+	if idx < 0 {
+		return false
+	}
+	before := idx == 0 || isBoundary(text[idx-1])
+	after := idx+len(phrase) >= len(text) || isBoundary(text[idx+len(phrase)])
+	return before && after
+}
+
+func isBoundary(b byte) bool {
+	return b == ' ' || b == '\n' || b == '\t' || b == '.' || b == ',' ||
+		b == ';' || b == ':' || b == '!' || b == '?' || b == '/' ||
+		b == '(' || b == ')' || b == '[' || b == ']' || b == '{' || b == '}'
 }
 
 func (r *Router) embeddingScore(message string, spec SkillSpec) float64 {
