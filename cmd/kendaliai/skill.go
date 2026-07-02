@@ -398,13 +398,46 @@ var skillAddFlags struct {
 
 var skillExportFormat string
 
+var skillSuggestCmd = &cobra.Command{
+	Use:   "suggest-keywords <skill-name-or-description>",
+	Short: "Suggest keywords for a skill from real data sources (no hallucination)",
+	Run:   runSkillSuggest,
+}
+
 func init() {
 	skillAddCmd.Flags().StringVar(&skillAddFlags.SkillID, "skill", "", "Skill ID to import")
 	skillAddCmd.Flags().StringVar(&skillAddFlags.Version, "version", "", "Specific version to install")
 	skillUpdateCmd.Flags().BoolP("all", "a", false, "Update all installed skills")
 	skillExportCmd.Flags().StringVar(&skillExportFormat, "format", "ksp", "Export format: ksp, claude, hermes")
 
-	skillCmd.AddCommand(skillAddCmd, skillUpdateCmd, skillDoctorCmd, skillSearchCmd, skillInfoCmd, skillVerifyCmd, skillExportCmd)
+	skillCmd.AddCommand(skillAddCmd, skillUpdateCmd, skillDoctorCmd, skillSearchCmd, skillInfoCmd, skillVerifyCmd, skillExportCmd, skillSuggestCmd)
+}
+
+func runSkillSuggest(cmd *cobra.Command, args []string) {
+	homeDir, _ := os.UserHomeDir()
+	manager := skills.NewManager(filepath.Join(homeDir, ".kendaliai", "skills"))
+	gen := skills.NewGenerator(manager)
+
+	query := "skill"
+	if len(args) > 0 {
+		query = strings.Join(args, " ")
+	}
+
+	suggestions := gen.SuggestKeywords(skills.GenerateRequest{
+		Name: query,
+	})
+
+	if len(suggestions) == 0 {
+		fmt.Println("  No keyword suggestions found. Try a more specific skill name.")
+		return
+	}
+
+	fmt.Println()
+	fmt.Printf("  Suggested keywords for '%s' (from real data):\n\n", query)
+	for _, s := range suggestions {
+		fmt.Printf("    %-20s source: %s (score=%d)\n", s.Keyword, s.Source, s.Score)
+	}
+	fmt.Println()
 }
 
 func runSkillAdd(cmd *cobra.Command, args []string) {

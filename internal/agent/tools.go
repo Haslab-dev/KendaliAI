@@ -908,7 +908,7 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 		},
 		"install_skill": {
 			Name:        "install_skill",
-			Description: "Installs an external skill from a GitHub repository URL. Supports Anthropic Skills format, generic git repos, and direct skill directories. Example: tool: install_skill({\"url\": \"https://github.com/anthropics/skills\", \"skill_id\": \"docx\"})",
+			Description: "Installs an external skill from a GitHub URL. Auto-detects skill_id from URL path. For local skills use install_local. ALWAYS use this for URL-based installs — it clones + imports in one call.",
 			Signature:   `{"url": "string", "skill_id": "string"}`,
 			Category:    "Skill",
 			Execute: func(ctx context.Context, args map[string]interface{}) string {
@@ -919,6 +919,12 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 				skillID, _ := args["skill_id"].(string)
 				if url == "" {
 					return "error: 'url' is required (GitHub repo URL)"
+				}
+				if skillID == "" {
+					skillID = extractSkillIDFromURL(url)
+				}
+				if skillID == "" {
+					return "error: could not detect skill_id from URL, pass 'skill_id' explicitly"
 				}
 
 				importer := skills.NewImporter(skills.DefaultManager)
@@ -1388,4 +1394,29 @@ func scanSubdirs(root string) string {
 	}
 	b, _ := json.Marshal(results)
 	return string(b)
+}
+
+func extractSkillIDFromURL(url string) string {
+	url = strings.TrimSuffix(url, "/")
+	if idx := strings.Index(url, "/tree/"); idx >= 0 {
+		after := url[idx+len("/tree/"):]
+		slash := strings.Index(after, "/")
+		if slash >= 0 {
+			after = after[slash+1:]
+		}
+		parts := strings.Split(after, "/")
+		for i := len(parts) - 1; i >= 0; i-- {
+			if parts[i] != "" && parts[i] != "skills" && parts[i] != "main" {
+				return parts[i]
+			}
+		}
+	}
+	parts := strings.Split(url, "/")
+	for i := len(parts) - 1; i >= 0; i-- {
+		p := parts[i]
+		if p != "" && p != "skills" && p != "tree" && p != "main" && !strings.HasPrefix(p, "ref=") {
+			return p
+		}
+	}
+	return ""
 }

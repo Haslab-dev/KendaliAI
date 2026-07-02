@@ -111,13 +111,3 @@ func (e *Exporter) exportKSP(pkg *SkillPackage, outputPath string) (string, erro
 	copyDir(srcDir, dir)
 	return dir, nil
 }
-
-func copyMappedDirs(srcBase, dstBase string, mappings map[string]string) {
-	for srcSub, dstSub := range mappings {
-		srcDir := filepath.Join(srcBase, srcSub)
-		dstDir := filepath.Join(dstBase, dstSub)
-		if _, err := os.Stat(srcDir); err == nil {
-			copyDir(srcDir, dstDir)
-		}
-	}
-}

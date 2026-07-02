@@ -92,12 +92,17 @@ func (g *Generator) buildKeywords(req GenerateRequest) []string {
 		raw = append(raw, strings.Fields(req.Category)...)
 	}
 
-	domainWords := []string{"add", "update", "list", "done", "todo", "task", "progress", "status"}
-	raw = append(raw, domainWords...)
-
 	stopWords := map[string]bool{
-		"dan": true, "ini": true, "akan": true, "serta": true, "itu": true,
-		"yang": true, "dari": true, "untuk": true, "dengan": true, "pada": true,
+		"use": true, "this": true, "whenever": true, "user": true, "wants": true,
+		"the": true, "and": true, "or": true, "any": true, "with": true,
+		"for": true, "from": true, "that": true, "your": true, "you": true,
+		"can": true, "all": true, "has": true, "was": true, "are": true,
+		"not": true, "but": true, "it": true, "also": true, "do": true,
+		"if": true, "in": true, "as": true, "be": true, "is": true,
+		"a": true, "an": true, "to": true, "of": true, "on": true,
+		"by": true, "at": true, "dan": true, "ini": true, "akan": true,
+		"serta": true, "itu": true, "yang": true, "dari": true, "untuk": true,
+		"dengan": true, "pada": true,
 	}
 
 	seen := map[string]bool{}
@@ -167,4 +172,112 @@ func sanitizeID(name string) string {
 		return -1
 	}, id)
 	return strings.Trim(id, "-")
+}
+
+type KeywordSuggestion struct {
+	Keyword string `json:"keyword"`
+	Source  string `json:"source"`
+	Score   int    `json:"score"`
+}
+
+func (g *Generator) SuggestKeywords(req GenerateRequest) []KeywordSuggestion {
+	query := strings.ToLower(req.Name + " " + req.Description)
+	queryWords := strings.Fields(query)
+	seen := map[string]bool{}
+	for _, w := range queryWords {
+		w = strings.Trim(w, ".,;:()[]{}")
+		if len(w) > 2 {
+			seen[w] = true
+		}
+	}
+
+	var suggestions []KeywordSuggestion
+
+	specs, _ := g.manager.List()
+	for _, spec := range specs {
+		for _, kw := range spec.Routing.Keywords {
+			kw = strings.ToLower(kw)
+			if seen[kw] {
+				continue
+			}
+			score := keywordRelevance(kw, queryWords)
+			if score > 0 {
+				suggestions = append(suggestions, KeywordSuggestion{
+					Keyword: kw,
+					Source:  fmt.Sprintf("installed skill: %s", spec.Name),
+					Score:   score,
+				})
+			}
+		}
+	}
+
+	domainMaps := map[string][]string{
+		"react":      {"react", "jsx", "component", "hook", "state", "props", "vite", "tailwind", "css", "frontend", "ui", "jsx", "tsx", "spa"},
+		"python":     {"python", "django", "flask", "fastapi", "pip", "venv", "pytest", "async", "decorator", "typehint"},
+		"go":         {"go", "golang", "goroutine", "channel", "interface", "struct", "module", "package", "cgo", "defer"},
+		"database":   {"sql", "database", "postgres", "mysql", "sqlite", "mongodb", "query", "migration", "orm", "index"},
+		"devops":     {"docker", "kubernetes", "ci", "cd", "pipeline", "deploy", "infrastructure", "terraform", "ansible", "monitoring"},
+		"design":     {"design", "figma", "ui", "ux", "prototype", "wireframe", "mockup", "sketch", "color", "typography"},
+		"finance":    {"finance", "accounting", "budget", "expense", "income", "tax", "invoice", "ledger", "bookkeeping", "transaction"},
+		"project":    {"project", "task", "sprint", "milestone", "deadline", "kanban", "scrum", "agile", "backlog", "estimation"},
+		"document":   {"document", "pdf", "docx", "markdown", "report", "memo", "template", "letter", "format", "convert"},
+		"ai-ml":      {"ai", "ml", "machine", "learning", "model", "training", "inference", "neural", "embedding", "token"},
+	}
+
+	for _, domain := range domainMaps {
+		matchCount := 0
+		for _, dw := range domain {
+			if seen[dw] {
+				matchCount++
+			}
+		}
+		if matchCount > 0 {
+			for _, dw := range domain {
+				if !seen[dw] {
+					suggestions = append(suggestions, KeywordSuggestion{
+						Keyword: dw,
+						Source:  "domain knowledge",
+						Score:   matchCount * 2,
+					})
+				}
+			}
+		}
+	}
+
+	sortSuggestions(suggestions)
+	return deduplicateSuggestions(suggestions)
+}
+
+func keywordRelevance(kw string, queryWords []string) int {
+	for _, qw := range queryWords {
+		if strings.Contains(kw, qw) || strings.Contains(qw, kw) {
+			return 2
+		}
+	}
+	return 0
+}
+
+func sortSuggestions(s []KeywordSuggestion) {
+	for i := 0; i < len(s); i++ {
+		for j := i + 1; j < len(s); j++ {
+			if s[j].Score > s[i].Score {
+				s[i], s[j] = s[j], s[i]
+			}
+		}
+	}
+}
+
+func deduplicateSuggestions(s []KeywordSuggestion) []KeywordSuggestion {
+	seen := map[string]bool{}
+	var result []KeywordSuggestion
+	for _, sug := range s {
+		if !seen[sug.Keyword] {
+			seen[sug.Keyword] = true
+			if len(result) >= 20 {
+				break
+			}
+			result = append(result, sug)
+		}
+	}
+	return result
 }

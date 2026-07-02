@@ -1,34 +1,44 @@
-{
-  "id": "docx",
-  "name": "Docx Converter",
-  "displayName": "DOCX Converter",
-  "version": "1.0.0",
-  "description": "Converts between DOCX and other formats using python-docx and mammoth.",
-  "author": "KendaliAI",
-  "license": "MIT",
-  "category": "example",
-  "keywords": ["docx", "word", "convert", "document", "mammoth"],
-  "routing": {
-    "keywords": ["docx", "word", "convert", "document", "word to", "to word"],
-    "threshold": 0.65
-  },
-  "tools": {
-    "allowed": ["exec", "read_file", "write_file"],
-    "denied": []
-  },
-  "dependencies": {
-    "python": ["python-docx", "mammoth"],
-    "system": ["libreoffice"]
-  },
-  "memory": {
-    "enabled": false
-  },
-  "examples": {
-    "enabled": true
-  },
-  "lifecycle": {
-    "onInstall": "build_embeddings",
-    "onDelete": "remove_embeddings"
-  },
-  "prompt": "prompt.md"
-}
+id: docx
+name: DOCX Processor
+displayName: DOCX Processor
+version: 1.0.0
+description: Demonstrates KSP dependencies by requiring external tools for document processing.
+author: KendaliAI
+license: MIT
+category: example
+keywords:
+  - docx
+  - document
+  - word
+  - processing
+  - dependencies
+routing:
+  keywords:
+    - docx
+    - document
+    - word
+    - convert
+    - extract
+  threshold: 0.65
+tools:
+  allowed:
+    - exec
+    - read_file
+    - write_file
+  denied: []
+dependencies:
+  packages:
+    apt:
+      - libreoffice
+      - pandoc
+    brew:
+      - libreoffice
+      - pandoc
+memory:
+  enabled: false
+examples:
+  enabled: true
+lifecycle:
+  onInstall: build_embeddings
+  onDelete: remove_embeddings
+prompt: prompt.md

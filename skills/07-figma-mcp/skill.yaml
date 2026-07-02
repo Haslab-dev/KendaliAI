@@ -1,0 +1,40 @@
+id: figma-mcp
+name: Figma MCP Bridge
+displayName: Figma MCP Bridge
+version: 1.0.0
+description: Demonstrates KSP wrapping an MCP server. Routes Figma design requests through the Figma MCP.
+author: KendaliAI
+license: MIT
+category: example
+keywords:
+  - figma
+  - mcp
+  - design
+  - bridge
+routing:
+  keywords:
+    - figma
+    - design
+    - ui
+    - component
+    - prototype
+    - layout
+  threshold: 0.7
+tools:
+  allowed:
+    - mcp_call
+    - read_file
+  denied: []
+capabilities:
+  network:
+    domains:
+      - api.figma.com
+      - figma.com
+memory:
+  enabled: true
+examples:
+  enabled: true
+lifecycle:
+  onInstall: build_embeddings
+  onDelete: remove_embeddings
+prompt: prompt.md

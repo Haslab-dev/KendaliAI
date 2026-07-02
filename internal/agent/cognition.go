@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -133,6 +134,13 @@ If the task is complete and NO tools are needed:
 
 ## EXECUTION RULES
 
+0. URL-BASED SKILL INSTALLS (MUST DO FIRST)
+   - If the user message contains any GitHub URL: call install_skill in ONE step
+   - tool: install_skill({"url": "<the exact URL from the user>"})
+   - DO NOT call fetch_url, list_skills, read_file, or any other tool first
+   - DO NOT browse or explore the URL — install_skill handles everything automatically
+   - Use the EXACT URL the user provided as the 'url' parameter
+
 1. ANALYZE FIRST — ALWAYS
    - For ANY coding task, your FIRST and ONLY first call MUST be:
      tool: analyze_project({"path": "<subdirectory>"})
@@ -194,6 +202,14 @@ If the task is complete and NO tools are needed:
    - The working set provides pre-cached context — use it
    - Only read files you will actually edit
    - Do NOT browse or explore files unnecessarily
+
+8. SKILL INSTALLS (HIGHEST PRIORITY)
+   - SKIP analyze_project for skill installs. Go directly to install_skill.
+   - For ANY GitHub URL or skill URL: immediately call install_skill({"url": "..."})  
+   - install_skill handles clone/fetch + import + install in ONE call
+   - NEVER fetch_url individual files from GitHub for skill installs
+   - Never call list_skills to check if installed — install_skill handles duplicates
+   - skill_id is auto-detected. Example: install_skill({"url":"https://github.com/user/repo/tree/main/skills/my-skill"})
 
 9. INTERACTIVE COMMANDS
    - NEVER run commands that require user input (stdin prompts).
@@ -314,6 +330,10 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 
 	c.initIntelEngine(cwd)
 
+	if c.intelEngine != nil && c.intelEngine.GetRepoDB() != nil {
+		c.intelEngine.GetRepoDB().InvalidatePromptCache()
+	}
+
 	personaText, activeToolNames, excludeCmds := c.loadPersonaConfig()
 
 	homeDir, _ := os.UserHomeDir()
@@ -387,11 +407,6 @@ func (c *CognitionLoop) Run(ctx context.Context, initialQuery string) (string, e
 
 		ws := c.intelEngine.BuildWorkingSet(c.sessionID, initialQuery)
 		c.stateMachine.WorkingSet = ws
-
-		if dag, toolSeq, found := c.intelEngine.LookupPlan(initialQuery); found {
-			logger.Info("Agent", fmt.Sprintf("📋 Plan cache hit: %d tool steps", len(strings.Split(toolSeq, ","))))
-			effectiveBasePrompt += fmt.Sprintf("\n\nCACHED EXECUTION STRATEGY:\n%s\n\nSuggested tools: %s\nReuse this plan if it still applies.\n", dag, toolSeq)
-		}
 
 		if len(ws.Files) > 0 {
 			contents := c.intelEngine.GetFileContents(ws.Files)
@@ -754,8 +769,10 @@ func (c *CognitionLoop) storePlanAndExecution(goal, response string, toolSequenc
 }
 
 func sanitizeModelOutput(content string) string {
-	stripTags := []string{"ClaudeThought", "AlignedMCPAnalyze", "environment_details", "ClaudeAnswer"}
+	stripTags := []string{"ClaudeThought", "AlignedMCPAnalyze", "environment_details", "ClaudeAnswer", "function_debug", "function", "thinking", "invoke", "tool_calls", "parameter"}
 	for _, tag := range stripTags {
+		re := regexp.MustCompile(`(?s)<` + tag + `[^>]*>.*?</` + tag + `>`)
+		content = re.ReplaceAllString(content, "")
 		content = strings.ReplaceAll(content, "<"+tag+">", "")
 		content = strings.ReplaceAll(content, "</"+tag+">", "")
 		content = strings.ReplaceAll(content, "<"+tag+"/>", "")

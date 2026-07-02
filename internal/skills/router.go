@@ -82,13 +82,24 @@ func (r *Router) keywordScore(message string, spec SkillSpec) float64 {
 		return 0.85
 	}
 
+	stopWords := map[string]bool{
+		"use": true, "this": true, "whenever": true, "user": true, "wants": true,
+		"the": true, "and": true, "or": true, "any": true, "with": true,
+		"for": true, "from": true, "that": true, "your": true, "you": true,
+		"can": true, "all": true, "has": true, "was": true, "are": true,
+		"not": true, "but": true, "it": true, "also": true, "do": true,
+		"if": true, "in": true, "as": true, "be": true, "is": true,
+		"a": true, "an": true, "to": true, "of": true, "on": true,
+		"by": true, "at": true, "its": true,
+	}
+
 	matches := 0
 	effectiveTotal := 0
 
 	for _, kw := range spec.Routing.Keywords {
 		kw = strings.TrimSpace(strings.ToLower(kw))
 		kw = strings.Trim(kw, ".,;:()[]{}!@#$%^&*\"'")
-		if len(kw) < 3 {
+		if len(kw) < 3 || stopWords[kw] {
 			continue
 		}
 		effectiveTotal++

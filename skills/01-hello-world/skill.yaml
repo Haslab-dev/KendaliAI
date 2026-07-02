@@ -10,12 +10,14 @@ keywords:
   - hello
   - minimal
   - starter
+  - halo
 routing:
   keywords:
     - hello
     - greet
     - hi
     - welcome
+    - halo
   threshold: 0.6
 tools:
   allowed:
