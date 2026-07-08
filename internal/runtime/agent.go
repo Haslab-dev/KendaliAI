@@ -9,29 +9,54 @@ import (
 	"github.com/google/uuid"
 	"github.com/kendaliai/app/internal/agent"
 	"github.com/kendaliai/app/internal/kernel"
+	"github.com/kendaliai/app/internal/providers"
 )
 
+// AgentProcess is the single Generic Agent Runtime instance (RFC-0042).
+// Every Agent — coder, planner, reviewer, research — is the same runtime,
+// differentiated only by its manifest, loaded skills and capabilities.
 type AgentProcess struct {
-	ID        string
-	Process   *kernel.Process
-	Manifest  *AgentManifest
-	Provider  agent.Provider
-	Workspace string
-	Kernel    kernel.Kernel
+	ID           string
+	Process      *kernel.Process
+	Manifest     *AgentManifest
+	Router       *providers.ModelRouter
+	Workspace    string
+	Kernel       kernel.Kernel
+	State        AgentState
+	LoadedSkills []string
 }
 
-func NewAgentProcess(proc *kernel.Process, m *AgentManifest, p agent.Provider, workspace string, k kernel.Kernel) *AgentProcess {
+func NewAgentProcess(proc *kernel.Process, m *AgentManifest, router *providers.ModelRouter, workspace string, k kernel.Kernel) *AgentProcess {
 	return &AgentProcess{
 		ID:        proc.ID,
 		Process:   proc,
 		Manifest:  m,
-		Provider:  p,
+		Router:    router,
 		Workspace: workspace,
 		Kernel:    k,
+		State:     StateRegister,
 	}
 }
 
+// LoadSkills attaches the manifest's default skills (RFC-0042 §7, RFC-0044 §6).
+// Skills extend an Agent's knowledge; the Agent never embeds domain knowledge.
+func (ap *AgentProcess) LoadSkills() {
+	for _, s := range ap.Manifest.DefaultSkills {
+		ap.LoadedSkills = append(ap.LoadedSkills, s)
+	}
+	ap.Kernel.PublishEvent(context.Background(), &kernel.Event{
+		ID:        uuid.New().String(),
+		Type:      "agent_skills_loaded",
+		Source:    ap.ID,
+		Data:      ap.LoadedSkills,
+		Timestamp: time.Now(),
+	})
+}
+
 func (ap *AgentProcess) Run(ctx context.Context) (string, error) {
+	ap.State = StateSpawn
+	ap.LoadSkills()
+
 	ap.Kernel.PublishEvent(ctx, &kernel.Event{
 		ID:        uuid.New().String(),
 		Type:      "agent_started",
@@ -42,6 +67,7 @@ func (ap *AgentProcess) Run(ctx context.Context) (string, error) {
 
 	result, err := ap.executeGoal(ctx, ap.Process.Goal)
 	if err != nil {
+		ap.State = StateTerminate
 		ap.Kernel.PublishEvent(ctx, &kernel.Event{
 			ID:        uuid.New().String(),
 			Type:      "agent_failed",
@@ -52,6 +78,7 @@ func (ap *AgentProcess) Run(ctx context.Context) (string, error) {
 		return "", err
 	}
 
+	ap.State = StateTerminate
 	ap.Kernel.PublishEvent(ctx, &kernel.Event{
 		ID:        uuid.New().String(),
 		Type:      "agent_completed",
@@ -61,6 +88,15 @@ func (ap *AgentProcess) Run(ctx context.Context) (string, error) {
 	})
 
 	return result, nil
+}
+
+// estimateTokens provides a rough token count for context-window validation.
+func estimateTokens(msgs []agent.Message) int {
+	total := 0
+	for _, m := range msgs {
+		total += len(m.Content)
+	}
+	return total / 4
 }
 
 func (ap *AgentProcess) executeGoal(ctx context.Context, goal string) (string, error) {
@@ -74,12 +110,18 @@ func (ap *AgentProcess) executeGoal(ctx context.Context, goal string) (string, e
 		{Role: "user", Content: goal},
 	}
 
-	// For early testing and MAK, we use the default tool registry
+	// For early testing and MAK, we use the default tool registry.
 	reg := agent.GetToolRegistry(nil, nil, ap.Workspace, nil)
 	engine := agent.NewExecutionEngine(5, reg)
 
 	for step := 0; step < 10; step++ {
-		resp, err := ap.Provider.ChatCompletion(ctx, msgs)
+		resp, err := ap.Router.ChatCompletion(ctx, providers.InferenceRequest{
+			AgentID:         ap.ID,
+			AgentType:       ap.Manifest.ID,
+			PreferredModels: ap.Manifest.PreferredModels,
+			FallbackModels:  ap.Manifest.FallbackModels,
+			ContextTokens:   estimateTokens(msgs),
+		}, msgs)
 		if err != nil {
 			return "", err
 		}

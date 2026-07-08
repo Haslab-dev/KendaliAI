@@ -1,6 +1,6 @@
 # KendaliAI RFC Index
 
-**Version:** 0.3.4
+**Version:** 0.4.1
 **Status:** Draft
 
 ## Overview
@@ -19,6 +19,115 @@ KendaliAI is an **AI Operating System (AIOS)** — a platform that orchestrates 
 8. **Checkpoint** — Crash recovery via snapshots
 9. **Goal Manager** — Goals evolve as trees, not strings
 10. **Context Manager** — Intelligent context assembly
+
+---
+
+## Architecture Summary
+
+KendaliAI follows a **microkernel** design: the kernel coordinates (process registry, mailbox, event bus, resource tracker, component registry) but does **not** implement business logic. Business logic lives in pluggable services — Workflow Engine, Supervisor, Capability Runtime, and Policy Engine.
+
+### Layered Flow
+
+```
+Channels (Telegram, Discord, REST)
+        │
+        ▼
+Intent Parser  (continue / fix / retry / undo / review / explain / plan)
+        │
+        ▼
+Agent Kernel (Microkernel)  ── coordinates only
+   Process Manager · Event Bus · IPC/Mailbox · Registry
+        │
+        ├───────────────┼───────────────┐
+        ▼               ▼               ▼
+   Workflow Engine   Model Router    Policy Engine
+        │
+        ▼
+   Supervisor (Process Tree) → Generic Agent Processes
+        │
+        ▼
+   Execution Runtime + Policy Engine
+   Capability → Policy → Scheduler → Sandbox → Tool
+   Code Capability → AST Runtime / File Runtime / Git Runtime
+        │
+        ▼
+   Supporting Services
+   Blackboard ← Observations ← Memory
+   Checkpoint ← Workspace ← Artifact Graph
+   Repository Index ← Incremental Watcher
+```
+
+### Key Architectural Changes
+
+1. **Microkernel** — coordinates via IPC; business logic in services.
+2. **Workflow Owns DAG** — Workflow owns execution, Planner owns reasoning.
+3. **Generic Agent Process** — one process type, different manifests (planner / coder / reviewer / research).
+4. **ChangeSet** — semantic changes (InsertComponent, ReplaceFunction, DeleteRoute, RenameSymbol) resolved by a Conflict Resolver, not text patches.
+5. **Blackboard System** — temporary coordination scratchpad (facts, questions, answers, hypotheses, notes).
+6. **Policy Engine** — runtime-configurable security (allow/deny per role).
+7. **Checkpoint Manager** — crash recovery via workspace/memory/DAG/artifact/process snapshots.
+8. **Human Approval Gate** — pauses for human input on expensive, destructive, or production operations.
+
+### Directory Structure
+
+```
+kendaliai/
+├── cmd/kendaliai/             # CLI commands
+├── internal/
+│   ├── kernel/                # Microkernel (coordination only)
+│   ├── runtime/               # Generic Agent Process, Supervisor, manifests
+│   ├── workflow/              # Workflow engine (OWNS DAG), phases, templates, approval
+│   ├── planner/               # Reasoning, planning context, replanning
+│   ├── executor/              # Task execution, ChangeSet handling, merge
+│   ├── execution/             # Runtime, capability, sandbox, code/fs/ast/shell
+│   ├── policy/                # Policy engine, evaluator, audit
+│   ├── blackboard/            # Shared scratchpad, entries, subscriptions
+│   ├── checkpoint/            # Snapshots, restore, rollback
+│   ├── goals/                 # Goal manager, graph, tree, evaluation
+│   ├── taskgraph/             # Task graph, builder, registry, state, templates
+│   ├── context/               # Context manager, builder, scorer, cache, assembler
+│   ├── prompts/               # Prompt compiler, templates, resolver, validator
+│   ├── scheduler/             # Scheduler, dependency, priority, rate limiter
+│   ├── observation/           # Observation engine, normalizers, aggregator
+│   ├── dag/                   # Mutable dynamic DAG operations
+│   ├── resource/              # Resource/budget/rate management
+│   ├── index/                 # Repository indexer, watcher, graphs
+│   ├── intent/                # Intent parser, workflow generation
+│   ├── memory/                # Semantic, episodic, procedural, working memory
+│   ├── artifact/              # Artifact store, dependency graph
+│   ├── session/  workspace/  knowledge/  git/  review/  channels/  tools/
+└── spec/                      # RFCs (see below)
+```
+
+### Minimum Autonomous Kernel (MAK)
+
+For early testing, implement these 10 pieces first:
+
+1. Kernel — process spawn/kill/wait, mailbox, event bus
+2. Session + Workspace — basic isolation
+3. Generic Agent Process — one agent type, manifest-driven
+4. Capability Runtime — file, shell, git capabilities
+5. Policy Engine — basic allow/deny
+6. Workflow Engine — single phase, linear execution
+7. Blackboard — shared facts/questions
+8. Planner — simple goal → task decomposition
+9. Executor — run task, report result
+10. Telegram Gateway — send/receive messages
+
+### Version Timeline
+
+| Version | Milestone | Features |
+|---------|-----------|----------|
+| v0.4.0 | MAK Complete | Kernel, Generic Agent, Workflow, Telegram |
+| v0.5.0 | Planning | Planner, Blackboard, Observation |
+| v0.6.0 | Persistence | Session, Workspace, Checkpoint, Artifact |
+| v0.7.0 | Security | Policy Engine, Approval Gate |
+| v0.8.0 | Intelligence | Memory, Knowledge, Context |
+| v0.9.0 | Quality | Git, Review, Dynamic DAG |
+| v1.0.0 | Scale | Multi-Agent, Model Router, Distributed |
+| v1.1.0 | Production | Event Sourcing, Monitoring |
+
+---
 
 ## RFC List
 
@@ -45,14 +154,8 @@ KendaliAI is an **AI Operating System (AIOS)** — a platform that orchestrates 
 | [RFC0021](./RFC0021-Observation-Layer.md) | Observation Layer | Draft | RFC0000 |
 | [RFC0022](./RFC0022-Dynamic-DAG.md) | Dynamic DAG | Draft | RFC0003 |
 | [RFC0023](./RFC0023-Tool-Manifest.md) | Tool Manifest | Draft | - |
-| [RFC0024](./RFC0024-Capability-Runtime.md) | Capability Runtime | Draft | RFC0023 |
+| [RFC0024](./RFC0024-Capability-Runtime.md) | Capability Runtime (Execution Runtime) | Draft | RFC0023 |
 | [RFC0025](./RFC0025-Resource-Manager.md) | Resource Manager | Draft | RFC0000 |
-
-### Execution (Renamed from Capability Runtime)
-
-| RFC | Title | Status | Depends |
-|-----|-------|--------|---------|
-| [RFC0024](./RFC0024-Capability-Runtime.md) | Execution Runtime | Draft | RFC0023 |
 
 ### Coordination
 
@@ -107,82 +210,29 @@ KendaliAI is an **AI Operating System (AIOS)** — a platform that orchestrates 
 |-----|-------|--------|---------|
 | [RFC0010](./RFC0010-File-Intelligence.md) | File Intelligence | Draft | - |
 
-## Architecture Diagram
+### Skills & Runtime Extensions
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                      Channels (Telegram, REST)                    │
-└─────────────────────────────────┬───────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    Intent Parser                                  │
-└─────────────────────────────────┬───────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    Agent Kernel (Microkernel)                     │
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐            │
-│  │ Process │  │  Event  │  │  IPC /  │  │Registry │            │
-│  │ Manager │  │   Bus   │  │ Mailbox │  │         │            │
-│  └─────────┘  └─────────┘  └─────────┘  └─────────┘            │
-└─────────────────────────────────┬───────────────────────────────┘
-                                  │
-      ┌───────────────────────────┼───────────────────────────┐
-      │                           │                           │
-      ▼                           ▼                           ▼
-┌─────────────┐           ┌─────────────┐           ┌─────────────┐
-│  Workflow   │           │   Model     │           │   Policy    │
-│  Engine     │           │   Router    │           │   Engine    │
-└──────┬──────┘           └─────────────┘           └─────────────┘
-       │
-       ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                     Generic Agent Process                         │
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐          │
-│  │ Planner │  │  Coder  │  │Reviewer │  │Research │          │
-│  │ Agent   │  │ Agent   │  │ Agent   │  │ Agent   │          │
-│  │(manifest│  │(manifest│  │(manifest│  │(manifest│          │
-│  └─────────┘  └─────────┘  └─────────┘  └─────────┘          │
-└─────────────────────────────────┬───────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    Execution Runtime                               │
-│                                                                  │
-│   Capability ──► Policy ──► Scheduler ──► Sandbox ──► Tool           │
-│                                                                  │
-│   Code Capability ──► AST Runtime / File Runtime / Git Runtime       │
-└─────────────────────────────────┬───────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    Supporting Services                             │
-│                                                                  │
-│   Goal Manager ◄────── Planner ──────► Context Manager            │
-│                                                                  │
-│   Blackboard ◄────── Observations ◄───── Memory                    │
-│                                                                  │
-│   Checkpoint ◄────── Workspace ◄───── Artifact Graph             │
-│                                                                  │
-│   Prompt Compiler ◄────── Templates ◄────── Versions              │
-└─────────────────────────────────────────────────────────────────┘
-```
+| RFC | Title | Status | Depends |
+|-----|-------|--------|---------|
+| [RFC0034](./RFC0034-Dynamic-Skills-Generation.md) | Dynamic Skills Generation | Draft | - |
+| [RFC0035](./RFC0035-Autonomous-Memory-Skills.md) | Autonomous Daily Skill Generation & Reflective Memory | Draft | RFC0034 |
+| [RFC0036](./RFC0036-Agent-Evaluation-Test-Suite.md) | Agent Evaluation Test Suite | Draft | - |
+| [RFC0037](./RFC0037-Agentic-Coding-Runtime.md) | Agentic Coding Runtime (ACR) | Draft | RFC0024 |
+| [RFC0038](./RFC0038-Hierarchical-Context-&-Token-Cache-Engine-(HCTC).md) | Hierarchical Context & Token Cache Engine (HCTC) | Draft | RFC0031 |
+| [RFC0039](./RFC0039-Unified-Data-Layer.md) | Unified Data Layer | Draft | RFC0001 |
+| [RFC0040](./RFC0040-Workspace-Intelligence-Engine.md) | Workspace Intelligence Engine (WIE) | Draft | RFC0002 |
+| [RFC0041](./RFC0041-Unified-Skill-Package-(USP).md) | Unified Skill Package Format (KSP) | Draft | RFC0034 |
 
-## Minimum Autonomous Kernel (MAK)
+### Agent Runtime & Orchestration
 
-For early testing, implement these 10 pieces first:
+| RFC | Title | Status | Depends |
+|-----|-------|--------|---------|
+| [RFC0042](./RFC0042-Generic-Agent-Runtime.md) | Generic Agent Runtime (GAR) | Draft | RFC0041, RFC0044 |
+| [RFC0043](./RFC0043-Multi-Agent-Orchestration.md) | Multi-Agent Orchestration | Draft | RFC0042, RFC0044, RFC0045 |
+| [RFC0044](./RFC0044-Agent-Registry-&-Manifest.md) | Agent Registry & Manifest | Draft | RFC0042 |
+| [RFC0045](./RFC0045-Model-Router-&-Inference-Policy.md) | Model Router & Inference Policy | Draft | RFC0025 |
 
-1. Kernel - Process spawn/kill/wait, mailbox, event bus
-2. Session + Workspace - Basic isolation
-3. Generic Agent Process - One agent type, manifest-driven
-4. Execution Runtime - Capability, Policy, Tool
-5. Workflow Engine - Single phase, linear execution
-6. Goal Manager - Goal trees, not strings
-7. Context Manager - Intelligent context assembly
-8. Blackboard - Shared facts/questions
-9. Tool Scheduler - Parallel tool execution
-10. Telegram Gateway - Send/receive messages
+---
 
 ## RFC Priority
 

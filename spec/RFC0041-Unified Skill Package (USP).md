@@ -1,10 +1,4 @@
- **RFC-0041 — Unified Skill Package Format (KSP)**
-
-Below is a production-grade RFC.
-
----
-
-# RFC-0041 — Unified Skill Package Format (KSP)
+# RFC-0041 — Unified Skill Package (USP)
 
 **Status:** Draft
 
@@ -18,611 +12,284 @@ Below is a production-grade RFC.
 
 # 1. Summary
 
-This RFC introduces the **Kendali Skill Package (KSP)**, a canonical package format for distributing reusable agent skills.
+This RFC defines the **Unified Skill Package (USP)**, also known as the **Kendali Skill Package (KSP)**, the canonical package format for reusable domain knowledge, specialization prompts, and executable tools in KendaliAI.
 
-Rather than executing third-party skill formats directly, KendaliAI imports external skills (Anthropic Skills, Hermes Skills, RigorPilot Skills, local repositories, etc.) into one internal representation.
+A Skill is a **passive package** consumed by one or more Agents. Skills never perform reasoning, execute autonomously, or communicate directly with users. All reasoning and orchestration are owned by the Agent Runtime.
 
-This provides:
-
-* consistent runtime behavior
-* versioned skills
-* dependency management
-* security policies
-* update mechanism
-* capability declarations
-* sandbox compatibility
-
-The runtime understands only KSP.
-
----
-
-# 2. Motivation
-
-Today multiple incompatible ecosystems exist.
-
-Examples:
-
-* Anthropic Skills
-* Hermes Skills
-* RigorPilot Skills
-* OpenCode Skills
-* Local Git repositories
-
-Each has different layouts.
-
-Instead of supporting every runtime format,
-
-KendaliAI standardizes everything into one format.
+USP is designed to be **Markdown-First**, allowing skills to be defined by a single Markdown file (`SKILL.md`) containing YAML frontmatter configuration and a markdown prompt body. This format is fully aligned with and maps directly to Claude Skills and Hermes Skills.
 
 ```
-Git Repository
-        │
-        ▼
-Skill Importer
-        │
- Detect Format
-        │
-        ▼
- Normalize
-        │
-        ▼
- Kendali Skill Package
-        │
-        ▼
- Runtime
+External Format (Claude / Hermes)
+                │
+                ▼
+          Skill Importer
+                │
+                ▼
+      Unified Skill Package (SKILL.md + optional dirs)
+                │
+                ▼
+        Agent RuntimeSpecialization
 ```
 
 ---
 
-# 3. Goals
+# 2. Design Principles
 
-The package format must support
+A Skill is:
 
-* reusable prompts
-* reusable examples
-* reusable templates
-* executable tools
-* dependency installation
-* versioning
-* updates
-* permissions
-* sandbox execution
-* indexing
-* embeddings
-* policy enforcement
+- **Passive:** Contains only instructions, prompt specialization, references, and tool definitions. It cannot execute on its own.
+- **Markdown-First:** Easy to write, read, and version control using standard Markdown.
+- **Agent-Independent:** Can be loaded by any generic agent (e.g., Coding, Reviewer, Planner) to specialize it for a domain.
+- **Self-Contained:** Encapsulates instructions, references, and tool scripts in a flat structure.
 
 ---
 
-# 4. Skill Layout
+# 3. Responsibilities
 
-```
-frontend-design/
+## Agent
 
-├── skill.yaml
-├── README.md
-├── LICENSE
+Responsible for:
+- Reasoning, planning, and decision making.
+- Dialogue flow and managing user conversation.
+- Selecting which loaded tools to execute.
+- State management and memory.
 
-├── prompt.md
-├── examples.md
+## Skill
 
-├── resources/
-│     templates/
-│     snippets/
-│     assets/
-
-├── tools/
-│     install.sh
-│     build.sh
-│     lint.sh
-│     format.sh
-
-├── hooks/
-│     pre_run.sh
-│     post_run.sh
-
-├── embeddings/
-│     vectors.bin
-
-├── metadata.json
-
-└── tests/
-```
-
-Everything required by the skill lives inside one directory.
+Responsible for:
+- Domain knowledge and prompt specialization rules.
+- Reusable resources and reference materials.
+- Flat tool definitions and executable scripts.
 
 ---
 
-# 5. Manifest
+# 4. Goals
 
-Every package contains
+The package format supports:
+- Reusable specialization prompts (in `SKILL.md`).
+- Flat, easy-to-read reference documents (in `references/`).
+- Simple executable tools (in `scripts/`).
+- Declaring metadata, keywords, and simple capability requirements via frontmatter.
+- Rapid import from popular formats (e.g., Claude.ai Skills, Hermes).
+
+---
+
+# 5. Skill Layout
+
+A Skill Package can be distributed as a single `SKILL.md` file (for instruction-only skills) or as a flat directory structure for execution-heavy skills:
 
 ```
-skill.yaml
+swiftui/
+├── SKILL.md           # Manifest (YAML Frontmatter) + System Prompt (Markdown Body)
+├── scripts/           # Optional: Executable scripts / tools
+├── references/        # Optional: Flat folder containing markdown docs / guidelines
+├── assets/            # Optional: Flat folder containing images or other media files
+└── templates/         # Optional: Flat folder containing code templates or skeletons
 ```
 
-Example
+Runtime-generated embeddings and cached vector stores are stored in the runtime cache directory (`~/.kendaliai/cache/skills/`) and are never distributed inside the skill package itself.
 
-```yaml
-name: frontend-design
+---
 
-displayName: Frontend Design
+# 6. SKILL.md Format (Manifest & Prompt)
 
-description: Modern React frontend engineering
+Every Skill contains a core `SKILL.md` (or `skill.md`). The top of the file contains the manifest as YAML frontmatter:
 
-version: 1.2.0
-
-author: Anthropic
-
+```markdown
+---
+name: SwiftUI Assistant
+version: 1.0.0
+description: Spezialisasi dalam pengembangan aplikasi native iOS menggunakan SwiftUI.
+author: HasLab
 license: MIT
-
-homepage: https://github.com/anthropics/skills
-
-repository: https://github.com/anthropics/skills
-
-keywords:
-
-  - react
-  - ui
-  - frontend
-  - tailwind
-
-categories:
-
-  - web
-  - design
-
-entrypoints:
-
-  prompt: prompt.md
-  examples: examples.md
-
-minimumVersion: 1.1.0
-```
-
----
-
-# 6. Dependencies
-
-Skills may declare required software.
-
-```yaml
-dependencies:
-
-  node:
-
-    version: ">=20"
-
-  bun:
-
-    version: ">=1.2"
-
-  go:
-
-    version: ">=1.24"
-
-  docker: true
-
-packages:
-
-  npm:
-
-    - react
-
-    - vite
-
-    - tailwindcss
-
-  apt:
-
-    - ffmpeg
-
-  brew:
-
-    - imagemagick
-```
-
-The runtime never installs automatically.
-
-Instead
-
-```
-kendaliai doctor
-```
-
-reports missing dependencies.
-
----
-
-# 7. Capability Manifest
-
-Every skill declares required permissions.
-
-```yaml
-capabilities:
-
-  filesystem:
-
-    read:
-
-      - src/**
-
-    write:
-
-      - src/**
-
-  shell:
-
-    commands:
-
-      - npm
-
-      - bun
-
-      - git
-
-  network:
-
-    domains:
-
-      - api.github.com
-
-      - registry.npmjs.org
-
-  environment:
-
-      - OPENAI_API_KEY
-```
-
-These integrate with
-
-RFC-0027 Policy Engine.
-
----
-
-# 8. Tools
-
-Skills may expose reusable tools.
-
-```
-tools/
-
-install.sh
-
-build.sh
-
-test.sh
-
-lint.sh
-
-format.sh
-```
-
-Manifest
-
-```yaml
+keywords: [swiftui, ios, mobile]
 tools:
+  allowed: [read_file, apply_patch, write_file]
+---
 
-  install:
-
-      path: tools/install.sh
-
-  build:
-
-      path: tools/build.sh
-
-  lint:
-
-      path: tools/lint.sh
+You are a senior iOS engineer specializing in SwiftUI. Always follow these rules:
+1. Keep views small and compostable.
+2. Use `@State` and `@Binding` correctly for state flow.
+3. Prefer declarative design patterns.
 ```
 
-Execution always goes through
-
-SandboxRuntime.
-
-Skills never execute directly.
+## Frontmatter Fields
+- `name`: Human-readable name of the skill.
+- `version`: Semantic versioning of the skill.
+- `description`: A brief summary of what the skill specializing in.
+- `author` / `license`: Author name and licensing information.
+- `keywords`: Array of tags used for dynamic skill routing.
+- `tools`: Map specifying allowed or denied system tools, or custom definition mappings.
 
 ---
 
-# 9. Hooks
+# 7. Dependencies
 
-Lifecycle hooks
-
-```
-hooks/
-
-pre_run.sh
-
-post_run.sh
-
-pre_install.sh
-
-post_install.sh
-```
-
-Manifest
+Skills can list raw environment dependency recommendations in their frontmatter:
 
 ```yaml
-hooks:
+---
+dependencies:
+  node: ">=20"
+  go: ">=1.24"
+  brew: [swiftlint]
+---
+```
 
-  install:
+The Agent Runtime does not automatically install system dependencies. If a required dependency is missing, the command `kendaliai doctor <skill>` reports the issue.
 
-      pre: hooks/pre_install.sh
+---
 
-      post: hooks/post_install.sh
+# 8. Capabilities
 
-  execution:
+Skills declare required capabilities/permissions in the YAML frontmatter:
 
-      pre: hooks/pre_run.sh
+```yaml
+---
+capabilities:
+  filesystem:
+    read: [src/**]
+    write: [src/**]
+  shell:
+    commands: [git, swift, xcodebuild]
+---
+```
 
-      post: hooks/post_run.sh
+These permissions are checked and enforced by the **Policy Engine** when the agent invokes tools.
+
+---
+
+# 9. Reference Materials
+
+The `references/` folder contains markdown files and text assets containing reusable domain knowledge, guidelines, or APIs.
+The runtime indexes these reference materials into the Unified Data Layer at startup, making them searchable by the agent via semantic search or vector queries.
+
+---
+
+# 10. Custom Scripts (Tools)
+
+Executable tools go into the `scripts/` directory:
+
+```
+scripts/
+├── build.sh
+├── test.sh
+└── format.sh
+```
+
+Tools are exposed to the agent and are run within the **Sandbox Runtime** subject to approval gates.
+
+---
+
+# 11. Tests
+
+Verification tests can be included inside the package:
+- Unit tests for script tools.
+- Evaluative prompts to verify that the loaded skill specialization yields the correct agent behavior.
+
+---
+
+# 12. Runtime Indexing & Cache
+
+At installation time, the runtime compiles the skill, processes the frontmatter, and creates a searchable vector index:
+
+```
+Install Skill (SKILL.md)
+           │
+           ▼
+        Validate
+           │
+           ▼
+    Index References
+           │
+           ▼
+   Generate Embeddings
+           │
+           ▼
+      Ready Cache
+```
+
+These artifacts are cached under `~/.kendaliai/cache/skills/<id>/vectors.db` and are not committed to source repositories.
+
+---
+
+# 13. Agent Integration
+
+When an agent is initialized, it dynamically loads its default skills or workflow-specified skills. The runtime merges the prompt from the `SKILL.md` body into the agent's system prompt and registers the custom scripts from the `scripts/` folder.
+
+```
+Generic Agent (Coder)
+         │
+  Loads SwiftUI Skill
+         │
+  Merges Prompt Body
+         │
+  Registers Scripts (scripts/)
+         │
+         ▼
+  Ready to Execute Tasks
 ```
 
 ---
 
-# 10. Resources
+# 14. Importers
 
-Reusable assets.
+Unified Skill Package maps directly to popular formats:
+- **Claude Skills:** Converted by reading the Anthropic JSON manifest and wrapping the system instructions into a standard `SKILL.md` file.
+- **Hermes Skills:** Python-decorated methods are translated into executable CLI script wrappers under the `scripts/` directory, and their decorators are extracted into the `SKILL.md` frontmatter.
 
-```
-resources/
+---
 
-templates/
+# 15. Installation
 
-snippets/
-
-assets/
-
-docs/
-```
-
-Example
-
-```
-templates/
-
-landing-page.tsx
-
-pricing.tsx
-
-navbar.tsx
+```bash
+kendaliai skill add https://github.com/example/swiftui-skill
 ```
 
 ---
 
-# 11. Embeddings
+# 16. Updates
 
-Optional semantic search.
-
-```
-embeddings/
-
-vectors.bin
-```
-
-Indexed into
-
-VectorStore
-
-during installation.
-
----
-
-# 12. Importers
-
-KendaliAI supports multiple source formats.
-
-```
-Anthropic Skills
-
-↓
-
-AnthropicImporter
-
-↓
-
-KSP
-```
-
-```
-Hermes Skills
-
-↓
-
-HermesImporter
-
-↓
-
-KSP
-```
-
-```
-RigorPilot
-
-↓
-
-RigorPilotImporter
-
-↓
-
-KSP
-```
-
-```
-Generic Git Repository
-
-↓
-
-GenericImporter
-
-↓
-
-KSP
+```bash
+kendaliai skill update swiftui
 ```
 
 ---
 
-# 13. Installation
+# 17. Runtime Model
 
-```
-kendaliai skill add \
-https://github.com/anthropics/skills \
---skill frontend-design
-```
-
-Pipeline
-
-```
-Clone
-
-↓
-
-Detect format
-
-↓
-
-Convert
-
-↓
-
-Validate
-
-↓
-
-Install
-
-↓
-
-Index
-
-↓
-
-Embed
-
-↓
-
-Ready
-```
-
----
-
-# 14. Updates
-
-Every installed skill records
-
-```
-origin repository
-
-commit
-
-version
-```
-
-Updating
-
-```
-kendaliai skill update frontend-design
-```
-
-Pipeline
-
-```
-Fetch
-
-↓
-
-Compare Version
-
-↓
-
-Reimport
-
-↓
-
-Reindex
-
-↓
-
-Done
-```
-
----
-
-# 15. Runtime Model
-
-The runtime never knows where the skill originated.
-
-Every installed package becomes
+In the Go runtime, the skill structure represents the simplified specification:
 
 ```go
 type Skill struct {
-    Manifest
-    Prompt
-    Examples
-    Resources
-    Tools
-    Hooks
-    Embeddings
+    Spec     SkillSpec // Parsed from YAML frontmatter
+    Prompt   string    // Markdown body of SKILL.md
+    Examples string    // Optional examples content
 }
 ```
 
 ---
 
-# 16. Security
+# 18. Security
 
-Every executable action passes through
-
-* Policy Engine
-* Sandbox Runtime
-* Approval Gate
-* Capability Runtime
-
-A skill cannot bypass runtime policies.
+Every tool execution initiated by a skill script passes through the Sandbox Runtime and is evaluated against the Policy Engine and Approval Gates. Skills cannot elevate permissions beyond what is allowed by the Agent Manifest policies.
 
 ---
 
-# 17. Future Extensions
-
-Planned additions include:
-
-* Skill Marketplace
-* Signed skill packages
-* Skill dependency resolution
-* Semantic version constraints
-* Private repositories
-* Cloud skill registry
-* Skill bundles
-* OCI/distributed package transport
+# 19. Future Extensions
+- Signed skill packages for secure execution.
+- Skill marketplace and centralized registry distribution.
+- Semantic dependency resolution.
 
 ---
 
-# 18. Relationship to Other RFCs
+# 20. Relationship to Other RFCs
 
-| RFC               | Relationship                                                         |
-| ----------------- | -------------------------------------------------------------------- |
-| RFC-0006          | Tool execution uses the Execution Engine                             |
-| RFC-0024          | Tool invocations go through the Capability Runtime                   |
-| RFC-0027          | Capability declarations are enforced by the Policy Engine            |
-| RFC-0039          | Skill resources are indexed into the Unified Data Layer              |
-| RFC-0040          | Workspace Intelligence indexes installed skill templates and symbols |
-| RFC-0042 (Future) | Remote Skill Registry & Marketplace                                  |
-
-## Suggested CLI
-
-I would also redesign the CLI to feel like a package manager:
-
-```bash
-kendaliai skill init
-kendaliai skill add <git-url> --skill frontend-design
-kendaliai skill remove frontend-design
-kendaliai skill update frontend-design
-kendaliai skill update --all
-kendaliai skill search react
-kendaliai skill list
-kendaliai skill info frontend-design
-kendaliai skill doctor frontend-design
-kendaliai skill verify frontend-design
-kendaliai skill export frontend-design
-kendaliai skill publish
-```
-
-This gives KendaliAI a familiar, extensible workflow similar to `npm`, `cargo`, or `brew`, while maintaining a single canonical skill format internally regardless of the source ecosystem.
+| RFC | Relationship |
+|------|--------------|
+| RFC-0019 | Skills specialization prompts are consumed by Generic Agent Runtime |
+| RFC-0024 | Custom script tools execute through the Capability Runtime |
+| RFC-0027 | Skill capability requests are enforced by the Policy Engine |
+| RFC-0039 | References and docs are indexed into the Unified Data Layer |
+| RFC-0042 | Generic Agents dynamically load the compiled skills |
+| RFC-0044 | Agent manifests declare default skills to load |

@@ -18,12 +18,34 @@ type Client struct {
 
 func NewClient() *Client {
 	c := config.Cfg
-	ocfg := openai.DefaultConfig(c.Embedding.APIKey)
-	ocfg.BaseURL = c.Embedding.Endpoint
+	apiKey := c.Embedding.APIKey
+	endpoint := c.Embedding.Endpoint
+	model := c.Embedding.Model
+
+	// Fall back to the default chat provider's credentials when the
+	// embedding section is not explicitly configured.
+	if apiKey == "" || endpoint == "" {
+		if p := c.DefaultChatProvider(); p != nil {
+			if apiKey == "" {
+				apiKey = p.APIKey
+			}
+			if endpoint == "" {
+				endpoint = p.Endpoint
+			}
+		}
+	}
+	if model == "" {
+		model = "text-embedding-3-small"
+	}
+
+	ocfg := openai.DefaultConfig(apiKey)
+	if endpoint != "" {
+		ocfg.BaseURL = endpoint
+	}
 
 	return &Client{
 		client: openai.NewClientWithConfig(ocfg),
-		model:  c.Embedding.Model,
+		model:  model,
 	}
 }
 

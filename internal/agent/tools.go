@@ -23,6 +23,7 @@ import (
 	"github.com/kendaliai/app/internal/skills"
 	"github.com/kendaliai/app/internal/storage"
 	"github.com/mark3labs/mcp-go/client"
+	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
@@ -1108,8 +1109,10 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 				logger.Info("MCP", fmt.Sprintf("mcp_call lookup: serverName=%s, toolName=%s", serverName, toolName))
 
 				// Lookup server config if name provided
+				var srv *config.MCPServerConfig
 				if serverName != "" && cfg != nil && cfg.MCPServers != nil {
-					if srv, ok := cfg.MCPServers[serverName]; ok {
+					if found, ok := cfg.MCPServers[serverName]; ok {
+						srv = &found
 						logger.Info("MCP", fmt.Sprintf("found config for server: %s", serverName))
 						if srv.ServerURL != "" {
 							serverURL = srv.ServerURL
@@ -1131,7 +1134,11 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 
 				if serverURL != "" {
 					// Streamable HTTP Client (Modern remote MCP transport)
-					c, err := client.NewStreamableHttpClient(serverURL)
+					var opts []transport.StreamableHTTPCOption
+					if srv.Headers != nil {
+						opts = append(opts, transport.WithHTTPHeaders(srv.Headers))
+					}
+					c, err := client.NewStreamableHttpClient(serverURL, opts...)
 					if err != nil {
 						return fmt.Sprintf("failed to create Streamable HTTP MCP client: %v", err)
 					}

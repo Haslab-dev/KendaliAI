@@ -1,8 +1,17 @@
 id: reviewer
-role: reviewer
-system_prompt: |
+displayName: Review Agent
+description: Security-focused code reviewer
+systemPrompt: |
   You are a security-focused code reviewer.
   Always check for vulnerabilities and code smells.
+defaultSkills:
+  - review
+preferredModels:
+  - deepseek-v4-flash
+fallbackModels:
+  - deepseek-v4-flash
+maxConcurrency: 2
+approvalRequired: true
 capabilities:
   - read_files
   - search_files
@@ -11,10 +20,3 @@ policies:
   - allow_read_only
   - deny_write_files
   - deny_shell
-model:
-  primary: gemini
-  fallback: gpt-4o
-  max_tokens: 50000
-resources:
-  timeout: 10m
-  max_cost: 0.20

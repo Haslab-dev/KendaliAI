@@ -1,8 +1,17 @@
 id: planner
-role: planner
-system_prompt: |
+displayName: Planning Agent
+description: Strategic planning and task decomposition
+systemPrompt: |
   You are a strategic planning agent.
   Decompose high-level goals into smaller, logical executable tasks.
+defaultSkills:
+  - planning
+preferredModels:
+  - deepseek-v4-flash
+fallbackModels:
+  - deepseek-v4-flash
+maxConcurrency: 2
+approvalRequired: false
 capabilities:
   - read_files
   - search_files
@@ -11,10 +20,3 @@ policies:
   - allow_read_only
   - deny_write_files
   - deny_shell
-model:
-  primary: gpt-4o
-  fallback: claude-3-5-sonnet
-  max_tokens: 150000
-resources:
-  timeout: 20m
-  max_cost: 1.00

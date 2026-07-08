@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/kendaliai/app/internal/config"
 	"github.com/kendaliai/app/internal/embedding"
 	"github.com/kendaliai/app/internal/search"
 	"github.com/kendaliai/app/internal/vector"
@@ -37,7 +38,7 @@ func NewCore(rootPath string) (*Core, error) {
 	}
 
 	var emb embedding.EmbeddingProvider
-	if apiKey := os.Getenv("OPENAI_API_KEY"); apiKey != "" {
+	if config.Cfg != nil && (config.Cfg.Embedding.APIKey != "" || (config.Cfg.DefaultChatProvider() != nil && config.Cfg.DefaultChatProvider().APIKey != "")) {
 		emb = embedding.NewClient()
 	}
 

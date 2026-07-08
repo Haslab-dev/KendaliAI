@@ -7,24 +7,24 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/kendaliai/app/internal/agent"
 	"github.com/kendaliai/app/internal/kernel"
+	"github.com/kendaliai/app/internal/providers"
 )
 
 type Supervisor struct {
 	Kernel          kernel.Kernel
-	Registry        *ManifestRegistry
-	Provider        agent.Provider
+	Registry        *AgentRegistry
+	Router          *providers.ModelRouter
 	Workspace       string
 	activeProcesses map[string]*AgentProcess
 	mu              sync.Mutex
 }
 
-func NewSupervisor(k kernel.Kernel, r *ManifestRegistry, p agent.Provider, workspace string) *Supervisor {
+func NewSupervisor(k kernel.Kernel, r *AgentRegistry, router *providers.ModelRouter, workspace string) *Supervisor {
 	return &Supervisor{
 		Kernel:          k,
 		Registry:        r,
-		Provider:        p,
+		Router:          router,
 		Workspace:       workspace,
 		activeProcesses: make(map[string]*AgentProcess),
 	}
@@ -64,7 +64,8 @@ func (s *Supervisor) Spawn(ctx context.Context, spec kernel.ProcessSpec) (*kerne
 		return nil, err
 	}
 
-	ap := NewAgentProcess(proc, m, s.Provider, s.Workspace, s.Kernel)
+	ap := NewAgentProcess(proc, m, s.Router, s.Workspace, s.Kernel)
+	s.Registry.SetState(m.ID, StateSpawn)
 
 	s.mu.Lock()
 	s.activeProcesses[proc.ID] = ap

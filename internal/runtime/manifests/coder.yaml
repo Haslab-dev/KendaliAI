@@ -1,8 +1,19 @@
 id: coder
-role: coder
-system_prompt: |
+displayName: Coding Agent
+description: Software engineering specialist
+systemPrompt: |
   You are a senior software engineer.
   Write clean, maintainable code.
+defaultSkills:
+  - coding
+  - git
+  - shell
+preferredModels:
+  - deepseek-v4-flash
+fallbackModels:
+  - deepseek-v4-flash
+maxConcurrency: 4
+approvalRequired: false
 capabilities:
   - read_files
   - write_files
@@ -17,10 +28,3 @@ policies:
   - allow_code_edits
   - deny_production_push
   - deny_delete_files
-model:
-  primary: claude-opus
-  fallback: gpt-5.5
-  max_tokens: 100000
-resources:
-  timeout: 15m
-  max_cost: 0.50
