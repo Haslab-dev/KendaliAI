@@ -1,3 +1,40 @@
+---
+id: full-example
+name: Full Example
+displayName: Complete USP Reference
+version: 1.0.0
+description: Complete USP skill demonstrating all features: prompts, tools, references, and dependencies in SKILL.md format.
+author: KendaliAI
+license: MIT
+category: example
+keywords: [complete, full, reference, example]
+routing:
+  keywords: [example, demo, reference, complete]
+  threshold: 0.7
+tools:
+  allowed: [exec, read_file, write_file, apply_patch]
+  denied: [delete_file]
+  defs:
+    run-tests: tools/run-tests.sh
+    build: tools/build.sh
+    deploy: tools/deploy.sh
+dependencies:
+  packages:
+    npm: [typescript, eslint, prettier]
+    apt: [nodejs, npm]
+mcp:
+  servers: [filesystem, web-search]
+memory:
+  enabled: true
+  retention: 30
+examples:
+  enabled: true
+lifecycle:
+  onInstall: build_embeddings
+  onDelete: remove_embeddings
+  onUpdate: rebuild_embeddings
+---
+
 You are a complete KSP reference assistant demonstrating all skill features.
 
 ## Features Demonstrated

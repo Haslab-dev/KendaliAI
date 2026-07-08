@@ -25,6 +25,7 @@ import (
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
+	"gopkg.in/yaml.v3"
 )
 
 type ToolDef struct {
@@ -981,6 +982,128 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 					return fmt.Sprintf("error deleting skill: %v", err)
 				}
 				return fmt.Sprintf("✅ Deleted skill '%s'", id)
+			},
+		},
+		"install_agent": {
+			Name:        "install_agent",
+			Description: "Installs an agent manifest YAML file from a remote URL or local path.",
+			Signature:   `{"url": "string"}`,
+			Category:    "Agent",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				src, _ := args["url"].(string)
+				if src == "" {
+					return "error: 'url' is required"
+				}
+				var data []byte
+				var err error
+
+				if strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://") {
+					resp, err := http.Get(src)
+					if err != nil {
+						return fmt.Sprintf("error downloading manifest: %v", err)
+					}
+					defer resp.Body.Close()
+					if resp.StatusCode != http.StatusOK {
+						return fmt.Sprintf("error downloading manifest: HTTP status %d", resp.StatusCode)
+					}
+					data, err = io.ReadAll(resp.Body)
+					if err != nil {
+						return fmt.Sprintf("error reading manifest response: %v", err)
+					}
+				} else {
+					data, err = os.ReadFile(src)
+					if err != nil {
+						return fmt.Sprintf("error reading local manifest: %v", err)
+					}
+				}
+
+				var m struct {
+					ID           string `yaml:"id"`
+					DisplayName  string `yaml:"displayName"`
+					SystemPrompt string `yaml:"systemPrompt"`
+				}
+				if err := yaml.Unmarshal(data, &m); err != nil {
+					return fmt.Sprintf("error parsing YAML manifest: %v", err)
+				}
+
+				if m.ID == "" {
+					return "error: agent manifest requires an 'id'"
+				}
+				if m.SystemPrompt == "" {
+					return fmt.Sprintf("error: agent manifest %q requires a 'systemPrompt'", m.ID)
+				}
+
+				homeDir, _ := os.UserHomeDir()
+				dir := filepath.Join(homeDir, ".kendaliai", "agents")
+				_ = os.MkdirAll(dir, 0755)
+
+				destPath := filepath.Join(dir, m.ID+".yaml")
+				if err := os.WriteFile(destPath, data, 0644); err != nil {
+					return fmt.Sprintf("error saving manifest: %v", err)
+				}
+
+				return fmt.Sprintf("✅ Successfully installed Agent '%s' [id=%s]", m.DisplayName, m.ID)
+			},
+		},
+		"list_agents": {
+			Name:        "list_agents",
+			Description: "Lists all installed agent manifests.",
+			Signature:   `{}`,
+			Category:    "Agent",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				homeDir, _ := os.UserHomeDir()
+				dir := filepath.Join(homeDir, ".kendaliai", "agents")
+				entries, err := os.ReadDir(dir)
+				if err != nil {
+					return "No agents installed."
+				}
+				var sb strings.Builder
+				count := 0
+				for _, entry := range entries {
+					if entry.IsDir() || (filepath.Ext(entry.Name()) != ".yaml" && filepath.Ext(entry.Name()) != ".yml") {
+						continue
+					}
+					path := filepath.Join(dir, entry.Name())
+					data, err := os.ReadFile(path)
+					if err != nil {
+						continue
+					}
+					var m struct {
+						ID          string `yaml:"id"`
+						DisplayName string `yaml:"displayName"`
+						Description string `yaml:"description"`
+					}
+					if err := yaml.Unmarshal(data, &m); err != nil {
+						continue
+					}
+					sb.WriteString(fmt.Sprintf("- %s [%s]: %s\n", m.DisplayName, m.ID, m.Description))
+					count++
+				}
+				if count == 0 {
+					return "No agents installed."
+				}
+				return sb.String()
+			},
+		},
+		"delete_agent": {
+			Name:        "delete_agent",
+			Description: "Deletes an installed agent manifest by ID.",
+			Signature:   `{"agent_id": "string"}`,
+			Category:    "Agent",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				id, _ := args["agent_id"].(string)
+				if id == "" {
+					return "error: 'agent_id' is required"
+				}
+				homeDir, _ := os.UserHomeDir()
+				path := filepath.Join(homeDir, ".kendaliai", "agents", id+".yaml")
+				if _, err := os.Stat(path); err != nil {
+					return fmt.Sprintf("agent '%s' not found", id)
+				}
+				if err := os.Remove(path); err != nil {
+					return fmt.Sprintf("error deleting agent: %v", err)
+				}
+				return fmt.Sprintf("✅ Deleted agent '%s'", id)
 			},
 		},
 		"update_skill": {

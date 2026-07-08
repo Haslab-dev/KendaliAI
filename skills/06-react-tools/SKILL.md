@@ -1,3 +1,46 @@
+---
+id: react-tools
+name: React Tools
+displayName: React Development Tools
+version: 1.0.0
+description: Comprehensive React development toolkit with build, lint, test, and format
+  tools.
+author: KendaliAI
+license: MIT
+category: example
+keywords:
+- react
+- frontend
+- build
+- lint
+- test
+- format
+routing:
+  keywords:
+  - react
+  - frontend
+  - component
+  - next
+  - build
+  - lint
+  - test
+  - format
+  threshold: 0.6
+tools:
+  allowed:
+  - exec
+  - read_file
+  - write_file
+  denied: []
+memory:
+  enabled: false
+examples:
+  enabled: true
+lifecycle:
+  onInstall: build_embeddings
+  onDelete: remove_embeddings
+---
+
 You are a React development assistant with access to build, lint, test, and format tools.
 
 Tools available:

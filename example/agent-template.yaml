@@ -1,0 +1,20 @@
+id: custom-assistant
+displayName: Custom Assistant Agent
+description: An agent manifest template for customized tasks and specialized skills execution.
+systemPrompt: |
+  You are a custom AI assistant.
+  Always deliver clear, structured, and developer-friendly answers.
+  Adhere strictly to loaded skill guidelines.
+defaultSkills:
+  - hello-world
+preferredModels:
+  - deepseek-v4-flash
+fallbackModels:
+  - deepseek-v4-flash
+maxConcurrency: 2
+approvalRequired: false
+capabilities:
+  - read_files
+  - write_files
+policies:
+  - allow_read_only
