@@ -116,6 +116,38 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		cleanPrompt = userPrompt
 	}
 
+	// 1b. Parse /doc:<title> directives — inject full document content as RAG context
+	var docContextSections []string
+	for strings.HasPrefix(cleanPrompt, "/doc:") {
+		parts := strings.SplitN(cleanPrompt, " ", 2)
+		docTitle := strings.TrimPrefix(parts[0], "/doc:")
+		if docTitle != "" {
+			docs, _ := r.store.ListDocuments("")
+			for _, d := range docs {
+				if strings.EqualFold(d.Title, docTitle) ||
+					strings.Contains(strings.ToLower(d.Title), strings.ToLower(docTitle)) {
+					docContextSections = append(docContextSections,
+						fmt.Sprintf("=== Document: %s ===\n%s", d.Title, d.Content))
+					break
+				}
+			}
+		}
+		if len(parts) > 1 {
+			cleanPrompt = strings.TrimSpace(parts[1])
+			continue
+		}
+		cleanPrompt = ""
+		break
+	}
+	if len(docContextSections) > 0 {
+		docBlock := strings.Join(docContextSections, "\n\n")
+		if cleanPrompt != "" {
+			cleanPrompt = docBlock + "\n\n---\nUser question: " + cleanPrompt
+		} else {
+			cleanPrompt = docBlock + "\n\n---\nPlease summarize this document."
+		}
+	}
+
 	// 2. Save User Message
 	userMsg := SessionMessage{
 		ID:        uuid.New().String(),

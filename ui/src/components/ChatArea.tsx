@@ -14,7 +14,7 @@ interface SlashCommand {
   prefix: string;
   label: string;
   desc: string;
-  category: 'SKILL' | 'MCP' | 'COMMAND';
+  category: 'SKILL' | 'MCP' | 'COMMAND' | 'DOC';
   icon: string;
   executeDirect?: () => void;
 }
@@ -49,6 +49,15 @@ export const ChatArea: React.FC = () => {
 
   const [isUploadingDoc, setIsUploadingDoc] = useState(false);
   const [ragNotice, setRagNotice] = useState<{ type: 'success' | 'info' | 'error'; text: string } | null>(null);
+  const [allDocs, setAllDocs] = useState<{ id: string; title: string; chunkCount: number }[]>([]);
+
+  // Load all documents for /doc: autocomplete
+  useEffect(() => {
+    fetch('/api/documents')
+      .then((r) => r.ok ? r.json() : [])
+      .then((data) => setAllDocs(Array.isArray(data) ? data.map((d: any) => ({ id: d.id, title: d.title, chunkCount: d.chunkCount || 0 })) : []))
+      .catch(() => {});
+  }, []);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -179,8 +188,20 @@ export const ChatArea: React.FC = () => {
       }
     );
 
+    // 4. Uploaded Documents — /doc:<title> RAG context recall
+    allDocs.forEach((doc) => {
+      list.push({
+        key: `doc-${doc.id}`,
+        prefix: `/doc:${doc.title}`,
+        label: doc.title,
+        desc: `Inject RAG context from this document (${doc.chunkCount} chunks)`,
+        category: 'DOC',
+        icon: '📄',
+      });
+    });
+
     return list;
-  }, [agents, mcps, activeSessionId, createSession, clearSessionMessages, setActiveModal]);
+  }, [agents, mcps, activeSessionId, allDocs, createSession, clearSessionMessages, setActiveModal]);
 
   // Determine if slash popup should be visible and filter suggestions
   const isTypingSlash = inputText.startsWith('/') && !inputText.includes(' ') && !isSlashDismissed;
@@ -603,6 +624,8 @@ const SlashAutocompleteModal: React.FC<{
               ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
               : item.category === 'MCP'
               ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+              : item.category === 'DOC'
+              ? 'bg-teal-500/20 text-teal-300 border-teal-500/30'
               : 'bg-blue-500/20 text-blue-300 border-blue-500/30';
 
           return (
