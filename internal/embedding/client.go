@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 
 	"github.com/kendaliai/app/internal/config"
 	openai "github.com/sashabaranov/go-openai"
@@ -18,19 +19,25 @@ type Client struct {
 
 func NewClient() *Client {
 	c := config.Cfg
-	apiKey := c.Embedding.APIKey
-	endpoint := c.Embedding.Endpoint
-	model := c.Embedding.Model
+	apiKey := ""
+	endpoint := ""
+	model := ""
 
-	// Fall back to the default chat provider's credentials when the
-	// embedding section is not explicitly configured.
-	if apiKey == "" || endpoint == "" {
-		if p := c.DefaultChatProvider(); p != nil {
-			if apiKey == "" {
-				apiKey = p.APIKey
-			}
-			if endpoint == "" {
-				endpoint = p.Endpoint
+	if c != nil {
+		apiKey = c.Embedding.APIKey
+		endpoint = c.Embedding.Endpoint
+		model = c.Embedding.Model
+
+		// Fall back to the default chat provider's credentials when the
+		// embedding section is not explicitly configured.
+		if apiKey == "" || endpoint == "" {
+			if p := c.DefaultChatProvider(); p != nil {
+				if apiKey == "" {
+					apiKey = p.APIKey
+				}
+				if endpoint == "" {
+					endpoint = p.Endpoint
+				}
 			}
 		}
 	}
@@ -39,6 +46,7 @@ func NewClient() *Client {
 	}
 
 	ocfg := openai.DefaultConfig(apiKey)
+	endpoint = strings.TrimRight(strings.TrimSpace(endpoint), "/")
 	if endpoint != "" {
 		ocfg.BaseURL = endpoint
 	}
@@ -51,11 +59,32 @@ func NewClient() *Client {
 
 func NewClientFromConfig(apiKey, endpoint, model string) *Client {
 	ocfg := openai.DefaultConfig(apiKey)
-	ocfg.BaseURL = endpoint
+	endpoint = strings.TrimRight(strings.TrimSpace(endpoint), "/")
+	if endpoint != "" {
+		ocfg.BaseURL = endpoint
+	}
+	if model == "" {
+		model = "text-embedding-3-small"
+	}
 	return &Client{
 		client: openai.NewClientWithConfig(ocfg),
 		model:  model,
 	}
+}
+
+func (c *Client) Model() string {
+	return c.model
+}
+
+func (c *Client) TestConnection(ctx context.Context) (int, error) {
+	vecs, err := c.Embed(ctx, []string{"KendaliAI embedding test connection probe."})
+	if err != nil {
+		return 0, err
+	}
+	if len(vecs) == 0 || len(vecs[0]) == 0 {
+		return 0, fmt.Errorf("no vector dimensions returned")
+	}
+	return len(vecs[0]), nil
 }
 
 type Vector []float32
@@ -67,19 +96,34 @@ type EmbeddingProvider interface {
 var _ EmbeddingProvider = (*Client)(nil)
 
 func (c *Client) Embed(ctx context.Context, texts []string) ([]Vector, error) {
-	resp, err := c.client.CreateEmbeddings(ctx, openai.EmbeddingRequest{
-		Input: texts,
-		Model: openai.EmbeddingModel(c.model),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("embedding API error: %w", err)
+	if len(texts) == 0 {
+		return nil, nil
 	}
 
-	result := make([]Vector, len(resp.Data))
-	for i, d := range resp.Data {
-		result[i] = Vector(d.Embedding)
+	batchSize := 16
+	var allVectors []Vector
+
+	for i := 0; i < len(texts); i += batchSize {
+		end := i + batchSize
+		if end > len(texts) {
+			end = len(texts)
+		}
+		batch := texts[i:end]
+
+		resp, err := c.client.CreateEmbeddings(ctx, openai.EmbeddingRequest{
+			Input: batch,
+			Model: openai.EmbeddingModel(c.model),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("embedding API error for batch [%d:%d]: %w", i, end, err)
+		}
+
+		for _, d := range resp.Data {
+			allVectors = append(allVectors, Vector(d.Embedding))
+		}
 	}
-	return result, nil
+
+	return allVectors, nil
 }
 
 func (c *Client) EmbedOne(ctx context.Context, text string) (Vector, error) {

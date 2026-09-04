@@ -45,6 +45,12 @@ func runStatus(cmd *cobra.Command, args []string) {
 	} else {
 		fmt.Println("  Status:  Stopped")
 	}
+	pids := findPIDsOnPort("8080")
+	if len(pids) > 0 {
+		fmt.Printf("  Port 8080: Listening (PIDs: %v)\n", pids)
+	} else {
+		fmt.Println("  Port 8080: Free")
+	}
 	fmt.Println()
 
 	fmt.Println("── Registered Providers ──")

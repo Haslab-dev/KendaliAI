@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/kendaliai/app/internal/channels"
 	"github.com/kendaliai/app/internal/config"
 	"github.com/kendaliai/app/internal/db"
 	"github.com/kendaliai/app/internal/gateways"
@@ -38,11 +37,12 @@ func runStart(cmd *cobra.Command, args []string) {
 	cfg := config.Cfg
 	pidFile := resolvePIDFile()
 
+	// Stop and clear any existing process holding port 8080 or recorded in PID file
+	if stopAndClearPort("8080", pidFile) {
+		fmt.Println("🔄 Existing process detected on port 8080. Stopped and cleared port.")
+	}
+
 	if daemonMode {
-		if isRunning(pidFile) {
-			fmt.Println("❌ KendaliAI Gateway is already running.")
-			os.Exit(1)
-		}
 
 		exe, err := os.Executable()
 		if err != nil {
@@ -123,14 +123,6 @@ func runStart(cmd *cobra.Command, args []string) {
 
 	// 1. Auto-onboard gateway/channels database configurations
 	gateways.HandleOnboard(database)
-
-	// 2. Poll configured gateways
-	tm := channels.NewTelegramManager(database)
-	activeChannels, _ := tm.LoadActiveChannels()
-	for _, c := range activeChannels {
-		log.Printf("🔌 Starting polling channel: %s (%s)", c.ID, c.Type)
-		go tm.StartPolling(c)
-	}
 
 	srv := server.NewServer(database)
 	_ = os.WriteFile(pidFile, []byte(fmt.Sprintf("%d", os.Getpid())), 0644)

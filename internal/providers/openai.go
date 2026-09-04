@@ -16,7 +16,9 @@ type OpenAIProvider struct {
 
 func NewProvider(apiKey, model, endpoint string) *OpenAIProvider {
 	cfg := openai.DefaultConfig(apiKey)
-	cfg.BaseURL = endpoint
+	if endpoint != "" {
+		cfg.BaseURL = endpoint
+	}
 
 	return &OpenAIProvider{
 		client: openai.NewClientWithConfig(cfg),

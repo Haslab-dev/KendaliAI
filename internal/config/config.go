@@ -19,9 +19,11 @@ type ProviderConfig struct {
 }
 
 type EmbeddingConfig struct {
-	APIKey   string `json:"apiKey,omitempty" yaml:"apiKey,omitempty"`
-	Endpoint string `json:"endpoint" yaml:"endpoint"`
-	Model    string `json:"model" yaml:"model"`
+	APIKey     string `json:"apiKey,omitempty" yaml:"apiKey,omitempty"`
+	Endpoint   string `json:"endpoint" yaml:"endpoint"`
+	Model      string `json:"model" yaml:"model"`
+	Dimensions int    `json:"dimensions,omitempty" yaml:"dimensions,omitempty"`
+	Enabled    bool   `json:"enabled" yaml:"enabled"`
 }
 
 type ChannelConfig struct {
@@ -210,6 +212,12 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Embedding.Endpoint == "" {
 		c.Embedding.Endpoint = "https://api.openai.com/v1"
+	}
+	if c.Embedding.Dimensions <= 0 {
+		c.Embedding.Dimensions = 1536
+	}
+	if !c.Embedding.Enabled {
+		c.Embedding.Enabled = true
 	}
 }
 

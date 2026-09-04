@@ -1,0 +1,56 @@
+# Air configuration for KendaliAI Gateway live-reloading
+root = "."
+testdata_dir = "testdata"
+tmp_dir = "tmp"
+
+[build]
+  # Build command
+  cmd = "go build -o ./tmp/kendaliai ./cmd/kendaliai"
+  # Entrypoint executable and args
+  entrypoint = ["./tmp/kendaliai", "start"]
+  # Watch these filename extensions.
+  include_ext = ["go", "yaml", "yml", "toml"]
+  # Ignore these filename extensions or directories.
+  exclude_dir = ["assets", "tmp", "vendor", "test", "tests", "ui", "web", "build", ".git", ".kendaliai", ".gemini"]
+  # Watch these directories if you specified.
+  include_dir = ["cmd", "internal", "configs"]
+  # Exclude specific regular expressions.
+  exclude_regex = ["_test\\.go"]
+  # Exclude unchanged files.
+  exclude_unchanged = true
+  # Follow symlink for directories
+  follow_symlink = true
+  # Log file placed in tmp_dir
+  log = "air.log"
+  # Poll files for changes instead of using fsnotify.
+  poll = false
+  # Delay in ms after file change
+  delay = 500
+  # Stop running old binary when build errors occur.
+  stop_on_error = true
+  # Send Interrupt signal before killing process
+  send_interrupt = true
+  # Delay after sending Interrupt signal
+  kill_delay = 500
+  # Rerun binary or not
+  rerun = false
+
+[log]
+  # Show log time
+  time = true
+  # Only show main log
+  main_only = false
+
+[color]
+  main = "magenta"
+  watcher = "cyan"
+  build = "yellow"
+  runner = "green"
+
+[misc]
+  # Delete tmp directory on exit
+  clean_on_exit = true
+
+[screen]
+  clear_on_rebuild = true
+  keep_scroll = true

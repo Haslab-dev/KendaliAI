@@ -250,6 +250,7 @@ var schemaQueries = []string{
 		channel TEXT DEFAULT 'web',
 		role TEXT NOT NULL,
 		content TEXT NOT NULL,
+		thought TEXT DEFAULT '',
 		tool_calls TEXT,
 		tool_call_id TEXT,
 		tokens INTEGER DEFAULT 0,
@@ -282,9 +283,32 @@ var schemaQueries = []string{
 		name TEXT NOT NULL,
 		token TEXT NOT NULL,
 		agent_id TEXT NOT NULL,
+		model TEXT DEFAULT '',
+		provider_id TEXT DEFAULT '',
 		enabled INTEGER DEFAULT 1,
 		status TEXT DEFAULT 'stopped',
 		last_active_at INTEGER,
 		created_at INTEGER
 	)`,
+	`CREATE TABLE IF NOT EXISTS documents (
+		id TEXT PRIMARY KEY,
+		session_id TEXT,
+		title TEXT NOT NULL,
+		source TEXT,
+		content TEXT,
+		char_count INTEGER DEFAULT 0,
+		chunk_count INTEGER DEFAULT 0,
+		created_at INTEGER
+	)`,
+	`CREATE TABLE IF NOT EXISTS document_chunks (
+		id TEXT PRIMARY KEY,
+		document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+		session_id TEXT,
+		chunk_index INTEGER DEFAULT 0,
+		content TEXT NOT NULL,
+		embedding TEXT NOT NULL,
+		created_at INTEGER
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_doc_chunks_session ON document_chunks(session_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_doc_chunks_doc ON document_chunks(document_id)`,
 }

@@ -1,52 +1,89 @@
 BINARY    := kendaliai
 CMD       := ./cmd/kendaliai
 BUILD_DIR := ./build
+UI_DIR    := ./ui
 VERSION   := $(shell cat VERSION 2>/dev/null || echo "0.2.0")
 
-.PHONY: dev dev-tui dev-gateway dev-onboard dev-logs build build-prod install run clean tidy lint bump-version
+# Tools resolution
+PM  := $(shell command -v bun 2>/dev/null || echo "npm")
+AIR := $(shell command -v air 2>/dev/null || echo "$$(go env GOPATH)/bin/air")
 
-build:
-	mkdir -p $(BUILD_DIR)
+.PHONY: all build build-go build-ui dev dev-go dev-ui start start-daemon stop restart status clean lint tidy install air-install bump-version
+
+all: build
+
+# ── Build Targets ──
+
+build: build-ui build-go
+	@echo "✅ KendaliAI full build complete: $(BUILD_DIR)/$(BINARY)"
+
+build-go:
+	@mkdir -p $(BUILD_DIR)
 	go build -o $(BUILD_DIR)/$(BINARY) $(CMD)
 
-build-prod:
-	mkdir -p $(BUILD_DIR)
-	CGO_ENABLED=1 go build -ldflags="-s -w -X main.version=$(VERSION)" -o $(BUILD_DIR)/$(BINARY) $(CMD)
+build-ui:
+	@echo "📦 Building React Vite UI with $(PM)..."
+	@cd $(UI_DIR) && $(PM) run build
 
-install: build-prod
-	cp $(BUILD_DIR)/$(BINARY) /usr/local/bin/
-	mkdir -p ~/.kendaliai
-	@if [ ! -f ~/.kendaliai/config.json ]; then \
-		echo "Copying config.json to ~/.kendaliai/config.json"; \
-		cp config.json ~/.kendaliai/config.json; \
-	fi
+# ── Development Targets (Live Hot-Reload) ──
 
+# Full-stack dev mode: Air (Go live-reload :8080) + Vite (UI live-reload :5173)
 dev:
-	go run $(CMD)
+	@echo "🚀 Starting KendaliAI Full-Stack Dev (Air + Vite)..."
+	@$(BUILD_DIR)/$(BINARY) stop >/dev/null 2>&1 || true
+	@trap 'kill 0' EXIT; $(AIR) & (cd $(UI_DIR) && $(PM) run dev)
 
-dev-tui:
-	go run $(CMD) tui
+# Backend only with Air live-reload
+dev-go:
+	@echo "🔥 Starting Go backend with Air live-reloading..."
+	@$(BUILD_DIR)/$(BINARY) stop >/dev/null 2>&1 || true
+	@$(AIR)
 
-dev-gateway:
-	go run $(CMD) gateway
+# Frontend only with Vite hot-reload
+dev-ui:
+	@echo "⚡ Starting React Vite frontend..."
+	@cd $(UI_DIR) && $(PM) run dev
 
-dev-onboard:
-	go run $(CMD) onboard
+air-install:
+	go install github.com/air-verse/air@latest
 
-dev-logs:
-	go run $(CMD) logs
+# ── Production Runtime Targets ──
 
-run: build
-	$(BUILD_DIR)/$(BINARY)
+# Start gateway in foreground (auto-clears port 8080 and stale processes first)
+start: build-go
+	$(BUILD_DIR)/$(BINARY) start
 
-bump-version:
-	@python3 -c "v='$(VERSION)'.split('.'); print('.'.join([v[0],v[1],str(int(v[2])+1)]))" > VERSION && echo "Version bumped to $$(cat VERSION)"
+# Start gateway in background as daemon
+start-daemon: build-go
+	$(BUILD_DIR)/$(BINARY) start -d
+
+# Stop gateway, kill any process holding port 8080, and clear PID file
+stop: build-go
+	$(BUILD_DIR)/$(BINARY) stop
+
+# Restart gateway daemon
+restart: build-go
+	$(BUILD_DIR)/$(BINARY) restart
+
+# Show gateway status, uptime, PID, and port listeners
+status: build-go
+	$(BUILD_DIR)/$(BINARY) status
+
+# ── Maintenance & Code Quality ──
 
 clean:
 	rm -rf $(BUILD_DIR)
+	rm -rf $(UI_DIR)/dist
+	rm -rf tmp/
 
 tidy:
 	go mod tidy
 
 lint:
 	go vet ./internal/... ./cmd/...
+
+bump-version:
+	@python3 -c "v='$(VERSION)'.split('.'); print('.'.join([v[0],v[1],str(int(v[2])+1)]))" > VERSION && echo "Version bumped to $$(cat VERSION)"
+
+install: build
+	@$(BUILD_DIR)/$(BINARY) install $(if $(DIR),-d $(DIR),)

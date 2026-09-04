@@ -1,6 +1,8 @@
 # KendaliAI (Go Edition)
 
-KendaliAI is a self-hosted, autonomous AI coding agent and orchestration gateway rebuilt natively in Go. Influenced heavily by actor-inspired systems and microkernel architectures, KendaliAI uses dynamic tool invocation, recursive LLM cognition loops, resource locking, and process supervision to execute local filesystem actions.
+KendaliAI is a self-hosted **AI Agent Gateway & Personal AI Runtime** built natively in Go. Designed as a lightweight daemon, KendaliAI unifies multiple specialized agents across **Web UI, Telegram bots, CLI, and REST/WebSocket APIs** with shared sessions, event sourcing, multi-tiered memory, and capability sandboxing.
+
+> **One lightweight Go daemon → many agents → many channels → shared sessions/memory/tools → Web + Telegram bidirectional.**
 
 ---
 
@@ -8,81 +10,109 @@ KendaliAI is a self-hosted, autonomous AI coding agent and orchestration gateway
 
 ### Prerequisites
 - Go 1.20+
+- Node / Bun (for Web UI)
 - SQLite3
 - CGO (required by `go-sqlite3`)
 
-### 1. Initialize Configuration
-Generate a commented default `config.yaml` configuration file:
+### Commands & Workflows (Makefile)
+
+| Command | Description |
+| :--- | :--- |
+| `make dev` | **Full-stack dev mode**: Auto-clears ports, runs Go daemon (`:8080`) + Vite HMR (`:5173`) |
+| `make start` | Starts gateway in foreground (auto-clears port `8080` & previous processes first) |
+| `make start-daemon` | Starts gateway in background daemon mode |
+| `make stop` | Gracefully stops daemon, terminates orphaned listeners, and releases port `8080` |
+| `make restart` | Restarts gateway daemon cleanly |
+| `make status` | Inspects daemon state, uptime, PID, and port `8080` listener status |
+| `make build` | Builds both production React UI assets (`ui/dist`) and Go binary (`build/kendaliai`) |
+| `make install` | Builds and installs `kendaliai` to system PATH (macOS & Linux), replacing old builds |
+
+### 1. Development Mode
+Run backend and frontend with live hot-reloading:
 ```bash
-go run ./cmd/kendaliai config init
+make dev
 ```
+Open **`http://localhost:5173`** for instant Vite HMR, which proxies API and WebSocket requests to `:8080`.
 
-This creates `./config.yaml` at the root directory:
-```yaml
-version: 1
-
-database:
-  path: ./build/kendaliai.db
-
-defaultProvider: deepseek
-
-chatProviders:
-  - name: deepseek
-    type: deepseek
-    apiKey: ${DEEPSEEK_API_KEY}
-    model: deepseek-chat
-  - name: openai
-    type: openai
-    apiKey: ${OPENAI_API_KEY}
-    model: gpt-4o
-
-embedding:
-  apiKey: ${OPENAI_API_KEY}
-  endpoint: https://api.openai.com/v1
-  model: text-embedding-3-small
-
-channels:
-  - id: telegram-main
-    channelName: telegram
-    channelType: telegram
-    token: ${TELEGRAM_TOKEN}
-```
-
-### 2. Validate Setup
-Verify syntax and environment diagnostics:
+### 2. Production Mode
+Build and run the unified single daemon:
 ```bash
-# Validate configuration parameters
-go run ./cmd/kendaliai config validate
+# Build production bundle (UI + Go binary)
+make build
 
-# Verify local dependencies (Go, Git, SQLite, Permissions)
-go run ./cmd/kendaliai doctor
+# Start daemon (foreground or background)
+make start
+# or: make start-daemon
 ```
+
+Open **`http://localhost:8080`** to access the **LibreChat-inspired Web UI** (supporting Dark/Light themes, collapsible tool execution cards, agent personas, MCPs, and Telegram bots).
 
 ---
 
 ## 2. CLI Command Index
 
-Operate the microkernel daemon using the unified command suite:
+Operate the gateway daemon using the unified command suite:
 
 | Command | Description |
 | :--- | :--- |
-| **`kendaliai start`** | Start gateway process in foreground. |
+| **`kendaliai start`** | Start gateway process & Web UI in foreground (`:8080`). |
 | **`kendaliai start -d`** | Start gateway background daemon. |
 | **`kendaliai stop`** | Stop background daemon. |
 | **`kendaliai restart`** | Restart daemon. |
-| **`kendaliai status`** | Show detailed uptime, CPU, memory, active agents, and cost metrics. |
+| **`kendaliai status`** | Show uptime, active sessions, agents, and bot metrics. |
 | **`kendaliai logs`** | Stream system logs (`--follow`, `--agent`, `--session`, `--level`, `--json`). |
 | **`kendaliai doctor`** | Diagnose platform dependencies and configurations. |
-| **`kendaliai dashboard`** | Launch local TUI dashboard. |
-| **`kendaliai config show`** | Dump active configuration. |
+| **`kendaliai tools`** | List all registered built-in agent capabilities. |
+| **`kendaliai agent`** | CLI wizard to create, list, install, and manage agent manifests. |
+| **`kendaliai skill`** | CLI manager for skills and packages. |
 
 ---
 
 ## 3. Platform Architecture
 
-KendaliAI is built on an **AI Operating System (AIOS)** microkernel architecture. Rather than treating agents as monoliths or hardcoded classes, KendaliAI separates **kernel coordination** (process management, mailboxes, event pub/sub) from **pluggable services** (workflow DAGs, goal trees, capabilities, policies, and cognition loops).
+KendaliAI is structured around an **AI Agent Gateway & Event Bus** architecture rather than a rigid workflow monolith. Channels (Web, Telegram, CLI) bind to **Agents**, conversations belong to **Sessions**, and execution is driven by an interactive **Agent Runtime** connected to a central **Event Bus**.
 
-### 3.1 Architectural Flow
+### 3.1 Conceptual Topology
+
+```text
+                         ┌───────────────────────┐
+                         │      KendaliAI        │
+                         │    Agent Gateway      │
+                         └───────────┬───────────┘
+                                     │
+             ┌───────────────────────┼────────────────────────┐
+             │                       │                        │
+        Telegram                   Web UI                  API/WS
+             │                       │                        │
+      ┌──────┴──────┐         ┌──────┴──────┐          ┌──────┴──────┐
+      │ engineer    │         │ engineer    │          │ external    │
+      │ finance     │         │ finance     │          │ clients     │
+      │ data-science│         │ data-science│          │             │
+      └──────┬──────┘         └──────┬──────┘          └─────────────┘
+             │                       │
+             └───────────┬───────────┘
+                         │
+                  Session / Message
+                         │
+                  Agent Runtime
+                         │
+       ┌─────────────────┼─────────────────┐
+       │                 │                 │
+     Tools             Memory             MCP
+       │                 │                 │
+    Shell             Working           Servers
+    Filesystem         Session           GitHub
+    HTTP               Long-term         Postgres
+    Browser            Semantic/RAG       etc.
+       │                 │
+       └─────────────────┼─────────────────┘
+                         │
+                    Model Router
+                         │
+             ┌───────────┼───────────┐
+          OpenAI       Claude      Gemini
+          DeepSeek     Qwen        Ollama
+```
 
 ```text
                                  User Channel / API Gateway

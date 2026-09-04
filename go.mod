@@ -42,6 +42,7 @@ require (
 	github.com/blevesearch/bleve/v2 v2.6.0
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/go-telegram-bot-api/telegram-bot-api/v5 v5.5.1
+	github.com/gorilla/websocket v1.5.3
 	github.com/mark3labs/mcp-go v0.49.0
 )
 
@@ -92,8 +93,8 @@ require (
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/golang/snappy v1.0.0 // indirect
 	github.com/google/jsonschema-go v0.4.2 // indirect
-	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
+	github.com/ledongthuc/pdf v0.0.0-20260903153007-b3c860c23753 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect
