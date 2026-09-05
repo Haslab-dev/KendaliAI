@@ -20,6 +20,10 @@ export const DocsPane: React.FC<{ onChatWithDoc: (docTitle: string) => void }> =
   const [uploadNotice, setUploadNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [searchQ, setSearchQ] = useState('');
   const [isReindexing, setIsReindexing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<{ documentId: string; title: string; content: string; score: number }[] | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchModel, setSearchModel] = useState('');
   const [embModel, setEmbModel] = useState<string>('');
   const [staleChunks, setStaleChunks] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -96,6 +100,31 @@ export const DocsPane: React.FC<{ onChatWithDoc: (docTitle: string) => void }> =
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
       setTimeout(() => setUploadNotice(null), 6000);
+    }
+  };
+
+  const handleVectorSearch = async () => {
+    const q = searchQuery.trim();
+    if (!q || isSearching) return;
+    setIsSearching(true);
+    setSearchResults(null);
+    try {
+      const res = await fetch('/api/documents/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: q, topK: 10 }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSearchModel(data.model || '');
+        setSearchResults(data.results || []);
+      } else {
+        setUploadNotice({ type: 'error', text: `Search failed: ${data.error || 'Unknown error'}` });
+      }
+    } catch (err: any) {
+      setUploadNotice({ type: 'error', text: `Search error: ${err.message}` });
+    } finally {
+      setIsSearching(false);
     }
   };
 
@@ -188,7 +217,7 @@ export const DocsPane: React.FC<{ onChatWithDoc: (docTitle: string) => void }> =
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={isUploading}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-hi hover:bg-hi disabled:opacity-50 text-hi rounded-lg text-xs font-semibold shadow-lg transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-hi text-app rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
           >
             {isUploading
               ? <RefreshCw size={12} className="animate-spin" />
@@ -214,7 +243,7 @@ export const DocsPane: React.FC<{ onChatWithDoc: (docTitle: string) => void }> =
         <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-lo" />
         <input
           type="text"
-          placeholder="Search documents..."
+          placeholder="Filter by title..."
           value={searchQ}
           onChange={(e) => setSearchQ(e.target.value)}
           className="w-full pl-8 pr-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi placeholder:text-lo outline-none focus:border-line transition-colors"
@@ -226,6 +255,55 @@ export const DocsPane: React.FC<{ onChatWithDoc: (docTitle: string) => void }> =
         <span><span className="text-mid font-semibold">{docs.length}</span> documents</span>
         <span><span className="text-mid font-semibold">{docs.reduce((s, d) => s + d.chunkCount, 0)}</span> total chunks</span>
         <span><span className="text-mid font-semibold">{docs.reduce((s, d) => s + d.charCount, 0) > 1024 ? `${(docs.reduce((s, d) => s + d.charCount, 0) / 1024).toFixed(0)} KB` : `${docs.reduce((s, d) => s + d.charCount, 0)} B`}</span> total size</span>
+      </div>
+
+      {/* Vector search with retrieval scores */}
+      <div className="rounded-xl border border-line bg-panel p-3">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[10px] font-bold text-hi uppercase tracking-wider">Vector Search</span>
+          {searchModel && <span className="text-[10px] text-lo font-mono">{searchModel}</span>}
+        </div>
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-lo" />
+            <input
+              type="text"
+              placeholder="Query your documents by meaning (semantic search)..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleVectorSearch(); }}
+              className="w-full pl-8 pr-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi placeholder:text-lo outline-none focus:border-mid transition-colors"
+            />
+          </div>
+          <button
+            onClick={handleVectorSearch}
+            disabled={isSearching || !searchQuery.trim()}
+            className="flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-hi text-app text-xs font-semibold disabled:opacity-50"
+          >
+            <RefreshCw size={12} className={isSearching ? 'animate-spin' : ''} />
+            {isSearching ? 'Searching...' : 'Search'}
+          </button>
+        </div>
+
+        {searchResults !== null && (
+          <div className="mt-3 space-y-2">
+            {searchResults.length === 0 && (
+              <div className="text-[11px] text-lo py-2">No matching chunks found.</div>
+            )}
+            {searchResults.map((r, i) => (
+              <div key={`${r.documentId}-${i}`} className="rounded-lg border border-line bg-raised p-2.5">
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <span className="text-xs font-semibold text-hi truncate">{i + 1}. {r.title}</span>
+                  <span className="text-[10px] font-mono font-semibold text-hi flex-shrink-0">{(r.score * 100).toFixed(1)}%</span>
+                </div>
+                <div className="h-1 rounded-full bg-hoverbg overflow-hidden mb-1.5">
+                  <div className="h-full bg-mid rounded-full" style={{ width: `${Math.max(2, Math.min(100, r.score * 100))}%` }} />
+                </div>
+                <div className="text-[11px] text-mid leading-relaxed whitespace-pre-wrap break-words">{r.content}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Loading */}

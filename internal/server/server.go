@@ -58,6 +58,8 @@ func NewServer(db *sql.DB) *Server {
 		},
 	}
 
+	s.ensureAuthTable()
+
 	// Auto-start active Telegram bots
 	go func() {
 		time.Sleep(500 * time.Millisecond)
@@ -76,7 +78,7 @@ func (s *Server) Start(port string) error {
 
 	srv := &http.Server{
 		Addr:         addr,
-		Handler:      s.corsMiddleware(s.router),
+		Handler:      s.corsMiddleware(s.authMiddleware(s.router)),
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 60 * time.Second,
 	}
@@ -101,6 +103,10 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 func (s *Server) routes() {
 	// Base diagnostics
 	s.router.HandleFunc("/health", s.handleHealth())
+	s.router.HandleFunc("/api/auth/status", s.handleAuthStatus())
+	s.router.HandleFunc("/api/auth/login", s.handleAuthLogin())
+	s.router.HandleFunc("/api/auth/logout", s.handleAuthLogout())
+	s.router.HandleFunc("/api/auth/password", s.handleAuthPassword())
 	s.router.HandleFunc("/status", s.handleStatus())
 	s.router.HandleFunc("/api/gateways", s.handleGateways())
 	s.router.HandleFunc("/v1/chat/completions", s.handleChatCompletions())
@@ -130,6 +136,7 @@ func (s *Server) routes() {
 	s.router.HandleFunc("/api/embedding/status", s.handleEmbeddingStatus())
 	s.router.HandleFunc("/api/documents/ingest", s.handleDocumentIngest())
 	s.router.HandleFunc("/api/documents/reindex", s.handleDocumentsReindex())
+	s.router.HandleFunc("/api/documents/search", s.handleDocumentsSearch())
 	s.router.HandleFunc("/api/documents", s.handleDocuments())
 	s.router.HandleFunc("/api/documents/", s.handleDocumentDetail())
 
@@ -1023,6 +1030,91 @@ func (s *Server) handleWebUI() http.HandlerFunc {
 // handleDocumentsReindex re-chunks and re-embeds every stored document with
 // the currently configured embedding model, so switching models/providers
 // keeps the doc store searchable (GOALS.md Track G).
+// handleDocumentsSearch embeds the query with the active embedding model
+// and returns the top-K matching chunks across all documents with their
+// similarity scores — the scored retrieval view for the Doc Store pane.
+func (s *Server) handleDocumentsSearch() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != "POST" {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			Query string `json:"query"`
+			TopK  int    `json:"topK"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		req.Query = strings.TrimSpace(req.Query)
+		if req.Query == "" {
+			http.Error(w, "query cannot be empty", http.StatusBadRequest)
+			return
+		}
+		if req.TopK <= 0 || req.TopK > 50 {
+			req.TopK = 10
+		}
+
+		embCfg, _ := s.store.GetEmbeddingConfig()
+		if embCfg == nil || !embCfg.Enabled || (embCfg.APIKey == "" && embCfg.Endpoint == "") {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": false,
+				"error":   "No embedding provider is configured. Set one up in Providers > Embedding & Vector RAG first.",
+			})
+			return
+		}
+		client := embedding.NewClientFromConfig(embCfg.APIKey, embCfg.Endpoint, embCfg.Model)
+
+		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+		defer cancel()
+		queryVec, err := client.EmbedOne(ctx, req.Query)
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": err.Error()})
+			return
+		}
+
+		// Global scope (all documents), low threshold: the scored view should
+		// surface weak matches too — the score tells the user how good they are.
+		hits, err := s.store.SearchDocumentChunks("", []float32(queryVec), req.TopK, 0.01, client.Model())
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": err.Error()})
+			return
+		}
+
+		type scoredHit struct {
+			DocumentID string  `json:"documentId"`
+			Title      string  `json:"title"`
+			Content    string  `json:"content"`
+			Score      float64 `json:"score"`
+		}
+		results := make([]scoredHit, 0, len(hits))
+		for _, h := range hits {
+			title := h.DocTitle
+			if title == "" {
+				title = "Document"
+			}
+			content := h.Content
+			if len(content) > 400 {
+				content = content[:400] + "..."
+			}
+			results = append(results, scoredHit{
+				DocumentID: h.DocumentID,
+				Title:      title,
+				Content:    content,
+				Score:      h.Score,
+			})
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": true,
+			"model":   client.Model(),
+			"results": results,
+		})
+	}
+}
+
 func (s *Server) handleDocumentsReindex() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
