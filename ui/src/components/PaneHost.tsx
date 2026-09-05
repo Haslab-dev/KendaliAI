@@ -56,15 +56,18 @@ export const PaneHost: React.FC<{ route: Exclude<RouteName, 'chat'> }> = ({ rout
         </div>
       )}
       <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col">
-        {route === 'providers' && <ProvidersPane />}
-        {route === 'agents' && <AgentsPane />}
-        {route === 'logs' && <LogsStreamingView onClose={() => navigate('chat')} />}
-        {route === 'sessions' && <SessionsPane onSelectSession={openInChat} />}
-        {route === 'docs' && <DocsPane onChatWithDoc={() => navigate('chat')} />}
-        {route === 'mcps' && <McpsPane />}
-        {route === 'skills' && <SkillsPane />}
-        {route === 'tools' && <ToolsPane />}
-        {route === 'telegram' && <TelegramPane />}
+        {/* Inner padding for all panes except full-bleed logs */}
+        <div className={route === 'logs' ? 'flex-1 flex flex-col' : 'flex-1 flex flex-col px-4 py-4 md:px-6 md:py-6'}>
+          {route === 'providers' && <ProvidersPane />}
+          {route === 'agents' && <AgentsPane />}
+          {route === 'logs' && <LogsStreamingView onClose={() => navigate('chat')} />}
+          {route === 'sessions' && <SessionsPane onSelectSession={openInChat} />}
+          {route === 'docs' && <DocsPane onChatWithDoc={() => navigate('chat')} />}
+          {route === 'mcps' && <McpsPane />}
+          {route === 'skills' && <SkillsPane />}
+          {route === 'tools' && <ToolsPane />}
+          {route === 'telegram' && <TelegramPane />}
+        </div>
       </div>
     </div>
   );
