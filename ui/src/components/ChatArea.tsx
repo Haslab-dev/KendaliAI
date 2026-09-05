@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Plus, Trash2, Moon, Sun, Paperclip, Mic, ArrowUp, Copy, Check,
-  ChevronDown, ChevronUp, Search, Brain, Zap, Settings, Command,
+  ChevronDown, ChevronUp, Search, Brain, Zap, Settings, Command, AlertCircle,
   CornerDownLeft, Terminal, Sparkles, Smartphone, Database, RefreshCw, FileText, X
 } from 'lucide-react';
 import { Bot, Feather } from 'lucide-react';
@@ -90,14 +90,12 @@ export const ChatArea: React.FC = () => {
           type: 'error',
           text: `Failed to ingest: ${data.error || 'Unknown error'}`,
         });
-        setTimeout(() => setRagNotice(null), 5000);
       }
     } catch (err: any) {
       setRagNotice({
         type: 'error',
         text: `Upload error: ${err.message}`,
       });
-      setTimeout(() => setRagNotice(null), 5000);
     } finally {
       setIsUploadingDoc(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -511,32 +509,44 @@ export const ChatArea: React.FC = () => {
         {/* RAG Document Ingestion Notification Banner */}
         {ragNotice && (
           <div
-            className={`mb-2 px-3.5 py-2 rounded-xl border text-xs flex items-center justify-between shadow-lg transition-all ${
-              ragNotice.type === 'success'
-                ? 'bg-raised bg-raised text-hi'
-                : ragNotice.type === 'info'
-                ? 'bg-raised bg-raised text-hi'
-                : 'bg-red-950/40 border-red-500/40 text-red-300'
+            className={`mb-2 rounded-xl border text-xs shadow-lg transition-all ${
+              ragNotice.type === 'error'
+                ? 'bg-red-500/15 border-red-500/60 text-red-100'
+                : 'bg-raised border-line text-hi'
             }`}
           >
-            <div className="flex items-center gap-2 truncate">
-              {isUploadingDoc ? (
-                <RefreshCw size={13} className="animate-spin text-hi flex-shrink-0" />
-              ) : (
-                <Database size={13} className="text-hi flex-shrink-0" />
-              )}
-              <span className="truncate">{ragNotice.text}</span>
+            <div className="flex items-start justify-between gap-2 px-3.5 py-2.5">
+              <div className="flex items-start gap-2 min-w-0">
+                {isUploadingDoc ? (
+                  <RefreshCw size={13} className="animate-spin text-hi flex-shrink-0 mt-0.5" />
+                ) : ragNotice.type === 'error' ? (
+                  <AlertCircle size={13} className="text-red-300 flex-shrink-0 mt-0.5" />
+                ) : (
+                  <Database size={13} className="text-hi flex-shrink-0 mt-0.5" />
+                )}
+                <div className="min-w-0">
+                  {ragNotice.type === 'error' && (
+                    <div className="font-bold text-red-200 uppercase tracking-wider text-[10px] mb-0.5">
+                      Error — action failed
+                    </div>
+                  )}
+                  <div className={`whitespace-pre-wrap break-words ${ragNotice.type === 'error' ? 'max-h-40 overflow-y-auto custom-scrollbar font-mono text-[11px] leading-relaxed' : ''}`}>
+                    {ragNotice.text}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setRagNotice(null)}
+                className="text-mid hover:text-hi p-0.5 flex-shrink-0"
+                title="Dismiss"
+              >
+                <X size={13} />
+              </button>
             </div>
-            <button
-              onClick={() => setRagNotice(null)}
-              className="text-mid hover:text-hi p-0.5 ml-2 flex-shrink-0"
-            >
-              <X size={13} />
-            </button>
           </div>
         )}
 
-        <div className="flex items-end bg-inputbg border border-line rounded-2xl p-2 gap-2 shadow-xl focus-within:border-neutral-400 transition-colors">
+        <div className="flex items-end bg-inputbg border border-line rounded-2xl p-2 gap-2 shadow-xl focus-within:border-mid transition-colors">
           <input
             type="file"
             ref={fileInputRef}
