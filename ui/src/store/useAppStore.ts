@@ -5,9 +5,6 @@ interface AppState {
   theme: 'dark' | 'light';
   toggleTheme: () => void;
 
-  activeView: 'chat' | 'logs';
-  setActiveView: (view: 'chat' | 'logs') => void;
-
   activeSessionId: string | null;
   setActiveSessionId: (id: string | null) => void;
   selectSession: (id: string) => Promise<void>;
@@ -45,9 +42,6 @@ interface AppState {
   thinkingStatus: string;
   setThinkingStatus: (status: string) => void;
 
-  activeModal: string | null;
-  setActiveModal: (modal: string | null) => void;
-
   activeModel: string | null;
   setActiveModel: (model: string | null) => void;
 
@@ -73,9 +67,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     set({ theme: next });
   },
-
-  activeView: 'chat',
-  setActiveView: (activeView) => set({ activeView }),
 
   activeSessionId: null,
   setActiveSessionId: (id) => {
@@ -400,9 +391,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   setIsGenerating: (isGenerating) => set({ isGenerating }),
   thinkingStatus: 'Thinking...',
   setThinkingStatus: (thinkingStatus) => set({ thinkingStatus }),
-
-  activeModal: null,
-  setActiveModal: (activeModal) => set({ activeModal }),
 
   activeModel: null,
   setActiveModel: (activeModel) => set({ activeModel }),

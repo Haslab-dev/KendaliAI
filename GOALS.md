@@ -161,9 +161,9 @@ All tracks run in parallel. Two **sync gates** serialize only what must be seria
 - [ ] E5 [M2] Role manifests (`coder`/`planner`/`reviewer`) selectable as personas from the Agents tab
 
 ### Track F — Workspace UI *(P7)*
-- [ ] F1 [M0] Adopt a router (hash-based, to keep the existing SPA fallback in `internal/server/server.go` `handleWebUI`) and define the route map
-- [ ] F2 [M1] Split `ManagementCenter.tsx` (2,034 lines) into per-pane components; modals become routed panes
-- [ ] F3 [M1] Responsive shell: desktop rail/sidebar ↔ mobile bottom nav; Tailwind breakpoint system (`sm/md/lg`) across `ui/src`
+- [x] F1 [M0] Adopt a router (hash-based, to keep the existing SPA fallback in `internal/server/server.go` `handleWebUI`) and define the route map
+- [x] F2 [M1] Split `ManagementCenter.tsx` (2,034 lines) into per-pane components; modals become routed panes
+- [x] F3 [M1] Responsive shell: desktop rail/sidebar ↔ mobile bottom nav; Tailwind breakpoint system (`sm/md/lg`) across `ui/src`
 - [ ] F4 [M2] PWA: manifest, installable, safe-area insets, touch targets ≥ 44px (S6)
 - [ ] F5 [M2] Boards / Collections / Scheduler panes (with D3, C4, B-UI)
 - [ ] F6 [M3] Polish: dark/light parity, cached static shell, skeleton loaders on mobile

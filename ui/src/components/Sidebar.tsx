@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Plus, ChevronDown, MessageSquare, Trash2, Search, Smartphone } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
+import { navigate } from '../router';
 
 export const Sidebar: React.FC = () => {
   const {
@@ -12,7 +13,6 @@ export const Sidebar: React.FC = () => {
     activeAgent,
     agents,
     setActiveAgent,
-    setActiveModal,
   } = useAppStore();
 
   const [isAgentMenuOpen, setIsAgentMenuOpen] = useState(false);
@@ -65,7 +65,7 @@ export const Sidebar: React.FC = () => {
             <div
               onClick={() => {
                 setIsAgentMenuOpen(false);
-                setActiveModal('agents');
+                navigate('agents');
               }}
               className="border-t border-[#333333] px-3 py-2 text-xs text-blue-400 hover:bg-[#2a2a2a] cursor-pointer font-sans"
             >

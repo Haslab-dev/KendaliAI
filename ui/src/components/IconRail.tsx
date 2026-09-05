@@ -9,59 +9,49 @@ import {
   Smartphone,
   Sun,
   Moon,
-  Settings,
+  History,
+  FileText,
   Terminal,
+  type LucideIcon,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
+import { navigate, RouteName, useRoute } from '../router';
+
+const NAV_ITEMS: { id: RouteName; label: string; icon: LucideIcon }[] = [
+  { id: 'chat', label: 'Chat View', icon: MessageSquare },
+  { id: 'logs', label: 'Streaming Logs', icon: Terminal },
+  { id: 'agents', label: 'Agents', icon: Bot },
+  { id: 'providers', label: 'Providers & Models', icon: Zap },
+  { id: 'docs', label: 'Doc Store', icon: FileText },
+  { id: 'mcps', label: 'MCP Servers', icon: Plug },
+  { id: 'skills', label: 'Skills Library', icon: Brain },
+  { id: 'tools', label: 'Tools & Policies', icon: Wrench },
+  { id: 'telegram', label: 'Telegram Bots', icon: Smartphone },
+];
 
 export const IconRail: React.FC = () => {
-  const { theme, toggleTheme, activeModal, setActiveModal, activeView, setActiveView } = useAppStore();
-
-  const navItems = [
-    { id: 'chat', label: 'Chat View', icon: MessageSquare, isView: true },
-    { id: 'logs', label: 'Streaming Logs', icon: Terminal, isView: true },
-    { id: 'agents', label: 'Agents', icon: Bot },
-    { id: 'providers', label: 'Providers & Models', icon: Zap },
-    { id: 'mcps', label: 'MCP Servers', icon: Plug },
-    { id: 'skills', label: 'Skills Library', icon: Brain },
-    { id: 'tools', label: 'Tools & Policies', icon: Wrench },
-    { id: 'telegram', label: 'Telegram Bots', icon: Smartphone },
-  ];
-
-  const handleClick = (item: (typeof navItems)[0]) => {
-    if (item.isView) {
-      setActiveView(item.id as 'chat' | 'logs');
-      setActiveModal(null);
-    } else {
-      setActiveModal(item.id);
-    }
-  };
+  const { theme, toggleTheme } = useAppStore();
+  const route = useRoute();
 
   return (
-    <nav className="w-[58px] bg-[#111111] dark:bg-[#111111] light:bg-[#efeff1] border-r border-[#262626] flex flex-col items-center py-3 gap-2 z-20 select-none">
+    <nav className="hidden md:flex w-[58px] bg-[#111111] dark:bg-[#111111] light:bg-[#efeff1] border-r border-[#262626] flex-col items-center py-3 gap-2 z-20 select-none flex-shrink-0">
       {/* LibreChat Feather Logo */}
       <div
         className="w-[38px] h-[38px] rounded-xl flex items-center justify-center cursor-pointer bg-gradient-to-br from-blue-500 to-purple-600 text-white font-bold text-lg shadow-lg shadow-blue-500/20 mb-2"
         title="KendaliAI Gateway"
-        onClick={() => {
-          setActiveView('chat');
-          setActiveModal(null);
-        }}
+        onClick={() => navigate('chat')}
       >
         🪶
       </div>
 
-      {/* Nav Icons */}
-      {navItems.map((item) => {
+      {/* Nav Icons — routed panes */}
+      {NAV_ITEMS.map((item) => {
         const Icon = item.icon;
-        const isActive = item.isView
-          ? activeModal === null && activeView === item.id
-          : activeModal === item.id;
-
+        const isActive = route === item.id;
         return (
           <button
             key={item.label}
-            onClick={() => handleClick(item)}
+            onClick={() => navigate(item.id)}
             className={`w-[42px] h-[42px] rounded-xl flex items-center justify-center transition-all group relative ${
               isActive
                 ? 'bg-[#212121] text-blue-400 font-semibold shadow-sm'
@@ -92,16 +82,16 @@ export const IconRail: React.FC = () => {
         </span>
       </button>
 
-      {/* Settings / Sessions */}
+      {/* Session Registry */}
       <button
-        onClick={() => setActiveModal('sessions')}
+        onClick={() => navigate('sessions')}
         className={`w-[42px] h-[42px] rounded-xl flex items-center justify-center transition-all group relative ${
-          activeModal === 'sessions'
+          route === 'sessions'
             ? 'bg-[#212121] text-blue-400'
             : 'text-neutral-400 hover:text-neutral-200 hover:bg-[#212121]/60'
         }`}
       >
-        <Settings size={19} />
+        <History size={19} />
         <span className="absolute left-[65px] bg-black text-white text-xs px-2 py-1 rounded shadow-md pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
           Session Registry
         </span>

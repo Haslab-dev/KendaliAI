@@ -19,6 +19,7 @@ import {
   X,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
+import { navigate } from '../router';
 import { GatewayLogEvent } from '../types';
 
 interface LogsStreamingViewProps {
@@ -26,7 +27,7 @@ interface LogsStreamingViewProps {
 }
 
 export const LogsStreamingView: React.FC<LogsStreamingViewProps> = ({ onClose }) => {
-  const { logs, loadLogs, clearLogs, setActiveView } = useAppStore();
+  const { logs, loadLogs, clearLogs } = useAppStore();
   const [channelFilter, setChannelFilter] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -182,7 +183,7 @@ export const LogsStreamingView: React.FC<LogsStreamingViewProps> = ({ onClose })
             </button>
           ) : (
             <button
-              onClick={() => setActiveView('chat')}
+              onClick={() => navigate('chat')}
               className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold font-sans transition-colors shadow-sm"
             >
               Back to Chat

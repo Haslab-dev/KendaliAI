@@ -5,6 +5,7 @@ import {
   CornerDownLeft, Terminal, Sparkles, Smartphone, Database, RefreshCw, FileText, X
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
+import { navigate } from '../router';
 import { useAgentSocket } from '../hooks/useAgentSocket';
 import { ToolExecutionCard } from './ToolExecutionCard';
 import { isReasoningModel } from '../types';
@@ -32,7 +33,6 @@ export const ChatArea: React.FC = () => {
     createSession,
     clearSessionMessages,
     activeSessionId,
-    setActiveModal,
     activeModel,
     mcps,
     sessions,
@@ -172,10 +172,10 @@ export const ChatArea: React.FC = () => {
         key: 'cmd-agent',
         prefix: '/agent',
         label: 'Switch Agent Persona',
-        desc: 'Open Agent Personas manager modal',
+        desc: 'Open Agent Personas pane',
         category: 'COMMAND',
         icon: '🤖',
-        executeDirect: () => setActiveModal('agents'),
+        executeDirect: () => navigate('agents'),
       },
       {
         key: 'cmd-providers',
@@ -184,7 +184,7 @@ export const ChatArea: React.FC = () => {
         desc: 'Configure custom OpenAI endpoints and probe /models',
         category: 'COMMAND',
         icon: '⚙️',
-        executeDirect: () => setActiveModal('providers'),
+        executeDirect: () => navigate('providers'),
       }
     );
 
@@ -201,7 +201,7 @@ export const ChatArea: React.FC = () => {
     });
 
     return list;
-  }, [agents, mcps, activeSessionId, allDocs, createSession, clearSessionMessages, setActiveModal]);
+  }, [agents, mcps, activeSessionId, allDocs, createSession, clearSessionMessages]);
 
   // Determine if slash popup should be visible and filter suggestions
   const isTypingSlash = inputText.startsWith('/') && !inputText.includes(' ') && !isSlashDismissed;
@@ -308,7 +308,7 @@ export const ChatArea: React.FC = () => {
         <div className="flex items-center gap-2">
           {/* Active Agent Selector */}
           <div
-            onClick={() => setActiveModal('agents')}
+            onClick={() => navigate('agents')}
             className="flex items-center gap-2 px-3 py-1.5 bg-[#1e1e1e] hover:bg-[#262626] border border-[#262626] rounded-xl cursor-pointer text-xs font-medium text-neutral-200 transition-colors"
             title="Switch Agent Persona"
           >
@@ -805,7 +805,7 @@ function renderInlineMarkdown(text: string): React.ReactNode {
 
 // Interactive Model Selector & Search Filter Dropdown
 const ModelSelectorDropdown: React.FC = () => {
-  const { providers, activeAgent, activeModel, setActiveModel, setActiveModal } = useAppStore();
+  const { providers, activeAgent, activeModel, setActiveModel } = useAppStore();
   const [isOpen, setIsOpen] = useState(false);
   const [searchFilter, setSearchFilter] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -988,7 +988,7 @@ const ModelSelectorDropdown: React.FC = () => {
               type="button"
               onClick={() => {
                 setIsOpen(false);
-                setActiveModal('providers');
+                navigate('providers');
               }}
               className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs text-neutral-400 hover:text-white hover:bg-[#202020] rounded-lg transition-colors"
             >

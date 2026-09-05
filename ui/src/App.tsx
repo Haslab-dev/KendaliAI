@@ -1,11 +1,12 @@
 import React, { useEffect } from 'react';
 import { useAppStore } from './store/useAppStore';
 import { useAgentSocket } from './hooks/useAgentSocket';
+import { useRoute } from './router';
 import { IconRail } from './components/IconRail';
 import { Sidebar } from './components/Sidebar';
 import { ChatArea } from './components/ChatArea';
-import { ManagementCenter } from './components/ManagementCenter';
-import { LogsStreamingView } from './components/LogsStreamingView';
+import { PaneHost } from './components/PaneHost';
+import { BottomNav } from './components/BottomNav';
 
 export const App: React.FC = () => {
   const {
@@ -17,8 +18,9 @@ export const App: React.FC = () => {
     activeSessionId,
     createSession,
     selectSession,
-    activeView,
   } = useAppStore();
+
+  const route = useRoute();
 
   // Connect to Agent WebSocket
   useAgentSocket();
@@ -61,26 +63,30 @@ export const App: React.FC = () => {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#0d0d0d] text-[#ececec] font-sans">
-      {/* LibreChat Icon Rail (Far Left) */}
+      {/* Desktop Icon Rail (hidden on mobile — BottomNav takes over) */}
       <IconRail />
 
-      {/* Main View: Logs Streaming Tab Screen or Chat Workspace */}
-      {activeView === 'logs' ? (
-        <LogsStreamingView />
-      ) : (
+      {/* Main content area: routed pane or chat workspace */}
+      {route === 'chat' ? (
         <>
-          {/* Main Sidebar (Sessions, Agent info, New Chat) */}
-          <Sidebar />
+          {/* Session sidebar — desktop only; sessions pane covers mobile */}
+          <div className="hidden md:flex h-full">
+            <Sidebar />
+          </div>
 
           {/* Central Chat & Interaction Canvas */}
-          <div className="flex-1 flex flex-col h-full relative overflow-hidden bg-[#0d0d0d]">
+          <div className="flex-1 flex flex-col h-full min-w-0 relative overflow-hidden bg-[#0d0d0d] pb-[60px] md:pb-0">
             <ChatArea />
           </div>
         </>
+      ) : (
+        <div className="flex-1 flex h-full min-w-0 pb-[60px] md:pb-0">
+          <PaneHost route={route} />
+        </div>
       )}
 
-      {/* Slide-over / Modal Management Center */}
-      <ManagementCenter />
+      {/* Mobile bottom navigation */}
+      <BottomNav />
     </div>
   );
 };
