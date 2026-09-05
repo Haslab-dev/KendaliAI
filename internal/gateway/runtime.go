@@ -70,6 +70,7 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 	}
 
 	// 1. Process slash directives in userPrompt: /skill:<agentID>, /agent:<agentID>, /mcp:<serverName>
+	rawPrompt := strings.TrimSpace(userPrompt)
 	activeAgentID := agentID
 	var extraMCPs []string
 	cleanPrompt := strings.TrimSpace(userPrompt)
@@ -116,9 +117,13 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		cleanPrompt = userPrompt
 	}
 
-	// 1b. Parse /doc:<title> directives — inject full document content as RAG context
+	// 1b. Parse /doc:<title> directives — attach document content as RAG
+	// context. Small documents are injected whole; large ones are injected as
+	// the top chunks matching the user's question so multi-megabyte PDFs stay
+	// inside the context window.
 	var docContextSections []string
 	var ragSources []RagSource
+	rawQuestion := cleanPrompt
 	for strings.HasPrefix(cleanPrompt, "/doc:") {
 		parts := strings.SplitN(cleanPrompt, " ", 2)
 		docTitle := strings.TrimPrefix(parts[0], "/doc:")
@@ -127,9 +132,41 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 			for _, d := range docs {
 				if strings.EqualFold(d.Title, docTitle) ||
 					strings.Contains(strings.ToLower(d.Title), strings.ToLower(docTitle)) {
-					docContextSections = append(docContextSections,
-						fmt.Sprintf("=== Document: %s ===\n%s", d.Title, d.Content))
 					ragSources = append(ragSources, RagSource{Title: d.Title})
+					if len(d.Content) <= 24000 {
+						docContextSections = append(docContextSections,
+							fmt.Sprintf("=== Document: %s ===\n%s", d.Title, d.Content))
+						break
+					}
+					// Large document: retrieve the chunks relevant to the
+					// question instead of the whole content.
+					if embCfg, _ := r.store.GetEmbeddingConfig(); embCfg != nil && embCfg.Enabled {
+						client := embedding.NewClientFromConfig(embCfg.APIKey, embCfg.Endpoint, embCfg.Model)
+						queryText := rawQuestion
+						if len(queryText) > 400 {
+							queryText = queryText[:400]
+						}
+						vec, err := client.EmbedOne(ctx, queryText)
+						if err == nil {
+							hits, err := r.store.SearchDocumentChunksByDoc(d.ID, []float32(vec), 10, 0.01, client.Model())
+							if err == nil && len(hits) > 0 {
+								var excerpts strings.Builder
+								for _, h := range hits {
+									excerpts.WriteString(fmt.Sprintf("\n[chunk %d, score %.2f]\n%s\n", h.ChunkIndex, h.Score, h.Content))
+								}
+								docContextSections = append(docContextSections,
+									fmt.Sprintf("=== Document: %s (large — top %d matching excerpts) ===%s", d.Title, len(hits), excerpts.String()))
+								break
+							}
+						}
+					}
+					// Fallback: truncated head with an explicit note.
+					head := d.Content
+					if len(head) > 24000 {
+						head = head[:24000] + "\n... [document truncated — ask narrower questions for more sections] ..."
+					}
+					docContextSections = append(docContextSections,
+						fmt.Sprintf("=== Document: %s (large — first part only) ===\n%s", d.Title, head))
 					break
 				}
 			}
@@ -146,10 +183,11 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 	turnPrompt := cleanPrompt
 	if len(docContextSections) > 0 {
 		docBlock := strings.Join(docContextSections, "\n\n")
+		grounding := "The document text above is attached to this message and IS fully accessible to you — quote and answer from it directly; never claim you cannot open documents."
 		if cleanPrompt != "" {
-			turnPrompt = docBlock + "\n\n---\nUser question: " + cleanPrompt
+			turnPrompt = docBlock + "\n\n" + grounding + "\nUser question: " + cleanPrompt
 		} else {
-			turnPrompt = docBlock + "\n\n---\nPlease summarize this document."
+			turnPrompt = docBlock + "\n\n" + grounding + "\nPlease summarize this document."
 		}
 	}
 
@@ -160,7 +198,7 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		AgentID:   activeAgentID,
 		Channel:   channel,
 		Role:      "user",
-		Content:   cleanPrompt,
+		Content:   rawPrompt,
 		CreatedAt: time.Now().UnixMilli(),
 	}
 	_ = r.store.SaveMessage(userMsg)

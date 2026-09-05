@@ -47,6 +47,7 @@ type ChunkSearchResult struct {
 	ID         string  `json:"id"`
 	DocumentID string  `json:"documentId"`
 	DocTitle   string  `json:"docTitle"`
+	ChunkIndex int     `json:"chunkIndex"`
 	Content    string  `json:"content"`
 	Score      float64 `json:"score"`
 }
@@ -1161,6 +1162,8 @@ func (s *Store) DeleteDocument(id string) error {
 	return err
 }
 
+// SearchDocumentChunks finds the top-K compatible chunks for a query vector
+// across the session's documents plus global (Doc Store) ones.
 func (s *Store) SearchDocumentChunks(sessionID string, queryEmbedding []float32, topK int, minScore float64, embedModel string) ([]ChunkSearchResult, error) {
 	if len(queryEmbedding) == 0 {
 		return nil, nil
@@ -1175,8 +1178,8 @@ func (s *Store) SearchDocumentChunks(sessionID string, queryEmbedding []float32,
 	// Only compare chunks embedded with the same model as the query vector.
 	// Legacy rows (embedded before model tagging) stay searchable best-effort;
 	// the per-row dimension guard below catches any residual mismatch.
-	query := `SELECT c.id, c.document_id, COALESCE(d.title, ''), c.content, c.embedding 
-	          FROM document_chunks c 
+	query := `SELECT c.id, c.document_id, COALESCE(d.title, ''), c.chunk_index, c.content, c.embedding
+	          FROM document_chunks c
 	          LEFT JOIN documents d ON c.document_id = d.id`
 	var args []interface{}
 	if sessionID != "" {
@@ -1189,7 +1192,36 @@ func (s *Store) SearchDocumentChunks(sessionID string, queryEmbedding []float32,
 		query += " AND (c.embedding_model = ? OR c.embedding_model = '')"
 		args = append(args, embedModel)
 	}
+	return s.searchChunks(query, args, queryEmbedding, topK, minScore)
+}
 
+// SearchDocumentChunksByDoc is SearchDocumentChunks scoped to a single
+// document — used by /doc: on large documents to pull only the relevant
+// sections instead of the whole content.
+func (s *Store) SearchDocumentChunksByDoc(documentID string, queryEmbedding []float32, topK int, minScore float64, embedModel string) ([]ChunkSearchResult, error) {
+	if len(queryEmbedding) == 0 {
+		return nil, nil
+	}
+	if topK <= 0 {
+		topK = 10
+	}
+	if minScore <= 0 {
+		minScore = 0.01
+	}
+
+	query := `SELECT c.id, c.document_id, COALESCE(d.title, ''), c.chunk_index, c.content, c.embedding
+	          FROM document_chunks c
+	          LEFT JOIN documents d ON c.document_id = d.id
+	          WHERE c.document_id = ?`
+	args := []interface{}{documentID}
+	if embedModel != "" {
+		query += " AND (c.embedding_model = ? OR c.embedding_model = '')"
+		args = append(args, embedModel)
+	}
+	return s.searchChunks(query, args, queryEmbedding, topK, minScore)
+}
+
+func (s *Store) searchChunks(query string, args []interface{}, queryEmbedding []float32, topK int, minScore float64) ([]ChunkSearchResult, error) {
 	rows, err := s.db.Query(query, args...)
 	if err != nil {
 		return nil, err
@@ -1199,7 +1231,8 @@ func (s *Store) SearchDocumentChunks(sessionID string, queryEmbedding []float32,
 	var results []ChunkSearchResult
 	for rows.Next() {
 		var id, docID, title, content, embStr string
-		if err := rows.Scan(&id, &docID, &title, &content, &embStr); err != nil {
+		var chunkIndex int
+		if err := rows.Scan(&id, &docID, &title, &chunkIndex, &content, &embStr); err != nil {
 			continue
 		}
 
@@ -1226,6 +1259,7 @@ func (s *Store) SearchDocumentChunks(sessionID string, queryEmbedding []float32,
 				ID:         id,
 				DocumentID: docID,
 				DocTitle:   title,
+				ChunkIndex: chunkIndex,
 				Content:    content,
 				Score:      score,
 			})
