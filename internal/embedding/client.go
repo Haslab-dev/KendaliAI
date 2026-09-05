@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -15,6 +16,28 @@ import (
 type Client struct {
 	client *openai.Client
 	model  string
+	// baseURL is the resolved endpoint root (ends with a version segment,
+	// e.g. https://host/v1); included in errors for debugging.
+	baseURL string
+}
+
+// resolveEmbeddingsBase normalizes a configured endpoint into the base URL
+// go-openai expects (it appends /embeddings). Mirrors the chat client's
+// resolveChatCompletionsURL: bare proxy roots without a version segment are
+// the most common misconfiguration and previously produced opaque
+// "cannot unmarshal number" errors from plain-text 404 bodies.
+func resolveEmbeddingsBase(endpoint string) string {
+	ep := strings.TrimRight(strings.TrimSpace(endpoint), "/")
+	if ep == "" {
+		return "" // go-openai default (https://api.openai.com/v1)
+	}
+	if strings.HasSuffix(ep, "/embeddings") {
+		return strings.TrimSuffix(ep, "/embeddings")
+	}
+	if versioned := regexp.MustCompile(`/v\d+[a-z]*$`); versioned.MatchString(ep) {
+		return ep
+	}
+	return ep + "/v1"
 }
 
 func NewClient() *Client {
@@ -46,29 +69,30 @@ func NewClient() *Client {
 	}
 
 	ocfg := openai.DefaultConfig(apiKey)
-	endpoint = strings.TrimRight(strings.TrimSpace(endpoint), "/")
-	if endpoint != "" {
-		ocfg.BaseURL = endpoint
+	if base := resolveEmbeddingsBase(endpoint); base != "" {
+		ocfg.BaseURL = base
 	}
 
 	return &Client{
-		client: openai.NewClientWithConfig(ocfg),
-		model:  model,
+		client:  openai.NewClientWithConfig(ocfg),
+		model:   model,
+		baseURL: ocfg.BaseURL,
 	}
 }
 
 func NewClientFromConfig(apiKey, endpoint, model string) *Client {
 	ocfg := openai.DefaultConfig(apiKey)
-	endpoint = strings.TrimRight(strings.TrimSpace(endpoint), "/")
-	if endpoint != "" {
-		ocfg.BaseURL = endpoint
+	base := resolveEmbeddingsBase(endpoint)
+	if base != "" {
+		ocfg.BaseURL = base
 	}
 	if model == "" {
 		model = "text-embedding-3-small"
 	}
 	return &Client{
-		client: openai.NewClientWithConfig(ocfg),
-		model:  model,
+		client:  openai.NewClientWithConfig(ocfg),
+		model:   model,
+		baseURL: base,
 	}
 }
 
@@ -115,7 +139,13 @@ func (c *Client) Embed(ctx context.Context, texts []string) ([]Vector, error) {
 			Model: openai.EmbeddingModel(c.model),
 		})
 		if err != nil {
-			return nil, fmt.Errorf("embedding API error for batch [%d:%d]: %w", i, end, err)
+			msg := err.Error()
+			if strings.Contains(msg, "cannot unmarshal") {
+				return nil, fmt.Errorf(
+					"embedding API error for batch [%d:%d] via %s/embeddings: %s — the endpoint did not return a JSON response; check the embedding endpoint URL",
+					i, end, c.baseURL, msg)
+			}
+			return nil, fmt.Errorf("embedding API error for batch [%d:%d] via %s/embeddings: %w", i, end, c.baseURL, err)
 		}
 
 		for _, d := range resp.Data {
