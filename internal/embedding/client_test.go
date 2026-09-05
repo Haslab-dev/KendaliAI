@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"io"
 	"strings"
 	"testing"
 )
@@ -100,5 +101,49 @@ func TestEmbedSuccess(t *testing.T) {
 	}
 	if len(vecs) != 1 || len(vecs[0]) != 3 || vecs[0][2] != 1.0 {
 		t.Errorf("unexpected vectors: %v", vecs)
+	}
+}
+
+func TestEmbedRequestOmitsUserField(t *testing.T) {
+	var captured string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		captured = string(b)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"embedding":[1,2,3]}]}`))
+	}))
+	defer server.Close()
+
+	c := NewClientFromConfig("key", server.URL, "mistral-embed")
+	if _, err := c.Embed(context.Background(), []string{"hello"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(captured, "user") {
+		t.Errorf("request must not carry a user field (Mistral 422): %s", captured)
+	}
+	if !strings.Contains(captured, `"model":"mistral-embed"`) {
+		t.Errorf("model missing from request: %s", captured)
+	}
+}
+
+func TestEmbedMistralShapeErrorIsReadable(t *testing.T) {
+	// Mistral returns 422 with {"object":"error","message":{"detail":[...]},"type":...}
+	// — go-openai printed this as "%!s(<nil>)".
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = w.Write([]byte(`{"object":"error","message":{"detail":[{"type":"extra_forbidden","loc":["body","EmbeddingRequest","user"],"msg":"Extra inputs are not permitted","input":""}]},"type":"invalid_request_error","param":null,"code":null,"raw_status_code":422}`))
+	}))
+	defer server.Close()
+
+	c := NewClientFromConfig("key", server.URL, "mistral-embed")
+	_, err := c.Embed(context.Background(), []string{"hello"})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "Extra inputs are not permitted") {
+		t.Errorf("Mistral detail message lost: %v", err)
+	}
+	if strings.Contains(err.Error(), "%!s") {
+		t.Errorf("raw format verb leaked into error: %v", err)
 	}
 }
