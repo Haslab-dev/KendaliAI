@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, Bot, Brain, FileText, MessageSquare, Plug, Smartphone, Terminal, Wrench, Zap, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, Bot, Brain, FileText, MessageSquare, Plug, Settings, Smartphone, Terminal, Wrench, Zap, type LucideIcon } from 'lucide-react';
 import { navigate, RouteName } from '../router';
 import { useAppStore } from '../store/useAppStore';
 import { ProvidersPane } from '../panes/providers';
@@ -10,6 +10,7 @@ import { McpsPane } from '../panes/mcps';
 import { SkillsPane } from '../panes/skills';
 import { ToolsPane } from '../panes/tools';
 import { TelegramPane } from '../panes/telegram';
+import { SettingsPane } from '../panes/settings';
 import { LogsStreamingView } from './LogsStreamingView';
 
 const PANES: Record<
@@ -25,6 +26,7 @@ const PANES: Record<
   skills: { label: 'Skills Library', icon: Brain },
   tools: { label: 'Tools & Policies', icon: Wrench },
   telegram: { label: 'Telegram Bots', icon: Smartphone },
+  settings: { label: 'Settings', icon: Settings },
 };
 
 // PaneHost renders the active workspace pane in the main content area as a
@@ -67,6 +69,7 @@ export const PaneHost: React.FC<{ route: Exclude<RouteName, 'chat'> }> = ({ rout
           {route === 'skills' && <SkillsPane />}
           {route === 'tools' && <ToolsPane />}
           {route === 'telegram' && <TelegramPane />}
+        {route === 'settings' && <SettingsPane />}
         </div>
       </div>
     </div>

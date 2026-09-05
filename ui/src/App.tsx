@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAppStore } from './store/useAppStore';
 import { useAgentSocket } from './hooks/useAgentSocket';
 import { useRoute } from './router';
@@ -7,6 +7,9 @@ import { Sidebar } from './components/Sidebar';
 import { ChatArea } from './components/ChatArea';
 import { PaneHost } from './components/PaneHost';
 import { BottomNav } from './components/BottomNav';
+import { LoginScreen } from './components/LoginScreen';
+
+type AuthState = 'checking' | 'ok' | 'login';
 
 export const App: React.FC = () => {
   const {
@@ -21,6 +24,15 @@ export const App: React.FC = () => {
   } = useAppStore();
 
   const route = useRoute();
+  const [authState, setAuthState] = useState<AuthState>('checking');
+
+  // Password gate: ask the gateway whether the workspace requires a login.
+  useEffect(() => {
+    fetch('/api/auth/status')
+      .then((r) => r.json())
+      .then((d) => setAuthState(d.required && !d.authenticated ? 'login' : 'ok'))
+      .catch(() => setAuthState('ok'));
+  }, []);
 
   // Connect to Agent WebSocket
   useAgentSocket();
@@ -38,8 +50,9 @@ export const App: React.FC = () => {
     }
   }, [theme]);
 
-  // Initial data loading from Gateway REST API
+  // Initial data loading from Gateway REST API (only after authentication)
   useEffect(() => {
+    if (authState !== 'ok') return;
     const init = async () => {
       try {
         await Promise.all([loadProviders(), loadAgents(), loadSessions(), loadMcps()]);
@@ -60,6 +73,14 @@ export const App: React.FC = () => {
 
     init();
   }, [loadProviders, loadAgents, loadSessions, loadMcps, selectSession, createSession]);
+
+  // Login gate: workspace data loads only after authentication
+  if (authState === 'checking') {
+    return <div className="h-screen w-screen bg-app" />;
+  }
+  if (authState === 'login') {
+    return <LoginScreen onSuccess={() => setAuthState('ok')} />;
+  }
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-app text-hi font-sans">

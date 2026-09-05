@@ -12,6 +12,7 @@ import {
   Moon,
   History,
   FileText,
+  Settings as SettingsIcon,
   Terminal,
   type LucideIcon,
 } from 'lucide-react';
@@ -28,6 +29,7 @@ const NAV_ITEMS: { id: RouteName; label: string; icon: LucideIcon }[] = [
   { id: 'skills', label: 'Skills Library', icon: Brain },
   { id: 'tools', label: 'Tools & Policies', icon: Wrench },
   { id: 'telegram', label: 'Telegram Bots', icon: Smartphone },
+  { id: 'settings', label: 'Settings', icon: SettingsIcon },
 ];
 
 export const IconRail: React.FC = () => {

@@ -13,6 +13,7 @@ export const ROUTES = [
   'skills',
   'tools',
   'telegram',
+  'settings',
 ] as const;
 
 export type RouteName = (typeof ROUTES)[number];
