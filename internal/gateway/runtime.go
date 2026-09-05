@@ -16,7 +16,6 @@ import (
 	"github.com/kendaliai/app/internal/messaging"
 	"github.com/kendaliai/app/internal/providers"
 	openai "github.com/sashabaranov/go-openai"
-	"sort"
 )
 
 type Runtime struct {
@@ -403,59 +402,10 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		}(cleanPrompt, sessionID)
 	}
 
-	// Retrieve document context for this session
-	sessionDocs, _ := r.store.ListDocuments(sessionID)
-	hasInjectedDoc := false
-
-	// If small/medium document exists in session, provide full text directly for 100% grounded comprehension
-	if len(sessionDocs) > 0 {
-		latestDoc := sessionDocs[0]
-		if len(latestDoc.Content) > 0 && len(latestDoc.Content) <= 24000 {
-			sysPrompt += fmt.Sprintf("\n\n## ATTACHED DOCUMENT: '%s'\n%s\n\nUse the above document to answer the user's questions.\n", latestDoc.Title, latestDoc.Content)
-			ragSources = append(ragSources, RagSource{Title: latestDoc.Title})
-			hasInjectedDoc = true
-		}
-	}
-
-	// Search relevant document chunks via vector search if not already fully injected
-	if !hasInjectedDoc && embClient != nil {
-		queryText := cleanPrompt
-		if len(queryText) > 400 {
-			queryText = queryText[:400]
-		}
-		queryVec, err := embClient.EmbedOne(ctx, queryText)
-		if err == nil && len(queryVec) > 0 {
-			hits, err := r.store.SearchDocumentChunks(sessionID, []float32(queryVec), 5, 0.35, embClient.Model())
-			if err == nil && len(hits) > 0 {
-				// Ensure hits are sorted by similarity score descending
-				sort.Slice(hits, func(i, j int) bool { return hits[i].Score > hits[j].Score })
-				sysPrompt += "\n\n## RETRIEVED EXCERPTS FROM ATTACHED DOCUMENTS (Top " + fmt.Sprintf("%d", len(hits)) + "):\n"
-				for i, h := range hits {
-					title := h.DocTitle
-					if title == "" {
-						title = "Document"
-					}
-					// Include similarity score (rounded to two decimals)
-					scoreStr := fmt.Sprintf("%.2f", h.Score)
-					sysPrompt += fmt.Sprintf("\n--- [Excerpt %d from '%s' (score: %s)] ---\n%s\n", i+1, title, scoreStr, h.Content)
-					ragSources = append(ragSources, RagSource{Title: title, Score: h.Score})
-				}
-				sysPrompt += "\nUse the above verified excerpts directly to answer questions.\n"
-				hasInjectedDoc = true
-			}
-		}
-	}
-
-	// Fallback for large documents if vector search is still computing in background or unconfigured
-	if !hasInjectedDoc && len(sessionDocs) > 0 {
-		latestDoc := sessionDocs[0]
-		preview := latestDoc.Content
-		if len(preview) > 18000 {
-			preview = preview[:18000] + "\n... [remaining document content truncated for length] ..."
-		}
-		sysPrompt += fmt.Sprintf("\n\n## ATTACHED DOCUMENT: '%s'\n%s\n\nUse this document to answer the user's questions.\n", latestDoc.Title, preview)
-		ragSources = append(ragSources, RagSource{Title: latestDoc.Title})
-	}
+	// RAG context policy (owner decision): documents are injected ONLY when
+	// explicitly requested via /doc:<title>. No automatic retrieval — uploads
+	// are embedded on ingest so /doc: and the scored vector search work, but
+	// ordinary chat never pulls document content behind the user's back.
 
 	// 7. Context Compaction & Conversation Assembly (128k Token Limit Safe)
 	history, _ := r.store.GetSessionMessages(sessionID)
