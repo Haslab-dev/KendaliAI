@@ -127,7 +127,9 @@ func (s *Server) routes() {
 	// Embedding & Vector RAG
 	s.router.HandleFunc("/api/embedding", s.handleEmbeddingConfig())
 	s.router.HandleFunc("/api/embedding/test", s.handleEmbeddingTest())
+	s.router.HandleFunc("/api/embedding/status", s.handleEmbeddingStatus())
 	s.router.HandleFunc("/api/documents/ingest", s.handleDocumentIngest())
+	s.router.HandleFunc("/api/documents/reindex", s.handleDocumentsReindex())
 	s.router.HandleFunc("/api/documents", s.handleDocuments())
 	s.router.HandleFunc("/api/documents/", s.handleDocumentDetail())
 
@@ -1018,6 +1020,105 @@ func (s *Server) handleWebUI() http.HandlerFunc {
 
 // --- Embedding & Vector RAG Handlers ---
 
+// handleDocumentsReindex re-chunks and re-embeds every stored document with
+// the currently configured embedding model, so switching models/providers
+// keeps the doc store searchable (GOALS.md Track G).
+func (s *Server) handleDocumentsReindex() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != "POST" {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		embCfg, _ := s.store.GetEmbeddingConfig()
+		if embCfg == nil || !embCfg.Enabled || (embCfg.APIKey == "" && embCfg.Endpoint == "") {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": false,
+				"error":   "No embedding provider is configured. Set one up in Providers > Embedding & Vector RAG first.",
+			})
+			return
+		}
+		client := embedding.NewClientFromConfig(embCfg.APIKey, embCfg.Endpoint, embCfg.Model)
+
+		docs, err := s.store.ListDocuments("")
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": err.Error()})
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+
+		reindexed, chunkCount := 0, 0
+		var failed []map[string]string
+		for _, doc := range docs {
+			if strings.TrimSpace(doc.Content) == "" {
+				continue
+			}
+			chunks := gateway.ChunkText(doc.Content, 1500, 150)
+			if len(chunks) == 0 {
+				chunks = []string{doc.Content}
+			}
+			vecs, err := client.Embed(ctx, chunks)
+			if err != nil {
+				failed = append(failed, map[string]string{"id": doc.ID, "title": doc.Title, "error": err.Error()})
+				continue
+			}
+			var floatVecs [][]float32
+			for _, v := range vecs {
+				floatVecs = append(floatVecs, []float32(v))
+			}
+			if err := s.store.IngestDocument(doc, chunks, floatVecs, client.Model()); err != nil {
+				failed = append(failed, map[string]string{"id": doc.ID, "title": doc.Title, "error": err.Error()})
+				continue
+			}
+			reindexed++
+			chunkCount += len(chunks)
+		}
+
+		log.Printf("🔁 Document reindex complete: %d docs, %d chunks, model=%s, failed=%d", reindexed, chunkCount, client.Model(), len(failed))
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success":    true,
+			"model":      client.Model(),
+			"reindexed":  reindexed,
+			"chunkCount": chunkCount,
+			"failed":     failed,
+		})
+	}
+}
+
+// handleEmbeddingStatus reports the active embedding model plus how many
+// stored chunks were embedded with each model, so the UI can show a
+// reindex prompt when they no longer match.
+func (s *Server) handleEmbeddingStatus() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		embCfg, _ := s.store.GetEmbeddingConfig()
+		model := ""
+		enabled := false
+		if embCfg != nil {
+			model = embCfg.Model
+			enabled = embCfg.Enabled
+		}
+		if model == "" {
+			model = "text-embedding-3-small"
+		}
+
+		stats, err := s.store.ChunkModelStats()
+		if err != nil {
+			stats = nil
+		}
+
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"model":   model,
+			"enabled": enabled,
+			"chunks":  stats,
+		})
+	}
+}
+
 func (s *Server) handleEmbeddingConfig() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -1165,7 +1266,7 @@ func (s *Server) handleDocumentIngest() http.HandlerFunc {
 			ChunkCount: len(chunks),
 		}
 
-		if err := s.store.IngestDocument(doc, chunks, nil); err != nil {
+		if err := s.store.IngestDocument(doc, chunks, nil, ""); err != nil {
 			http.Error(w, "failed to save document: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -1187,7 +1288,7 @@ func (s *Server) handleDocumentIngest() http.HandlerFunc {
 				for _, v := range embVecs {
 					floatVecs = append(floatVecs, []float32(v))
 				}
-				_ = s.store.UpdateDocumentChunkEmbeddings(docID, floatVecs)
+				_ = s.store.UpdateDocumentChunkEmbeddings(docID, floatVecs, client.Model())
 			}
 		}(doc.ID, chunks)
 

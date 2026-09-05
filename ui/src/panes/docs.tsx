@@ -19,7 +19,25 @@ export const DocsPane: React.FC<{ onChatWithDoc: (docTitle: string) => void }> =
   const [isUploading, setIsUploading] = useState(false);
   const [uploadNotice, setUploadNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [searchQ, setSearchQ] = useState('');
+  const [isReindexing, setIsReindexing] = useState(false);
+  const [embModel, setEmbModel] = useState<string>('');
+  const [staleChunks, setStaleChunks] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const fetchStatus = async () => {
+    try {
+      const res = await fetch('/api/embedding/status');
+      if (!res.ok) return;
+      const data = await res.json();
+      setEmbModel(data.model || '');
+      const chunks: { model: string; count: number }[] = data.chunks || [];
+      const current = data.model || '(legacy)';
+      const stale = chunks
+        .filter((c) => c.model !== current && c.model !== '')
+        .reduce((sum, c) => sum + c.count, 0);
+      setStaleChunks(stale);
+    } catch {}
+  };
 
   const fetchDocs = async () => {
     setIsLoading(true);
@@ -30,7 +48,29 @@ export const DocsPane: React.FC<{ onChatWithDoc: (docTitle: string) => void }> =
     setIsLoading(false);
   };
 
-  useEffect(() => { fetchDocs(); }, []);
+  useEffect(() => { fetchDocs(); fetchStatus(); }, []);
+
+  const handleReindex = async () => {
+    if (isReindexing) return;
+    setIsReindexing(true);
+    setUploadNotice({ type: 'success', text: 'Reindexing all documents with the current embedding model...' });
+    try {
+      const res = await fetch('/api/documents/reindex', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        const failedNote = (data.failed || []).length > 0 ? ` — ${(data.failed || []).length} failed, check gateway logs` : '';
+        setUploadNotice({ type: 'success', text: `Reindexed ${data.reindexed} documents (${data.chunkCount} chunks) with ${data.model}${failedNote}` });
+        fetchDocs();
+      } else {
+        setUploadNotice({ type: 'error', text: `Reindex failed: ${data.error || 'Unknown error'}` });
+      }
+    } catch (err: any) {
+      setUploadNotice({ type: 'error', text: `Reindex error: ${err.message}` });
+    } finally {
+      setIsReindexing(false);
+      fetchStatus();
+    }
+  };
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -103,6 +143,27 @@ export const DocsPane: React.FC<{ onChatWithDoc: (docTitle: string) => void }> =
 
   return (
     <div className="flex flex-col gap-4 h-full">
+      {/* Embedding model mismatch banner */}
+      {staleChunks > 0 && (
+        <div className="rounded-xl border border-line bg-raised px-4 py-3 text-xs flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="font-bold text-hi uppercase tracking-wider text-[10px] mb-0.5">Embedding model changed</div>
+            <div className="text-mid">
+              {staleChunks} chunks were embedded with a different model and are skipped by vector search. Reindex to re-embed everything with{' '}
+              <span className="text-hi font-semibold">{embModel || 'the current model'}</span>.
+            </div>
+          </div>
+          <button
+            onClick={handleReindex}
+            disabled={isReindexing}
+            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg bg-hi text-app text-xs font-semibold disabled:opacity-50"
+          >
+            <RefreshCw size={13} className={isReindexing ? 'animate-spin' : ''} />
+            {isReindexing ? 'Reindexing...' : 'Reindex All'}
+          </button>
+        </div>
+      )}
+
       {/* Header row */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">

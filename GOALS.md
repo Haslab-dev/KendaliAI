@@ -174,7 +174,7 @@ All tracks run in parallel. Two **sync gates** serialize only what must be seria
 - [ ] G3 [M1] Encrypt `providers.api_key` + Telegram tokens at rest (reuse `internal/security/encryption.go` AES-GCM)
 - [ ] G4 [M2] MCP connector catalog: preconfigured servers for Google Calendar/Gmail/Workspace, Jira, Confluence, Zoom, Mattermost + OAuth token storage
 - [ ] G5 [M2] CLI executor hardening: command allowlist profiles, per-run timeout, output truncation policy
-- [ ] G6 [M2] Background reindexing + per-collection embedding model config
+- [x] G6 [M2] Background reindexing + per-collection embedding model config — *reindex shipped 2026-09-05: chunks are tagged with model+dims, search filters incompatible vectors, Doc Store shows a mismatch banner with Reindex All; per-collection model config still open*
 - [ ] G7 [M3] CI: PR job running `go test ./...`, `go vet`, UI build + lint; add `golangci-lint`; first frontend tests
 
 ---

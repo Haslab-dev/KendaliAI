@@ -180,6 +180,8 @@ func (s *Store) SeedInitialData(cfg *config.Config) {
 	_, _ = s.db.Exec("ALTER TABLE telegram_bots ADD COLUMN model TEXT DEFAULT ''")
 	_, _ = s.db.Exec("ALTER TABLE telegram_bots ADD COLUMN provider_id TEXT DEFAULT ''")
 	_, _ = s.db.Exec("ALTER TABLE session_messages ADD COLUMN thought TEXT DEFAULT ''")
+	_, _ = s.db.Exec("ALTER TABLE document_chunks ADD COLUMN embedding_model TEXT DEFAULT ''")
+	_, _ = s.db.Exec("ALTER TABLE document_chunks ADD COLUMN dimensions INTEGER DEFAULT 0")
 
 	_, _ = s.db.Exec(`CREATE TABLE IF NOT EXISTS documents (
 		id TEXT PRIMARY KEY,
@@ -987,7 +989,7 @@ func (s *Store) SaveEmbeddingConfig(cfg EmbeddingConfig) error {
 	return nil
 }
 
-func (s *Store) IngestDocument(doc Document, chunks []string, embeddings [][]float32) error {
+func (s *Store) IngestDocument(doc Document, chunks []string, embeddings [][]float32, embedModel string) error {
 	if doc.ID == "" {
 		doc.ID = uuid.New().String()
 	}
@@ -1021,8 +1023,8 @@ func (s *Store) IngestDocument(doc Document, chunks []string, embeddings [][]flo
 	_, _ = tx.Exec("DELETE FROM document_chunks WHERE document_id = ?", doc.ID)
 
 	stmt, err := tx.Prepare(`
-		INSERT INTO document_chunks (id, document_id, session_id, chunk_index, content, embedding, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`)
+		INSERT INTO document_chunks (id, document_id, session_id, chunk_index, content, embedding, embedding_model, dimensions, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("prepare chunk insert: %w", err)
 	}
@@ -1031,13 +1033,15 @@ func (s *Store) IngestDocument(doc Document, chunks []string, embeddings [][]flo
 	for i, chunk := range chunks {
 		chunkID := fmt.Sprintf("%s_chk_%d", doc.ID, i)
 		var embJSON []byte
+		dims := 0
 		if i < len(embeddings) && len(embeddings[i]) > 0 {
 			embJSON, _ = json.Marshal(embeddings[i])
+			dims = len(embeddings[i])
 		} else {
 			embJSON = []byte("[]")
 		}
 
-		if _, err := stmt.Exec(chunkID, doc.ID, doc.SessionID, i, chunk, string(embJSON), doc.CreatedAt); err != nil {
+		if _, err := stmt.Exec(chunkID, doc.ID, doc.SessionID, i, chunk, string(embJSON), embedModel, dims, doc.CreatedAt); err != nil {
 			return fmt.Errorf("insert chunk error: %w", err)
 		}
 	}
@@ -1045,14 +1049,14 @@ func (s *Store) IngestDocument(doc Document, chunks []string, embeddings [][]flo
 	return tx.Commit()
 }
 
-func (s *Store) UpdateDocumentChunkEmbeddings(docID string, embeddings [][]float32) error {
+func (s *Store) UpdateDocumentChunkEmbeddings(docID string, embeddings [][]float32, embedModel string) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 
-	stmt, err := tx.Prepare("UPDATE document_chunks SET embedding = ? WHERE document_id = ? AND chunk_index = ?")
+	stmt, err := tx.Prepare("UPDATE document_chunks SET embedding = ?, embedding_model = ?, dimensions = ? WHERE document_id = ? AND chunk_index = ?")
 	if err != nil {
 		return err
 	}
@@ -1066,10 +1070,41 @@ func (s *Store) UpdateDocumentChunkEmbeddings(docID string, embeddings [][]float
 		if err != nil {
 			continue
 		}
-		_, _ = stmt.Exec(string(data), docID, i)
+		_, _ = stmt.Exec(string(data), embedModel, len(vec), docID, i)
 	}
 
 	return tx.Commit()
+}
+
+// ChunkModelStat reports how many stored chunks were embedded with each
+// model/dimension combination, so the UI can flag incompatibilities when the
+// embedding model changes.
+type ChunkModelStat struct {
+	Model string `json:"model"`
+	Dims  int    `json:"dims"`
+	Count int    `json:"count"`
+}
+
+func (s *Store) ChunkModelStats() ([]ChunkModelStat, error) {
+	rows, err := s.db.Query(`
+		SELECT COALESCE(NULLIF(embedding_model, ''), '(legacy)'), COALESCE(dimensions, 0), COUNT(*)
+		FROM document_chunks
+		GROUP BY 1, 2
+		ORDER BY 3 DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var stats []ChunkModelStat
+	for rows.Next() {
+		var st ChunkModelStat
+		if err := rows.Scan(&st.Model, &st.Dims, &st.Count); err != nil {
+			continue
+		}
+		stats = append(stats, st)
+	}
+	return stats, rows.Err()
 }
 
 func (s *Store) ListDocuments(sessionID string) ([]Document, error) {
@@ -1109,7 +1144,7 @@ func (s *Store) DeleteDocument(id string) error {
 	return err
 }
 
-func (s *Store) SearchDocumentChunks(sessionID string, queryEmbedding []float32, topK int, minScore float64) ([]ChunkSearchResult, error) {
+func (s *Store) SearchDocumentChunks(sessionID string, queryEmbedding []float32, topK int, minScore float64, embedModel string) ([]ChunkSearchResult, error) {
 	if len(queryEmbedding) == 0 {
 		return nil, nil
 	}
@@ -1120,13 +1155,22 @@ func (s *Store) SearchDocumentChunks(sessionID string, queryEmbedding []float32,
 		minScore = 0.30
 	}
 
+	// Only compare chunks embedded with the same model as the query vector.
+	// Legacy rows (embedded before model tagging) stay searchable best-effort;
+	// the per-row dimension guard below catches any residual mismatch.
 	query := `SELECT c.id, c.document_id, COALESCE(d.title, ''), c.content, c.embedding 
 	          FROM document_chunks c 
 	          LEFT JOIN documents d ON c.document_id = d.id`
 	var args []interface{}
 	if sessionID != "" {
-		query += " WHERE c.session_id = ? OR c.session_id = ''"
+		query += " WHERE (c.session_id = ? OR c.session_id = '')"
 		args = append(args, sessionID)
+	} else {
+		query += " WHERE 1=1"
+	}
+	if embedModel != "" {
+		query += " AND (c.embedding_model = ? OR c.embedding_model = '')"
+		args = append(args, embedModel)
 	}
 
 	rows, err := s.db.Query(query, args...)

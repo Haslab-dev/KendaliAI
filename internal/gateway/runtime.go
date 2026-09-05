@@ -383,7 +383,7 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 					for _, v := range vecs {
 						floatVecs = append(floatVecs, []float32(v))
 					}
-					_ = r.store.IngestDocument(doc, chunks, floatVecs)
+					_ = r.store.IngestDocument(doc, chunks, floatVecs, embClient.Model())
 					r.bus.Publish(messaging.Event{
 						Type:      "document.ingested",
 						SessionID: sessId,
@@ -419,7 +419,7 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		}
 		queryVec, err := embClient.EmbedOne(ctx, queryText)
 		if err == nil && len(queryVec) > 0 {
-			hits, err := r.store.SearchDocumentChunks(sessionID, []float32(queryVec), 5, 0.35)
+			hits, err := r.store.SearchDocumentChunks(sessionID, []float32(queryVec), 5, 0.35, embClient.Model())
 			if err == nil && len(hits) > 0 {
 				// Ensure hits are sorted by similarity score descending
 				sort.Slice(hits, func(i, j int) bool { return hits[i].Score > hits[j].Score })
