@@ -70,6 +70,12 @@ export interface ToolCallRecord {
   durationMs?: number;
 }
 
+// A document used as RAG grounding context for an assistant turn.
+export interface RagSource {
+  title: string;
+  score?: number;
+}
+
 export interface SessionMessage {
   id: string;
   sessionId: string;
@@ -82,6 +88,7 @@ export interface SessionMessage {
   toolCallId?: string;
   tokens?: number;
   model?: string;
+  ragSources?: RagSource[];
   createdAt: number;
 }
 

@@ -119,6 +119,7 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 
 	// 1b. Parse /doc:<title> directives — inject full document content as RAG context
 	var docContextSections []string
+	var ragSources []RagSource
 	for strings.HasPrefix(cleanPrompt, "/doc:") {
 		parts := strings.SplitN(cleanPrompt, " ", 2)
 		docTitle := strings.TrimPrefix(parts[0], "/doc:")
@@ -129,6 +130,7 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 					strings.Contains(strings.ToLower(d.Title), strings.ToLower(docTitle)) {
 					docContextSections = append(docContextSections,
 						fmt.Sprintf("=== Document: %s ===\n%s", d.Title, d.Content))
+					ragSources = append(ragSources, RagSource{Title: d.Title})
 					break
 				}
 			}
@@ -140,12 +142,15 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		cleanPrompt = ""
 		break
 	}
+	// The injected document is LLM context for this turn only — it must not
+	// be saved, displayed, or mirrored as part of the user's message.
+	turnPrompt := cleanPrompt
 	if len(docContextSections) > 0 {
 		docBlock := strings.Join(docContextSections, "\n\n")
 		if cleanPrompt != "" {
-			cleanPrompt = docBlock + "\n\n---\nUser question: " + cleanPrompt
+			turnPrompt = docBlock + "\n\n---\nUser question: " + cleanPrompt
 		} else {
-			cleanPrompt = docBlock + "\n\n---\nPlease summarize this document."
+			turnPrompt = docBlock + "\n\n---\nPlease summarize this document."
 		}
 	}
 
@@ -407,6 +412,7 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		latestDoc := sessionDocs[0]
 		if len(latestDoc.Content) > 0 && len(latestDoc.Content) <= 24000 {
 			sysPrompt += fmt.Sprintf("\n\n## ATTACHED DOCUMENT: '%s'\n%s\n\nUse the above document to answer the user's questions.\n", latestDoc.Title, latestDoc.Content)
+			ragSources = append(ragSources, RagSource{Title: latestDoc.Title})
 			hasInjectedDoc = true
 		}
 	}
@@ -432,6 +438,7 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 					// Include similarity score (rounded to two decimals)
 					scoreStr := fmt.Sprintf("%.2f", h.Score)
 					sysPrompt += fmt.Sprintf("\n--- [Excerpt %d from '%s' (score: %s)] ---\n%s\n", i+1, title, scoreStr, h.Content)
+					ragSources = append(ragSources, RagSource{Title: title, Score: h.Score})
 				}
 				sysPrompt += "\nUse the above verified excerpts directly to answer questions.\n"
 				hasInjectedDoc = true
@@ -447,6 +454,7 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 			preview = preview[:18000] + "\n... [remaining document content truncated for length] ..."
 		}
 		sysPrompt += fmt.Sprintf("\n\n## ATTACHED DOCUMENT: '%s'\n%s\n\nUse this document to answer the user's questions.\n", latestDoc.Title, preview)
+		ragSources = append(ragSources, RagSource{Title: latestDoc.Title})
 	}
 
 	// 7. Context Compaction & Conversation Assembly (128k Token Limit Safe)
@@ -522,6 +530,18 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 					"message": "Conversation context approached 100k token limit; active working memory compacted to guarantee safety margin within 128k context.",
 				},
 			})
+		}
+	}
+
+	// The last assembled message is the just-saved user turn. When a /doc:
+	// injection is active, give the model the full document context while the
+	// stored/displayed message stays the short version the user typed.
+	if turnPrompt != cleanPrompt && len(conversationMsgs) > 0 {
+		last := &conversationMsgs[len(conversationMsgs)-1]
+		if last.Role == "user" {
+			last.Content = turnPrompt
+		} else {
+			conversationMsgs = append(conversationMsgs, agent.Message{Role: "user", Content: turnPrompt})
 		}
 	}
 
@@ -712,17 +732,18 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 
 	// 9. Save Assistant Message
 	assistantMsg := SessionMessage{
-		ID:        uuid.New().String(),
-		SessionID: sessionID,
-		AgentID:   agentConfig.ID,
-		Channel:   channel,
-		Role:      "assistant",
-		Content:   finalContent,
-		Thought:   thought,
-		ToolCalls: recordedToolCalls,
-		Tokens:    totalTokens,
-		Model:     modelToUse,
-		CreatedAt: time.Now().UnixMilli(),
+		ID:         uuid.New().String(),
+		SessionID:  sessionID,
+		AgentID:    agentConfig.ID,
+		Channel:    channel,
+		Role:       "assistant",
+		Content:    finalContent,
+		Thought:    thought,
+		ToolCalls:  recordedToolCalls,
+		RagSources: dedupeRagSources(ragSources),
+		Tokens:     totalTokens,
+		Model:      modelToUse,
+		CreatedAt:  time.Now().UnixMilli(),
 	}
 	_ = r.store.SaveMessage(assistantMsg)
 
@@ -862,6 +883,32 @@ func toolResultMessage(nativeMode bool, call agent.ToolCall, output string) agen
 		Role:    "user",
 		Content: fmt.Sprintf("tool_result(%s):\n%s", call.Name, output),
 	}
+}
+
+// dedupeRagSources collapses repeated injections of the same document,
+// keeping the best retrieval score seen for it.
+func dedupeRagSources(sources []RagSource) []RagSource {
+	if len(sources) == 0 {
+		return nil
+	}
+	seen := map[string]*RagSource{}
+	order := []string{}
+	for _, src := range sources {
+		if existing, ok := seen[src.Title]; ok {
+			if src.Score > existing.Score {
+				existing.Score = src.Score
+			}
+			continue
+		}
+		cp := src
+		seen[src.Title] = &cp
+		order = append(order, src.Title)
+	}
+	out := make([]RagSource, 0, len(order))
+	for _, title := range order {
+		out = append(out, *seen[title])
+	}
+	return out
 }
 
 func (r *Runtime) isToolAllowed(toolName string, allowedPatterns []string) bool {

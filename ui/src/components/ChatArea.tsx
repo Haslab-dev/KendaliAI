@@ -52,13 +52,30 @@ export const ChatArea: React.FC = () => {
   const [ragNotice, setRagNotice] = useState<{ type: 'success' | 'info' | 'error'; text: string } | null>(null);
   const [allDocs, setAllDocs] = useState<{ id: string; title: string; chunkCount: number }[]>([]);
 
-  // Load all documents for /doc: autocomplete
-  useEffect(() => {
+  // Load all documents for /doc: autocomplete and RAG context chips
+  const docsFetchedAtRef = useRef(0);
+  const refreshDocs = React.useCallback(() => {
     fetch('/api/documents')
       .then((r) => r.ok ? r.json() : [])
-      .then((data) => setAllDocs(Array.isArray(data) ? data.map((d: any) => ({ id: d.id, title: d.title, chunkCount: d.chunkCount || 0 })) : []))
+      .then((data) => {
+        setAllDocs(Array.isArray(data) ? data.map((d: any) => ({ id: d.id, title: d.title, chunkCount: d.chunkCount || 0 })) : []);
+        docsFetchedAtRef.current = Date.now();
+      })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    refreshDocs();
+  }, [refreshDocs]);
+
+  // Docs uploaded elsewhere (Doc Store pane, other sessions) must still show
+  // up in /doc: autocomplete — refresh when the user starts typing /doc if
+  // the list is older than 10 seconds.
+  useEffect(() => {
+    if (inputText.startsWith('/doc') && Date.now() - docsFetchedAtRef.current > 10_000) {
+      refreshDocs();
+    }
+  }, [inputText, refreshDocs]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -84,6 +101,7 @@ export const ChatArea: React.FC = () => {
           type: 'success',
           text: `Ingested "${file.name}" into knowledge base.`,
         });
+        refreshDocs();
         setTimeout(() => setRagNotice(null), 7000);
       } else {
         setRagNotice({
@@ -469,6 +487,24 @@ export const ChatArea: React.FC = () => {
                     </div>
                   )}
 
+                  {/* RAG grounding badges — which documents grounded this answer */}
+                  {msg.role === 'assistant' && msg.ragSources && msg.ragSources.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1 mb-1.5">
+                      <span className="text-[10px] font-semibold text-lo uppercase tracking-wider">RAG</span>
+                      {msg.ragSources.map((rs, idx) => (
+                        <span
+                          key={`${rs.title}-${idx}`}
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-raised text-mid border border-line"
+                          title={rs.score > 0 ? `retrieval score ${rs.score.toFixed(2)}` : 'full document injected'}
+                        >
+                          <FileText size={9} />
+                          <span className="truncate max-w-[180px]">{rs.title}</span>
+                          {rs.score > 0 && <span className="text-lo font-mono">{Math.round(rs.score * 100)}%</span>}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
                   {/* Message Text with Streaming Cursor */}
                   <div className="text-hi leading-relaxed break-words">
                     <MarkdownRenderer text={msg.content} />
@@ -546,6 +582,33 @@ export const ChatArea: React.FC = () => {
           </div>
         )}
 
+        {/* RAG context chips — documents available to this conversation */}
+        {!isTypingSlash && allDocs.length > 0 && (
+          <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+            <span className="text-[10px] font-semibold text-lo uppercase tracking-wider flex items-center gap-1">
+              <Database size={10} /> RAG
+            </span>
+            {allDocs.slice(0, 5).map((doc) => (
+              <button
+                key={doc.id}
+                onClick={() => {
+                  setInputText(`/doc:${doc.title} `);
+                  textareaRef.current?.focus();
+                }}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium bg-raised text-mid border border-line hover:text-hi hover:border-mid transition-colors max-w-[200px]"
+                title={`Inject ${doc.title} into the conversation (${doc.chunkCount} chunks)`}
+              >
+                <FileText size={9} />
+                <span className="truncate">{doc.title}</span>
+                <span className="text-lo font-mono">{doc.chunkCount}</span>
+              </button>
+            ))}
+            {allDocs.length > 5 && (
+              <span className="text-[10px] text-lo font-mono">+{allDocs.length - 5}</span>
+            )}
+          </div>
+        )}
+
         <div className="flex items-end bg-inputbg border border-line rounded-2xl p-2 gap-2 shadow-xl focus-within:border-mid transition-colors">
           <input
             type="file"
@@ -558,11 +621,11 @@ export const ChatArea: React.FC = () => {
           <button
             type="button"
             disabled={isUploadingDoc}
-            className="w-8 h-8 rounded-full flex items-center justify-center text-mid hover:text-hi transition-colors disabled:opacity-50"
+            className="w-9 h-9 rounded-full flex items-center justify-center border border-mid/50 bg-raised text-hi hover:bg-hoverbg transition-colors disabled:opacity-50"
             title="Upload document or code into Vector RAG memory"
             onClick={() => fileInputRef.current?.click()}
           >
-            {isUploadingDoc ? <RefreshCw size={15} className="animate-spin text-hi" /> : <Paperclip size={17} />}
+            {isUploadingDoc ? <RefreshCw size={15} className="animate-spin text-hi" /> : <Paperclip size={16} />}
           </button>
 
           <textarea
@@ -576,11 +639,11 @@ export const ChatArea: React.FC = () => {
           />
 
           <button
-            className="w-8 h-8 rounded-full flex items-center justify-center text-mid hover:text-hi transition-colors"
+            className="w-9 h-9 rounded-full flex items-center justify-center border border-mid/50 bg-raised text-hi hover:bg-hoverbg transition-colors"
             title="Voice input"
             onClick={() => alert('Voice input coming soon')}
           >
-            <Mic size={17} />
+            <Mic size={16} />
           </button>
 
           <button

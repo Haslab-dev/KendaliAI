@@ -122,7 +122,16 @@ type SessionMessage struct {
 	ToolCallID string           `json:"toolCallId,omitempty"`
 	Tokens     int              `json:"tokens"`
 	Model      string           `json:"model,omitempty"`
+	// RagSources lists the documents injected as RAG context for this
+	// assistant turn, so the UI can show what grounded the answer.
+	RagSources []RagSource      `json:"ragSources,omitempty"`
 	CreatedAt  int64            `json:"createdAt"`
+}
+
+// RagSource names a document used as RAG context for a turn.
+type RagSource struct {
+	Title string  `json:"title"`
+	Score float64 `json:"score,omitempty"`
 }
 
 type ToolCachedInfo struct {
@@ -181,6 +190,7 @@ func (s *Store) SeedInitialData(cfg *config.Config) {
 	_, _ = s.db.Exec("ALTER TABLE telegram_bots ADD COLUMN provider_id TEXT DEFAULT ''")
 	_, _ = s.db.Exec("ALTER TABLE session_messages ADD COLUMN thought TEXT DEFAULT ''")
 	_, _ = s.db.Exec("ALTER TABLE document_chunks ADD COLUMN embedding_model TEXT DEFAULT ''")
+	_, _ = s.db.Exec("ALTER TABLE session_messages ADD COLUMN rag_sources TEXT DEFAULT ''")
 	_, _ = s.db.Exec("ALTER TABLE document_chunks ADD COLUMN dimensions INTEGER DEFAULT 0")
 
 	_, _ = s.db.Exec(`CREATE TABLE IF NOT EXISTS documents (
@@ -674,7 +684,7 @@ func (s *Store) DeleteSession(id string) error {
 // --- Session Messages CRUD ---
 
 func (s *Store) GetSessionMessages(sessionID string) ([]SessionMessage, error) {
-	rows, err := s.db.Query("SELECT id, session_id, agent_id, channel, role, content, thought, tool_calls, tool_call_id, tokens, model, created_at FROM session_messages WHERE session_id = ? ORDER BY created_at ASC, id ASC", sessionID)
+	rows, err := s.db.Query("SELECT id, session_id, agent_id, channel, role, content, thought, tool_calls, tool_call_id, tokens, model, rag_sources, created_at FROM session_messages WHERE session_id = ? ORDER BY created_at ASC, id ASC", sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -683,9 +693,9 @@ func (s *Store) GetSessionMessages(sessionID string) ([]SessionMessage, error) {
 	res := make([]SessionMessage, 0)
 	for rows.Next() {
 		var m SessionMessage
-		var toolCallsJSON, toolCallID, model, thought sql.NullString
+		var toolCallsJSON, toolCallID, model, thought, ragSourcesJSON sql.NullString
 		var agentID sql.NullString
-		if err := rows.Scan(&m.ID, &m.SessionID, &agentID, &m.Channel, &m.Role, &m.Content, &thought, &toolCallsJSON, &toolCallID, &m.Tokens, &model, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.SessionID, &agentID, &m.Channel, &m.Role, &m.Content, &thought, &toolCallsJSON, &toolCallID, &m.Tokens, &model, &ragSourcesJSON, &m.CreatedAt); err != nil {
 			return nil, err
 		}
 		if agentID.Valid {
@@ -703,6 +713,9 @@ func (s *Store) GetSessionMessages(sessionID string) ([]SessionMessage, error) {
 		if toolCallsJSON.Valid && toolCallsJSON.String != "" {
 			_ = json.Unmarshal([]byte(toolCallsJSON.String), &m.ToolCalls)
 		}
+		if ragSourcesJSON.Valid && ragSourcesJSON.String != "" {
+			_ = json.Unmarshal([]byte(ragSourcesJSON.String), &m.RagSources)
+		}
 		res = append(res, m)
 	}
 	return res, nil
@@ -716,11 +729,15 @@ func (s *Store) SaveMessage(m SessionMessage) error {
 		m.CreatedAt = time.Now().UnixMilli()
 	}
 	toolCallsJSON, _ := json.Marshal(m.ToolCalls)
+	ragSourcesJSON, _ := json.Marshal(m.RagSources)
+	if len(m.RagSources) == 0 {
+		ragSourcesJSON = []byte("")
+	}
 
 	_, err := s.db.Exec(`
-		INSERT INTO session_messages (id, session_id, agent_id, channel, role, content, thought, tool_calls, tool_call_id, tokens, model, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		m.ID, m.SessionID, m.AgentID, m.Channel, m.Role, m.Content, m.Thought, string(toolCallsJSON), m.ToolCallID, m.Tokens, m.Model, m.CreatedAt)
+		INSERT INTO session_messages (id, session_id, agent_id, channel, role, content, thought, tool_calls, tool_call_id, tokens, model, rag_sources, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		m.ID, m.SessionID, m.AgentID, m.Channel, m.Role, m.Content, m.Thought, string(toolCallsJSON), m.ToolCallID, m.Tokens, m.Model, string(ragSourcesJSON), m.CreatedAt)
 
 	// Update session updated_at
 	_, _ = s.db.Exec("UPDATE sessions SET updated_at = ? WHERE id = ?", time.Now().Unix(), m.SessionID)
