@@ -28,12 +28,52 @@ type Provider interface {
 type Message struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
+	// Native tool-calling extensions. Empty for plain user/assistant/system
+	// messages, so text-protocol callers and persisted history are unaffected.
+	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string     `json:"tool_call_id,omitempty"`
+	Name       string     `json:"name,omitempty"`
+}
+
+// ToolCall is a single native function call requested by the model.
+type ToolCall struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// Args is the parsed arguments object used for execution.
+	Args map[string]interface{} `json:"args,omitempty"`
+	// ArgsJSON preserves the provider's raw arguments JSON; used verbatim when
+	// echoing the call back to the provider, even if Args failed to parse.
+	ArgsJSON string `json:"args_json,omitempty"`
+}
+
+// Arguments returns the arguments as a JSON string for provider serialization.
+func (tc ToolCall) Arguments() string {
+	if tc.ArgsJSON != "" {
+		return tc.ArgsJSON
+	}
+	if tc.Args == nil {
+		return "{}"
+	}
+	b, err := json.Marshal(tc.Args)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
+}
+
+// ToRequest adapts the call for the ExecutionEngine / registry dispatch.
+func (tc ToolCall) ToRequest() ToolRequest {
+	return ToolRequest{Name: tc.Name, Args: tc.Args}
 }
 
 type Response struct {
 	Content      string `json:"content"`
 	InputTokens  int    `json:"input_tokens"`
 	OutputTokens int    `json:"output_tokens"`
+	// Native tool-calling extension: tool calls requested instead of a final
+	// answer. Empty on text-protocol responses.
+	ToolCalls    []ToolCall `json:"tool_calls,omitempty"`
+	FinishReason string     `json:"finish_reason,omitempty"`
 }
 
 type CognitionLoop struct {
