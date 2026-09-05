@@ -86,8 +86,8 @@ func TestSignatureToJSONSchemaProducesValidJSON(t *testing.T) {
 
 func TestBuildToolDefinitions(t *testing.T) {
 	registry := map[string]ToolDef{
-		"zeta_tool": {Name: "zeta_tool", Description: "last", Signature: `{"id": "string"}`},
-		"alpha_tool": {Name: "alpha_tool", Description: "first", Signature: `{"path": "string"}`},
+		"zeta_tool":   {Name: "zeta_tool", Description: "last", Signature: `{"id": "string"}`},
+		"alpha_tool":  {Name: "alpha_tool", Description: "first", Signature: `{"path": "string"}`},
 		"hidden_tool": {Name: "hidden_tool", Description: "not allowed", Signature: `{}`},
 	}
 

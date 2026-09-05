@@ -77,19 +77,19 @@ type Response struct {
 }
 
 type CognitionLoop struct {
-	Provider       Provider
-	MaxSteps       int
-	Config         *config.Config
-	DB             *sql.DB
-	OnTool         func(toolName string, category string, args map[string]interface{})
-	OnResponse     func(content string)
-	OnStats        func(totalInput, totalOutput int)
-	intelEngine    *intelligence.Engine
-	dataLayer      *data.Core
-	stateMachine   *intelligence.StateMachine
-	readBudget     int
-	readCount      int
-	sessionID      string
+	Provider     Provider
+	MaxSteps     int
+	Config       *config.Config
+	DB           *sql.DB
+	OnTool       func(toolName string, category string, args map[string]interface{})
+	OnResponse   func(content string)
+	OnStats      func(totalInput, totalOutput int)
+	intelEngine  *intelligence.Engine
+	dataLayer    *data.Core
+	stateMachine *intelligence.StateMachine
+	readBudget   int
+	readCount    int
+	sessionID    string
 }
 
 func NewCognitionLoop(p Provider, maxSteps int, cfg *config.Config) *CognitionLoop {
