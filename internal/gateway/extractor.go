@@ -85,18 +85,86 @@ func ExtractTextFromPDF(data []byte) (string, error) {
 // fragments whose Y coordinates sit within the same visual row are joined
 // left-to-right — a wide horizontal gap between fragments becomes a space
 // (table columns), fragments that touch are concatenated (word glyphs).
+// textToken is a positioned run of text on the page: either a normal
+// horizontal fragment or a re-assembled rotated (vertical) word.
+type textToken struct {
+	s       string
+	x, y, w float64
+}
+
+// renderPageText reconstructs reading order from positioned text fragments.
+// Rotated glyphs (vertical headers in sheet exports) are detected via their
+// zeroed horizontal matrix scale (FontSize == Trm[0][0] ≈ 0) and re-assembled
+// in stream order — which is their reading order — into single words. The
+// remaining horizontal fragments are grouped into rows by Y (2.5pt tolerance)
+// and sorted by X; wide gaps become spaces, touching glyphs concatenate.
 func renderPageText(texts []pdf.Text) string {
 	if len(texts) == 0 {
 		return ""
 	}
 
-	fragments := make([]pdf.Text, len(texts))
-	copy(fragments, texts)
-	sort.SliceStable(fragments, func(i, j int) bool {
-		if fragments[i].Y != fragments[j].Y {
-			return fragments[i].Y > fragments[j].Y // PDF Y grows upward
+	// Pass 1 — collect rotated glyph runs (FontSize ≈ 0) into vertical tokens.
+	isRotated := func(t pdf.Text) bool { return t.FontSize < 0.5 && t.FontSize > -0.5 }
+
+	tokens := make([]textToken, 0, len(texts))
+	var run []pdf.Text
+
+	flushRun := func() {
+		if len(run) == 0 {
+			return
 		}
-		return fragments[i].X < fragments[j].X
+		// Stream order is the reading order of the rotated word; split into
+		// separate words when the glyph positions jump (new word/column).
+		start := 0
+		for i := 1; i <= len(run); i++ {
+			split := i == len(run)
+			if !split {
+				if abs(run[i].Y-run[i-1].Y) > 6 || abs(run[i].X-run[i-1].X) > 3 {
+					split = true
+				}
+			}
+			if !split {
+				continue
+			}
+			var sb strings.Builder
+			minY, maxY := run[start].Y, run[start].Y
+			for _, r := range run[start:i] {
+				sb.WriteString(r.S)
+				if r.Y < minY {
+					minY = r.Y
+				}
+				if r.Y > maxY {
+					maxY = r.Y
+				}
+			}
+			tokens = append(tokens, textToken{
+				s: sb.String(),
+				x: run[start].X,
+				y: maxY,                 // occupy the topmost row band it spans
+				w: maxY - minY + 8,      // horizontal extent ≈ its vertical span
+			})
+			start = i
+		}
+		run = run[:0]
+	}
+
+	for _, t := range texts {
+		if isRotated(t) {
+			run = append(run, t)
+		} else {
+			flushRun()
+			tokens = append(tokens, textToken{s: t.S, x: t.X, y: t.Y, w: t.W})
+		}
+	}
+	flushRun()
+
+	// Pass 2 — row assembly over tokens (Y banding, X order, gap → space).
+	fragments := tokens
+	sort.SliceStable(fragments, func(i, j int) bool {
+		if fragments[i].y != fragments[j].y {
+			return fragments[i].y > fragments[j].y // PDF Y grows upward
+		}
+		return fragments[i].x < fragments[j].x
 	})
 
 	const rowTolerance = 2.5
@@ -104,8 +172,8 @@ func renderPageText(texts []pdf.Text) string {
 
 	var lines []string
 	var current strings.Builder
-	currentY := fragments[0].Y
-	lineEndX := fragments[0].X
+	currentY := fragments[0].y
+	lineEndX := fragments[0].x
 
 	flush := func() {
 		if current.Len() > 0 {
@@ -115,16 +183,16 @@ func renderPageText(texts []pdf.Text) string {
 	}
 
 	for _, frag := range fragments {
-		if abs(frag.Y-currentY) > rowTolerance {
+		if abs(frag.y-currentY) > rowTolerance {
 			flush()
-			currentY = frag.Y
-			lineEndX = frag.X
+			currentY = frag.y
+			lineEndX = frag.x
 		}
-		if current.Len() > 0 && frag.X-lineEndX > gapThreshold && !strings.HasPrefix(frag.S, " ") {
+		if current.Len() > 0 && frag.x-lineEndX > gapThreshold && !strings.HasPrefix(frag.s, " ") {
 			current.WriteString(" ")
 		}
-		current.WriteString(frag.S)
-		if end := frag.X + frag.W; end > lineEndX {
+		current.WriteString(frag.s)
+		if end := frag.x + frag.w; end > lineEndX {
 			lineEndX = end
 		}
 	}

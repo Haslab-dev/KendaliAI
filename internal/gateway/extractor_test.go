@@ -40,15 +40,39 @@ func TestRenderPageTextRowsAndOrder(t *testing.T) {
 	// must concatenate into one word; row 2 (bottom, Y=90) has a space glyph
 	// and a column gap that becomes a space.
 	texts := []pdf.Text{
-		{S: "Assigned", X: 10, Y: 90, W: 40},
-		{S: " ", X: 51, Y: 90, W: 4},
-		{S: "to", X: 56, Y: 90, W: 10},
-		{S: "Ac", X: 10, Y: 100, W: 19.5},
-		{S: "tiv", X: 30, Y: 100, W: 14},
-		{S: "ity", X: 44.5, Y: 100, W: 15},
+		{S: "Assigned", X: 10, Y: 90, W: 40, FontSize: 10},
+		{S: " ", X: 51, Y: 90, W: 4, FontSize: 10},
+		{S: "to", X: 56, Y: 90, W: 10, FontSize: 10},
+		{S: "Ac", X: 10, Y: 100, W: 19.5, FontSize: 10},
+		{S: "tiv", X: 30, Y: 100, W: 14, FontSize: 10},
+		{S: "ity", X: 44.5, Y: 100, W: 15, FontSize: 10},
 	}
 	got := renderPageText(texts)
 	want := "Activity\nAssigned to"
+	if got != want {
+		t.Errorf("renderPageText:\n got %q\nwant %q", got, want)
+	}
+}
+
+// TestRenderPageTextRotatedHeaders: sheet exports render month headers as
+// rotated glyphs (FontSize == Trm[0][0] ≈ 0, placed bottom-to-top in stream
+// order). Each such run must reassemble into one readable word instead of
+// interleaving with horizontal rows.
+func TestRenderPageTextRotatedHeaders(t *testing.T) {
+	texts := []pdf.Text{
+		// rotated header "June" — same X, rising Y, FontSize ~ 0
+		{S: "J", X: 100, Y: 80},
+		{S: "u", X: 100, Y: 86},
+		{S: "n", X: 100, Y: 92},
+		{S: "e", X: 100, Y: 98},
+		// horizontal body rows
+		{S: "Install", X: 10, Y: 50, W: 30, FontSize: 10},
+		{S: "&", X: 45, Y: 50, W: 6, FontSize: 10},
+		{S: "Setup", X: 53, Y: 50, W: 24, FontSize: 10},
+		{S: "Reza", X: 10, Y: 40, W: 20, FontSize: 10},
+	}
+	got := renderPageText(texts)
+	want := "June\nInstall & Setup\nReza"
 	if got != want {
 		t.Errorf("renderPageText:\n got %q\nwant %q", got, want)
 	}
