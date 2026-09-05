@@ -72,7 +72,7 @@ export const App: React.FC = () => {
     };
 
     init();
-  }, [loadProviders, loadAgents, loadSessions, loadMcps, selectSession, createSession]);
+  }, [authState, loadProviders, loadAgents, loadSessions, loadMcps, selectSession, createSession]);
 
   // Login gate: workspace data loads only after authentication
   if (authState === 'checking') {
