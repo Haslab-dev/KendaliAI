@@ -88,8 +88,9 @@ func ExtractTextFromPDF(data []byte) (string, error) {
 // textToken is a positioned run of text on the page: either a normal
 // horizontal fragment or a re-assembled rotated (vertical) word.
 type textToken struct {
-	s       string
-	x, y, w float64
+	s        string
+	x, y, w  float64
+	fontSize float64
 }
 
 // renderPageText reconstructs reading order from positioned text fragments.
@@ -140,8 +141,8 @@ func renderPageText(texts []pdf.Text) string {
 			tokens = append(tokens, textToken{
 				s: sb.String(),
 				x: run[start].X,
-				y: maxY,                 // occupy the topmost row band it spans
-				w: maxY - minY + 8,      // horizontal extent ≈ its vertical span
+				y: maxY,            // occupy the topmost row band it spans
+				w: maxY - minY + 8, // horizontal extent ≈ its vertical span
 			})
 			start = i
 		}
@@ -153,7 +154,7 @@ func renderPageText(texts []pdf.Text) string {
 			run = append(run, t)
 		} else {
 			flushRun()
-			tokens = append(tokens, textToken{s: t.S, x: t.X, y: t.Y, w: t.W})
+			tokens = append(tokens, textToken{s: t.S, x: t.X, y: t.Y, w: t.W, fontSize: t.FontSize})
 		}
 	}
 	flushRun()
@@ -188,7 +189,15 @@ func renderPageText(texts []pdf.Text) string {
 			currentY = frag.y
 			lineEndX = frag.x
 		}
-		if current.Len() > 0 && frag.x-lineEndX > gapThreshold && !strings.HasPrefix(frag.s, " ") {
+		// Word-space detection relative to the glyph size: per-glyph-positioned
+		// PDFs (common in formal letters) leave sub-point gaps between every
+		// character, while a real space is ~0.25em of the font size.
+		spaceGap := frag.fontSize * 0.18
+		if spaceGap < 0.75 {
+			spaceGap = 0.75
+		}
+		if current.Len() > 0 && frag.x-lineEndX > spaceGap &&
+			!strings.HasPrefix(frag.s, " ") && !strings.HasSuffix(current.String(), " ") {
 			current.WriteString(" ")
 		}
 		current.WriteString(frag.s)

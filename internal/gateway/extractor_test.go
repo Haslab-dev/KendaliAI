@@ -77,3 +77,22 @@ func TestRenderPageTextRotatedHeaders(t *testing.T) {
 		t.Errorf("renderPageText:\n got %q\nwant %q", got, want)
 	}
 }
+
+// TestRenderPageTextPerGlyphPositioning: formal letters place every glyph
+// individually — ~1.5pt intra-word gaps and ~4-8pt word gaps at font size 12.
+// Word-space detection must be relative to the font size, not a fixed 1pt.
+func TestRenderPageTextPerGlyphPositioning(t *testing.T) {
+	mk := func(s string, x float64) pdf.Text {
+		return pdf.Text{S: s, X: x, W: float64(len(s)) * 6, FontSize: 12, Y: 100}
+	}
+	texts := []pdf.Text{
+		mk("K", 10), mk("a", 17.5), mk("r", 25), mk("a", 32.5), mk("w", 40), mk("ang", 47.5),
+		mk("17", 68),  // wide gap -> word space
+		{S: "Oktober", X: 10, W: 34, FontSize: 12, Y: 88}, // next row
+	}
+	got := renderPageText(texts)
+	want := "Karawang 17\nOktober"
+	if got != want {
+		t.Errorf("renderPageText:\n got %q\nwant %q", got, want)
+	}
+}
