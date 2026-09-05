@@ -58,6 +58,12 @@ permissions:
     - path: ./
       permissions: [read]
 
+# Native function calling (OpenAI tools API). Enabled by default for
+# providers that support it; providers that reject it fall back to the legacy
+# `tool: NAME({...})` text protocol automatically. Set false to always use
+# the text protocol.
+# nativeTools: false
+
 # Daily reflection daemon — runs at midnight, generates timeline and auto-skills
 reflection:
   enabled: true

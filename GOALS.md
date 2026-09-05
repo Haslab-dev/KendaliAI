@@ -109,7 +109,7 @@ The product is "done" when all of these pass. Each is measurable and maps to mil
 
 All tracks run in parallel. Two **sync gates** serialize only what must be serialized:
 
-- **Gate-1 · Native tool calling live** in the gateway turn loop *(Track A)* — required before Track E's sub-agents become reliable.
+- **Gate-1 · Native tool calling live** in the gateway turn loop *(Track A)* — required before Track E's sub-agents become reliable. **Status: implemented 2026-09-05** (`nativeTools` config flag, default on; SSE tool-call streaming, provider fallback chain, text-protocol fallback preserved). Registry merge (A2) still open.
 - **Gate-2 · UI router + pane shell shipped** *(Track F)* — required before the Kanban pane (D3) and Collections pane (C4) land.
 
 **Milestones**
@@ -122,9 +122,9 @@ All tracks run in parallel. Two **sync gates** serialize only what must be seria
 | **M3 · Hardening & dogfood** | S5 stable; all secrets encrypted at rest; CI green (tests + lint, Go + UI); this roadmap imported as the first board (D5) |
 
 ### Track A — Core agent runtime *(P1)*
-- [ ] A1 [M0] Extend the provider interface with native tools: add `Tools` support to `providers/openai.go` + `providers/anthropic.go` (go-openai already supports it; Anthropic provider is hand-rolled HTTP)
-- [ ] A2 [M0] Generate JSON-schema tool definitions from **one** unified registry (merge the dual registries `internal/agent/tools.go` + `internal/tools/registry.go`)
-- [ ] A3 [M1] Dispatch native `tool_calls` in `internal/gateway/runtime.go`; keep the text protocol as fallback for providers without tool support
+- [x] A1 [M0] Extend the provider interface with native tools: add `Tools` support to `providers/openai.go` + `providers/anthropic.go` (go-openai already supports it; Anthropic provider is hand-rolled HTTP)
+- [ ] A2 [M0] Generate JSON-schema tool definitions from **one** unified registry (merge the dual registries `internal/agent/tools.go` + `internal/tools/registry.go`) — *converter shipped (`internal/agent/toolcalls.go`); merging the second registry into the live loop is still open*
+- [x] A3 [M1] Dispatch native `tool_calls` in `internal/gateway/runtime.go`; keep the text protocol as fallback for providers without tool support
 - [ ] A4 [M1] Move streaming into the provider layer (today: manual SSE in `internal/gateway/sse_client.go`); keep SSE fallback
 - [ ] A5 [M2] Unify `gateway.Runtime` and `agent.CognitionLoop` behind one engine, or formally deprecate one
 - [ ] A6 [M2] Parallel tool execution with per-tool timeout + cancel propagation

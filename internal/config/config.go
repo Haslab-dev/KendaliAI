@@ -34,8 +34,8 @@ type ChannelConfig struct {
 }
 
 type Config struct {
-	Version         int                        `json:"version" yaml:"version"`
-	Database        struct {
+	Version  int `json:"version" yaml:"version"`
+	Database struct {
 		Path string `json:"path" yaml:"path"`
 	} `json:"database" yaml:"database"`
 	DefaultProvider string                     `json:"defaultProvider" yaml:"defaultProvider"`
@@ -48,6 +48,17 @@ type Config struct {
 	Reflection      ReflectionConfig           `json:"reflection" yaml:"reflection"`
 	Search          SearchConfig               `json:"search,omitempty" yaml:"search,omitempty"`
 	Vector          VectorConfig               `json:"vector,omitempty" yaml:"vector,omitempty"`
+	// NativeTools enables the native function-calling API for providers that
+	// support it (GOALS.md Gate-1). Nil defaults to true. Set false to force
+	// the legacy `tool: NAME({...})` text protocol. A provider that rejects
+	// native tool calls falls back to the text protocol automatically.
+	NativeTools *bool `json:"nativeTools,omitempty" yaml:"nativeTools,omitempty"`
+}
+
+// NativeToolsEnabled reports whether native function calling should be
+// attempted (default true when unset).
+func (c *Config) NativeToolsEnabled() bool {
+	return c == nil || c.NativeTools == nil || *c.NativeTools
 }
 
 type SearchConfig struct {

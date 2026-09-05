@@ -9,13 +9,14 @@ import (
 	"strings"
 	"time"
 
-    "sort"
-    "github.com/google/uuid"
-    "github.com/kendaliai/app/internal/agent"
-    "github.com/kendaliai/app/internal/embedding"
-    "github.com/kendaliai/app/internal/messaging"
-    "github.com/kendaliai/app/internal/providers"
-    openai "github.com/sashabaranov/go-openai"
+	"github.com/google/uuid"
+	"github.com/kendaliai/app/internal/agent"
+	"github.com/kendaliai/app/internal/config"
+	"github.com/kendaliai/app/internal/embedding"
+	"github.com/kendaliai/app/internal/messaging"
+	"github.com/kendaliai/app/internal/providers"
+	openai "github.com/sashabaranov/go-openai"
+	"sort"
 )
 
 type Runtime struct {
@@ -344,6 +345,17 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		}
 	}
 
+	// Native function-calling tool definitions (GOALS.md Gate-1). The text
+	// instructions above are kept so the text protocol remains a working
+	// fallback for providers that reject the tools API.
+	nativeToolsEnabled := config.Cfg.NativeToolsEnabled()
+	toolDefs := agent.BuildToolDefinitions(toolRegistry, func(name string) bool {
+		return r.isToolAllowed(name, agentConfig.Tools)
+	})
+	if nativeToolsEnabled && len(toolDefs) > 0 {
+		sysPrompt += "\nTool definitions are also attached via the native function-calling API. Prefer issuing tool calls through it; the `tool: NAME({...})` text format remains available as a fallback.\n"
+	}
+
 	// 6. Vector RAG Retrieval & Auto-Ingest
 	embCfg, _ := r.store.GetEmbeddingConfig()
 	var embClient *embedding.Client
@@ -526,6 +538,12 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		apiKey = provCfg.APIKey
 	}
 
+	// Native function calling (GOALS.md Gate-1): pass tool definitions to the
+	// provider and dispatch structured tool_calls. The text protocol remains
+	// as an automatic fallback (mid-turn, on provider errors, or when the
+	// model replies in text format anyway).
+	nativeTools := nativeToolsEnabled && len(toolDefs) > 0
+
 	for step := 0; step < 8; step++ {
 		r.bus.Publish(messaging.Event{
 			Type:      messaging.EventAgentThinking,
@@ -535,7 +553,12 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 			Payload:   "Planning next step...",
 		})
 
-		streamRes, err := StreamOpenAICompatible(ctx, endpoint, apiKey, modelToUse, conversationMsgs, StreamCallbacks{
+		toolsParam := toolDefs
+		if !nativeTools {
+			toolsParam = nil
+		}
+
+		streamRes, err := StreamOpenAICompatible(ctx, endpoint, apiKey, modelToUse, conversationMsgs, toolsParam, StreamCallbacks{
 			OnThinking: func(delta string) {
 				finalThought.WriteString(delta)
 				r.bus.Publish(messaging.Event{
@@ -564,16 +587,32 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		if err != nil {
 			log.Printf("SSE stream error (%v), attempting fallback...", err)
 			pClient := r.createProviderClient(provCfg, modelToUse)
-			resp, fallbackErr := pClient.ChatCompletion(ctx, conversationMsgs)
-			if fallbackErr != nil {
+
+			var resp *agent.Response
+			if nativeTools {
+				if tp, ok := pClient.(agent.ToolCallingProvider); ok {
+					resp, err = tp.ChatCompletionWithTools(ctx, conversationMsgs, toolDefs)
+					if err != nil {
+						log.Printf("native tool fallback failed (%v), retrying without tools", err)
+						resp = nil
+						nativeTools = false
+					}
+				} else {
+					nativeTools = false
+				}
+			}
+			if resp == nil {
+				resp, err = pClient.ChatCompletion(ctx, conversationMsgs)
+			}
+			if err != nil {
 				r.bus.Publish(messaging.Event{
 					Type:      messaging.EventAgentFailed,
 					SessionID: sessionID,
 					AgentID:   agentConfig.ID,
 					Channel:   channel,
-					Payload:   fallbackErr.Error(),
+					Payload:   err.Error(),
 				})
-				return nil, fmt.Errorf("LLM error: %w", fallbackErr)
+				return nil, fmt.Errorf("LLM error: %w", err)
 			}
 
 			content := resp.Content
@@ -607,15 +646,32 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 			streamRes = &StreamResult{
 				Content:      content,
 				Thought:      th,
+				ToolCalls:    resp.ToolCalls,
+				FinishReason: resp.FinishReason,
 				InputTokens:  resp.InputTokens,
 				OutputTokens: resp.OutputTokens,
 			}
 		}
 
 		totalTokens += streamRes.InputTokens + streamRes.OutputTokens
+
+		// Native tool calls requested by the model (Gate-1).
+		if len(streamRes.ToolCalls) > 0 {
+			conversationMsgs = append(conversationMsgs, agent.Message{
+				Role:      "assistant",
+				Content:   streamRes.Content,
+				ToolCalls: streamRes.ToolCalls,
+			})
+			for _, tc := range streamRes.ToolCalls {
+				followUp := r.executeToolCall(ctx, sessionID, channel, agentConfig, tc, toolRegistry, true, &recordedToolCalls)
+				conversationMsgs = append(conversationMsgs, followUp)
+			}
+			continue
+		}
+
 		content := streamRes.Content
 
-		// Check if content contains tool calls
+		// Legacy text-protocol tool calls (`tool: NAME({...})`).
 		reqs := agent.ParseActionPlan(content)
 		if len(reqs) == 0 {
 			// Final answer reached!
@@ -623,106 +679,19 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 			break
 		}
 
+		if nativeTools {
+			// The model replied in the text protocol despite native tool
+			// definitions; stop sending them for the rest of this turn.
+			nativeTools = false
+		}
+
 		// Tool calls detected
 		conversationMsgs = append(conversationMsgs, agent.Message{Role: "assistant", Content: content})
 
 		for _, req := range reqs {
-			toolCallID := uuid.New().String()[:8]
-
-			// Broadcast tool call started
-			r.bus.Publish(messaging.Event{
-				Type:      messaging.EventAgentToolCall,
-				SessionID: sessionID,
-				AgentID:   agentConfig.ID,
-				Channel:   channel,
-				Payload: messaging.ToolCallPayload{
-					ID:        toolCallID,
-					Tool:      req.Name,
-					Arguments: req.Args,
-				},
-			})
-
-			// Evaluate Policy
-			policyEffect := r.evaluatePolicy(agentConfig.ID, req.Name, agentConfig.Policy)
-			if policyEffect == "DENY" {
-				log.Printf("⛔ Policy denied tool %s for agent %s", req.Name, agentConfig.ID)
-				record := ToolCallRecord{
-					ID:        toolCallID,
-					Tool:      req.Name,
-					Arguments: req.Args,
-					Output:    "SECURITY DENIAL: Tool execution prohibited by policy.",
-					Status:    "denied",
-				}
-				recordedToolCalls = append(recordedToolCalls, record)
-
-				r.bus.Publish(messaging.Event{
-					Type:      messaging.EventAgentToolResult,
-					SessionID: sessionID,
-					AgentID:   agentConfig.ID,
-					Channel:   channel,
-					Payload: messaging.ToolResultPayload{
-						ID:         toolCallID,
-						Tool:       req.Name,
-						Output:     record.Output,
-						Status:     "denied",
-						DurationMs: 0,
-					},
-				})
-
-				conversationMsgs = append(conversationMsgs, agent.Message{
-					Role:    "user",
-					Content: fmt.Sprintf("tool_result(%s):\nSECURITY DENIAL: Not permitted by security policy.", req.Name),
-				})
-				continue
-			}
-
-			// Execute tool
-			startExec := time.Now()
-			toolDef, exists := toolRegistry[req.Name]
-			var toolOutput string
-			var status string = "success"
-
-			if !exists {
-				toolOutput = fmt.Sprintf("Error: tool '%s' not recognized.", req.Name)
-				status = "error"
-			} else {
-				toolOutput = toolDef.Execute(ctx, req.Args)
-				if strings.Contains(toolOutput, "Error") || strings.Contains(toolOutput, "SECURITY DENIAL") {
-					status = "error"
-				}
-			}
-			duration := time.Since(startExec).Milliseconds()
-
-			// Record tool call
-			record := ToolCallRecord{
-				ID:         toolCallID,
-				Tool:       req.Name,
-				Arguments:  req.Args,
-				Output:     toolOutput,
-				Status:     status,
-				DurationMs: duration,
-			}
-			recordedToolCalls = append(recordedToolCalls, record)
-
-			// Broadcast tool result
-			r.bus.Publish(messaging.Event{
-				Type:      messaging.EventAgentToolResult,
-				SessionID: sessionID,
-				AgentID:   agentConfig.ID,
-				Channel:   channel,
-				Payload: messaging.ToolResultPayload{
-					ID:         toolCallID,
-					Tool:       req.Name,
-					Output:     toolOutput,
-					Status:     status,
-					DurationMs: duration,
-				},
-			})
-
-			conversationMsgs = append(conversationMsgs, agent.Message{
-				Role:    "user",
-				Content: fmt.Sprintf("tool_result(%s):\n%s", req.Name, toolOutput),
-			})
+			tc := agent.ToolCall{ID: uuid.New().String()[:8], Name: req.Name, Args: req.Args}
+			followUp := r.executeToolCall(ctx, sessionID, channel, agentConfig, tc, toolRegistry, false, &recordedToolCalls)
+			conversationMsgs = append(conversationMsgs, followUp)
 		}
 	}
 
@@ -767,6 +736,132 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 	})
 
 	return &assistantMsg, nil
+}
+
+// executeToolCall evaluates policy, executes a single tool call, records it,
+// and broadcasts the call/result events on the bus. The returned follow-up
+// message must be appended to the conversation by the caller; its shape
+// depends on nativeMode (role "tool" with tool_call_id vs legacy user
+// tool_result text).
+func (r *Runtime) executeToolCall(
+	ctx context.Context,
+	sessionID, channel string,
+	agentConfig *AgentConfig,
+	call agent.ToolCall,
+	toolRegistry map[string]agent.ToolDef,
+	nativeMode bool,
+	recordedToolCalls *[]ToolCallRecord,
+) agent.Message {
+	toolCallID := call.ID
+	if toolCallID == "" {
+		toolCallID = uuid.New().String()[:8]
+	}
+
+	// Broadcast tool call started
+	r.bus.Publish(messaging.Event{
+		Type:      messaging.EventAgentToolCall,
+		SessionID: sessionID,
+		AgentID:   agentConfig.ID,
+		Channel:   channel,
+		Payload: messaging.ToolCallPayload{
+			ID:        toolCallID,
+			Tool:      call.Name,
+			Arguments: call.Args,
+		},
+	})
+
+	// Evaluate Policy
+	policyEffect := r.evaluatePolicy(agentConfig.ID, call.Name, agentConfig.Policy)
+	if policyEffect == "DENY" {
+		log.Printf("⛔ Policy denied tool %s for agent %s", call.Name, agentConfig.ID)
+		record := ToolCallRecord{
+			ID:        toolCallID,
+			Tool:      call.Name,
+			Arguments: call.Args,
+			Output:    "SECURITY DENIAL: Tool execution prohibited by policy.",
+			Status:    "denied",
+		}
+		*recordedToolCalls = append(*recordedToolCalls, record)
+
+		r.bus.Publish(messaging.Event{
+			Type:      messaging.EventAgentToolResult,
+			SessionID: sessionID,
+			AgentID:   agentConfig.ID,
+			Channel:   channel,
+			Payload: messaging.ToolResultPayload{
+				ID:         toolCallID,
+				Tool:       call.Name,
+				Output:     record.Output,
+				Status:     "denied",
+				DurationMs: 0,
+			},
+		})
+
+		return toolResultMessage(nativeMode, call, "SECURITY DENIAL: Not permitted by security policy.")
+	}
+
+	// Execute tool
+	startExec := time.Now()
+	toolDef, exists := toolRegistry[call.Name]
+	var toolOutput string
+	var status string = "success"
+
+	if !exists {
+		toolOutput = fmt.Sprintf("Error: tool '%s' not recognized.", call.Name)
+		status = "error"
+	} else {
+		toolOutput = toolDef.Execute(ctx, call.Args)
+		if strings.Contains(toolOutput, "Error") || strings.Contains(toolOutput, "SECURITY DENIAL") {
+			status = "error"
+		}
+	}
+	duration := time.Since(startExec).Milliseconds()
+
+	// Record tool call
+	record := ToolCallRecord{
+		ID:         toolCallID,
+		Tool:       call.Name,
+		Arguments:  call.Args,
+		Output:     toolOutput,
+		Status:     status,
+		DurationMs: duration,
+	}
+	*recordedToolCalls = append(*recordedToolCalls, record)
+
+	// Broadcast tool result
+	r.bus.Publish(messaging.Event{
+		Type:      messaging.EventAgentToolResult,
+		SessionID: sessionID,
+		AgentID:   agentConfig.ID,
+		Channel:   channel,
+		Payload: messaging.ToolResultPayload{
+			ID:         toolCallID,
+			Tool:       call.Name,
+			Output:     toolOutput,
+			Status:     status,
+			DurationMs: duration,
+		},
+	})
+
+	return toolResultMessage(nativeMode, call, toolOutput)
+}
+
+// toolResultMessage builds the conversation follow-up for a finished tool
+// call: native role "tool" message when the call carries a provider-issued ID
+// and native mode is active, else the legacy user-role tool_result text.
+func toolResultMessage(nativeMode bool, call agent.ToolCall, output string) agent.Message {
+	if nativeMode && call.ID != "" {
+		return agent.Message{
+			Role:       "tool",
+			ToolCallID: call.ID,
+			Name:       call.Name,
+			Content:    output,
+		}
+	}
+	return agent.Message{
+		Role:    "user",
+		Content: fmt.Sprintf("tool_result(%s):\n%s", call.Name, output),
+	}
 }
 
 func (r *Runtime) isToolAllowed(toolName string, allowedPatterns []string) bool {
