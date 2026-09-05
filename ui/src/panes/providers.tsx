@@ -228,8 +228,8 @@ export const ProvidersPane: React.FC = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-base font-bold text-neutral-100">LLM Inference Providers & Models</h3>
-        <p className="text-xs text-neutral-400">
+        <h3 className="text-base font-bold text-hi">LLM Inference Providers & Models</h3>
+        <p className="text-xs text-mid">
           Configure API endpoints, probe /models catalogs, and toggle which models are enabled for Chat and Bots.
         </p>
       </div>
@@ -243,34 +243,34 @@ export const ProvidersPane: React.FC = () => {
           return (
             <div
               key={p.id}
-              className={`p-4 bg-[#212121] border rounded-xl space-y-3 transition-colors ${
-                editingId === p.id ? 'border-blue-500/70 bg-[#252525]' : 'border-[#2e2e2e]'
+              className={`p-4 bg-raised border rounded-xl space-y-3 transition-colors ${
+                editingId === p.id ? 'bg-raised bg-raised' : 'border-line'
               }`}
             >
               <div className="flex items-center justify-between">
-                <div className="font-semibold text-sm text-neutral-200 flex items-center gap-1.5">
-                  <Zap size={15} className="text-amber-400" />
+                <div className="font-semibold text-sm text-hi flex items-center gap-1.5">
+                  <Zap size={15} className="text-mid" />
                   <span>{p.name}</span>
-                  <span className="text-[10px] text-neutral-400 uppercase bg-[#181818] px-1.5 py-0.5 rounded border border-[#333]">
+                  <span className="text-[10px] text-mid uppercase bg-hoverbg px-1.5 py-0.5 rounded border border-line">
                     {p.type}
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   {p.isDefault && (
-                    <span className="text-[10px] bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full font-bold">
+                    <span className="text-[10px] bg-raised text-hi px-2 py-0.5 rounded-full font-bold">
                       DEFAULT
                     </span>
                   )}
                   <button
                     onClick={() => handleEdit(p)}
-                    className="text-neutral-400 hover:text-blue-400 p-1 transition-colors"
+                    className="text-mid hover:text-hi p-1 transition-colors"
                     title="Edit provider and models"
                   >
                     <Edit2 size={14} />
                   </button>
                   <button
                     onClick={() => handleDelete(p.id)}
-                    className="text-neutral-500 hover:text-red-400 p-1 transition-colors"
+                    className="text-lo hover:text-red-400 p-1 transition-colors"
                     title="Delete provider"
                   >
                     <Trash2 size={14} />
@@ -278,13 +278,13 @@ export const ProvidersPane: React.FC = () => {
                 </div>
               </div>
 
-              <div className="text-xs text-neutral-400 truncate">
-                Endpoint: <code className="text-neutral-300">{p.endpoint || 'default (cloud)'}</code>
+              <div className="text-xs text-mid truncate">
+                Endpoint: <code className="text-mid">{p.endpoint || 'default (cloud)'}</code>
               </div>
 
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-neutral-400 font-medium">
+                  <span className="text-mid font-medium">
                     Models ({enabledCount} active / {totalCount} total)
                   </span>
                 </div>
@@ -292,19 +292,19 @@ export const ProvidersPane: React.FC = () => {
                   {enabledModels.slice(0, 6).map((m) => (
                     <span
                       key={m.id}
-                      className="text-[10px] bg-[#171717] border border-[#2e2e2e] text-neutral-300 px-2 py-0.5 rounded-md flex items-center gap-1 font-mono"
+                      className="text-[10px] bg-panel border border-line text-mid px-2 py-0.5 rounded-md flex items-center gap-1 font-mono"
                     >
-                      {isReasoningModel(m.id) && <span title="Reasoning / Thinking Model">🧠</span>}
+                      {isReasoningModel(m.id) && <span title="Reasoning / Thinking Model" className="text-mid"><Brain size={12} /></span>}
                       <span>{m.id}</span>
                     </span>
                   ))}
                   {enabledModels.length > 6 && (
-                    <span className="text-[10px] text-neutral-500 self-center px-1 font-mono">
+                    <span className="text-[10px] text-lo self-center px-1 font-mono">
                       +{enabledModels.length - 6} more
                     </span>
                   )}
                   {enabledModels.length === 0 && (
-                    <span className="text-[11px] text-neutral-500 italic">No models enabled</span>
+                    <span className="text-[11px] text-lo italic">No models enabled</span>
                   )}
                 </div>
               </div>
@@ -314,14 +314,14 @@ export const ProvidersPane: React.FC = () => {
       </div>
 
       {/* Add / Edit Form */}
-      <div ref={formRef} className="border-t border-[#262626] pt-5 space-y-4">
+      <div ref={formRef} className="border-t border-line pt-5 space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <h4 className="text-sm font-semibold text-neutral-200">
+            <h4 className="text-sm font-semibold text-hi">
               {editingId ? `Edit Provider: ${form.name}` : 'Register New Provider'}
             </h4>
             {editingId && (
-              <span className="text-[10px] bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full font-bold">
+              <span className="text-[10px] bg-raised text-hi px-2 py-0.5 rounded-full font-bold">
                 EDITING MODE
               </span>
             )}
@@ -329,7 +329,7 @@ export const ProvidersPane: React.FC = () => {
           {editingId && (
             <button
               onClick={handleCancelEdit}
-              className="text-xs text-neutral-400 hover:text-white px-2 py-1 bg-[#242424] hover:bg-[#2c2c2c] rounded-lg transition-colors"
+              className="text-xs text-mid hover:text-hi px-2 py-1 hover:bg-hoverbg bg-hoverbg rounded-lg transition-colors"
             >
               Cancel Edit
             </button>
@@ -338,19 +338,19 @@ export const ProvidersPane: React.FC = () => {
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-[11px] font-semibold text-neutral-400 uppercase">Name</label>
+            <label className="text-[11px] font-semibold text-mid uppercase">Name</label>
             <input
               type="text"
-              className="w-full mt-1 px-3 py-2 bg-[#1b1b1b] border border-[#2e2e2e] rounded-lg text-xs text-neutral-200 outline-none focus:border-blue-500"
+              className="w-full mt-1 px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi outline-none focus:border-line"
               placeholder="e.g. OpenAI Production"
               value={form.name || ''}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
             />
           </div>
           <div>
-            <label className="text-[11px] font-semibold text-neutral-400 uppercase">Provider Type (OpenAI Compatible)</label>
+            <label className="text-[11px] font-semibold text-mid uppercase">Provider Type (OpenAI Compatible)</label>
             <select
-              className="w-full mt-1 px-3 py-2 bg-[#1b1b1b] border border-[#2e2e2e] rounded-lg text-xs text-neutral-200 outline-none focus:border-blue-500"
+              className="w-full mt-1 px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi outline-none focus:border-line"
               value={form.type || 'custom'}
               onChange={(e) => {
                 const nextType = e.target.value;
@@ -373,20 +373,20 @@ export const ProvidersPane: React.FC = () => {
             </select>
           </div>
           <div>
-            <label className="text-[11px] font-semibold text-neutral-400 uppercase">API Key</label>
+            <label className="text-[11px] font-semibold text-mid uppercase">API Key</label>
             <input
               type="password"
-              className="w-full mt-1 px-3 py-2 bg-[#1b1b1b] border border-[#2e2e2e] rounded-lg text-xs text-neutral-200 outline-none focus:border-blue-500 font-mono"
+              className="w-full mt-1 px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi outline-none focus:border-line font-mono"
               placeholder="sk-..."
               value={form.apiKey || ''}
               onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
             />
           </div>
           <div>
-            <label className="text-[11px] font-semibold text-neutral-400 uppercase">Endpoint URL</label>
+            <label className="text-[11px] font-semibold text-mid uppercase">Endpoint URL</label>
             <input
               type="text"
-              className="w-full mt-1 px-3 py-2 bg-[#1b1b1b] border border-[#2e2e2e] rounded-lg text-xs text-neutral-200 outline-none focus:border-blue-500 font-mono"
+              className="w-full mt-1 px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi outline-none focus:border-line font-mono"
               placeholder="https://api.openai.com/v1 or https://your-provider/v1"
               value={form.endpoint || ''}
               onChange={(e) => setForm({ ...form, endpoint: e.target.value })}
@@ -400,7 +400,7 @@ export const ProvidersPane: React.FC = () => {
             type="button"
             onClick={handleFetchRemoteModels}
             disabled={isFetchingModels}
-            className="px-3 py-2 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/40 rounded-lg text-xs font-semibold flex items-center gap-2 transition-colors disabled:opacity-50"
+            className="px-3 py-2 bg-raised hover:bg-raised text-hi border bg-raised rounded-lg text-xs font-semibold flex items-center gap-2 transition-colors disabled:opacity-50"
             title="Probe endpoint for available models catalog"
           >
             <RefreshCw size={13} className={isFetchingModels ? 'animate-spin' : ''} />
@@ -410,7 +410,7 @@ export const ProvidersPane: React.FC = () => {
             type="button"
             onClick={handleTest}
             disabled={isTesting}
-            className="px-3 py-2 bg-[#212121] hover:bg-[#2a2a2a] text-neutral-300 border border-[#2e2e2e] rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+            className="px-3 py-2 bg-raised hover:bg-hoverbg text-mid border border-line rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
           >
             {isTesting ? 'Testing...' : 'Test Connection'}
           </button>
@@ -421,7 +421,7 @@ export const ProvidersPane: React.FC = () => {
           <div
             className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${
               fetchNotice.type === 'success'
-                ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-300'
+                ? 'bg-raised bg-raised text-hi'
                 : 'bg-red-950/30 border-red-500/30 text-red-300'
             }`}
           >
@@ -431,13 +431,13 @@ export const ProvidersPane: React.FC = () => {
         )}
 
         {/* Models Catalog & Checkboxes Section */}
-        <div className="bg-[#1b1b1b] border border-[#2e2e2e] rounded-xl p-4 space-y-3">
+        <div className="bg-inputbg border border-line rounded-xl p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-neutral-200">
+              <span className="text-xs font-semibold text-hi">
                 Models Catalog ({enabledFormCount} of {totalFormCount} enabled)
               </span>
-              <span className="text-[11px] text-neutral-400">
+              <span className="text-[11px] text-mid">
                 — Uncheck models you do not want shown in chat selectors
               </span>
             </div>
@@ -446,15 +446,15 @@ export const ProvidersPane: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setAllModels(true)}
-                  className="text-[11px] text-blue-400 hover:text-blue-300 transition-colors"
+                  className="text-[11px] text-hi hover:text-hi transition-colors"
                 >
                   Enable All
                 </button>
-                <span className="text-neutral-600">|</span>
+                <span className="text-lo">|</span>
                 <button
                   type="button"
                   onClick={() => setAllModels(false)}
-                  className="text-[11px] text-neutral-400 hover:text-neutral-200 transition-colors"
+                  className="text-[11px] text-mid hover:text-hi transition-colors"
                 >
                   Disable All
                 </button>
@@ -465,10 +465,10 @@ export const ProvidersPane: React.FC = () => {
           {/* Model search if many models */}
           {totalFormCount > 5 && (
             <div className="relative">
-              <Search size={13} className="absolute left-2.5 top-2.5 text-neutral-500" />
+              <Search size={13} className="absolute left-2.5 top-2.5 text-lo" />
               <input
                 type="text"
-                className="w-full pl-8 pr-3 py-1.5 bg-[#141414] border border-[#2a2a2a] rounded-lg text-xs text-neutral-200 outline-none focus:border-blue-500"
+                className="w-full pl-8 pr-3 py-1.5 bg-panel border border-line rounded-lg text-xs text-hi outline-none focus:border-line"
                 placeholder={`Search ${totalFormCount} models...`}
                 value={modelFilter}
                 onChange={(e) => setModelFilter(e.target.value)}
@@ -486,8 +486,8 @@ export const ProvidersPane: React.FC = () => {
                   key={m.id}
                   className={`flex items-center justify-between px-3 py-2 rounded-lg border text-xs transition-colors ${
                     isEnabled
-                      ? 'bg-[#222222] border-[#333333] text-neutral-200'
-                      : 'bg-[#161616] border-[#222222] text-neutral-500'
+                      ? 'bg-raised border-line text-hi'
+                      : 'bg-inputbg border-line text-lo'
                   }`}
                 >
                   <label className="flex items-center gap-2.5 cursor-pointer select-none flex-1 truncate mr-2">
@@ -495,14 +495,14 @@ export const ProvidersPane: React.FC = () => {
                       type="checkbox"
                       checked={isEnabled}
                       onChange={() => toggleModel(m.id)}
-                      className="rounded border-[#3e3e3e] bg-[#181818] text-blue-600 focus:ring-0 cursor-pointer w-4 h-4"
+                      className="rounded border-line bg-hoverbg text-hi focus:ring-0 cursor-pointer w-4 h-4"
                     />
-                    <span className={`font-mono text-xs truncate ${isEnabled ? 'text-neutral-200' : 'text-neutral-500 line-through'}`}>
+                    <span className={`font-mono text-xs truncate ${isEnabled ? 'text-hi' : 'text-lo line-through'}`}>
                       {m.id}
                     </span>
                     {isReasoning && (
-                      <span className="text-[10px] bg-purple-500/20 text-purple-300 border border-purple-500/30 px-1.5 py-0.5 rounded-full flex items-center gap-1 font-sans">
-                        <span>🧠</span>
+                      <span className="text-[10px] bg-raised text-hi border bg-raised px-1.5 py-0.5 rounded-full flex items-center gap-1 font-sans">
+                        <Brain size={12} className="text-mid" />
                         <span>Reasoning</span>
                       </span>
                     )}
@@ -511,7 +511,7 @@ export const ProvidersPane: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleRemoveModel(m.id)}
-                    className="text-neutral-500 hover:text-red-400 p-1 transition-colors"
+                    className="text-lo hover:text-red-400 p-1 transition-colors"
                     title="Remove model"
                   >
                     <Trash2 size={13} />
@@ -521,23 +521,23 @@ export const ProvidersPane: React.FC = () => {
             })}
 
             {totalFormCount === 0 && (
-              <div className="py-6 text-center text-xs text-neutral-500 border border-dashed border-[#2a2a2a] rounded-lg">
-                No models in catalog yet. Click <strong className="text-purple-400">"Fetch Models (/models)"</strong> above to auto-detect, or add a custom model below.
+              <div className="py-6 text-center text-xs text-lo border border-dashed border-line rounded-lg">
+                No models in catalog yet. Click <strong className="text-hi">"Fetch Models (/models)"</strong> above to auto-detect, or add a custom model below.
               </div>
             )}
 
             {totalFormCount > 0 && filteredFormModels.length === 0 && (
-              <div className="py-4 text-center text-xs text-neutral-500">
+              <div className="py-4 text-center text-xs text-lo">
                 No models matching "{modelFilter}"
               </div>
             )}
           </div>
 
           {/* Add Custom Model Manually */}
-          <div className="flex gap-2 pt-2 border-t border-[#262626]">
+          <div className="flex gap-2 pt-2 border-t border-line">
             <input
               type="text"
-              className="flex-1 px-3 py-1.5 bg-[#141414] border border-[#2a2a2a] rounded-lg text-xs text-neutral-200 outline-none focus:border-blue-500 font-mono"
+              className="flex-1 px-3 py-1.5 bg-panel border border-line rounded-lg text-xs text-hi outline-none focus:border-line font-mono"
               placeholder="Add custom model ID (e.g. gpt-4o, claude-3-7-sonnet, llama3:8b)"
               value={newModelInput}
               onChange={(e) => setNewModelInput(e.target.value)}
@@ -552,7 +552,7 @@ export const ProvidersPane: React.FC = () => {
               type="button"
               onClick={handleAddManualModel}
               disabled={!newModelInput.trim()}
-              className="px-3 py-1.5 bg-[#252525] hover:bg-[#303030] text-neutral-200 border border-[#333333] rounded-lg text-xs font-medium transition-colors disabled:opacity-40"
+              className="px-3 py-1.5 bg-raised hover:bg-hoverbg text-hi border border-line rounded-lg text-xs font-medium transition-colors disabled:opacity-40"
             >
               Add Model
             </button>
@@ -564,7 +564,7 @@ export const ProvidersPane: React.FC = () => {
           <button
             type="button"
             onClick={handleSave}
-            className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-lg shadow-blue-600/20 transition-colors"
+            className="px-5 py-2 bg-hi hover:bg-hi text-app rounded-lg text-xs font-semibold shadow-lg transition-colors"
           >
             {editingId ? 'Update Provider & Models' : 'Save Provider'}
           </button>
@@ -572,7 +572,7 @@ export const ProvidersPane: React.FC = () => {
             <button
               type="button"
               onClick={handleCancelEdit}
-              className="px-4 py-2 bg-[#212121] hover:bg-[#2a2a2a] text-neutral-400 hover:text-neutral-200 border border-[#2e2e2e] rounded-lg text-xs font-medium transition-colors"
+              className="px-4 py-2 bg-raised hover:bg-hoverbg text-mid hover:text-hi border border-line rounded-lg text-xs font-medium transition-colors"
             >
               Cancel
             </button>
@@ -666,33 +666,33 @@ const EmbeddingRAGCard: React.FC = () => {
   };
 
   return (
-    <div className="pt-6 border-t border-[#262626] space-y-4">
+    <div className="pt-6 border-t border-line space-y-4">
       <div>
         <div className="flex items-center gap-2">
-          <Database size={17} className="text-emerald-400" />
-          <h3 className="text-base font-bold text-neutral-100">
+          <Database size={17} className="text-hi" />
+          <h3 className="text-base font-bold text-hi">
             Embedding & Vector RAG (OpenAI Compatible)
           </h3>
-          <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold">
+          <span className="text-[10px] bg-raised text-hi border bg-raised px-2 py-0.5 rounded-full font-bold">
             SQLITE VECTOR
           </span>
         </div>
-        <p className="text-xs text-neutral-400 mt-0.5">
+        <p className="text-xs text-mid mt-0.5">
           Configure custom OpenAI-compatible embedding provider (e.g. OpenAI, Ollama, vLLM, LMStudio) for vector RAG over documents, large pastes, and 128k context compaction.
         </p>
       </div>
 
-      <div className="p-4 bg-[#1b1b1b] border border-[#2e2e2e] rounded-xl space-y-4">
-        <div className="flex items-center justify-between pb-3 border-b border-[#282828]">
+      <div className="p-4 bg-inputbg border border-line rounded-xl space-y-4">
+        <div className="flex items-center justify-between pb-3 border-b border-line">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-neutral-200">Enable Vector Knowledge & RAG</span>
-            <span className="text-xs text-neutral-500">(Auto-indexes uploads & large pastes into local SQLite)</span>
+            <span className="text-sm font-semibold text-hi">Enable Vector Knowledge & RAG</span>
+            <span className="text-xs text-lo">(Auto-indexes uploads & large pastes into local SQLite)</span>
           </div>
           <button
             type="button"
             onClick={() => setCfg({ ...cfg, enabled: !cfg.enabled })}
             className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-              cfg.enabled ? 'bg-emerald-600' : 'bg-[#333333]'
+              cfg.enabled ? 'bg-hi' : 'bg-hoverbg'
             }`}
           >
             <span
@@ -705,62 +705,62 @@ const EmbeddingRAGCard: React.FC = () => {
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs text-neutral-400 mb-1">Embedding Provider Endpoint</label>
+            <label className="block text-xs text-mid mb-1">Embedding Provider Endpoint</label>
             <input
               type="text"
               value={cfg.endpoint}
               onChange={(e) => setCfg({ ...cfg, endpoint: e.target.value })}
               placeholder="https://api.openai.com/v1"
-              className="w-full px-3 py-2 bg-[#121212] border border-[#2e2e2e] rounded-lg text-xs text-neutral-200 outline-none focus:border-emerald-500 font-mono"
+              className="w-full px-3 py-2 bg-rail border border-line rounded-lg text-xs text-hi outline-none focus:border-line font-mono"
             />
-            <span className="text-[10px] text-neutral-500 mt-1 block">Supports OpenAI or any OpenAI-compatible embedding API</span>
+            <span className="text-[10px] text-lo mt-1 block">Supports OpenAI or any OpenAI-compatible embedding API</span>
           </div>
 
           <div>
-            <label className="block text-xs text-neutral-400 mb-1">API Key</label>
+            <label className="block text-xs text-mid mb-1">API Key</label>
             <div className="relative">
               <input
                 type={showKey ? 'text' : 'password'}
                 value={cfg.apiKey}
                 onChange={(e) => setCfg({ ...cfg, apiKey: e.target.value })}
                 placeholder="sk-..."
-                className="w-full pl-3 pr-8 py-2 bg-[#121212] border border-[#2e2e2e] rounded-lg text-xs text-neutral-200 outline-none focus:border-emerald-500 font-mono"
+                className="w-full pl-3 pr-8 py-2 bg-rail border border-line rounded-lg text-xs text-hi outline-none focus:border-line font-mono"
               />
               <button
                 type="button"
                 onClick={() => setShowKey(!showKey)}
-                className="absolute right-2.5 top-2.5 text-neutral-500 hover:text-neutral-300"
+                className="absolute right-2.5 top-2.5 text-lo hover:text-mid"
               >
                 {showKey ? <EyeOff size={13} /> : <Eye size={13} />}
               </button>
             </div>
-            <span className="text-[10px] text-neutral-500 mt-1 block">Leave empty if local endpoint requires no auth</span>
+            <span className="text-[10px] text-lo mt-1 block">Leave empty if local endpoint requires no auth</span>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs text-neutral-400 mb-1">Embedding Model Name</label>
+            <label className="block text-xs text-mid mb-1">Embedding Model Name</label>
             <input
               type="text"
               value={cfg.model}
               onChange={(e) => setCfg({ ...cfg, model: e.target.value })}
               placeholder="text-embedding-3-small"
-              className="w-full px-3 py-2 bg-[#121212] border border-[#2e2e2e] rounded-lg text-xs text-neutral-200 outline-none focus:border-emerald-500 font-mono"
+              className="w-full px-3 py-2 bg-rail border border-line rounded-lg text-xs text-hi outline-none focus:border-line font-mono"
             />
-            <span className="text-[10px] text-neutral-500 mt-1 block">Default: text-embedding-3-small</span>
+            <span className="text-[10px] text-lo mt-1 block">Default: text-embedding-3-small</span>
           </div>
 
           <div>
-            <label className="block text-xs text-neutral-400 mb-1">Dimensions</label>
+            <label className="block text-xs text-mid mb-1">Dimensions</label>
             <input
               type="number"
               value={cfg.dimensions || 1536}
               onChange={(e) => setCfg({ ...cfg, dimensions: parseInt(e.target.value) || 1536 })}
               placeholder="1536"
-              className="w-full px-3 py-2 bg-[#121212] border border-[#2e2e2e] rounded-lg text-xs text-neutral-200 outline-none focus:border-emerald-500 font-mono"
+              className="w-full px-3 py-2 bg-rail border border-line rounded-lg text-xs text-hi outline-none focus:border-line font-mono"
             />
-            <span className="text-[10px] text-neutral-500 mt-1 block">Vector dimension (1536 for text-embedding-3-small)</span>
+            <span className="text-[10px] text-lo mt-1 block">Vector dimension (1536 for text-embedding-3-small)</span>
           </div>
         </div>
 
@@ -768,7 +768,7 @@ const EmbeddingRAGCard: React.FC = () => {
           <div
             className={`p-2.5 rounded-lg border text-xs flex items-center gap-2 ${
               testResult.success
-                ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-300'
+                ? 'bg-raised bg-raised text-hi'
                 : 'bg-red-950/30 border-red-500/40 text-red-300'
             }`}
           >
@@ -782,7 +782,7 @@ const EmbeddingRAGCard: React.FC = () => {
             type="button"
             onClick={handleSave}
             disabled={isSaving}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-lg shadow-emerald-600/20 transition-colors disabled:opacity-50"
+            className="px-4 py-2 bg-hi hover:bg-hi text-app rounded-lg text-xs font-semibold shadow-lg transition-colors disabled:opacity-50"
           >
             {isSaving ? 'Saving...' : 'Save Embedding Settings'}
           </button>
@@ -791,14 +791,14 @@ const EmbeddingRAGCard: React.FC = () => {
             type="button"
             onClick={handleTest}
             disabled={isTesting}
-            className="px-4 py-2 bg-[#262626] hover:bg-[#303030] text-neutral-200 border border-[#333333] rounded-lg text-xs font-medium transition-colors disabled:opacity-50 flex items-center gap-1.5"
+            className="px-4 py-2 hover:bg-hoverbg bg-hoverbg text-hi border border-line rounded-lg text-xs font-medium transition-colors disabled:opacity-50 flex items-center gap-1.5"
           >
-            {isTesting ? <RefreshCw size={13} className="animate-spin" /> : <Sparkles size={13} className="text-emerald-400" />}
+            {isTesting ? <RefreshCw size={13} className="animate-spin" /> : <Sparkles size={13} className="text-hi" />}
             <span>{isTesting ? 'Testing Probe...' : 'Test Connection'}</span>
           </button>
 
           {saveSuccess && (
-            <span className="text-xs text-emerald-400 flex items-center gap-1">
+            <span className="text-xs text-hi flex items-center gap-1">
               <Check size={13} /> Settings saved!
             </span>
           )}

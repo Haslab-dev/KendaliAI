@@ -4,6 +4,7 @@ import {
   ChevronDown, ChevronUp, Search, Brain, Zap, Settings, Command,
   CornerDownLeft, Terminal, Sparkles, Smartphone, Database, RefreshCw, FileText, X
 } from 'lucide-react';
+import { Bot, Feather } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { navigate } from '../router';
 import { useAgentSocket } from '../hooks/useAgentSocket';
@@ -81,7 +82,7 @@ export const ChatArea: React.FC = () => {
       if (data.success) {
         setRagNotice({
           type: 'success',
-          text: `📄 Ingested "${file.name}" into knowledge base.`,
+          text: `Ingested "${file.name}" into knowledge base.`,
         });
         setTimeout(() => setRagNotice(null), 7000);
       } else {
@@ -113,10 +114,10 @@ export const ChatArea: React.FC = () => {
 
     // 1. Agent Personas as Invocable Skills
     const agentList = agents.length > 0 ? agents : [
-      { id: 'personal-assistant', name: 'Personal Assistant', description: 'Proactive daily coordinator & executive tasks', avatar: '🎩', skills: ['planning', 'coordination'] },
-      { id: 'research-agent', name: 'Research Agent', description: 'In-depth research, web investigation & fact-checking', avatar: '🔍', skills: ['deep-research', 'synthesis'] },
-      { id: 'knowledge-agent', name: 'Knowledge Agent', description: 'Second brain, documentation & concept retrieval', avatar: '📚', skills: ['knowledge-graph', 'notes'] },
-      { id: 'coding-agent', name: 'Coding Agent', description: 'Senior software engineer, architecture & code authoring', avatar: '💻', skills: ['coding', 'debugging'] },
+      { id: 'personal-assistant', name: 'Personal Assistant', description: 'Proactive daily coordinator & executive tasks', avatar: '', skills: ['planning', 'coordination'] },
+      { id: 'research-agent', name: 'Research Agent', description: 'In-depth research, web investigation & fact-checking', avatar: '', skills: ['deep-research', 'synthesis'] },
+      { id: 'knowledge-agent', name: 'Knowledge Agent', description: 'Second brain, documentation & concept retrieval', avatar: '', skills: ['knowledge-graph', 'notes'] },
+      { id: 'coding-agent', name: 'Coding Agent', description: 'Senior software engineer, architecture & code authoring', avatar: '', skills: ['coding', 'debugging'] },
     ];
 
     agentList.forEach((ag) => {
@@ -126,7 +127,7 @@ export const ChatArea: React.FC = () => {
         label: ag.name,
         desc: ag.description || `Specialized skill: ${(ag.skills || []).join(', ')}`,
         category: 'SKILL',
-        icon: ag.avatar || '🤖',
+        icon: ag.avatar || '',
       });
     });
 
@@ -144,7 +145,7 @@ export const ChatArea: React.FC = () => {
         label: `MCP: ${m.name || m.id}`,
         desc: toolNames ? `Tools: ${toolNames}...` : 'External Model Context Protocol server',
         category: 'MCP',
-        icon: '🔌',
+        icon: '',
       });
     });
 
@@ -156,7 +157,7 @@ export const ChatArea: React.FC = () => {
         label: 'New Chat Session',
         desc: 'Start a fresh conversation thread',
         category: 'COMMAND',
-        icon: '➕',
+        icon: '',
         executeDirect: () => createSession(),
       },
       {
@@ -165,7 +166,7 @@ export const ChatArea: React.FC = () => {
         label: 'Clear Messages',
         desc: 'Clear message history of current session',
         category: 'COMMAND',
-        icon: '🗑️',
+        icon: '',
         executeDirect: () => activeSessionId && clearSessionMessages(activeSessionId),
       },
       {
@@ -174,7 +175,7 @@ export const ChatArea: React.FC = () => {
         label: 'Switch Agent Persona',
         desc: 'Open Agent Personas pane',
         category: 'COMMAND',
-        icon: '🤖',
+        icon: '',
         executeDirect: () => navigate('agents'),
       },
       {
@@ -183,7 +184,7 @@ export const ChatArea: React.FC = () => {
         label: 'OpenAI Providers & Models',
         desc: 'Configure custom OpenAI endpoints and probe /models',
         category: 'COMMAND',
-        icon: '⚙️',
+        icon: '',
         executeDirect: () => navigate('providers'),
       }
     );
@@ -196,7 +197,7 @@ export const ChatArea: React.FC = () => {
         label: doc.title,
         desc: `Inject RAG context from this document (${doc.chunkCount} chunks)`,
         category: 'DOC',
-        icon: '📄',
+        icon: '',
       });
     });
 
@@ -302,17 +303,17 @@ export const ChatArea: React.FC = () => {
   }
 
   return (
-    <main className="flex-1 flex flex-col bg-[#0d0d0d] dark:bg-[#0d0d0d] light:bg-[#ffffff] relative overflow-hidden">
+    <main className="flex-1 flex flex-col bg-app relative overflow-hidden">
       {/* Topbar */}
-      <header className="h-[52px] border-b border-[#262626] flex items-center justify-between px-4 bg-[#0d0d0d] dark:bg-[#0d0d0d] light:bg-[#ffffff] z-20 select-none">
+      <header className="h-[52px] border-b border-line flex items-center justify-between px-4 bg-app z-20 select-none">
         <div className="flex items-center gap-2">
           {/* Active Agent Selector */}
           <div
             onClick={() => navigate('agents')}
-            className="flex items-center gap-2 px-3 py-1.5 bg-[#1e1e1e] hover:bg-[#262626] border border-[#262626] rounded-xl cursor-pointer text-xs font-medium text-neutral-200 transition-colors"
+            className="flex items-center gap-2 px-3 py-1.5 bg-inputbg hover:bg-hoverbg border border-line rounded-xl cursor-pointer text-xs font-medium text-hi transition-colors"
             title="Switch Agent Persona"
           >
-            <span>{activeAgent?.avatar || '🤖'}</span>
+            <span className="text-mid"><Bot size={14} /></span>
             <span className="font-semibold">{activeAgent?.name || 'Personal Assistant'}</span>
           </div>
 
@@ -321,8 +322,8 @@ export const ChatArea: React.FC = () => {
 
           {/* Telegram Sync Indicator */}
           {isTelegramSession && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-sky-950/60 border border-sky-800/60 text-sky-400 rounded-xl text-xs font-mono">
-              <Smartphone size={12} className="text-sky-400 animate-pulse" />
+            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-raised border bg-raised text-hi rounded-xl text-xs font-mono">
+              <Smartphone size={12} className="text-hi animate-pulse" />
               <span>Synced with {botLabel}</span>
             </div>
           )}
@@ -331,21 +332,21 @@ export const ChatArea: React.FC = () => {
         <div className="flex items-center gap-2">
           <button
             onClick={() => createSession()}
-            className="w-8 h-8 rounded-lg border border-[#262626] hover:bg-[#212121] text-neutral-400 hover:text-neutral-200 flex items-center justify-center transition-colors"
+            className="w-8 h-8 rounded-lg border border-line hover:bg-raised text-mid hover:text-hi flex items-center justify-center transition-colors"
             title="New Chat (/new)"
           >
             <Plus size={15} />
           </button>
           <button
             onClick={() => activeSessionId && clearSessionMessages(activeSessionId)}
-            className="w-8 h-8 rounded-lg border border-[#262626] hover:bg-[#212121] text-neutral-400 hover:text-neutral-200 flex items-center justify-center transition-colors"
+            className="w-8 h-8 rounded-lg border border-line hover:bg-raised text-mid hover:text-hi flex items-center justify-center transition-colors"
             title="Clear Messages (/clear)"
           >
             <Trash2 size={15} />
           </button>
           <button
             onClick={toggleTheme}
-            className="w-8 h-8 rounded-lg border border-[#262626] hover:bg-[#212121] text-neutral-400 hover:text-neutral-200 flex items-center justify-center transition-colors"
+            className="w-8 h-8 rounded-lg border border-line hover:bg-raised text-mid hover:text-hi flex items-center justify-center transition-colors"
             title="Toggle Theme"
           >
             {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
@@ -359,13 +360,13 @@ export const ChatArea: React.FC = () => {
           {/* Zero State View */}
           {messages.length === 0 && (
             <div className="flex flex-col items-center justify-center text-center mt-12 mb-8">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-3xl text-white shadow-xl shadow-blue-500/20 mb-4">
-                {activeAgent?.avatar || '🪶'}
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center bg-raised border border-line text-hi mb-4">
+                <Feather size={26} strokeWidth={1.5} />
               </div>
-              <h1 className="text-2xl font-bold text-neutral-100 mb-1">KendaliAI</h1>
-              <p className="text-sm text-neutral-400 mb-8 max-w-md">
+              <h1 className="text-2xl font-bold text-hi mb-1">KendaliAI</h1>
+              <p className="text-sm text-mid mb-8 max-w-md">
                 Personal AI Agent Gateway • Connected to{' '}
-                <span className="text-blue-400 font-semibold">{activeAgent?.name || 'Personal Assistant'}</span>
+                <span className="text-hi font-semibold">{activeAgent?.name || 'Personal Assistant'}</span>
               </p>
 
               {/* Bootstrap Agents as Skills Shortcuts */}
@@ -373,25 +374,25 @@ export const ChatArea: React.FC = () => {
                 {[
                   {
                     title: 'Coding Agent',
-                    avatar: '💻',
+                    avatar: '',
                     desc: 'Senior software engineer & architecture',
                     command: '/skill:coding-agent refactor my component to use a clean state machine',
                   },
                   {
                     title: 'Research Agent',
-                    avatar: '🔍',
+                    avatar: '',
                     desc: 'In-depth investigation & web synthesis',
                     command: '/skill:research-agent compare local LLM runtimes Ollama vs vLLM',
                   },
                   {
                     title: 'Knowledge Agent',
-                    avatar: '📚',
+                    avatar: '',
                     desc: 'Second brain, memory recall & notes',
                     command: '/skill:knowledge-agent summarize key ideas from my knowledge notes',
                   },
                   {
                     title: 'Personal Assistant',
-                    avatar: '🎩',
+                    avatar: '',
                     desc: 'Daily coordinator & task workflows',
                     command: '/skill:personal-assistant organize my priority tasks for today',
                   },
@@ -399,15 +400,15 @@ export const ChatArea: React.FC = () => {
                   <div
                     key={item.title}
                     onClick={() => sendMessage(item.command)}
-                    className="p-3.5 bg-[#171717] hover:bg-[#212121] border border-[#262626] hover:border-neutral-500 rounded-xl text-left cursor-pointer transition-all shadow-sm group"
+                    className="p-3.5 bg-panel hover:bg-raised border border-line hover:border-mid rounded-xl text-left cursor-pointer transition-all shadow-sm group"
                   >
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-base">{item.avatar}</span>
-                      <span className="text-xs font-semibold text-neutral-200 group-hover:text-blue-400 transition-colors">
+                      <span className="text-mid"><Bot size={14} /></span>
+                      <span className="text-xs font-semibold text-hi group-hover:text-hi transition-colors">
                         {item.title}
                       </span>
                     </div>
-                    <div className="text-[11px] text-neutral-400">{item.desc}</div>
+                    <div className="text-[11px] text-mid">{item.desc}</div>
                   </div>
                 ))}
               </div>
@@ -423,33 +424,31 @@ export const ChatArea: React.FC = () => {
               <div key={msg.id} className="flex gap-3.5 text-sm">
                 {/* Avatar */}
                 <div
-                  className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm font-semibold flex-shrink-0 ${
-                    msg.role === 'user'
-                      ? 'bg-blue-600 text-white rounded-full'
-                      : 'bg-gradient-to-br from-blue-500 to-purple-600 text-white'
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0 ${
+                    msg.role === 'user' ? 'bg-hi text-app' : 'bg-raised text-mid border border-line'
                   }`}
                 >
-                  {msg.role === 'user' ? 'LI' : activeAgent?.avatar || '🪶'}
+                  {msg.role === 'user' ? 'LI' : <Bot size={14} />}
                 </div>
 
                 {/* Message Content */}
                 <div className="flex-1 space-y-1 overflow-hidden">
-                  <div className="flex items-center justify-between text-xs font-medium text-neutral-400">
+                  <div className="flex items-center justify-between text-xs font-medium text-mid">
                     <div className="flex items-center gap-2">
                       <span>{msg.role === 'user' ? 'You' : activeAgent?.name || 'KendaliAI'}</span>
                       {msg.channel === 'telegram' && (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-500/15 text-sky-400 border border-sky-500/30 font-mono">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-raised text-hi border bg-raised font-mono">
                           <Smartphone size={10} /> Telegram
                         </span>
                       )}
                       {msg.channel === 'web' && isTelegramSession && (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/15 text-purple-400 border border-purple-500/30 font-mono">
-                          💻 Web UI
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-raised text-hi border bg-raised font-mono">
+                          Web UI
                         </span>
                       )}
                     </div>
                     {msg.model && (
-                      <span className="text-[10px] text-neutral-500 font-mono">
+                      <span className="text-[10px] text-lo font-mono">
                         {msg.model}
                       </span>
                     )}
@@ -473,17 +472,17 @@ export const ChatArea: React.FC = () => {
                   )}
 
                   {/* Message Text with Streaming Cursor */}
-                  <div className="text-neutral-200 leading-relaxed break-words">
+                  <div className="text-hi leading-relaxed break-words">
                     <MarkdownRenderer text={msg.content} />
                     {isCurrentStreaming && msg.content && (
-                      <span className="inline-block w-2 h-4 bg-blue-400 animate-pulse ml-1 align-middle rounded-[1px]" />
+                      <span className="inline-block w-2 h-4 bg-hi animate-pulse ml-1 align-middle rounded-[1px]" />
                     )}
                     {isCurrentStreaming && !msg.content && !msg.thought && (!msg.toolCalls || msg.toolCalls.length === 0) && (
-                      <div className="flex items-center gap-2 text-xs text-neutral-400 py-1 font-mono">
+                      <div className="flex items-center gap-2 text-xs text-mid py-1 font-mono">
                         <div className="flex gap-1">
-                          <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" />
-                          <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:0.2s]" />
-                          <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:0.4s]" />
+                          <span className="w-1.5 h-1.5 bg-hi rounded-full animate-bounce" />
+                          <span className="w-1.5 h-1.5 bg-hi rounded-full animate-bounce [animation-delay:0.2s]" />
+                          <span className="w-1.5 h-1.5 bg-hi rounded-full animate-bounce [animation-delay:0.4s]" />
                         </div>
                         <span>{thinkingStatus || 'Initializing agent...'}</span>
                       </div>
@@ -514,30 +513,30 @@ export const ChatArea: React.FC = () => {
           <div
             className={`mb-2 px-3.5 py-2 rounded-xl border text-xs flex items-center justify-between shadow-lg transition-all ${
               ragNotice.type === 'success'
-                ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300'
+                ? 'bg-raised bg-raised text-hi'
                 : ragNotice.type === 'info'
-                ? 'bg-blue-950/40 border-blue-500/40 text-blue-300'
+                ? 'bg-raised bg-raised text-hi'
                 : 'bg-red-950/40 border-red-500/40 text-red-300'
             }`}
           >
             <div className="flex items-center gap-2 truncate">
               {isUploadingDoc ? (
-                <RefreshCw size={13} className="animate-spin text-blue-400 flex-shrink-0" />
+                <RefreshCw size={13} className="animate-spin text-hi flex-shrink-0" />
               ) : (
-                <Database size={13} className="text-emerald-400 flex-shrink-0" />
+                <Database size={13} className="text-hi flex-shrink-0" />
               )}
               <span className="truncate">{ragNotice.text}</span>
             </div>
             <button
               onClick={() => setRagNotice(null)}
-              className="text-neutral-400 hover:text-white p-0.5 ml-2 flex-shrink-0"
+              className="text-mid hover:text-hi p-0.5 ml-2 flex-shrink-0"
             >
               <X size={13} />
             </button>
           </div>
         )}
 
-        <div className="flex items-end bg-[#1e1e1e] dark:bg-[#1e1e1e] light:bg-[#ffffff] border border-[#2e2e2e] rounded-2xl p-2 gap-2 shadow-xl focus-within:border-neutral-400 transition-colors">
+        <div className="flex items-end bg-inputbg border border-line rounded-2xl p-2 gap-2 shadow-xl focus-within:border-neutral-400 transition-colors">
           <input
             type="file"
             ref={fileInputRef}
@@ -549,11 +548,11 @@ export const ChatArea: React.FC = () => {
           <button
             type="button"
             disabled={isUploadingDoc}
-            className="w-8 h-8 rounded-full flex items-center justify-center text-neutral-400 hover:text-white transition-colors disabled:opacity-50"
+            className="w-8 h-8 rounded-full flex items-center justify-center text-mid hover:text-hi transition-colors disabled:opacity-50"
             title="Upload document or code into Vector RAG memory"
             onClick={() => fileInputRef.current?.click()}
           >
-            {isUploadingDoc ? <RefreshCw size={15} className="animate-spin text-blue-400" /> : <Paperclip size={17} />}
+            {isUploadingDoc ? <RefreshCw size={15} className="animate-spin text-hi" /> : <Paperclip size={17} />}
           </button>
 
           <textarea
@@ -563,11 +562,11 @@ export const ChatArea: React.FC = () => {
             onChange={handleTextareaInput}
             onKeyDown={handleKeyDown}
             placeholder={`Message ${activeAgent?.name || 'KendaliAI'}... (Type '/' for skills & MCPs)`}
-            className="flex-1 bg-transparent text-sm text-neutral-100 placeholder-neutral-500 outline-none resize-none max-h-40 min-h-[24px] py-1 leading-relaxed"
+            className="flex-1 bg-transparent text-sm text-hi placeholder:text-lo outline-none resize-none max-h-40 min-h-[24px] py-1 leading-relaxed"
           />
 
           <button
-            className="w-8 h-8 rounded-full flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
+            className="w-8 h-8 rounded-full flex items-center justify-center text-mid hover:text-hi transition-colors"
             title="Voice input"
             onClick={() => alert('Voice input coming soon')}
           >
@@ -577,14 +576,14 @@ export const ChatArea: React.FC = () => {
           <button
             onClick={handleSend}
             disabled={!inputText.trim() || isGenerating}
-            className="w-8 h-8 rounded-full bg-white text-black flex items-center justify-center font-bold disabled:bg-[#2a2a2a] disabled:text-neutral-500 transition-colors"
+            className="w-8 h-8 rounded-full bg-hi text-app flex items-center justify-center font-bold disabled:bg-hoverbg disabled:text-lo transition-colors"
             title="Send Message"
           >
             <ArrowUp size={16} />
           </button>
         </div>
 
-        <div className="text-center text-[11px] text-neutral-500 mt-2">
+        <div className="text-center text-[11px] text-lo mt-2">
           KendaliAI v0.5.0 — Personal AI Agent Gateway. Supports slash skills, MCP tools & bi-directional Telegram sync.
         </div>
       </div>
@@ -601,13 +600,13 @@ const SlashAutocompleteModal: React.FC<{
   if (suggestions.length === 0) return null;
 
   return (
-    <div className="absolute bottom-full left-4 right-4 mb-2 bg-[#161616]/95 backdrop-blur-md border border-[#2e2e2e] rounded-2xl shadow-2xl overflow-hidden z-40 animate-in fade-in slide-in-from-bottom-2 duration-150">
-      <div className="p-2 border-b border-[#262626] flex items-center justify-between text-[11px] text-neutral-400 font-medium px-3 bg-[#111111]">
+    <div className="absolute bottom-full left-4 right-4 mb-2 bg-inputbg/95 backdrop-blur-md border border-line rounded-2xl shadow-2xl overflow-hidden z-40 animate-in fade-in slide-in-from-bottom-2 duration-150">
+      <div className="p-2 border-b border-line flex items-center justify-between text-[11px] text-mid font-medium px-3 bg-rail">
         <div className="flex items-center gap-1.5 font-mono">
-          <Command size={12} className="text-blue-400" />
+          <Command size={12} className="text-hi" />
           <span>Slash Commands & Agent Skills</span>
         </div>
-        <div className="flex items-center gap-2 text-[10px] text-neutral-500 font-mono">
+        <div className="flex items-center gap-2 text-[10px] text-lo font-mono">
           <span>↑↓ Navigate</span>
           <span>•</span>
           <span>Tab / Enter Select</span>
@@ -621,12 +620,12 @@ const SlashAutocompleteModal: React.FC<{
           const isSelected = idx === selectedIndex;
           const badgeColor =
             item.category === 'SKILL'
-              ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+              ? 'bg-raised text-hi bg-raised'
               : item.category === 'MCP'
-              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+              ? 'bg-raised text-hi bg-raised'
               : item.category === 'DOC'
-              ? 'bg-teal-500/20 text-teal-300 border-teal-500/30'
-              : 'bg-blue-500/20 text-blue-300 border-blue-500/30';
+              ? 'bg-raised text-hi bg-raised'
+              : 'bg-raised text-hi bg-raised';
 
           return (
             <div
@@ -634,18 +633,18 @@ const SlashAutocompleteModal: React.FC<{
               onClick={() => onSelect(item)}
               className={`flex items-center justify-between px-3 py-2 rounded-xl cursor-pointer transition-colors select-none ${
                 isSelected
-                  ? 'bg-blue-600/20 text-white border border-blue-500/40'
-                  : 'text-neutral-300 hover:bg-[#222222] border border-transparent'
+                  ? 'hover:bg-raised text-hi border bg-raised'
+                  : 'text-mid hover:bg-raised border border-transparent'
               }`}
             >
               <div className="flex items-center gap-2.5 truncate">
                 <span className="text-base flex-shrink-0">{item.icon}</span>
                 <div className="truncate">
                   <div className="flex items-center gap-2 font-mono text-xs">
-                    <span className="font-semibold text-blue-400">{item.prefix}</span>
-                    <span className="text-neutral-300 font-sans font-medium">— {item.label}</span>
+                    <span className="font-semibold text-hi">{item.prefix}</span>
+                    <span className="text-mid font-sans font-medium">— {item.label}</span>
                   </div>
-                  <div className="text-[11px] text-neutral-400 truncate mt-0.5">
+                  <div className="text-[11px] text-mid truncate mt-0.5">
                     {item.desc}
                   </div>
                 </div>
@@ -656,7 +655,7 @@ const SlashAutocompleteModal: React.FC<{
                   {item.category}
                 </span>
                 {isSelected && (
-                  <CornerDownLeft size={13} className="text-neutral-400" />
+                  <CornerDownLeft size={13} className="text-mid" />
                 )}
               </div>
             </div>
@@ -687,37 +686,37 @@ const ThoughtProcessAccordion: React.FC<{ thought: string; isStreaming?: boolean
   );
 
   return (
-    <div className="my-2 rounded-xl border border-purple-500/25 bg-[#17141f] dark:bg-[#17141f] light:bg-[#fbf7ff] overflow-hidden text-xs transition-all shadow-md shadow-purple-950/10">
+    <div className="my-2 rounded-xl border bg-raised bg-raised   overflow-hidden text-xs transition-all shadow-md">
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between px-3.5 py-2 text-purple-300 hover:text-purple-200 bg-purple-950/20 hover:bg-purple-950/30 transition-colors select-none text-left"
+        className="w-full flex items-center justify-between px-3.5 py-2 text-hi hover:text-hi bg-raised hover:bg-raised transition-colors select-none text-left"
       >
         <div className="flex items-center gap-2 font-medium">
-          <Brain size={14} className={`text-purple-400 ${isStreaming ? 'animate-pulse' : ''}`} />
-          <span className="font-semibold text-purple-200">
+          <Brain size={14} className={`text-hi ${isStreaming ? 'animate-pulse' : ''}`} />
+          <span className="font-semibold text-hi">
             {isStreaming ? 'Reasoning in progress...' : 'Reasoning Process'}
           </span>
-          <span className="text-[10px] bg-purple-500/20 text-purple-300 border border-purple-500/30 px-1.5 py-0.5 rounded-full font-mono">
+          <span className="text-[10px] bg-raised text-hi border bg-raised px-1.5 py-0.5 rounded-full font-mono">
             {wordCount} words
           </span>
           {isStreaming && (
-            <span className="text-[9px] bg-purple-500/30 text-purple-200 px-1.5 py-0.5 rounded uppercase font-bold tracking-wider animate-pulse">
+            <span className="text-[9px] bg-raised text-hi px-1.5 py-0.5 rounded uppercase font-bold tracking-wider animate-pulse">
               LIVE
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1 text-[11px] text-purple-400/80">
+        <div className="flex items-center gap-1 text-[11px] text-hi">
           <span>{isOpen ? 'Hide reasoning' : 'Show reasoning'}</span>
           {isOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
         </div>
       </button>
 
       {isOpen && (
-        <div className="px-4 py-3 border-t border-purple-500/15 text-neutral-300 dark:text-neutral-300 font-mono text-[11px] leading-relaxed whitespace-pre-wrap select-text max-h-80 overflow-y-auto custom-scrollbar italic bg-black/25">
+        <div className="px-4 py-3 border-t bg-raised text-mid font-mono text-[11px] leading-relaxed whitespace-pre-wrap select-text max-h-80 overflow-y-auto custom-scrollbar italic bg-black/25">
           {thought}
           {isStreaming && (
-            <span className="inline-block w-2 h-3.5 bg-purple-400 animate-pulse ml-1 align-middle" />
+            <span className="inline-block w-2 h-3.5 bg-hi animate-pulse ml-1 align-middle" />
           )}
         </div>
       )}
@@ -764,18 +763,18 @@ const CodeBlock: React.FC<{ code: string; language: string }> = ({ code, languag
   };
 
   return (
-    <div className="rounded-xl border border-[#2a2a2a] bg-[#141414] overflow-hidden my-3 text-xs">
-      <div className="flex items-center justify-between px-3.5 py-1.5 bg-[#1e1e1e] border-b border-[#2a2a2a] text-neutral-400 font-mono text-[11px]">
+    <div className="rounded-xl border border-line bg-panel overflow-hidden my-3 text-xs">
+      <div className="flex items-center justify-between px-3.5 py-1.5 bg-inputbg border-b border-line text-mid font-mono text-[11px]">
         <span>{language || 'code'}</span>
         <button
           onClick={handleCopy}
-          className="flex items-center gap-1 hover:text-white transition-colors"
+          className="flex items-center gap-1 hover:text-hi transition-colors"
         >
-          {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+          {copied ? <Check size={12} className="text-hi" /> : <Copy size={12} />}
           <span>{copied ? 'Copied' : 'Copy'}</span>
         </button>
       </div>
-      <pre className="p-3 font-mono text-neutral-300 overflow-x-auto">
+      <pre className="p-3 font-mono text-mid overflow-x-auto">
         <code>{code}</code>
       </pre>
     </div>
@@ -787,14 +786,14 @@ function renderInlineMarkdown(text: string): React.ReactNode {
   return chunks.map((chunk, i) => {
     if (chunk.startsWith('`') && chunk.endsWith('`')) {
       return (
-        <code key={i} className="bg-[#212121] px-1.5 py-0.5 rounded text-xs font-mono text-blue-300">
+        <code key={i} className="bg-raised px-1.5 py-0.5 rounded text-xs font-mono text-hi">
           {chunk.slice(1, -1)}
         </code>
       );
     }
     if (chunk.startsWith('**') && chunk.endsWith('**')) {
       return (
-        <strong key={i} className="font-semibold text-white">
+        <strong key={i} className="font-semibold text-hi">
           {chunk.slice(2, -2)}
         </strong>
       );
@@ -859,43 +858,43 @@ const ModelSelectorDropdown: React.FC = () => {
         onClick={() => setIsOpen(!isOpen)}
         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-all select-none ${
           activeModel
-            ? 'bg-purple-950/30 hover:bg-purple-950/50 border-purple-500/40 text-purple-200 shadow-sm'
-            : 'bg-[#1e1e1e] hover:bg-[#262626] border-[#262626] text-neutral-300'
+            ? 'hover:bg-raised hover:bg-raised bg-raised text-hi shadow-sm'
+            : 'bg-inputbg hover:bg-hoverbg border-line text-mid'
         }`}
         title="Select active model or filter catalog"
       >
         {isReasoning ? (
-          <Brain size={14} className="text-purple-400 animate-pulse" />
+          <Brain size={14} className="text-hi animate-pulse" />
         ) : (
-          <Zap size={14} className="text-amber-400" />
+          <Zap size={14} className="text-mid" />
         )}
         <span className="font-mono max-w-[140px] truncate">{effectiveModel}</span>
         {isReasoning && (
-          <span className="text-[9px] bg-purple-500/30 text-purple-300 px-1 rounded uppercase tracking-wider font-semibold">
+          <span className="text-[9px] bg-raised text-hi px-1 rounded uppercase tracking-wider font-semibold">
             THINK
           </span>
         )}
-        <ChevronDown size={12} className={`text-neutral-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown size={12} className={`text-mid transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 mt-1.5 w-72 bg-[#171717] border border-[#2e2e2e] rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-1 duration-150">
+        <div className="absolute left-0 mt-1.5 w-72 bg-panel border border-line rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-1 duration-150">
           {/* Search Filter Input */}
-          <div className="p-2 border-b border-[#262626]">
-            <div className="flex items-center gap-2 px-2.5 py-1.5 bg-[#121212] border border-[#2a2a2a] rounded-lg">
-              <Search size={13} className="text-neutral-500 flex-shrink-0" />
+          <div className="p-2 border-b border-line">
+            <div className="flex items-center gap-2 px-2.5 py-1.5 bg-rail border border-line rounded-lg">
+              <Search size={13} className="text-lo flex-shrink-0" />
               <input
                 type="text"
                 autoFocus
                 value={searchFilter}
                 onChange={(e) => setSearchFilter(e.target.value)}
                 placeholder="Filter models..."
-                className="bg-transparent text-xs text-neutral-200 placeholder-neutral-500 outline-none w-full"
+                className="bg-transparent text-xs text-hi placeholder:text-lo outline-none w-full"
               />
               {searchFilter && (
                 <button
                   onClick={() => setSearchFilter('')}
-                  className="text-neutral-500 hover:text-neutral-300 text-[10px]"
+                  className="text-lo hover:text-mid text-[10px]"
                 >
                   Clear
                 </button>
@@ -913,25 +912,25 @@ const ModelSelectorDropdown: React.FC = () => {
                 setIsOpen(false);
               }}
               className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-left transition-colors ${
-                !activeModel ? 'bg-blue-600/20 text-blue-300 font-semibold' : 'text-neutral-300 hover:bg-[#222222]'
+                !activeModel ? 'hover:bg-raised text-hi font-semibold' : 'text-mid hover:bg-raised'
               }`}
             >
               <div className="flex items-center gap-2 truncate">
-                <span>🤖</span>
+                <span className="text-mid"><Bot size={12} /></span>
                 <div className="truncate">
                   <div className="text-xs">Agent Default</div>
-                  <div className="text-[10px] text-neutral-500 font-mono truncate">
+                  <div className="text-[10px] text-lo font-mono truncate">
                     {activeAgent?.model || 'default'}
                   </div>
                 </div>
               </div>
-              {!activeModel && <Check size={14} className="text-blue-400 flex-shrink-0" />}
+              {!activeModel && <Check size={14} className="text-hi flex-shrink-0" />}
             </button>
 
             {/* Grouped by Provider */}
             {filteredProviders.map((p) => (
               <div key={p.id} className="mt-2">
-                <div className="px-2.5 py-1 text-[10px] font-bold text-neutral-500 uppercase tracking-wider bg-[#141414] rounded">
+                <div className="px-2.5 py-1 text-[10px] font-bold text-lo uppercase tracking-wider bg-panel rounded">
                   {p.name} ({p.type})
                 </div>
                 <div className="space-y-0.5 mt-0.5">
@@ -948,25 +947,25 @@ const ModelSelectorDropdown: React.FC = () => {
                         }}
                         className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left transition-colors ${
                           isSelected
-                            ? 'bg-purple-600/20 text-purple-300 font-semibold'
-                            : 'text-neutral-300 hover:bg-[#222222]'
+                            ? 'hover:bg-raised text-hi font-semibold'
+                            : 'text-mid hover:bg-raised'
                         }`}
                       >
                         <div className="flex items-center gap-1.5 truncate">
                           {reasoning ? (
-                            <span title="Reasoning Model">🧠</span>
+                            <span title="Reasoning Model" className="text-mid"><Brain size={12} /></span>
                           ) : (
-                            <Zap size={12} className="text-neutral-500" />
+                            <Zap size={12} className="text-lo" />
                           )}
                           <span className="font-mono text-xs truncate">{m.id}</span>
                         </div>
                         <div className="flex items-center gap-1.5">
                           {reasoning && (
-                            <span className="text-[9px] bg-purple-500/20 text-purple-300 border border-purple-500/30 px-1 rounded">
+                            <span className="text-[9px] bg-raised text-hi border bg-raised px-1 rounded">
                               THINK
                             </span>
                           )}
-                          {isSelected && <Check size={13} className="text-purple-400" />}
+                          {isSelected && <Check size={13} className="text-hi" />}
                         </div>
                       </button>
                     );
@@ -976,21 +975,21 @@ const ModelSelectorDropdown: React.FC = () => {
             ))}
 
             {totalMatchedModels === 0 && (
-              <div className="py-6 text-center text-xs text-neutral-500">
+              <div className="py-6 text-center text-xs text-lo">
                 No enabled models match "{searchFilter}"
               </div>
             )}
           </div>
 
           {/* Footer: Manage Providers link */}
-          <div className="p-1.5 border-t border-[#262626] bg-[#141414]">
+          <div className="p-1.5 border-t border-line bg-panel">
             <button
               type="button"
               onClick={() => {
                 setIsOpen(false);
                 navigate('providers');
               }}
-              className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs text-neutral-400 hover:text-white hover:bg-[#202020] rounded-lg transition-colors"
+              className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs text-mid hover:text-hi hover:bg-hoverbg rounded-lg transition-colors"
             >
               <Settings size={12} />
               <span>Configure Providers & Models</span>

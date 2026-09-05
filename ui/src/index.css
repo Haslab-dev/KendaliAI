@@ -2,27 +2,52 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Design tokens — a single neutral scale in two modes (GOALS.md P7).
+ * Monochrome by design: one foreground-driven accent (inverted hi/app),
+ * red reserved exclusively for destructive actions. Components consume
+ * these through Tailwind classes (bg-app, text-hi, border-line, ...).
+ */
 @layer base {
   :root {
-    --bg-primary: #ffffff;
-    --bg-secondary: #f9f9f9;
-    --bg-sidebar: #f3f3f3;
-    --border-color: #e5e5e5;
-    --text-primary: #0d0d0d;
-    --text-secondary: #676767;
+    /* light mode */
+    --c-app: 255 255 255;
+    --c-panel: 247 247 248;
+    --c-rail: 241 241 243;
+    --c-raised: 244 244 245;
+    --c-hoverbg: 230 230 233;
+    --c-inputbg: 255 255 255;
+    --c-line: 228 228 231;
+    --c-hi: 9 9 11;
+    --c-mid: 82 82 91;
+    --c-lo: 159 159 168;
   }
 
   .dark {
-    --bg-primary: #0d0d0d;
-    --bg-secondary: #171717;
-    --bg-sidebar: #171717;
-    --border-color: #262626;
-    --text-primary: #ececec;
-    --text-secondary: #8e8ea0;
+    /* dark mode */
+    --c-app: 10 10 10;
+    --c-panel: 20 20 21;
+    --c-rail: 15 15 16;
+    --c-raised: 28 28 30;
+    --c-hoverbg: 40 40 42;
+    --c-inputbg: 24 24 26;
+    --c-line: 41 41 44;
+    --c-hi: 244 244 245;
+    --c-mid: 161 161 170;
+    --c-lo: 98 98 106;
+  }
+
+  html, body {
+    height: 100%;
   }
 
   body {
-    @apply bg-neutral-950 text-neutral-100 font-sans selection:bg-neutral-700 selection:text-white;
+    @apply bg-app text-hi font-sans antialiased selection:bg-mid/30 selection:text-hi;
+    color-scheme: light;
+  }
+
+  .dark body {
+    color-scheme: dark;
   }
 }
 
@@ -37,12 +62,12 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(140, 140, 140, 0.2);
+  background: rgb(var(--c-lo) / 0.35);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(140, 140, 140, 0.4);
+  background: rgb(var(--c-lo) / 0.6);
 }
 
 /* Hide scrollbar when desired */

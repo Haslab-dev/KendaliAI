@@ -104,8 +104,8 @@ export const TelegramPane: React.FC = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-base font-bold text-neutral-100">Telegram Bot Channel Manager</h3>
-        <p className="text-xs text-neutral-400">
+        <h3 className="text-base font-bold text-hi">Telegram Bot Channel Manager</h3>
+        <p className="text-xs text-mid">
           Map Telegram bots directly to agents and assign model overrides. Conversations synchronize bidirectionally with Web.
         </p>
       </div>
@@ -119,31 +119,31 @@ export const TelegramPane: React.FC = () => {
           return (
             <div
               key={b.id}
-              className={`p-4 bg-[#212121] border rounded-xl flex items-center justify-between transition-colors ${
-                isEditing ? 'border-blue-500/70 bg-[#252525]' : 'border-[#2e2e2e]'
+              className={`p-4 bg-raised border rounded-xl flex items-center justify-between transition-colors ${
+                isEditing ? 'bg-raised bg-raised' : 'border-line'
               }`}
             >
               <div className="space-y-1.5">
-                <div className="font-semibold text-sm text-neutral-200 flex items-center gap-2">
-                  <Smartphone size={16} className="text-sky-400" />
+                <div className="font-semibold text-sm text-hi flex items-center gap-2">
+                  <Smartphone size={16} className="text-hi" />
                   <span>{b.name}</span>
-                  <span className="text-xs text-neutral-400">
-                    → Agent: <code className="text-blue-400 font-semibold">{assignedAgent?.name || b.agentId}</code>
+                  <span className="text-xs text-mid">
+                    → Agent: <code className="text-hi font-semibold">{assignedAgent?.name || b.agentId}</code>
                   </span>
                   {b.model ? (
-                    <span className="text-xs text-purple-400 bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-md font-mono flex items-center gap-1">
-                      {isReasoningModel(b.model) && <span>🧠</span>}
+                    <span className="text-xs text-hi bg-raised border bg-raised px-2 py-0.5 rounded-md font-mono flex items-center gap-1">
+                      {isReasoningModel(b.model) && <Brain size={12} className="inline text-mid" />}
                       <span>Model: {b.model}</span>
                     </span>
                   ) : (
-                    <span className="text-[11px] text-neutral-400 bg-[#191919] border border-[#2e2e2e] px-2 py-0.5 rounded-md font-mono">
+                    <span className="text-[11px] text-mid bg-panel border border-line px-2 py-0.5 rounded-md font-mono">
                       Model: Default ({assignedAgent?.model || 'default'})
                     </span>
                   )}
                 </div>
-                <div className="text-xs text-neutral-500 flex items-center gap-3">
+                <div className="text-xs text-lo flex items-center gap-3">
                   <span>Token: <code>••••••••{b.token.slice(-6)}</code></span>
-                  <span>ID: <code className="text-neutral-400">{b.id}</code></span>
+                  <span>ID: <code className="text-mid">{b.id}</code></span>
                 </div>
               </div>
 
@@ -151,13 +151,13 @@ export const TelegramPane: React.FC = () => {
                 <span
                   className={`text-[11px] px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1.5 ${
                     isRunning
-                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                      : 'bg-neutral-800 text-neutral-400 border border-neutral-700'
+                      ? 'bg-raised text-hi border bg-raised'
+                      : 'bg-raised text-mid border border-neutral-700'
                   }`}
                 >
                   <span
                     className={`w-1.5 h-1.5 rounded-full ${
-                      isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-neutral-500'
+                      isRunning ? 'bg-hi animate-pulse' : 'bg-neutral-500'
                     }`}
                   />
                   {b.status.toUpperCase()}
@@ -166,14 +166,14 @@ export const TelegramPane: React.FC = () => {
                 {isRunning ? (
                   <button
                     onClick={() => handleToggle(b.id, 'stop')}
-                    className="px-3 py-1 bg-[#2e2e2e] hover:bg-[#383838] text-neutral-300 rounded-lg text-xs transition-colors"
+                    className="px-3 py-1 bg-raised hover:bg-hoverbg text-mid rounded-lg text-xs transition-colors"
                   >
                     Stop
                   </button>
                 ) : (
                   <button
                     onClick={() => handleToggle(b.id, 'start')}
-                    className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold transition-colors"
+                    className="px-3 py-1 bg-hi hover:bg-hi text-app rounded-lg text-xs font-semibold transition-colors"
                   >
                     Start
                   </button>
@@ -181,7 +181,7 @@ export const TelegramPane: React.FC = () => {
 
                 <button
                   onClick={() => handleEdit(b)}
-                  className="px-2.5 py-1 bg-[#282828] hover:bg-[#323232] text-neutral-300 border border-[#383838] rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors"
+                  className="px-2.5 py-1 bg-raised hover:bg-hoverbg text-mid border border-line rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors"
                   title="Edit bot configuration"
                 >
                   <Edit2 size={12} />
@@ -190,7 +190,7 @@ export const TelegramPane: React.FC = () => {
 
                 <button
                   onClick={() => handleDelete(b.id)}
-                  className="text-neutral-500 hover:text-red-400 p-1.5 transition-colors"
+                  className="text-lo hover:text-red-400 p-1.5 transition-colors"
                   title="Delete bot"
                 >
                   <Trash2 size={15} />
@@ -201,20 +201,20 @@ export const TelegramPane: React.FC = () => {
         })}
 
         {bots.length === 0 && (
-          <div className="py-8 text-center text-xs text-neutral-500 border border-dashed border-[#2a2a2a] rounded-xl">
+          <div className="py-8 text-center text-xs text-lo border border-dashed border-line rounded-xl">
             No Telegram bots registered yet. Create one below to connect your Telegram chats to KendaliAI agents.
           </div>
         )}
       </div>
 
-      <div ref={formRef} className="border-t border-[#262626] pt-5 space-y-4">
+      <div ref={formRef} className="border-t border-line pt-5 space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <h4 className="text-sm font-semibold text-neutral-200">
+            <h4 className="text-sm font-semibold text-hi">
               {editingBotId ? `Edit Telegram Bot: ${form.name}` : 'Register Telegram Bot'}
             </h4>
             {editingBotId && (
-              <span className="text-[10px] bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full font-bold">
+              <span className="text-[10px] bg-raised text-hi px-2 py-0.5 rounded-full font-bold">
                 EDITING MODE
               </span>
             )}
@@ -222,7 +222,7 @@ export const TelegramPane: React.FC = () => {
           {editingBotId && (
             <button
               onClick={handleCancelEdit}
-              className="text-xs text-neutral-400 hover:text-white px-2 py-1 bg-[#242424] hover:bg-[#2c2c2c] rounded-lg transition-colors"
+              className="text-xs text-mid hover:text-hi px-2 py-1 hover:bg-hoverbg bg-hoverbg rounded-lg transition-colors"
             >
               Cancel Edit
             </button>
@@ -231,49 +231,49 @@ export const TelegramPane: React.FC = () => {
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-[11px] font-semibold text-neutral-400 uppercase">Bot Label</label>
+            <label className="text-[11px] font-semibold text-mid uppercase">Bot Label</label>
             <input
               type="text"
-              className="w-full mt-1 px-3 py-2 bg-[#1b1b1b] border border-[#2e2e2e] rounded-lg text-xs text-neutral-200 outline-none focus:border-blue-500"
+              className="w-full mt-1 px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi outline-none focus:border-line"
               placeholder="e.g. Engineer Bot"
               value={form.name || ''}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
             />
           </div>
           <div>
-            <label className="text-[11px] font-semibold text-neutral-400 uppercase">
+            <label className="text-[11px] font-semibold text-mid uppercase">
               Bot Token (@BotFather)
             </label>
             <input
               type="password"
-              className="w-full mt-1 px-3 py-2 bg-[#1b1b1b] border border-[#2e2e2e] rounded-lg text-xs text-neutral-200 outline-none focus:border-blue-500 font-mono"
+              className="w-full mt-1 px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi outline-none focus:border-line font-mono"
               placeholder="123456:ABC-DEF..."
               value={form.token || ''}
               onChange={(e) => setForm({ ...form, token: e.target.value })}
             />
           </div>
           <div>
-            <label className="text-[11px] font-semibold text-neutral-400 uppercase">
+            <label className="text-[11px] font-semibold text-mid uppercase">
               Target Agent Persona
             </label>
             <select
-              className="w-full mt-1 px-3 py-2 bg-[#1b1b1b] border border-[#2e2e2e] rounded-lg text-xs text-neutral-200 outline-none focus:border-blue-500"
+              className="w-full mt-1 px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi outline-none focus:border-line"
               value={form.agentId || 'engineer'}
               onChange={(e) => setForm({ ...form, agentId: e.target.value })}
             >
               {agents.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.name} ({a.avatar || '🤖'})
+                  {a.name}
                 </option>
               ))}
             </select>
           </div>
           <div>
-            <label className="text-[11px] font-semibold text-neutral-400 uppercase">
+            <label className="text-[11px] font-semibold text-mid uppercase">
               Default Model (from Providers)
             </label>
             <select
-              className="w-full mt-1 px-3 py-2 bg-[#1b1b1b] border border-[#2e2e2e] rounded-lg text-xs text-neutral-200 outline-none focus:border-blue-500 font-mono"
+              className="w-full mt-1 px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi outline-none focus:border-line font-mono"
               value={form.model || ''}
               onChange={(e) => setForm({ ...form, model: e.target.value })}
             >
@@ -287,7 +287,7 @@ export const TelegramPane: React.FC = () => {
                   <optgroup key={p.id} label={`${p.name} (${p.type})`}>
                     {enabledMods.map((m) => (
                       <option key={m.id} value={m.id}>
-                        {m.id} {isReasoningModel(m.id) ? '🧠 (Reasoning)' : ''}
+                        {m.id}{isReasoningModel(m.id) ? ' (reasoning)' : ''}
                       </option>
                     ))}
                   </optgroup>
@@ -300,14 +300,14 @@ export const TelegramPane: React.FC = () => {
         <div className="flex items-center gap-2 pt-2">
           <button
             onClick={handleSave}
-            className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-lg shadow-blue-600/20 transition-colors"
+            className="px-5 py-2 bg-hi hover:bg-hi text-app rounded-lg text-xs font-semibold shadow-lg transition-colors"
           >
             {editingBotId ? 'Update Telegram Bot' : 'Save & Launch Bot'}
           </button>
           {editingBotId && (
             <button
               onClick={handleCancelEdit}
-              className="px-4 py-2 bg-[#212121] hover:bg-[#2a2a2a] text-neutral-400 hover:text-neutral-200 border border-[#2e2e2e] rounded-lg text-xs font-medium transition-colors"
+              className="px-4 py-2 bg-raised hover:bg-hoverbg text-mid hover:text-hi border border-line rounded-lg text-xs font-medium transition-colors"
             >
               Cancel
             </button>

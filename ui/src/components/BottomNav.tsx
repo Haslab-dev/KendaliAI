@@ -17,7 +17,7 @@ export const BottomNav: React.FC = () => {
 
   return (
     <nav
-      className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-[#111111] border-t border-[#262626] flex items-stretch justify-around pt-1"
+      className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-rail border-t border-line flex items-stretch justify-around pt-1"
       style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0.25rem)' }}
     >
       {MOBILE_ITEMS.map((item) => {
@@ -28,7 +28,7 @@ export const BottomNav: React.FC = () => {
             key={item.id}
             onClick={() => navigate(item.id)}
             className={`flex flex-col items-center justify-center gap-0.5 min-h-[48px] min-w-[48px] flex-1 py-1 rounded-xl transition-colors ${
-              isActive ? 'text-blue-400' : 'text-neutral-400 active:text-neutral-200'
+              isActive ? 'text-hi' : 'text-mid active:text-hi'
             }`}
           >
             <Icon size={20} />

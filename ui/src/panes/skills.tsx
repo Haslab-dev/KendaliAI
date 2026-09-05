@@ -44,8 +44,8 @@ export const SkillsPane: React.FC = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-base font-bold text-neutral-100">Skills Library</h3>
-        <p className="text-xs text-neutral-400">
+        <h3 className="text-base font-bold text-hi">Skills Library</h3>
+        <p className="text-xs text-mid">
           Modular domain instructions (SKILL.md) loaded lazily on demand.
         </p>
       </div>
@@ -55,31 +55,31 @@ export const SkillsPane: React.FC = () => {
           <div
             key={sk.id}
             onClick={() => handleEdit(sk.id)}
-            className="p-3.5 bg-[#212121] border border-[#2e2e2e] hover:border-neutral-500 rounded-xl cursor-pointer space-y-1"
+            className="p-3.5 bg-raised border border-line hover:border-mid rounded-xl cursor-pointer space-y-1"
           >
-            <div className="font-semibold text-xs text-neutral-200 flex items-center gap-1.5">
-              <Brain size={14} className="text-pink-400" />
+            <div className="font-semibold text-xs text-hi flex items-center gap-1.5">
+              <Brain size={14} className="text-hi" />
               <span>{sk.name}</span>
             </div>
-            <div className="text-[11px] text-neutral-400 line-clamp-2">{sk.description}</div>
+            <div className="text-[11px] text-mid line-clamp-2">{sk.description}</div>
           </div>
         ))}
       </div>
 
       {selectedSkill && (
-        <div className="border-t border-[#262626] pt-5 space-y-3">
-          <h4 className="text-sm font-semibold text-neutral-200">
+        <div className="border-t border-line pt-5 space-y-3">
+          <h4 className="text-sm font-semibold text-hi">
             Edit Skill: {selectedSkill.id}
           </h4>
           <textarea
             rows={8}
-            className="w-full px-3 py-2 bg-[#1b1b1b] border border-[#2e2e2e] rounded-lg text-xs text-neutral-200 font-mono outline-none"
+            className="w-full px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi font-mono outline-none"
             value={selectedSkill.content || ''}
             onChange={(e) => setSelectedSkill({ ...selectedSkill, content: e.target.value })}
           />
           <button
             onClick={handleSave}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold"
+            className="px-4 py-2 bg-hi hover:bg-hi text-app rounded-lg text-xs font-semibold"
           >
             Save Guidelines
           </button>

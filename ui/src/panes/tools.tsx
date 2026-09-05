@@ -48,16 +48,16 @@ export const ToolsPane: React.FC = () => {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-base font-bold text-neutral-100">Capability Tools & Policies</h3>
-          <p className="text-xs text-neutral-400">
+          <h3 className="text-base font-bold text-hi">Capability Tools & Policies</h3>
+          <p className="text-xs text-mid">
             Configure ALLOW, APPROVAL (Human-in-the-loop), or DENY policies per agent role.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-xs text-neutral-400">Role:</span>
+          <span className="text-xs text-mid">Role:</span>
           <select
-            className="px-3 py-1.5 bg-[#212121] border border-[#2e2e2e] rounded-lg text-xs text-neutral-200 outline-none"
+            className="px-3 py-1.5 bg-raised border border-line rounded-lg text-xs text-hi outline-none"
             value={selectedAgent}
             onChange={(e) => setSelectedAgent(e.target.value)}
           >
@@ -72,7 +72,7 @@ export const ToolsPane: React.FC = () => {
 
       <table className="w-full text-left text-xs border-collapse">
         <thead>
-          <tr className="border-b border-[#262626] text-neutral-400 uppercase font-semibold">
+          <tr className="border-b border-line text-mid uppercase font-semibold">
             <th className="py-2.5 px-3">Tool Name</th>
             <th className="py-2.5 px-3">Category</th>
             <th className="py-2.5 px-3">Signature</th>
@@ -83,14 +83,14 @@ export const ToolsPane: React.FC = () => {
           {tools.map((t) => {
             const current = policies[t.name] || 'ALLOW';
             return (
-              <tr key={t.name} className="border-b border-[#222222] hover:bg-[#212121]">
-                <td className="py-2 px-3 font-semibold text-neutral-200 font-mono">{t.name}</td>
+              <tr key={t.name} className="border-b border-line hover:bg-raised">
+                <td className="py-2 px-3 font-semibold text-hi font-mono">{t.name}</td>
                 <td className="py-2 px-3">
-                  <span className="bg-[#1c1c1c] text-neutral-400 px-2 py-0.5 rounded text-[10px]">
+                  <span className="bg-raised text-mid px-2 py-0.5 rounded text-[10px]">
                     {t.category}
                   </span>
                 </td>
-                <td className="py-2 px-3 font-mono text-[11px] text-neutral-500 truncate max-w-xs">
+                <td className="py-2 px-3 font-mono text-[11px] text-lo truncate max-w-xs">
                   {t.signature}
                 </td>
                 <td className="py-2 px-3 text-right">
@@ -99,8 +99,8 @@ export const ToolsPane: React.FC = () => {
                       current === 'DENY'
                         ? 'bg-red-500/20 text-red-400 border border-red-500/30'
                         : current === 'APPROVAL'
-                        ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                        : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                        ? 'bg-raised text-mid border bg-raised'
+                        : 'bg-raised text-hi border bg-raised'
                     }`}
                     value={current}
                     onChange={(e) => handlePolicyChange(t.name, e.target.value)}

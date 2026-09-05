@@ -21,15 +21,15 @@ export const SessionsPane: React.FC<{ onSelectSession: (id: string) => void }> =
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-base font-bold text-neutral-100">Session Registry</h3>
-        <p className="text-xs text-neutral-400">
+        <h3 className="text-base font-bold text-hi">Session Registry</h3>
+        <p className="text-xs text-mid">
           Persistent multi-channel conversations synced across Web, Telegram, and API.
         </p>
       </div>
 
       <table className="w-full text-left text-xs border-collapse">
         <thead>
-          <tr className="border-b border-[#262626] text-neutral-400 uppercase font-semibold">
+          <tr className="border-b border-line text-mid uppercase font-semibold">
             <th className="py-2.5 px-3">Title</th>
             <th className="py-2.5 px-3">Agent</th>
             <th className="py-2.5 px-3">Channel</th>
@@ -39,23 +39,23 @@ export const SessionsPane: React.FC<{ onSelectSession: (id: string) => void }> =
         </thead>
         <tbody>
           {sessions.map((s) => (
-            <tr key={s.id} className="border-b border-[#222222] hover:bg-[#212121]">
-              <td className="py-2 px-3 font-medium text-neutral-200">{s.title}</td>
+            <tr key={s.id} className="border-b border-line hover:bg-raised">
+              <td className="py-2 px-3 font-medium text-hi">{s.title}</td>
               <td className="py-2 px-3">
-                <code className="text-neutral-300">{s.agentId}</code>
+                <code className="text-mid">{s.agentId}</code>
               </td>
               <td className="py-2 px-3">
-                <span className="bg-[#1a1a1a] px-2 py-0.5 rounded text-[10px] text-neutral-400">
+                <span className="bg-inputbg px-2 py-0.5 rounded text-[10px] text-mid">
                   {s.channelId}
                 </span>
               </td>
-              <td className="py-2 px-3 text-neutral-500">
+              <td className="py-2 px-3 text-lo">
                 {new Date(s.updatedAt * 1000).toLocaleTimeString()}
               </td>
               <td className="py-2 px-3 text-right space-x-2">
                 <button
                   onClick={() => onSelectSession(s.id)}
-                  className="px-2.5 py-1 bg-[#2a2a2a] hover:bg-[#333] text-neutral-200 rounded"
+                  className="px-2.5 py-1 hover:bg-hoverbg bg-hoverbg text-hi rounded"
                 >
                   Open
                 </button>

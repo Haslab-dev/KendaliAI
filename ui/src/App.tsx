@@ -62,7 +62,7 @@ export const App: React.FC = () => {
   }, [loadProviders, loadAgents, loadSessions, loadMcps, selectSession, createSession]);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#0d0d0d] text-[#ececec] font-sans">
+    <div className="flex h-screen w-screen overflow-hidden bg-app text-hi font-sans">
       {/* Desktop Icon Rail (hidden on mobile — BottomNav takes over) */}
       <IconRail />
 
@@ -75,7 +75,7 @@ export const App: React.FC = () => {
           </div>
 
           {/* Central Chat & Interaction Canvas */}
-          <div className="flex-1 flex flex-col h-full min-w-0 relative overflow-hidden bg-[#0d0d0d] pb-[60px] md:pb-0">
+          <div className="flex-1 flex flex-col h-full min-w-0 relative overflow-hidden bg-app pb-[60px] md:pb-0">
             <ChatArea />
           </div>
         </>

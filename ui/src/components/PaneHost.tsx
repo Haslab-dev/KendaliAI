@@ -39,20 +39,20 @@ export const PaneHost: React.FC<{ route: Exclude<RouteName, 'chat'> }> = ({ rout
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full min-w-0 relative overflow-hidden bg-[#0d0d0d]">
+    <div className="flex-1 flex flex-col h-full min-w-0 relative overflow-hidden bg-app">
       {route !== 'logs' && (
-        <div className="flex items-center gap-3 px-4 md:px-6 py-3 border-b border-[#262626] bg-[#111111] flex-shrink-0">
+        <div className="flex items-center gap-3 px-4 md:px-6 py-3 border-b border-line bg-rail flex-shrink-0">
           <button
             onClick={() => navigate('chat')}
-            className="md:hidden flex items-center gap-1 text-neutral-400 hover:text-white text-xs px-2 py-1.5 rounded-lg bg-[#212121]"
+            className="md:hidden flex items-center gap-1 text-mid hover:text-hi text-xs px-2 py-1.5 rounded-lg bg-raised"
           >
             <ArrowLeft size={14} />
             Chat
           </button>
-          <span className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 text-white flex items-center justify-center flex-shrink-0">
+          <span className="w-8 h-8 rounded-xl text-hi flex items-center justify-center flex-shrink-0">
             <meta.icon size={16} />
           </span>
-          <h1 className="text-sm font-bold text-neutral-100">{meta.label}</h1>
+          <h1 className="text-sm font-bold text-hi">{meta.label}</h1>
         </div>
       )}
       <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col">

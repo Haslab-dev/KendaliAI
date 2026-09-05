@@ -45,7 +45,7 @@ export const DocsPane: React.FC<{ onChatWithDoc: (docTitle: string) => void }> =
       const res = await fetch('/api/documents/ingest', { method: 'POST', body: fd });
       const data = await res.json();
       if (data.success) {
-        setUploadNotice({ type: 'success', text: `✅ "${file.name}" ingested — ${data.chunkCount || '?'} chunks embedded` });
+        setUploadNotice({ type: 'success', text: `"${file.name}" ingested — ${data.chunkCount || '?'} chunks embedded` });
         fetchDocs();
       } else {
         setUploadNotice({ type: 'error', text: `Failed: ${data.error || 'Unknown error'}` });
@@ -106,18 +106,18 @@ export const DocsPane: React.FC<{ onChatWithDoc: (docTitle: string) => void }> =
       {/* Header row */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <BookOpen size={18} className="text-blue-400" />
+          <BookOpen size={18} className="text-hi" />
           <div>
-            <h3 className="text-sm font-semibold text-neutral-100">Document Store</h3>
-            <p className="text-[11px] text-neutral-400">
-              Upload documents to build a vector knowledge base. Use <span className="font-mono text-emerald-400">/doc:filename</span> in chat to recall context.
+            <h3 className="text-sm font-semibold text-hi">Document Store</h3>
+            <p className="text-[11px] text-mid">
+              Upload documents to build a vector knowledge base. Use <span className="font-mono text-hi">/doc:filename</span> in chat to recall context.
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={fetchDocs}
-            className="w-8 h-8 flex items-center justify-center rounded-lg border border-[#2e2e2e] text-neutral-400 hover:text-white hover:bg-[#212121] transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-lg border border-line text-mid hover:text-hi hover:bg-raised transition-colors"
             title="Refresh"
           >
             <RefreshCw size={13} className={isLoading ? 'animate-spin' : ''} />
@@ -127,7 +127,7 @@ export const DocsPane: React.FC<{ onChatWithDoc: (docTitle: string) => void }> =
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={isUploading}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg text-xs font-semibold shadow-lg shadow-blue-600/20 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-hi hover:bg-hi disabled:opacity-50 text-hi rounded-lg text-xs font-semibold shadow-lg transition-colors"
           >
             {isUploading
               ? <RefreshCw size={12} className="animate-spin" />
@@ -141,7 +141,7 @@ export const DocsPane: React.FC<{ onChatWithDoc: (docTitle: string) => void }> =
       {uploadNotice && (
         <div className={`px-3.5 py-2 rounded-xl border text-xs font-medium ${
           uploadNotice.type === 'success'
-            ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300'
+            ? 'bg-raised bg-raised text-hi'
             : 'bg-red-950/40 border-red-500/40 text-red-300'
         }`}>
           {uploadNotice.text}
@@ -150,26 +150,26 @@ export const DocsPane: React.FC<{ onChatWithDoc: (docTitle: string) => void }> =
 
       {/* Search bar */}
       <div className="relative">
-        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
+        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-lo" />
         <input
           type="text"
           placeholder="Search documents..."
           value={searchQ}
           onChange={(e) => setSearchQ(e.target.value)}
-          className="w-full pl-8 pr-3 py-2 bg-[#1b1b1b] border border-[#2e2e2e] rounded-lg text-xs text-neutral-200 placeholder-neutral-500 outline-none focus:border-blue-500 transition-colors"
+          className="w-full pl-8 pr-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi placeholder:text-lo outline-none focus:border-line transition-colors"
         />
       </div>
 
       {/* Stats bar */}
-      <div className="flex items-center gap-4 text-[11px] text-neutral-500">
-        <span><span className="text-neutral-300 font-semibold">{docs.length}</span> documents</span>
-        <span><span className="text-neutral-300 font-semibold">{docs.reduce((s, d) => s + d.chunkCount, 0)}</span> total chunks</span>
-        <span><span className="text-neutral-300 font-semibold">{docs.reduce((s, d) => s + d.charCount, 0) > 1024 ? `${(docs.reduce((s, d) => s + d.charCount, 0) / 1024).toFixed(0)} KB` : `${docs.reduce((s, d) => s + d.charCount, 0)} B`}</span> total size</span>
+      <div className="flex items-center gap-4 text-[11px] text-lo">
+        <span><span className="text-mid font-semibold">{docs.length}</span> documents</span>
+        <span><span className="text-mid font-semibold">{docs.reduce((s, d) => s + d.chunkCount, 0)}</span> total chunks</span>
+        <span><span className="text-mid font-semibold">{docs.reduce((s, d) => s + d.charCount, 0) > 1024 ? `${(docs.reduce((s, d) => s + d.charCount, 0) / 1024).toFixed(0)} KB` : `${docs.reduce((s, d) => s + d.charCount, 0)} B`}</span> total size</span>
       </div>
 
       {/* Loading */}
       {isLoading && (
-        <div className="flex items-center justify-center py-16 text-neutral-500 gap-2 text-sm">
+        <div className="flex items-center justify-center py-16 text-lo gap-2 text-sm">
           <RefreshCw size={16} className="animate-spin" />
           <span>Loading documents...</span>
         </div>
@@ -178,14 +178,14 @@ export const DocsPane: React.FC<{ onChatWithDoc: (docTitle: string) => void }> =
       {/* Empty state */}
       {!isLoading && filtered.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
-          <div className="w-14 h-14 rounded-2xl bg-[#1a1a1a] border border-[#2a2a2a] flex items-center justify-center">
-            <FileText size={24} className="text-neutral-600" />
+          <div className="w-14 h-14 rounded-2xl bg-inputbg border border-line flex items-center justify-center">
+            <FileText size={24} className="text-lo" />
           </div>
           <div>
-            <p className="text-sm font-medium text-neutral-300">
+            <p className="text-sm font-medium text-mid">
               {searchQ ? 'No documents match your search' : 'No documents yet'}
             </p>
-            <p className="text-[11px] text-neutral-500 mt-1">
+            <p className="text-[11px] text-lo mt-1">
               {searchQ
                 ? 'Try a different search term'
                 : 'Upload a document to start building your knowledge base'}
@@ -194,7 +194,7 @@ export const DocsPane: React.FC<{ onChatWithDoc: (docTitle: string) => void }> =
           {!searchQ && (
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-1.5 px-4 py-2 bg-[#1e1e1e] hover:bg-[#262626] border border-[#2e2e2e] text-neutral-300 rounded-lg text-xs font-medium transition-colors"
+              className="flex items-center gap-1.5 px-4 py-2 bg-inputbg hover:bg-hoverbg border border-line text-mid rounded-lg text-xs font-medium transition-colors"
             >
               <Upload size={13} />
               Upload first document
@@ -207,7 +207,7 @@ export const DocsPane: React.FC<{ onChatWithDoc: (docTitle: string) => void }> =
       {!isLoading && filtered.length > 0 && (
         <div className="flex flex-col gap-2 overflow-y-auto custom-scrollbar">
           {/* Table header */}
-          <div className="grid grid-cols-[1fr_80px_70px_80px_80px_120px] gap-2 px-3 py-1.5 text-[10px] font-semibold text-neutral-500 uppercase tracking-wider border-b border-[#2a2a2a]">
+          <div className="grid grid-cols-[1fr_80px_70px_80px_80px_120px] gap-2 px-3 py-1.5 text-[10px] font-semibold text-lo uppercase tracking-wider border-b border-line">
             <span>Document</span>
             <span>Size</span>
             <span>Chunks</span>
@@ -219,45 +219,45 @@ export const DocsPane: React.FC<{ onChatWithDoc: (docTitle: string) => void }> =
           {filtered.map((doc) => (
             <div
               key={doc.id}
-              className="grid grid-cols-[1fr_80px_70px_80px_80px_120px] gap-2 items-center px-3 py-2.5 bg-[#141414] hover:bg-[#1a1a1a] border border-[#1f1f1f] hover:border-[#2a2a2a] rounded-xl transition-colors group"
+              className="grid grid-cols-[1fr_80px_70px_80px_80px_120px] gap-2 items-center px-3 py-2.5 bg-panel hover:bg-inputbg border hover:border-line border-line rounded-xl transition-colors group"
             >
               {/* Name */}
               <div className="flex items-center gap-2 min-w-0">
-                <div className="w-7 h-7 rounded-lg bg-[#1e1e1e] border border-[#2a2a2a] flex items-center justify-center flex-shrink-0">
-                  <FileText size={13} className="text-blue-400" />
+                <div className="w-7 h-7 rounded-lg bg-inputbg border border-line flex items-center justify-center flex-shrink-0">
+                  <FileText size={13} className="text-hi" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs font-medium text-neutral-200 truncate" title={doc.title}>{doc.title}</p>
+                  <p className="text-xs font-medium text-hi truncate" title={doc.title}>{doc.title}</p>
                   {doc.source && (
-                    <p className="text-[10px] text-neutral-600 truncate">{doc.source}</p>
+                    <p className="text-[10px] text-lo truncate">{doc.source}</p>
                   )}
                 </div>
               </div>
 
               {/* Size */}
-              <span className="text-xs text-neutral-400 font-mono">{formatSize(doc.charCount)}</span>
+              <span className="text-xs text-mid font-mono">{formatSize(doc.charCount)}</span>
 
               {/* Chunks */}
               <div className="flex items-center gap-1">
-                <Database size={10} className="text-neutral-600" />
-                <span className="text-xs text-neutral-400 font-mono">{doc.chunkCount}</span>
+                <Database size={10} className="text-lo" />
+                <span className="text-xs text-mid font-mono">{doc.chunkCount}</span>
               </div>
 
               {/* Vectors */}
               <div className="flex items-center gap-1">
-                <Sparkles size={10} className="text-emerald-600" />
-                <span className="text-xs text-emerald-400 font-mono">{doc.chunkCount}</span>
+                <Sparkles size={10} className="text-hi" />
+                <span className="text-xs text-hi font-mono">{doc.chunkCount}</span>
               </div>
 
               {/* Date */}
-              <span className="text-[11px] text-neutral-500">{formatDate(doc.createdAt)}</span>
+              <span className="text-[11px] text-lo">{formatDate(doc.createdAt)}</span>
 
               {/* Actions */}
               <div className="flex items-center justify-end gap-1.5">
                 <button
                   onClick={() => handleChatWithDoc(doc)}
                   title="Chat with this document"
-                  className="flex items-center gap-1 px-2 py-1 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-500/30 rounded-lg text-[10px] font-semibold transition-colors"
+                  className="flex items-center gap-1 px-2 py-1 bg-raised hover:bg-raised text-hi border bg-raised rounded-lg text-[10px] font-semibold transition-colors"
                 >
                   <MessageSquare size={10} />
                   Chat
@@ -265,7 +265,7 @@ export const DocsPane: React.FC<{ onChatWithDoc: (docTitle: string) => void }> =
                 <button
                   onClick={() => handleDelete(doc.id)}
                   title="Delete document"
-                  className="w-6 h-6 flex items-center justify-center rounded-lg text-neutral-600 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                  className="w-6 h-6 flex items-center justify-center rounded-lg text-lo hover:text-red-400 hover:bg-red-500/10 transition-colors"
                 >
                   <Trash2 size={12} />
                 </button>
@@ -276,8 +276,8 @@ export const DocsPane: React.FC<{ onChatWithDoc: (docTitle: string) => void }> =
       )}
 
       {/* Help footer */}
-      <div className="mt-auto pt-3 border-t border-[#1f1f1f] text-[10px] text-neutral-600 flex items-center gap-2">
-        <span className="font-mono text-emerald-500/80">/doc:filename.pdf</span>
+      <div className="mt-auto pt-3 border-t border-line text-[10px] text-lo flex items-center gap-2">
+        <span className="font-mono text-hi">/doc:filename.pdf</span>
         <span>in chat → injects document context into the conversation</span>
       </div>
     </div>
