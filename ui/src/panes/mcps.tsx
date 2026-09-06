@@ -57,7 +57,7 @@ export const McpsPane: React.FC = () => {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {mcps.map((m) => (
           <div key={m.id} className="p-4 bg-raised border border-line rounded-xl space-y-2">
             <div className="flex items-center justify-between">
@@ -82,7 +82,7 @@ export const McpsPane: React.FC = () => {
 
       <div className="border-t border-line pt-5 space-y-3">
         <h4 className="text-sm font-semibold text-hi">Register New MCP Server</h4>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="text-[11px] font-semibold text-mid uppercase">Name</label>
             <input

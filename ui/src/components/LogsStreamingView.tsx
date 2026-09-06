@@ -193,8 +193,8 @@ export const LogsStreamingView: React.FC<LogsStreamingViewProps> = ({ onClose })
       </header>
 
       {/* Metrics Counter Strip */}
-      <div className="bg-rail border-b border-line px-4 py-2 flex items-center justify-between text-xs text-mid flex-shrink-0 select-none">
-        <div className="flex items-center gap-6">
+      <div className="bg-rail border-b border-line px-4 py-2 flex flex-wrap items-center justify-between gap-3 text-xs text-mid flex-shrink-0 select-none">
+        <div className="flex items-center gap-4 flex-wrap">
           <div className="flex items-center gap-1.5">
             <span className="text-lo">Total Events:</span>
             <span className="font-bold text-hi">{metrics.total}</span>
@@ -206,7 +206,7 @@ export const LogsStreamingView: React.FC<LogsStreamingViewProps> = ({ onClose })
           </div>
           <div className="flex items-center gap-1.5">
             <Smartphone size={13} className="text-hi" />
-            <span className="text-lo">Telegram Bot:</span>
+            <span className="text-lo">Telegram:</span>
             <span className="font-bold text-hi">{metrics.telegram}</span>
           </div>
           <div className="flex items-center gap-1.5">
@@ -217,7 +217,7 @@ export const LogsStreamingView: React.FC<LogsStreamingViewProps> = ({ onClose })
         </div>
 
         {/* Filter Controls */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
           {/* Channel Filter */}
           <div className="flex items-center gap-1.5 text-[11px] font-sans">
             <span className="text-lo">Channel:</span>
@@ -256,8 +256,8 @@ export const LogsStreamingView: React.FC<LogsStreamingViewProps> = ({ onClose })
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search logs..."
-              className="bg-transparent text-hi placeholder:text-lo outline-none w-32 font-mono text-[11px]"
+              placeholder="Search..."
+              className="bg-transparent text-hi placeholder:text-lo outline-none w-24 sm:w-32 font-mono text-[11px]"
             />
             {searchQuery && (
               <button

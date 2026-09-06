@@ -3,12 +3,28 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🪶</text></svg>" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#0d0d0d" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="KendaliAI" />
+    <meta name="application-name" content="KendaliAI" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/pwa-icon-192.png" />
     <title>KendaliAI — Personal AI Agent Gateway</title>
-    <script type="module" crossorigin src="/assets/index-D3YXzDR_.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-CZ5_Kb1Q.css">
+    <script type="module" crossorigin src="/assets/index-DChBmdzd.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-CJhbnIMV.css">
   </head>
-  <body class="bg-[#0d0d0d] text-[#ececec] overflow-hidden antialiased">
+  <body class="overflow-hidden antialiased">
     <div id="root"></div>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch((err) => {
+            console.warn('PWA service worker registration failed:', err);
+          });
+        });
+      }
+    </script>
   </body>
 </html>

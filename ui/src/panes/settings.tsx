@@ -147,6 +147,35 @@ export const SettingsPane: React.FC = () => {
           Switch to {theme === 'dark' ? 'light' : 'dark'} mode
         </button>
       </div>
+
+      {/* Standalone PWA App Viewer */}
+      <div className="rounded-xl border border-line bg-panel p-5">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-sm">📱</span>
+          <h3 className="text-sm font-semibold text-hi">Standalone App Viewer (PWA)</h3>
+        </div>
+        <p className="text-[11px] text-mid mb-3">
+          Install KendaliAI as a standalone native app viewer window on your smartphone, tablet, or desktop.
+          Live gateway connection, zero caching, always fresh.
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              if ((window as any).__kendaliInstallPrompt) {
+                (window as any).__kendaliInstallPrompt();
+              } else {
+                alert('To install KendaliAI as a standalone app, open your browser menu and choose "Add to Home Screen" or "Install App".');
+              }
+            }}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-hi text-app text-xs font-semibold hover:opacity-90 transition-opacity"
+          >
+            <span>📥</span>
+            Install Standalone App
+          </button>
+          <span className="text-[11px] text-lo font-mono">Status: Live Network Gateway (No Offline Cache)</span>
+        </div>
+      </div>
     </div>
   );
 };

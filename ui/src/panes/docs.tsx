@@ -194,7 +194,7 @@ export const DocsPane: React.FC<{ onChatWithDoc: (docTitle: string) => void }> =
       )}
 
       {/* Header row */}
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <BookOpen size={18} className="text-hi" />
           <div>
@@ -344,73 +344,75 @@ export const DocsPane: React.FC<{ onChatWithDoc: (docTitle: string) => void }> =
 
       {/* Document table */}
       {!isLoading && filtered.length > 0 && (
-        <div className="flex flex-col gap-2 overflow-y-auto custom-scrollbar">
-          {/* Table header */}
-          <div className="grid grid-cols-[1fr_80px_70px_80px_80px_120px] gap-2 px-3 py-1.5 text-[10px] font-semibold text-lo uppercase tracking-wider border-b border-line">
-            <span>Document</span>
-            <span>Size</span>
-            <span>Chunks</span>
-            <span>Vectors</span>
-            <span>Uploaded</span>
-            <span className="text-right">Actions</span>
-          </div>
-
-          {filtered.map((doc) => (
-            <div
-              key={doc.id}
-              className="grid grid-cols-[1fr_80px_70px_80px_80px_120px] gap-2 items-center px-3 py-2.5 bg-panel hover:bg-inputbg border hover:border-line border-line rounded-xl transition-colors group"
-            >
-              {/* Name */}
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="w-7 h-7 rounded-lg bg-inputbg border border-line flex items-center justify-center flex-shrink-0">
-                  <FileText size={13} className="text-hi" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-medium text-hi truncate" title={doc.title}>{doc.title}</p>
-                  {doc.source && (
-                    <p className="text-[10px] text-lo truncate">{doc.source}</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Size */}
-              <span className="text-xs text-mid font-mono">{formatSize(doc.charCount)}</span>
-
-              {/* Chunks */}
-              <div className="flex items-center gap-1">
-                <Database size={10} className="text-lo" />
-                <span className="text-xs text-mid font-mono">{doc.chunkCount}</span>
-              </div>
-
-              {/* Vectors */}
-              <div className="flex items-center gap-1">
-                <Sparkles size={10} className="text-hi" />
-                <span className="text-xs text-hi font-mono">{doc.chunkCount}</span>
-              </div>
-
-              {/* Date */}
-              <span className="text-[11px] text-lo">{formatDate(doc.createdAt)}</span>
-
-              {/* Actions */}
-              <div className="flex items-center justify-end gap-1.5">
-                <button
-                  onClick={() => handleChatWithDoc(doc)}
-                  title="Chat with this document"
-                  className="flex items-center gap-1 px-2 py-1 bg-raised hover:bg-raised text-hi border bg-raised rounded-lg text-[10px] font-semibold transition-colors"
-                >
-                  <MessageSquare size={10} />
-                  Chat
-                </button>
-                <button
-                  onClick={() => handleDelete(doc.id)}
-                  title="Delete document"
-                  className="w-6 h-6 flex items-center justify-center rounded-lg text-lo hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                >
-                  <Trash2 size={12} />
-                </button>
-              </div>
+        <div className="overflow-x-auto custom-scrollbar border border-line rounded-xl p-2 bg-panel/30">
+          <div className="flex flex-col gap-2 min-w-[560px]">
+            {/* Table header */}
+            <div className="grid grid-cols-[1fr_80px_70px_80px_80px_120px] gap-2 px-3 py-1.5 text-[10px] font-semibold text-lo uppercase tracking-wider border-b border-line">
+              <span>Document</span>
+              <span>Size</span>
+              <span>Chunks</span>
+              <span>Vectors</span>
+              <span>Uploaded</span>
+              <span className="text-right">Actions</span>
             </div>
-          ))}
+
+            {filtered.map((doc) => (
+              <div
+                key={doc.id}
+                className="grid grid-cols-[1fr_80px_70px_80px_80px_120px] gap-2 items-center px-3 py-2.5 bg-panel hover:bg-inputbg border hover:border-line border-line rounded-xl transition-colors group"
+              >
+                {/* Name */}
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-7 h-7 rounded-lg bg-inputbg border border-line flex items-center justify-center flex-shrink-0">
+                    <FileText size={13} className="text-hi" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-hi truncate" title={doc.title}>{doc.title}</p>
+                    {doc.source && (
+                      <p className="text-[10px] text-lo truncate">{doc.source}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Size */}
+                <span className="text-xs text-mid font-mono">{formatSize(doc.charCount)}</span>
+
+                {/* Chunks */}
+                <div className="flex items-center gap-1">
+                  <Database size={10} className="text-lo" />
+                  <span className="text-xs text-mid font-mono">{doc.chunkCount}</span>
+                </div>
+
+                {/* Vectors */}
+                <div className="flex items-center gap-1">
+                  <Sparkles size={10} className="text-hi" />
+                  <span className="text-xs text-hi font-mono">{doc.chunkCount}</span>
+                </div>
+
+                {/* Date */}
+                <span className="text-[11px] text-lo">{formatDate(doc.createdAt)}</span>
+
+                {/* Actions */}
+                <div className="flex items-center justify-end gap-1.5">
+                  <button
+                    onClick={() => handleChatWithDoc(doc)}
+                    title="Chat with this document"
+                    className="flex items-center gap-1 px-2 py-1 bg-raised hover:bg-raised text-hi border bg-raised rounded-lg text-[10px] font-semibold transition-colors"
+                  >
+                    <MessageSquare size={10} />
+                    Chat
+                  </button>
+                  <button
+                    onClick={() => handleDelete(doc.id)}
+                    title="Delete document"
+                    className="w-6 h-6 flex items-center justify-center rounded-lg text-lo hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

@@ -234,7 +234,7 @@ export const ProvidersPane: React.FC = () => {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {providers.map((p) => {
           const enabledCount = (p.models || []).filter((m) => m.enabled !== false).length;
           const totalCount = (p.models || []).length;
@@ -336,7 +336,7 @@ export const ProvidersPane: React.FC = () => {
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="text-[11px] font-semibold text-mid uppercase">Name</label>
             <input
@@ -703,7 +703,7 @@ const EmbeddingRAGCard: React.FC = () => {
           </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="block text-xs text-mid mb-1">Embedding Provider Endpoint</label>
             <input
@@ -738,7 +738,7 @@ const EmbeddingRAGCard: React.FC = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="block text-xs text-mid mb-1">Embedding Model Name</label>
             <input

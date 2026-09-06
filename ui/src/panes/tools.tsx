@@ -70,51 +70,53 @@ export const ToolsPane: React.FC = () => {
         </div>
       </div>
 
-      <table className="w-full text-left text-xs border-collapse">
-        <thead>
-          <tr className="border-b border-line text-mid uppercase font-semibold">
-            <th className="py-2.5 px-3">Tool Name</th>
-            <th className="py-2.5 px-3">Category</th>
-            <th className="py-2.5 px-3">Signature</th>
-            <th className="py-2.5 px-3 text-right">Policy Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          {tools.map((t) => {
-            const current = policies[t.name] || 'ALLOW';
-            return (
-              <tr key={t.name} className="border-b border-line hover:bg-raised">
-                <td className="py-2 px-3 font-semibold text-hi font-mono">{t.name}</td>
-                <td className="py-2 px-3">
-                  <span className="bg-raised text-mid px-2 py-0.5 rounded text-[10px]">
-                    {t.category}
-                  </span>
-                </td>
-                <td className="py-2 px-3 font-mono text-[11px] text-lo truncate max-w-xs">
-                  {t.signature}
-                </td>
-                <td className="py-2 px-3 text-right">
-                  <select
-                    className={`px-2 py-1 rounded text-xs font-semibold outline-none ${
-                      current === 'DENY'
-                        ? 'bg-red-500/20 text-red-400 border border-red-500/30'
-                        : current === 'APPROVAL'
-                        ? 'bg-raised text-mid border bg-raised'
-                        : 'bg-raised text-hi border bg-raised'
-                    }`}
-                    value={current}
-                    onChange={(e) => handlePolicyChange(t.name, e.target.value)}
-                  >
-                    <option value="ALLOW">ALLOW</option>
-                    <option value="APPROVAL">APPROVAL</option>
-                    <option value="DENY">DENY</option>
-                  </select>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      <div className="overflow-x-auto custom-scrollbar border border-line rounded-xl">
+        <table className="w-full text-left text-xs border-collapse min-w-[540px]">
+          <thead>
+            <tr className="border-b border-line text-mid uppercase font-semibold bg-raised/50">
+              <th className="py-2.5 px-3">Tool Name</th>
+              <th className="py-2.5 px-3">Category</th>
+              <th className="py-2.5 px-3">Signature</th>
+              <th className="py-2.5 px-3 text-right">Policy Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tools.map((t) => {
+              const current = policies[t.name] || 'ALLOW';
+              return (
+                <tr key={t.name} className="border-b border-line hover:bg-raised">
+                  <td className="py-2 px-3 font-semibold text-hi font-mono">{t.name}</td>
+                  <td className="py-2 px-3">
+                    <span className="bg-raised text-mid px-2 py-0.5 rounded text-[10px]">
+                      {t.category}
+                    </span>
+                  </td>
+                  <td className="py-2 px-3 font-mono text-[11px] text-lo truncate max-w-xs">
+                    {t.signature}
+                  </td>
+                  <td className="py-2 px-3 text-right">
+                    <select
+                      className={`px-2 py-1 rounded text-xs font-semibold outline-none ${
+                        current === 'DENY'
+                          ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                          : current === 'APPROVAL'
+                          ? 'bg-raised text-mid border bg-raised'
+                          : 'bg-raised text-hi border bg-raised'
+                      }`}
+                      value={current}
+                      onChange={(e) => handlePolicyChange(t.name, e.target.value)}
+                    >
+                      <option value="ALLOW">ALLOW</option>
+                      <option value="APPROVAL">APPROVAL</option>
+                      <option value="DENY">DENY</option>
+                    </select>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };

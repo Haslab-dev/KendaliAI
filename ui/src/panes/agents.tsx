@@ -50,7 +50,7 @@ export const AgentsPane: React.FC = () => {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {agents.map((a) => (
           <div
             key={a.id}
@@ -88,7 +88,7 @@ export const AgentsPane: React.FC = () => {
       {/* Edit Form */}
       <div className="border-t border-line pt-5 space-y-3">
         <h4 className="text-sm font-semibold text-hi">Create / Edit Agent Manifest</h4>
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div>
             <label className="text-[11px] font-semibold text-mid uppercase">ID</label>
             <input
@@ -140,7 +140,7 @@ export const AgentsPane: React.FC = () => {
               })}
             </select>
           </div>
-          <div className="col-span-3">
+          <div className="col-span-1 sm:col-span-2 lg:col-span-4">
             <label className="text-[11px] font-semibold text-mid uppercase">Description</label>
             <input
               type="text"
@@ -150,7 +150,7 @@ export const AgentsPane: React.FC = () => {
               onChange={(e) => setForm({ ...form, description: e.target.value })}
             />
           </div>
-          <div className="col-span-3">
+          <div className="col-span-1 sm:col-span-2 lg:col-span-4">
             <label className="text-[11px] font-semibold text-mid uppercase">
               System Prompt
             </label>
@@ -162,7 +162,7 @@ export const AgentsPane: React.FC = () => {
               onChange={(e) => setForm({ ...form, systemPrompt: e.target.value })}
             />
           </div>
-          <div className="col-span-3">
+          <div className="col-span-1 sm:col-span-2 lg:col-span-4">
             <label className="text-[11px] font-semibold text-mid uppercase">
               Allowed Tools (comma-separated)
             </label>

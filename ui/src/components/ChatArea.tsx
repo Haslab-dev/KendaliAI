@@ -9,6 +9,7 @@ import { useAppStore } from '../store/useAppStore';
 import { navigate } from '../router';
 import { useAgentSocket } from '../hooks/useAgentSocket';
 import { ToolExecutionCard } from './ToolExecutionCard';
+import { InstallPromptModal } from './InstallPromptModal';
 import { isReasoningModel } from '../types';
 
 interface SlashCommand {
@@ -345,7 +346,8 @@ export const ChatArea: React.FC = () => {
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <InstallPromptModal />
           <button
             onClick={() => createSession()}
             className="w-8 h-8 rounded-lg border border-line hover:bg-raised text-mid hover:text-hi flex items-center justify-center transition-colors"
@@ -355,7 +357,7 @@ export const ChatArea: React.FC = () => {
           </button>
           <button
             onClick={() => activeSessionId && clearSessionMessages(activeSessionId)}
-            className="w-8 h-8 rounded-lg border border-line hover:bg-raised text-mid hover:text-hi flex items-center justify-center transition-colors"
+            className="w-8 h-8 rounded-lg border border-line hover:bg-raised text-mid hover:text-hi flex items-center justify-center transition-colors hidden sm:flex"
             title="Clear Messages (/clear)"
           >
             <Trash2 size={15} />
@@ -386,7 +388,7 @@ export const ChatArea: React.FC = () => {
               </p>
 
               {/* Bootstrap Agents as Skills Shortcuts */}
-              <div className="grid grid-cols-2 gap-3 w-full max-w-xl">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-xl">
                 {[
                   {
                     title: 'Coding Agent',
