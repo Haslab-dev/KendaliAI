@@ -165,4 +165,18 @@ All done!`
 	if !strings.Contains(stripped, "Here is the result:") || !strings.Contains(stripped, "All done!") {
 		t.Errorf("expected outer text preserved, got %q", stripped)
 	}
+
+	inputWithParams := `I need to check the directory contents.
+<｜｜DSML｜｜ calls>
+<｜｜DSML｜｜ invoke name="exec">
+<｜｜DSML｜｜ parameter name="command" string="true">pwd && echo "=== ls -la ===" && ls -la</｜｜DSML｜｜ parameter>
+</｜｜DSML｜｜ invoke>
+</｜｜DSML｜｜ calls>`
+	strippedParams := StripToolCallMarkup(inputWithParams)
+	if strings.Contains(strippedParams, "DSML") || strings.Contains(strippedParams, "parameter") {
+		t.Errorf("expected DSML and parameter stripped, got %q", strippedParams)
+	}
+	if strippedParams != "I need to check the directory contents." {
+		t.Errorf("expected cleaned text, got %q", strippedParams)
+	}
 }

@@ -14,6 +14,7 @@ import (
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/google/uuid"
+	"github.com/kendaliai/app/internal/agent"
 	"github.com/kendaliai/app/internal/gateway"
 	"github.com/kendaliai/app/internal/messaging"
 )
@@ -387,6 +388,7 @@ func SanitizeModelArtifacts(raw string) string {
 	cleaned = reDSMLUnclosed.ReplaceAllString(cleaned, "")
 	cleaned = reDSMLTags.ReplaceAllString(cleaned, "")
 	cleaned = reToolCalls.ReplaceAllString(cleaned, "")
+	cleaned = agent.StripToolCallMarkup(cleaned)
 	return strings.TrimSpace(cleaned)
 }
 

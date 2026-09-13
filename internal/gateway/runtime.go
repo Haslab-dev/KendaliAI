@@ -821,6 +821,7 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 			finalContent = strings.TrimSpace(finalContent[:start-len("<think>")] + finalContent[end+len("</think>"):])
 		}
 	}
+	thought = agent.StripToolCallMarkup(thought)
 	finalContent = agent.StripToolCallMarkup(finalContent)
 
 	// 9. Save Assistant Message

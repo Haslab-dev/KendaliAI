@@ -1296,6 +1296,21 @@ const SlashAutocompleteModal: React.FC<{
   );
 };
 
+const cleanThoughtText = (raw: string): string => {
+  if (!raw) return '';
+  return raw
+    .replace(/<｜(?:begin|end) of sentence｜>/g, '')
+    .replace(/<｜thought｜>[\s\S]*?<\/｜thought｜>/g, '')
+    .replace(/<｜thought｜>[\s\S]*/g, '')
+    .replace(/<｜DSML.*?｜>/g, '')
+    .replace(/<(?:\|\||｜｜)DSML(?:\|\||｜｜)\s*calls>[\s\S]*?<\/(?:\|\||｜｜)DSML(?:\|\||｜｜)\s*calls>/gi, '')
+    .replace(/<(?:\|\||｜｜)DSML(?:\|\||｜｜)[\s\S]*?<\/(?:\|\||｜｜)DSML(?:\|\||｜｜)[^>]*>/gi, '')
+    .replace(/<\/?(?:\|\||｜｜)DSML(?:\|\||｜｜)[^>]*>/gi, '')
+    .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, '')
+    .replace(/<\/?tool_call>/gi, '')
+    .trim();
+};
+
 // Collapsible Thought / Reasoning Process Accordion matching refs/desktop/chat.html
 const ThoughtProcessAccordion: React.FC<{ thought: string; isStreaming?: boolean }> = ({
   thought,
@@ -1309,10 +1324,15 @@ const ThoughtProcessAccordion: React.FC<{ thought: string; isStreaming?: boolean
     }
   }, [isStreaming]);
 
+  const cleanedThought = useMemo(() => cleanThoughtText(thought), [thought]);
   const wordCount = useMemo(
-    () => thought.trim().split(/\s+/).filter(Boolean).length,
-    [thought]
+    () => cleanedThought.split(/\s+/).filter(Boolean).length,
+    [cleanedThought]
   );
+
+  if (!cleanedThought && !isStreaming) {
+    return null;
+  }
 
   return (
     <div className="w-full bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[8px] overflow-hidden my-1 shadow-2xs">
@@ -1338,7 +1358,7 @@ const ThoughtProcessAccordion: React.FC<{ thought: string; isStreaming?: boolean
       {isOpen && (
         <div className="w-full p-[0px_14px_12px_14px]">
           <div className="text-[12px]/[19px] text-[#8A8A85] dark:text-[#A1A1AA] font-geist whitespace-pre-wrap">
-            {thought}
+            {cleanedThought}
             {isStreaming && (
               <span className="inline-block w-1.5 h-3 bg-[#007AFF] animate-pulse ml-1 align-middle" />
             )}

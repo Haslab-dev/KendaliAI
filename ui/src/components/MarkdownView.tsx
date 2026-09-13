@@ -8,7 +8,7 @@ interface MarkdownViewProps {
 }
 
 // Cleans raw internal model tags (e.g. DSML, <tool_call>, thinking leaks)
-function sanitizeMarkdown(raw: string): string {
+export function sanitizeMarkdown(raw: string): string {
   if (!raw) return '';
   let cleaned = raw;
 
@@ -18,10 +18,16 @@ function sanitizeMarkdown(raw: string): string {
   cleaned = cleaned.replace(/<｜thought｜>[\s\S]*/g, '');
   cleaned = cleaned.replace(/<｜DSML.*?｜>/g, '');
 
+  // Strip DSML tool call blocks (double-bar: full-width ｜｜ or ASCII ||)
+  cleaned = cleaned.replace(/<(?:\|\||｜｜)DSML(?:\|\||｜｜)\s*calls>[\s\S]*?<\/(?:\|\||｜｜)DSML(?:\|\||｜｜)\s*calls>/gi, '');
+  cleaned = cleaned.replace(/<(?:\|\||｜｜)DSML(?:\|\||｜｜)[\s\S]*?<\/(?:\|\||｜｜)DSML(?:\|\||｜｜)[^>]*>/gi, '');
+  cleaned = cleaned.replace(/<\/?(?:\|\||｜｜)DSML(?:\|\||｜｜)[^>]*>/gi, '');
+
   // Strip raw tool_call XML tags if present
   cleaned = cleaned.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '');
+  cleaned = cleaned.replace(/<\/?tool_call>/g, '');
 
-  return cleaned;
+  return cleaned.trim();
 }
 
 // Configure marked with GFM (GitHub Flavored Markdown)

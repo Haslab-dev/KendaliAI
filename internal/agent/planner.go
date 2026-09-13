@@ -17,11 +17,29 @@ var (
 
 // StripToolCallMarkup removes in-band DSML or <tool_call> XML tags from text.
 func StripToolCallMarkup(text string) string {
-	reCalls := regexp.MustCompile(`(?s)<(?:\|\||｜｜)DSML(?:\|\||｜｜)\s+calls>[\s\S]*?</(?:\|\||｜｜)DSML(?:\|\||｜｜)\s+calls>`)
+	// 1. Remove complete DSML calls blocks
+	reCalls := regexp.MustCompile(`(?s)<(?:\|\||｜｜)DSML(?:\|\||｜｜)\s*calls>[\s\S]*?</(?:\|\||｜｜)DSML(?:\|\||｜｜)\s*calls>`)
 	cleaned := reCalls.ReplaceAllString(text, "")
-	reInvokes := regexp.MustCompile(`(?s)<(?:\|\||｜｜)DSML(?:\|\||｜｜)\s+invoke[\s\S]*?</(?:\|\||｜｜)DSML(?:\|\||｜｜)\s+invoke>`)
+
+	// 2. Remove complete DSML invoke blocks
+	reInvokes := regexp.MustCompile(`(?s)<(?:\|\||｜｜)DSML(?:\|\||｜｜)\s*invoke[\s\S]*?</(?:\|\||｜｜)DSML(?:\|\||｜｜)\s*invoke>`)
 	cleaned = reInvokes.ReplaceAllString(cleaned, "")
+
+	// 3. Remove standard XML tool_call blocks
 	cleaned = toolCallXMLRegex.ReplaceAllString(cleaned, "")
+
+	// 4. Remove any unclosed or dangling DSML calls / invoke blocks
+	reAnyDSML := regexp.MustCompile(`(?s)<(?:\|\||｜｜)DSML(?:\|\||｜｜)[\s\S]*?(?:</(?:\|\||｜｜)DSML(?:\|\||｜｜)[^>]*>|$)`)
+	cleaned = reAnyDSML.ReplaceAllString(cleaned, "")
+
+	// 5. Remove any leftover individual DSML or tool_call tags (e.g. </｜｜DSML｜｜ parameter>)
+	reTags := regexp.MustCompile(`</?(?:\|\||｜｜)DSML(?:\|\||｜｜)[^>]*>`)
+	cleaned = reTags.ReplaceAllString(cleaned, "")
+	reSingleBarTags := regexp.MustCompile(`<[｜|]DSML.*?[｜|]>`)
+	cleaned = reSingleBarTags.ReplaceAllString(cleaned, "")
+	reToolCallTags := regexp.MustCompile(`</?tool_call>`)
+	cleaned = reToolCallTags.ReplaceAllString(cleaned, "")
+
 	return strings.TrimSpace(cleaned)
 }
 

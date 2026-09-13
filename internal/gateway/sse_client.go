@@ -195,6 +195,7 @@ func StreamOpenAICompatible(
 	var accumulatedThought strings.Builder
 	var inThinkingTag bool
 	var inToolCallTag bool
+	var inReasoningToolCallTag bool
 	var inputTokens, outputTokens int
 	var finishReason string
 
@@ -269,8 +270,19 @@ func StreamOpenAICompatible(
 
 						if reasoningChunk != "" {
 							accumulatedThought.WriteString(reasoningChunk)
-							if callbacks.OnThinking != nil {
-								callbacks.OnThinking(reasoningChunk)
+
+							if !inReasoningToolCallTag && (strings.Contains(reasoningChunk, "<||DSML") || strings.Contains(reasoningChunk, "<｜｜DSML") || strings.Contains(reasoningChunk, "<tool_call>")) {
+								inReasoningToolCallTag = true
+							}
+
+							if inReasoningToolCallTag {
+								if strings.Contains(reasoningChunk, "</||DSML") || strings.Contains(reasoningChunk, "</｜｜DSML") || strings.Contains(reasoningChunk, "</tool_call>") {
+									inReasoningToolCallTag = false
+								}
+							} else {
+								if callbacks.OnThinking != nil {
+									callbacks.OnThinking(reasoningChunk)
+								}
 							}
 						}
 
@@ -365,8 +377,8 @@ func StreamOpenAICompatible(
 		}
 	}
 
-	finalThought := strings.TrimSpace(accumulatedThought.String())
-	finalContent := strings.TrimSpace(accumulatedContent.String())
+	finalThought := strings.TrimSpace(agent.StripToolCallMarkup(accumulatedThought.String()))
+	finalContent := strings.TrimSpace(agent.StripToolCallMarkup(accumulatedContent.String()))
 
 	// Assemble accumulated tool call fragments in index order.
 	var toolCalls []agent.ToolCall
