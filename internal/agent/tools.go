@@ -713,6 +713,26 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 			},
 		},
 
+		// 🌐 WEB SEARCH & SCRAPING (Exa / Firecrawl / Fallback)
+		"web_search": {
+			Name:        "web_search",
+			Description: "Search the live web for up-to-date information, documentation, news, facts, or code using Exa neural search or Firecrawl search.",
+			Signature:   `{"query": "string"}`,
+			Category:    "Web",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				return executeWebSearch(ctx, cfg, db, args)
+			},
+		},
+		"web_scrape": {
+			Name:        "web_scrape",
+			Description: "Extract clean markdown and readable text content from any web page URL using Firecrawl or Exa web fetch.",
+			Signature:   `{"url": "string"}`,
+			Category:    "Web",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				return executeWebScrape(ctx, cfg, db, args)
+			},
+		},
+
 		// ☁️ OBJECT STORAGE
 		"upload_object": {
 			Name:        "upload_object",
@@ -1523,126 +1543,10 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 		},
 		"mcp_call": {
 			Name:        "mcp_call",
-			Description: "Calls a tool on an MCP (Model Context Protocol) server. You can specify a configured 'server' name (e.g. 'exa') or provide 'server_url'/'server_cmd' directly.",
+			Description: "Calls a tool on an MCP (Model Context Protocol) server. Specify a configured 'server' name (e.g. 'firecrawl', 'exa', 'github') or provide 'server_url'/'server_cmd' directly.",
 			Signature:   `{"server": "string", "server_cmd": "string", "server_args": "array", "server_url": "string", "tool_name": "string", "tool_args": "object"}`,
 			Execute: func(ctx context.Context, args map[string]interface{}) string {
-				serverName, _ := args["server"].(string)
-				if serverName == "" {
-					serverName, _ = args["server_name"].(string)
-				}
-				serverCmd, _ := args["server_cmd"].(string)
-				serverURL, _ := args["server_url"].(string)
-				var serverArgs []string
-
-				if rawArgs, ok := args["server_args"].([]interface{}); ok {
-					for _, a := range rawArgs {
-						serverArgs = append(serverArgs, fmt.Sprint(a))
-					}
-				}
-
-				toolName, _ := args["tool_name"].(string)
-				if toolName == "" {
-					toolName, _ = args["tool"].(string)
-				} // Alias
-				toolArgs := args["tool_args"]
-				if toolArgs == nil {
-					toolArgs = args["args"]
-				} // Alias
-				if toolArgs == nil {
-					toolArgs = args["arguments"]
-				} // Alias
-
-				logger.Info("MCP", fmt.Sprintf("mcp_call lookup: serverName=%s, toolName=%s", serverName, toolName))
-
-				// Lookup server config if name provided
-				var srv *config.MCPServerConfig
-				if serverName != "" && cfg != nil && cfg.MCPServers != nil {
-					if found, ok := cfg.MCPServers[serverName]; ok {
-						srv = &found
-						logger.Info("MCP", fmt.Sprintf("found config for server: %s", serverName))
-						if srv.ServerURL != "" {
-							serverURL = srv.ServerURL
-						} else {
-							serverCmd = srv.Command
-							serverArgs = srv.Args
-						}
-					} else {
-						logger.Info("MCP", fmt.Sprintf("server config NOT found: %s", serverName))
-					}
-				}
-
-				if serverURL == "" && serverCmd == "" {
-					return "error: no server name, url or command provided"
-				}
-
-				var mcpClient *client.Client
-				var err error
-
-				if serverURL != "" {
-					// Streamable HTTP Client (Modern remote MCP transport)
-					var opts []transport.StreamableHTTPCOption
-					if srv.Headers != nil {
-						opts = append(opts, transport.WithHTTPHeaders(srv.Headers))
-					}
-					c, err := client.NewStreamableHttpClient(serverURL, opts...)
-					if err != nil {
-						return fmt.Sprintf("failed to create Streamable HTTP MCP client: %v", err)
-					}
-					defer c.Close()
-					if err := c.Start(ctx); err != nil {
-						return fmt.Sprintf("failed to start SSE MCP client: %v", err)
-					}
-
-					initReq := mcp.InitializeRequest{}
-					initReq.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
-					initReq.Params.ClientInfo = mcp.Implementation{Name: "kendaliai", Version: "1.0.0"}
-					if _, err := c.Initialize(ctx, initReq); err != nil {
-						return fmt.Sprintf("failed to initialize SSE MCP client: %v", err)
-					}
-
-					callReq := mcp.CallToolRequest{}
-					callReq.Params.Name = toolName
-					callReq.Params.Arguments = toolArgs
-					res, err := c.CallTool(ctx, callReq)
-					if err != nil {
-						logger.Error("MCP", fmt.Sprintf("call failed: %v", err))
-						return fmt.Sprintf("failed to call MCP tool %s: %v", toolName, err)
-					}
-					b, _ := json.Marshal(res.Content)
-					if res.IsError {
-						logger.Error("MCP", fmt.Sprintf("tool returned error: %s", string(b)))
-						return fmt.Sprintf("MCP error: %s", string(b))
-					}
-					logger.Info("MCP", fmt.Sprintf("call success: %s", strings.ReplaceAll(string(b), "\n", " ")[:100]))
-					return string(b)
-				} else {
-					// Stdio Client
-					mcpClient, err = client.NewStdioMCPClient(serverCmd, os.Environ(), serverArgs...)
-					if err != nil {
-						return fmt.Sprintf("failed to create Stdio MCP client: %v", err)
-					}
-					defer mcpClient.Close()
-					if err := mcpClient.Start(ctx); err != nil {
-						return fmt.Sprintf("failed to start Stdio MCP client: %v", err)
-					}
-
-					initReq := mcp.InitializeRequest{}
-					initReq.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
-					initReq.Params.ClientInfo = mcp.Implementation{Name: "kendaliai", Version: "1.0.0"}
-					if _, err := mcpClient.Initialize(ctx, initReq); err != nil {
-						return fmt.Sprintf("failed to initialize Stdio MCP client: %v", err)
-					}
-
-					callReq := mcp.CallToolRequest{}
-					callReq.Params.Name = toolName
-					callReq.Params.Arguments = toolArgs
-					res, err := mcpClient.CallTool(ctx, callReq)
-					if err != nil {
-						return fmt.Sprintf("failed to call MCP tool %s: %v", toolName, err)
-					}
-					b, _ := json.Marshal(res.Content)
-					return string(b)
-				}
+				return executeMCPCall(ctx, cfg, db, args)
 			},
 		},
 	}
@@ -1909,4 +1813,307 @@ func extractSkillIDFromURL(url string) string {
 		}
 	}
 	return ""
+}
+
+func executeMCPCall(ctx context.Context, cfg *config.Config, db *sql.DB, args map[string]interface{}) string {
+	serverName, _ := args["server"].(string)
+	if serverName == "" {
+		serverName, _ = args["server_name"].(string)
+	}
+	serverCmd, _ := args["server_cmd"].(string)
+	serverURL, _ := args["server_url"].(string)
+	var serverArgs []string
+
+	if rawArgs, ok := args["server_args"].([]interface{}); ok {
+		for _, a := range rawArgs {
+			serverArgs = append(serverArgs, fmt.Sprint(a))
+		}
+	}
+
+	toolName, _ := args["tool_name"].(string)
+	if toolName == "" {
+		toolName, _ = args["tool"].(string)
+	} // Alias
+	toolArgs := args["tool_args"]
+	if toolArgs == nil {
+		toolArgs = args["args"]
+	} // Alias
+	if toolArgs == nil {
+		toolArgs = args["arguments"]
+	} // Alias
+
+	logger.Info("MCP", fmt.Sprintf("mcp_call lookup: serverName=%s, toolName=%s", serverName, toolName))
+
+	// Resolve server config
+	var srv *config.MCPServerConfig
+	effectiveCfg := cfg
+	if effectiveCfg == nil {
+		effectiveCfg = config.Cfg
+	}
+
+	if serverName != "" {
+		// 1. Check SQLite database first (where UI saves configured keys)
+		if db != nil {
+			var u, cmd, argsStr, envStr sql.NullString
+			row := db.QueryRow("SELECT command, args, url, env FROM mcp_servers WHERE LOWER(name) = LOWER(?) OR LOWER(id) = LOWER(?)", serverName, serverName)
+			if err := row.Scan(&cmd, &argsStr, &u, &envStr); err == nil {
+				srv = &config.MCPServerConfig{
+					Command:   cmd.String,
+					ServerURL: u.String,
+					URL:       u.String,
+					Headers:   make(map[string]string),
+				}
+				if argsStr.Valid && argsStr.String != "" {
+					_ = json.Unmarshal([]byte(argsStr.String), &srv.Args)
+				}
+				if envStr.Valid && envStr.String != "" {
+					var envMap map[string]string
+					if err := json.Unmarshal([]byte(envStr.String), &envMap); err == nil {
+						for ek, ev := range envMap {
+							if strings.HasPrefix(ek, "header:") {
+								srv.Headers[strings.TrimPrefix(ek, "header:")] = ev
+							} else if strings.HasPrefix(strings.ToLower(ek), "auth") || strings.HasPrefix(strings.ToLower(ek), "x-") || strings.Contains(strings.ToLower(ek), "key") {
+								srv.Headers[ek] = ev
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// 2. Check loaded config (fallback or merge)
+		if effectiveCfg != nil && effectiveCfg.MCPServers != nil {
+			for k, v := range effectiveCfg.MCPServers {
+				if strings.EqualFold(k, serverName) {
+					if srv == nil {
+						cp := v
+						srv = &cp
+					} else {
+						if srv.Headers == nil {
+							srv.Headers = make(map[string]string)
+						}
+						for hk, hv := range v.Headers {
+							if cur, ok := srv.Headers[hk]; !ok || cur == "" || strings.Contains(cur, "<") || strings.Contains(cur, "YOUR_") {
+								srv.Headers[hk] = hv
+							}
+						}
+					}
+					break
+				}
+			}
+		}
+
+		// 3. Known default remote MCP presets for firecrawl & exa
+		if srv == nil {
+			lower := strings.ToLower(serverName)
+			if lower == "firecrawl" {
+				srv = &config.MCPServerConfig{
+					Type:      "http",
+					ServerURL: "https://mcp.firecrawl.dev/v2/mcp",
+					URL:       "https://mcp.firecrawl.dev/v2/mcp",
+					Headers: map[string]string{
+						"Authorization": "Bearer " + os.Getenv("FIRECRAWL_API_KEY"),
+					},
+				}
+			} else if lower == "exa" {
+				srv = &config.MCPServerConfig{
+					Type:      "http",
+					ServerURL: "https://mcp.exa.ai/mcp?tools=web_search_exa,web_fetch_exa,agent_run",
+					URL:       "https://mcp.exa.ai/mcp?tools=web_search_exa,web_fetch_exa,agent_run",
+					Headers: map[string]string{
+						"x-api-key": os.Getenv("EXA_API_KEY"),
+					},
+				}
+			}
+		}
+	}
+
+	if srv != nil {
+		if srv.ServerURL != "" {
+			serverURL = srv.ServerURL
+		} else if srv.URL != "" {
+			serverURL = srv.URL
+		} else {
+			serverCmd = srv.Command
+			serverArgs = srv.Args
+		}
+	}
+
+	if serverURL == "" && serverCmd == "" {
+		return "error: no server name, url or command provided"
+	}
+
+	effectiveHeaders := make(map[string]string)
+	if srv != nil && srv.Headers != nil {
+		for hk, hv := range srv.Headers {
+			val := os.ExpandEnv(hv)
+			if strings.Contains(val, "<FIRECRAWL_API_KEY>") {
+				val = strings.ReplaceAll(val, "<FIRECRAWL_API_KEY>", os.Getenv("FIRECRAWL_API_KEY"))
+			}
+			if strings.Contains(val, "YOUR_EXA_API_KEY") || strings.Contains(val, "<EXA_API_KEY>") || strings.Contains(val, "<YOUR_EXA_API_KEY>") {
+				exaKey := os.Getenv("EXA_API_KEY")
+				val = strings.ReplaceAll(val, "YOUR_EXA_API_KEY", exaKey)
+				val = strings.ReplaceAll(val, "<EXA_API_KEY>", exaKey)
+				val = strings.ReplaceAll(val, "<YOUR_EXA_API_KEY>", exaKey)
+			}
+			effectiveHeaders[hk] = val
+		}
+	}
+
+	// Validate required keys for firecrawl and exa
+	if strings.EqualFold(serverName, "firecrawl") {
+		authVal := effectiveHeaders["Authorization"]
+		if authVal == "" || authVal == "Bearer " || authVal == "Bearer <FIRECRAWL_API_KEY>" {
+			return "error: Firecrawl API key is required. Please set FIRECRAWL_API_KEY in your environment or configure mcpServers.firecrawl.headers.Authorization in config.json"
+		}
+	} else if strings.EqualFold(serverName, "exa") {
+		exaKey := effectiveHeaders["x-api-key"]
+		if exaKey == "" || exaKey == "YOUR_EXA_API_KEY" || exaKey == "<YOUR_EXA_API_KEY>" {
+			return "error: Exa API key is required. Please set EXA_API_KEY in your environment or configure mcpServers.exa.headers.x-api-key in config.json"
+		}
+	}
+
+	if serverURL != "" {
+		var opts []transport.StreamableHTTPCOption
+		if len(effectiveHeaders) > 0 {
+			opts = append(opts, transport.WithHTTPHeaders(effectiveHeaders))
+		}
+		c, err := client.NewStreamableHttpClient(serverURL, opts...)
+		if err != nil {
+			return fmt.Sprintf("failed to create Streamable HTTP MCP client: %v", err)
+		}
+		defer c.Close()
+		if err := c.Start(ctx); err != nil {
+			return fmt.Sprintf("failed to start MCP client: %v", err)
+		}
+
+		initReq := mcp.InitializeRequest{}
+		initReq.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+		initReq.Params.ClientInfo = mcp.Implementation{Name: "kendaliai", Version: "1.0.0"}
+		if _, err := c.Initialize(ctx, initReq); err != nil {
+			return fmt.Sprintf("failed to initialize MCP client: %v", err)
+		}
+
+		callReq := mcp.CallToolRequest{}
+		callReq.Params.Name = toolName
+		callReq.Params.Arguments = toolArgs
+		res, err := c.CallTool(ctx, callReq)
+		if err != nil {
+			logger.Error("MCP", fmt.Sprintf("call failed: %v", err))
+			return fmt.Sprintf("failed to call MCP tool %s: %v", toolName, err)
+		}
+		b, _ := json.Marshal(res.Content)
+		if res.IsError {
+			logger.Error("MCP", fmt.Sprintf("tool returned error: %s", string(b)))
+			return fmt.Sprintf("MCP error: %s", string(b))
+		}
+		logger.Info("MCP", fmt.Sprintf("call success"))
+		return string(b)
+	}
+
+	// Stdio Client
+	mcpClient, err := client.NewStdioMCPClient(serverCmd, os.Environ(), serverArgs...)
+	if err != nil {
+		return fmt.Sprintf("failed to create Stdio MCP client: %v", err)
+	}
+	defer mcpClient.Close()
+	if err := mcpClient.Start(ctx); err != nil {
+		return fmt.Sprintf("failed to start Stdio MCP client: %v", err)
+	}
+
+	initReq := mcp.InitializeRequest{}
+	initReq.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	initReq.Params.ClientInfo = mcp.Implementation{Name: "kendaliai", Version: "1.0.0"}
+	if _, err := mcpClient.Initialize(ctx, initReq); err != nil {
+		return fmt.Sprintf("failed to initialize Stdio MCP client: %v", err)
+	}
+
+	callReq := mcp.CallToolRequest{}
+	callReq.Params.Name = toolName
+	callReq.Params.Arguments = toolArgs
+	res, err := mcpClient.CallTool(ctx, callReq)
+	if err != nil {
+		return fmt.Sprintf("failed to call MCP tool %s: %v", toolName, err)
+	}
+	b, _ := json.Marshal(res.Content)
+	if res.IsError {
+		return fmt.Sprintf("MCP error: %s", string(b))
+	}
+	return string(b)
+}
+
+func executeWebSearch(ctx context.Context, cfg *config.Config, db *sql.DB, args map[string]interface{}) string {
+	q, _ := args["query"].(string)
+	if q == "" {
+		q, _ = args["q"].(string)
+	}
+	if strings.TrimSpace(q) == "" {
+		return "error: query parameter is required"
+	}
+
+	// 1. Try Exa web_search_exa
+	exaRes := executeMCPCall(ctx, cfg, db, map[string]interface{}{
+		"server":    "exa",
+		"tool":      "web_search_exa",
+		"arguments": map[string]interface{}{"query": q},
+	})
+	if !strings.Contains(exaRes, "API key is required") && !strings.Contains(exaRes, "failed to") && !strings.HasPrefix(exaRes, "error:") {
+		return exaRes
+	}
+
+	// 2. Try Firecrawl firecrawl_search
+	fcRes := executeMCPCall(ctx, cfg, db, map[string]interface{}{
+		"server":    "firecrawl",
+		"tool":      "firecrawl_search",
+		"arguments": map[string]interface{}{"query": q},
+	})
+	if !strings.Contains(fcRes, "API key is required") && !strings.Contains(fcRes, "failed to") && !strings.HasPrefix(fcRes, "error:") {
+		return fcRes
+	}
+
+	return fmt.Sprintf("Web search is available via Exa and Firecrawl MCP. To enable live results, configure your API key in config.json under mcpServers.exa or mcpServers.firecrawl (or set EXA_API_KEY / FIRECRAWL_API_KEY in environment).\nDetails: %s", exaRes)
+}
+
+func executeWebScrape(ctx context.Context, cfg *config.Config, db *sql.DB, args map[string]interface{}) string {
+	u, _ := args["url"].(string)
+	if strings.TrimSpace(u) == "" {
+		return "error: url parameter is required"
+	}
+
+	// 1. Try Firecrawl firecrawl_scrape
+	fcRes := executeMCPCall(ctx, cfg, db, map[string]interface{}{
+		"server":    "firecrawl",
+		"tool":      "firecrawl_scrape",
+		"arguments": map[string]interface{}{"url": u},
+	})
+	if !strings.Contains(fcRes, "API key is required") && !strings.Contains(fcRes, "failed to") && !strings.HasPrefix(fcRes, "error:") {
+		return fcRes
+	}
+
+	// 2. Try Exa web_fetch_exa
+	exaRes := executeMCPCall(ctx, cfg, db, map[string]interface{}{
+		"server":    "exa",
+		"tool":      "web_fetch_exa",
+		"arguments": map[string]interface{}{"url": u},
+	})
+	if !strings.Contains(exaRes, "API key is required") && !strings.Contains(exaRes, "failed to") && !strings.HasPrefix(exaRes, "error:") {
+		return exaRes
+	}
+
+	// 3. Fallback to basic HTTP fetch
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return err.Error()
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err.Error()
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	s := string(b)
+	if len(s) > 8000 {
+		s = s[:8000] + "\n...(truncated)"
+	}
+	return s
 }

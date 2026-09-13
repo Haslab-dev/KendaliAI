@@ -106,11 +106,12 @@ export interface SessionMessage {
 export interface MCPServerConfig {
   id: string;
   name: string;
-  transport: 'stdio' | 'sse';
+  transport: 'stdio' | 'sse' | 'http';
   command: string;
   args: string[];
   url: string;
   env: Record<string, string>;
+  headers?: Record<string, string>;
   enabled: boolean;
   status: string;
   toolsCached?: { name: string; description: string; schema?: string }[];

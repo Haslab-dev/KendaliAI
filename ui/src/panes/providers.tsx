@@ -19,8 +19,10 @@ import {
   Globe,
   Sliders,
   Sparkles,
+  Key,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
+import { ApiKeyModal } from '../components/ApiKeyModal';
 import { ProviderConfig, MCPServerConfig, ModelItem, isReasoningModel } from '../types';
 
 interface ExtendedProvider {
@@ -114,7 +116,7 @@ const DEFAULT_FALLBACK_PROVIDERS: ExtendedProvider[] = [
 interface ShowcaseMCP {
   id: string;
   name: string;
-  transport: 'stdio' | 'sse';
+  transport: 'stdio' | 'sse' | 'http';
   commandOrUrl: string;
   toolsCount: number;
   status: 'connected' | 'cached' | 'error';
@@ -164,6 +166,7 @@ export const ProvidersPane: React.FC = () => {
   const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
   const [showMcpModal, setShowMcpModal] = useState(false);
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
 
   // Provider Form State
   const [pName, setPName] = useState('');
@@ -182,7 +185,7 @@ export const ProvidersPane: React.FC = () => {
 
   // MCP Form
   const [mName, setMName] = useState('');
-  const [mTransport, setMTransport] = useState<'stdio' | 'sse'>('stdio');
+  const [mTransport, setMTransport] = useState<'stdio' | 'sse' | 'http'>('stdio');
   const [mCommand, setMCommand] = useState('npx');
   const [mArgs, setMArgs] = useState('');
   const [mUrl, setMUrl] = useState('');
@@ -235,7 +238,7 @@ export const ProvidersPane: React.FC = () => {
             id: m.id || m.name.toLowerCase(),
             name: m.name,
             transport: m.transport || 'stdio',
-            commandOrUrl: m.transport === 'sse' ? m.url || '' : `${m.command} ${(m.args || []).join(' ')}`,
+            commandOrUrl: (m.transport === 'sse' || m.transport === 'http') ? m.url || '' : `${m.command} ${(m.args || []).join(' ')}`,
             toolsCount: 4,
             status: 'connected',
           }));
@@ -567,7 +570,7 @@ export const ProvidersPane: React.FC = () => {
       id: mName.toLowerCase().replace(/\s+/g, '-'),
       name: mName.trim(),
       transport: mTransport,
-      commandOrUrl: mTransport === 'sse' ? mUrl : `${mCommand} ${mArgs}`.trim(),
+      commandOrUrl: (mTransport === 'sse' || mTransport === 'http') ? mUrl : `${mCommand} ${mArgs}`.trim(),
       toolsCount: 3,
       status: 'connected',
     };
@@ -926,14 +929,24 @@ export const ProvidersPane: React.FC = () => {
               </h2>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setShowMcpModal(true)}
-              className="bg-[#262626] hover:bg-white/20 text-[#FFFFFF] text-[11px] font-bold font-sans px-3 py-1 rounded-[6px] transition-colors cursor-pointer flex items-center gap-1"
-            >
-              <Plus size={12} />
-              <span>Connect</span>
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setShowApiKeyModal(true)}
+                className="bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-bold font-sans px-2.5 py-1 rounded-[6px] transition-colors cursor-pointer flex items-center gap-1 shadow-sm"
+              >
+                <Key size={12} />
+                <span>API Keys</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowMcpModal(true)}
+                className="bg-[#262626] hover:bg-white/20 text-[#FFFFFF] text-[11px] font-bold font-sans px-3 py-1 rounded-[6px] transition-colors cursor-pointer flex items-center gap-1"
+              >
+                <Plus size={12} />
+                <span>Connect</span>
+              </button>
+            </div>
           </div>
 
           <p className="text-[11px] text-[#A3A3A0] leading-relaxed">
@@ -1367,7 +1380,18 @@ export const ProvidersPane: React.FC = () => {
                         : 'bg-white dark:bg-[#141414] text-[#8A8A85] border-[#E5E7EB] dark:border-[#2C2C2E]'
                     }`}
                   >
-                    SSE (remote stream)
+                    SSE (stream)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMTransport('http')}
+                    className={`py-1.5 px-3 rounded-[6px] text-xs font-bold border transition-colors cursor-pointer ${
+                      mTransport === 'http'
+                        ? 'bg-[#007AFF] text-white border-[#007AFF]'
+                        : 'bg-white dark:bg-[#141414] text-[#8A8A85] border-[#E5E7EB] dark:border-[#2C2C2E]'
+                    }`}
+                  >
+                    HTTP (streamable)
                   </button>
                 </div>
               </div>
@@ -1397,12 +1421,14 @@ export const ProvidersPane: React.FC = () => {
                 </div>
               ) : (
                 <div className="flex flex-col gap-1">
-                  <label className="text-[11px] font-bold text-[#000000] dark:text-white">SSE Endpoint URL</label>
+                  <label className="text-[11px] font-bold text-[#000000] dark:text-white">
+                    {mTransport === 'http' ? 'HTTP Endpoint URL' : 'SSE Endpoint URL'}
+                  </label>
                   <input
                     type="text"
                     value={mUrl}
                     onChange={(e) => setMUrl(e.target.value)}
-                    placeholder="https://mcp.domain.com/sse"
+                    placeholder={mTransport === 'http' ? 'https://mcp.domain.com/mcp' : 'https://mcp.domain.com/sse'}
                     className="border border-[#E5E7EB] dark:border-[#2C2C2E] bg-white dark:bg-[#141414] rounded-[6px] px-3 py-1.5 text-xs font-mono text-[#000000] dark:text-white focus:outline-none focus:border-[#007AFF]"
                   />
                 </div>
@@ -1427,6 +1453,12 @@ export const ProvidersPane: React.FC = () => {
           </div>
         </div>
       )}
+
+      <ApiKeyModal
+        isOpen={showApiKeyModal}
+        onClose={() => setShowApiKeyModal(false)}
+        onSuccess={loadData}
+      />
     </div>
   );
 };

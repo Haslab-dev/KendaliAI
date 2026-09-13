@@ -2,9 +2,10 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Zap, Bot, MessageSquare, Plug, Brain, Wrench, Smartphone, Plus, Trash2, CheckCircle,
   RefreshCw, Edit2, Search, Check, CheckSquare, Square, Sparkles, AlertCircle, ChevronDown, ChevronUp, Terminal,
-  Database, Eye, EyeOff, FileText, Upload, BookOpen
+  Database, Eye, EyeOff, FileText, Upload, BookOpen, Key
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
+import { ApiKeyModal } from '../components/ApiKeyModal';
 import {
   ProviderConfig, AgentConfig, MCPServerConfig, SkillItem, ToolDefinition, TelegramBotConfig,
   ModelItem, isReasoningModel, EmbeddingConfig, DocumentItem
@@ -21,6 +22,9 @@ export const McpsPane: React.FC = () => {
     url: '',
     enabled: true,
   });
+
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [apiKeyTarget, setApiKeyTarget] = useState<'firecrawl' | 'exa' | 'all'>('all');
 
   const fetchMCPs = async () => {
     const res = await fetch('/api/mcps');
@@ -48,36 +52,143 @@ export const McpsPane: React.FC = () => {
     fetchMCPs();
   };
 
+  const [headerKey, setHeaderKey] = useState('');
+  const [headerVal, setHeaderVal] = useState('');
+
   return (
     <div className="space-y-6">
-      <div>
-        <h3 className="text-base font-bold text-hi">Model Context Protocol (MCP) Servers</h3>
-        <p className="text-xs text-mid">
-          Supervised background processes or remote SSE tool endpoints.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div>
+          <h3 className="text-base font-bold text-hi">Model Context Protocol (MCP) Servers</h3>
+          <p className="text-xs text-mid">
+            Supervised background tools, local CLI subprocesses, or remote Streamable HTTP / SSE endpoints.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setApiKeyTarget('all');
+              setShowApiKeyModal(true);
+            }}
+            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+          >
+            <Key size={13} />
+            <span>Configure API Keys</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setApiKeyTarget('firecrawl');
+              setShowApiKeyModal(true);
+            }}
+            className="px-2.5 py-1.5 bg-raised hover:bg-hoverbg border border-line rounded-lg text-xs font-medium text-hi transition-colors cursor-pointer"
+          >
+            + Firecrawl Key
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setApiKeyTarget('exa');
+              setShowApiKeyModal(true);
+            }}
+            className="px-2.5 py-1.5 bg-raised hover:bg-hoverbg border border-line rounded-lg text-xs font-medium text-hi transition-colors cursor-pointer"
+          >
+            + Exa Key
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {mcps.map((m) => (
-          <div key={m.id} className="p-4 bg-raised border border-line rounded-xl space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="font-semibold text-sm text-hi flex items-center gap-1.5">
-                <Plug size={15} className="text-hi" />
-                <span>{m.name}</span>
-                <span className="text-[10px] text-lo uppercase">({m.transport})</span>
+        {mcps.map((m) => {
+          const isFc = m.name?.toLowerCase() === 'firecrawl' || m.id?.toLowerCase() === 'firecrawl';
+          const isEx = m.name?.toLowerCase() === 'exa' || m.id?.toLowerCase() === 'exa';
+          const authH = m.headers ? (m.headers['Authorization'] || m.headers['authorization'] || '') : '';
+          const exaH = m.headers ? (m.headers['x-api-key'] || m.headers['X-Api-Key'] || '') : '';
+          const isConfigured = isFc
+            ? Boolean(authH && !authH.includes('<') && !authH.includes('YOUR_'))
+            : isEx
+            ? Boolean(exaH && !exaH.includes('<') && !exaH.includes('YOUR_'))
+            : Boolean(m.headers && Object.keys(m.headers).length > 0);
+
+          return (
+            <div key={m.id} className="p-4 bg-raised border border-line rounded-xl space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="font-semibold text-sm text-hi flex items-center gap-1.5">
+                  <Plug size={15} className="text-hi" />
+                  <span>{m.name}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10 text-mid uppercase font-mono">
+                    {m.transport || 'stdio'}
+                  </span>
+                </div>
+                <button
+                  onClick={() => handleDelete(m.id)}
+                  className="text-lo hover:text-red-400 p-1 transition-colors cursor-pointer"
+                  title="Delete MCP Server"
+                >
+                  <Trash2 size={13} />
+                </button>
               </div>
-              <button
-                onClick={() => handleDelete(m.id)}
-                className="text-lo hover:text-red-400 p-1"
-              >
-                <Trash2 size={13} />
-              </button>
+
+              {m.transport === 'http' || m.transport === 'sse' ? (
+                <div className="text-xs text-mid font-mono truncate" title={m.url}>
+                  <span className="text-lo font-sans">URL: </span>{m.url || 'No URL configured'}
+                </div>
+              ) : (
+                <div className="text-xs text-mid font-mono truncate">
+                  {m.command} {(m.args || []).join(' ')}
+                </div>
+              )}
+
+              {/* Key status and quick configure button */}
+              <div className="flex items-center justify-between pt-1 border-t border-line/60">
+                <div className="flex items-center gap-1.5">
+                  {isFc || isEx ? (
+                    isConfigured ? (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium flex items-center gap-1">
+                        <Check size={10} /> Key Configured
+                      </span>
+                    ) : (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-medium flex items-center gap-1">
+                        <AlertCircle size={10} /> Key Required
+                      </span>
+                    )
+                  ) : m.headers && Object.keys(m.headers).length > 0 ? (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono">
+                      {Object.keys(m.headers).length} Header{Object.keys(m.headers).length > 1 ? 's' : ''}
+                    </span>
+                  ) : null}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setApiKeyTarget(isFc ? 'firecrawl' : isEx ? 'exa' : 'all');
+                    setShowApiKeyModal(true);
+                  }}
+                  className="text-[11px] text-blue-400 hover:text-blue-300 font-medium flex items-center gap-1 cursor-pointer transition-colors"
+                >
+                  <Key size={11} />
+                  <span>Configure Key</span>
+                </button>
+              </div>
+
+              {m.toolsCached && m.toolsCached.length > 0 && (
+                <div className="flex flex-wrap gap-1 pt-1">
+                  {m.toolsCached.map((t) => (
+                    <span
+                      key={t.name}
+                      className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono"
+                      title={t.description}
+                    >
+                      {t.name}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
-            <div className="text-xs text-mid font-mono truncate">
-              {m.command} {(m.args || []).join(' ')}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="border-t border-line pt-5 space-y-3">
@@ -88,7 +199,7 @@ export const McpsPane: React.FC = () => {
             <input
               type="text"
               className="w-full mt-1 px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi outline-none"
-              placeholder="e.g. github"
+              placeholder="e.g. firecrawl, exa, github"
               value={form.name || ''}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
             />
@@ -100,40 +211,120 @@ export const McpsPane: React.FC = () => {
               value={form.transport || 'stdio'}
               onChange={(e) => setForm({ ...form, transport: e.target.value as any })}
             >
-              <option value="stdio">Stdio (Local CLI)</option>
-              <option value="sse">SSE (HTTP endpoint)</option>
+              <option value="http">HTTP / Streamable (Firecrawl, Exa)</option>
+              <option value="sse">SSE (Remote Endpoint)</option>
+              <option value="stdio">Stdio (Local CLI / Subprocess)</option>
             </select>
           </div>
-          <div>
-            <label className="text-[11px] font-semibold text-mid uppercase">Command</label>
-            <input
-              type="text"
-              className="w-full mt-1 px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi outline-none"
-              placeholder="npx"
-              value={form.command || ''}
-              onChange={(e) => setForm({ ...form, command: e.target.value })}
-            />
-          </div>
-          <div>
-            <label className="text-[11px] font-semibold text-mid uppercase">Arguments</label>
-            <input
-              type="text"
-              className="w-full mt-1 px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi outline-none"
-              placeholder="-y @modelcontextprotocol/server-github"
-              value={(form.args || []).join(' ')}
-              onChange={(e) =>
-                setForm({ ...form, args: e.target.value.split(' ').filter(Boolean) })
-              }
-            />
-          </div>
+
+          {form.transport === 'http' || form.transport === 'sse' ? (
+            <>
+              <div className="sm:col-span-2">
+                <label className="text-[11px] font-semibold text-mid uppercase">Endpoint URL</label>
+                <input
+                  type="text"
+                  className="w-full mt-1 px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi outline-none font-mono"
+                  placeholder="https://mcp.firecrawl.dev/v2/mcp or https://mcp.exa.ai/mcp"
+                  value={form.url || ''}
+                  onChange={(e) => setForm({ ...form, url: e.target.value })}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="text-[11px] font-semibold text-mid uppercase">HTTP Headers (API Key)</label>
+                <div className="flex gap-2 mt-1">
+                  <input
+                    type="text"
+                    className="w-1/3 px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi outline-none font-mono"
+                    placeholder="Header (e.g. Authorization or x-api-key)"
+                    value={headerKey}
+                    onChange={(e) => setHeaderKey(e.target.value)}
+                  />
+                  <input
+                    type="text"
+                    className="flex-1 px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi outline-none font-mono"
+                    placeholder="Value (e.g. Bearer fc-xxx or exa-xxx)"
+                    value={headerVal}
+                    onChange={(e) => setHeaderVal(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!headerKey) return;
+                      setForm({
+                        ...form,
+                        headers: { ...(form.headers || {}), [headerKey]: headerVal },
+                      });
+                      setHeaderKey('');
+                      setHeaderVal('');
+                    }}
+                    className="px-3 py-2 bg-raised border border-line rounded-lg text-xs text-hi font-medium"
+                  >
+                    Add
+                  </button>
+                </div>
+                {form.headers && Object.keys(form.headers).length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {Object.entries(form.headers).map(([k, v]) => (
+                      <div key={k} className="flex items-center justify-between px-2.5 py-1 bg-inputbg border border-line rounded text-[11px] font-mono text-mid">
+                        <span>{k}: {v.slice(0, 12)}...</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newH = { ...(form.headers || {}) };
+                            delete newH[k];
+                            setForm({ ...form, headers: newH });
+                          }}
+                          className="text-red-400 text-xs hover:underline"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <label className="text-[11px] font-semibold text-mid uppercase">Command</label>
+                <input
+                  type="text"
+                  className="w-full mt-1 px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi outline-none"
+                  placeholder="npx"
+                  value={form.command || ''}
+                  onChange={(e) => setForm({ ...form, command: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-mid uppercase">Arguments</label>
+                <input
+                  type="text"
+                  className="w-full mt-1 px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi outline-none"
+                  placeholder="-y @modelcontextprotocol/server-github"
+                  value={(form.args || []).join(' ')}
+                  onChange={(e) =>
+                    setForm({ ...form, args: e.target.value.split(' ').filter(Boolean) })
+                  }
+                />
+              </div>
+            </>
+          )}
         </div>
         <button
           onClick={handleSave}
-          className="px-4 py-2 bg-hi hover:bg-hi text-app rounded-lg text-xs font-semibold"
+          className="px-4 py-2 bg-hi hover:bg-hi text-app rounded-lg text-xs font-semibold cursor-pointer"
         >
           Save MCP Server
         </button>
       </div>
+
+      <ApiKeyModal
+        isOpen={showApiKeyModal}
+        onClose={() => setShowApiKeyModal(false)}
+        onSuccess={fetchMCPs}
+        targetService={apiKeyTarget}
+      />
     </div>
   );
 };

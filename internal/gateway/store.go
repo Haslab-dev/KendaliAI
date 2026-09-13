@@ -146,11 +146,12 @@ type ToolCachedInfo struct {
 type MCPServerConfig struct {
 	ID          string            `json:"id"`
 	Name        string            `json:"name"`
-	Transport   string            `json:"transport"` // stdio, sse
+	Transport   string            `json:"transport"` // stdio, sse, http
 	Command     string            `json:"command"`
 	Args        []string          `json:"args"`
 	URL         string            `json:"url"`
 	Env         map[string]string `json:"env"`
+	Headers     map[string]string `json:"headers,omitempty"`
 	Enabled     bool              `json:"enabled"`
 	Status      string            `json:"status"`
 	ToolsCached []ToolCachedInfo  `json:"toolsCached,omitempty"`
@@ -403,35 +404,80 @@ func (s *Store) SeedInitialData(cfg *config.Config) {
 
 	// 3. MCP Servers seed
 	mcps, err := s.ListMCPServers()
-	if err == nil && len(mcps) == 0 {
+	if err == nil {
 		now := time.Now().Unix()
-		_ = s.SaveMCPServer(MCPServerConfig{
-			ID:        "github",
-			Name:      "github",
-			Transport: "stdio",
-			Command:   "npx",
-			Args:      []string{"-y", "@modelcontextprotocol/server-github"},
-			URL:       "",
-			Env:       map[string]string{"GITHUB_PERSONAL_ACCESS_TOKEN": ""},
-			Enabled:   false,
-			Status:    "configured",
-			CreatedAt: now,
-			UpdatedAt: now,
-		})
+		existingMap := make(map[string]bool)
+		for _, m := range mcps {
+			existingMap[m.ID] = true
+		}
 
-		_ = s.SaveMCPServer(MCPServerConfig{
-			ID:        "postgres",
-			Name:      "postgres",
-			Transport: "stdio",
-			Command:   "npx",
-			Args:      []string{"-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost/kendaliai"},
-			URL:       "",
-			Env:       map[string]string{},
-			Enabled:   false,
-			Status:    "configured",
-			CreatedAt: now,
-			UpdatedAt: now,
-		})
+		if !existingMap["firecrawl"] {
+			_ = s.SaveMCPServer(MCPServerConfig{
+				ID:        "firecrawl",
+				Name:      "firecrawl",
+				Transport: "http",
+				URL:       "https://mcp.firecrawl.dev/v2/mcp",
+				Headers:   map[string]string{"Authorization": "Bearer <FIRECRAWL_API_KEY>"},
+				Enabled:   true,
+				Status:    "ready",
+				ToolsCached: []ToolCachedInfo{
+					{Name: "firecrawl_scrape", Description: "Retrieve and extract clean markdown content from any URL"},
+					{Name: "firecrawl_search", Description: "Search web sources and return ranked results with markdown snippets"},
+					{Name: "firecrawl_parse", Description: "Parse documents (PDF, DOCX, HTML) into markdown"},
+				},
+				CreatedAt: now,
+				UpdatedAt: now,
+			})
+		}
+
+		if !existingMap["exa"] {
+			_ = s.SaveMCPServer(MCPServerConfig{
+				ID:        "exa",
+				Name:      "exa",
+				Transport: "http",
+				URL:       "https://mcp.exa.ai/mcp?tools=web_search_exa,web_fetch_exa,agent_run",
+				Headers:   map[string]string{"x-api-key": "YOUR_EXA_API_KEY"},
+				Enabled:   true,
+				Status:    "ready",
+				ToolsCached: []ToolCachedInfo{
+					{Name: "web_search_exa", Description: "Neural web search across latest web and news"},
+					{Name: "web_fetch_exa", Description: "Extract clean page content and markdown from URLs"},
+					{Name: "agent_run", Description: "Run deep multi-step Exa research agent"},
+				},
+				CreatedAt: now,
+				UpdatedAt: now,
+			})
+		}
+
+		if len(mcps) == 0 {
+			_ = s.SaveMCPServer(MCPServerConfig{
+				ID:        "github",
+				Name:      "github",
+				Transport: "stdio",
+				Command:   "npx",
+				Args:      []string{"-y", "@modelcontextprotocol/server-github"},
+				URL:       "",
+				Env:       map[string]string{"GITHUB_PERSONAL_ACCESS_TOKEN": ""},
+				Enabled:   false,
+				Status:    "configured",
+				CreatedAt: now,
+				UpdatedAt: now,
+			})
+
+			_ = s.SaveMCPServer(MCPServerConfig{
+				ID:        "postgres",
+				Name:      "postgres",
+				Transport: "stdio",
+				Command:   "npx",
+				Args:      []string{"-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost/kendaliai"},
+				URL:       "",
+				Env:       map[string]string{},
+				Enabled:   false,
+				Status:    "configured",
+				CreatedAt: now,
+				UpdatedAt: now,
+			})
+		}
 	}
 
 	// 4. Default Telegram Bot from config if provided
@@ -844,12 +890,90 @@ func (s *Store) ListMCPServers() ([]MCPServerConfig, error) {
 		_ = json.Unmarshal([]byte(envJSON), &m.Env)
 		_ = json.Unmarshal([]byte(toolsJSON), &m.ToolsCached)
 		m.Enabled = en == 1
+		if m.Env != nil {
+			for ek, ev := range m.Env {
+				if strings.HasPrefix(ek, "header:") {
+					if m.Headers == nil {
+						m.Headers = make(map[string]string)
+					}
+					m.Headers[strings.TrimPrefix(ek, "header:")] = ev
+				}
+			}
+		}
 		res = append(res, m)
 	}
 	return res, nil
 }
 
+func (s *Store) GetMCPServer(id string) (*MCPServerConfig, error) {
+	row := s.db.QueryRow("SELECT id, name, transport, command, args, url, env, enabled, status, tools_cached, created_at, updated_at FROM mcp_servers WHERE id = ? OR name = ?", id, id)
+	var m MCPServerConfig
+	var argsJSON, envJSON, toolsJSON string
+	var en int
+	if err := row.Scan(&m.ID, &m.Name, &m.Transport, &m.Command, &argsJSON, &m.URL, &envJSON, &en, &m.Status, &toolsJSON, &m.CreatedAt, &m.UpdatedAt); err != nil {
+		return nil, err
+	}
+	_ = json.Unmarshal([]byte(argsJSON), &m.Args)
+	_ = json.Unmarshal([]byte(envJSON), &m.Env)
+	_ = json.Unmarshal([]byte(toolsJSON), &m.ToolsCached)
+	m.Enabled = en == 1
+	if m.Env != nil {
+		for ek, ev := range m.Env {
+			if strings.HasPrefix(ek, "header:") {
+				if m.Headers == nil {
+					m.Headers = make(map[string]string)
+				}
+				m.Headers[strings.TrimPrefix(ek, "header:")] = ev
+			}
+		}
+	}
+	return &m, nil
+}
+
 func (s *Store) SaveMCPServer(m MCPServerConfig) error {
+	existing, _ := s.GetMCPServer(m.ID)
+	if existing == nil && m.Name != "" {
+		existing, _ = s.GetMCPServer(m.Name)
+	}
+	if existing != nil {
+		if m.Transport == "" {
+			m.Transport = existing.Transport
+		}
+		if m.Command == "" {
+			m.Command = existing.Command
+		}
+		if len(m.Args) == 0 {
+			m.Args = existing.Args
+		}
+		if m.URL == "" {
+			m.URL = existing.URL
+		}
+		if len(m.ToolsCached) == 0 {
+			m.ToolsCached = existing.ToolsCached
+		}
+		if m.CreatedAt == 0 {
+			m.CreatedAt = existing.CreatedAt
+		}
+		if m.Env == nil {
+			m.Env = make(map[string]string)
+		}
+		if existing.Env != nil {
+			for k, v := range existing.Env {
+				if _, ok := m.Env[k]; !ok {
+					m.Env[k] = v
+				}
+			}
+		}
+	}
+
+	if m.Headers != nil && len(m.Headers) > 0 {
+		if m.Env == nil {
+			m.Env = make(map[string]string)
+		}
+		for hk, hv := range m.Headers {
+			m.Env["header:"+hk] = hv
+		}
+	}
 	argsJSON, _ := json.Marshal(m.Args)
 	envJSON, _ := json.Marshal(m.Env)
 	toolsJSON, _ := json.Marshal(m.ToolsCached)

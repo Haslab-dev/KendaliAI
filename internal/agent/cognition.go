@@ -225,17 +225,17 @@ If the task is complete and NO tools are needed:
    - After every tool call, verify: does this serve my ACTIVE GOAL?
 
 7. TOOL ROUTING & CAPABILITY RANKING
-   - Documentation tasks: Context7 (resolve-library-id → query-docs) → Exa → fetch_url
-   - Latest news/search: Exa → fetch_url (GitHub API, direct URLs)
-   - Known URLs: fetch_url only
+   - Documentation tasks: Context7 (resolve-library-id → query-docs) → web_search → fetch_url
+   - Latest news/web search: web_search({"query": "..."}) or mcp_call({"server": "exa", "tool": "web_search_exa", ...}) / mcp_call({"server": "firecrawl", "tool": "firecrawl_search", ...})
+   - Web scraping / reading page content: web_scrape({"url": "..."}) or mcp_call({"server": "firecrawl", "tool": "firecrawl_scrape", ...}) or fetch_url({"url": "..."})
+   - Known URLs: web_scrape or fetch_url
    - Local files: analyze_project → resolve_symbol → read_file → search_files
    - Shell commands: exec
-   - MCP servers MUST be called via: mcp_call({"server": "context7", "tool": "resolve-library-id", ...})
-   - NEVER call MCP tool names as direct tools (web_search_exa, query-docs, etc. are NOT standalone)
-   - Context7 args: resolve-library-id takes "libraryName" (string), query-docs takes "libraryId" and "query"
+   - MCP servers can be called via: mcp_call({"server": "SERVER_NAME", "tool": "TOOL_NAME", ...})
+   - NEVER call internal MCP tool names directly without mcp_call (e.g. firecrawl_search or web_search_exa must be invoked via mcp_call, or use top-level web_search / web_scrape)
    - Exa args: web_search_exa takes "query" (string), web_fetch_exa takes "url" (string)
+   - Firecrawl args: firecrawl_search takes "query" (string), firecrawl_scrape takes "url" (string)
    - If an MCP tool returns validation error, retry ONCE with corrected args. Then fall back.
-   - If Exa returns "authorization required", immediately fall back to fetch_url. Do NOT retry Exa.
 
 8. READ BUDGET
    - You have a limited number of reads per task

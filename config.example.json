@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "database": {
+    "path": "./build/kendaliai.db"
+  },
+  "defaultProvider": "openai-compatible",
+  "chatProviders": [
+    {
+      "name": "openai-compatible",
+      "type": "openai",
+      "apiKey": "your-openai-key-here",
+      "endpoint": "https://api.openai.com/v1",
+      "model": "gpt-4o"
+    }
+  ],
+  "mcpServers": {
+    "firecrawl": {
+      "type": "http",
+      "url": "https://mcp.firecrawl.dev/v2/mcp",
+      "headers": {
+        "Authorization": "Bearer <FIRECRAWL_API_KEY>"
+      }
+    },
+    "exa": {
+      "type": "http",
+      "url": "https://mcp.exa.ai/mcp?tools=web_search_exa,web_fetch_exa,agent_run",
+      "headers": {
+        "x-api-key": "YOUR_EXA_API_KEY"
+      }
+    }
+  }
+}

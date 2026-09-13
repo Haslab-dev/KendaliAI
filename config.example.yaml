@@ -27,6 +27,19 @@ channels:
     channelType: telegram
     token: your-telegram-token-here
 
+# MCP Servers (Remote HTTP or local CLI tool servers)
+mcpServers:
+  firecrawl:
+    type: http
+    url: https://mcp.firecrawl.dev/v2/mcp
+    headers:
+      Authorization: "Bearer <FIRECRAWL_API_KEY>"
+  exa:
+    type: http
+    url: "https://mcp.exa.ai/mcp?tools=web_search_exa,web_fetch_exa,agent_run"
+    headers:
+      x-api-key: "YOUR_EXA_API_KEY"
+
 # Object storage for generated artifacts, uploads, and session data.
 # Local storage is ALWAYS auto-available — no config needed.
 # Cloudflare R2 / S3-compatible is optional, added on top of local.

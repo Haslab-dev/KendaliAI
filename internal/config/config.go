@@ -102,9 +102,11 @@ type PermissionsConfig struct {
 }
 
 type MCPServerConfig struct {
+	Type      string            `json:"type,omitempty" yaml:"type,omitempty"`
 	Command   string            `json:"command,omitempty" yaml:"command,omitempty"`
 	Args      []string          `json:"args,omitempty" yaml:"args,omitempty"`
 	ServerURL string            `json:"serverUrl,omitempty" yaml:"serverUrl,omitempty"`
+	URL       string            `json:"url,omitempty" yaml:"url,omitempty"`
 	Headers   map[string]string `json:"headers,omitempty" yaml:"headers,omitempty"`
 	Disabled  bool              `json:"disabled" yaml:"disabled"`
 }
@@ -229,6 +231,16 @@ func (c *Config) applyDefaults() {
 	}
 	if !c.Embedding.Enabled {
 		c.Embedding.Enabled = true
+	}
+
+	if c.MCPServers == nil {
+		c.MCPServers = make(map[string]MCPServerConfig)
+	}
+	for k, srv := range c.MCPServers {
+		if srv.ServerURL == "" && srv.URL != "" {
+			srv.ServerURL = srv.URL
+			c.MCPServers[k] = srv
+		}
 	}
 }
 

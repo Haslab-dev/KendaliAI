@@ -385,8 +385,43 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		}
 	}
 
-	// Inject configured MCP servers
+	// Inject configured MCP servers from store and config.json
 	allMCPs, _ := r.store.ListMCPServers()
+	if config.Cfg != nil && config.Cfg.MCPServers != nil {
+		for srvName, cfgSrv := range config.Cfg.MCPServers {
+			if cfgSrv.Disabled {
+				continue
+			}
+			found := false
+			for _, m := range allMCPs {
+				if strings.EqualFold(m.Name, srvName) || strings.EqualFold(m.ID, srvName) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				u := cfgSrv.ServerURL
+				if u == "" {
+					u = cfgSrv.URL
+				}
+				tr := "http"
+				if cfgSrv.Command != "" {
+					tr = "stdio"
+				}
+				allMCPs = append(allMCPs, MCPServerConfig{
+					ID:        srvName,
+					Name:      srvName,
+					Transport: tr,
+					Command:   cfgSrv.Command,
+					Args:      cfgSrv.Args,
+					URL:       u,
+					Headers:   cfgSrv.Headers,
+					Enabled:   true,
+					Status:    "ready",
+				})
+			}
+		}
+	}
 	var activeMCPs []MCPServerConfig
 	for _, m := range allMCPs {
 		hasInAgent := false
@@ -426,7 +461,7 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 	}
 
 	// Append Tool instructions
-	toolRegistry := agent.GetToolRegistry(nil, nil, r.workRoot, r.store.db)
+	toolRegistry := agent.GetToolRegistry(config.Cfg, nil, r.workRoot, r.store.db)
 	sysPrompt += "\n\n## AVAILABLE TOOLS:\n"
 	sysPrompt += "You can execute tools to perform actions. When calling tools, use the standard format:\n"
 	sysPrompt += "tool: TOOL_NAME({\"arg\": \"value\"})\n"
@@ -961,6 +996,9 @@ func (r *Runtime) isToolAllowed(toolName string, allowedPatterns []string) bool 
 			return true
 		}
 		if toolName == "mcp_call" && (pat == "mcp" || pat == "mcp.*" || strings.HasPrefix(pat, "mcp:")) {
+			return true
+		}
+		if (toolName == "web_search" || toolName == "web_scrape") && (pat == "web" || pat == "web.*" || pat == "web.fetch" || pat == "web.search" || pat == "fetch_url") {
 			return true
 		}
 		if strings.HasSuffix(pat, ".*") {
