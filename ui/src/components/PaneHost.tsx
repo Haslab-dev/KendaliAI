@@ -68,9 +68,23 @@ export const PaneHost: React.FC<{ route: Exclude<RouteName, 'chat'> }> = ({ rout
     navigate('chat');
   };
 
+  const isFullBleed = [
+    'dashboard',
+    'editor',
+    'worktrees',
+    'scheduler',
+    'plugins',
+    'providers',
+    'agents',
+    'docs',
+    'telegram',
+    'settings',
+    'logs',
+  ].includes(route);
+
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 relative overflow-hidden bg-app">
-      {route !== 'logs' && route !== 'editor' && route !== 'dashboard' && (
+      {!isFullBleed && (
         <div className="flex items-center gap-3 px-4 md:px-6 py-3 border-b border-line bg-rail flex-shrink-0">
           <button
             onClick={() => navigate('chat')}
@@ -86,8 +100,8 @@ export const PaneHost: React.FC<{ route: Exclude<RouteName, 'chat'> }> = ({ rout
         </div>
       )}
       <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col">
-        {/* Inner padding for all panes except full-bleed logs, editor, and dashboard */}
-        <div className={route === 'logs' || route === 'editor' || route === 'dashboard' ? 'flex-1 flex flex-col' : 'flex-1 flex flex-col px-4 py-4 md:px-6 md:py-6'}>
+        {/* Inner padding for supplementary panes; full-bleed for dedicated reference layouts */}
+        <div className={isFullBleed ? 'flex-1 flex flex-col' : 'flex-1 flex flex-col px-4 py-4 md:px-6 md:py-6'}>
           {route === 'dashboard' && <DashboardPane />}
           {route === 'editor' && <EditorPane />}
           {route === 'worktrees' && <WorktreesPane />}
