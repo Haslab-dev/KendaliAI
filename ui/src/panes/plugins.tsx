@@ -40,61 +40,6 @@ interface Plugin {
   skills?: { name: string; description: string; body: string }[];
 }
 
-const DEFAULT_PLUGINS: Plugin[] = [
-  {
-    id: 'web-scraper',
-    name: 'web-scraper',
-    description: 'Plain-language URL scraper and DOM extractor.',
-    version: '1.2.0',
-    author: 'Research agent',
-    enabled: true,
-    source: 'workspace',
-    tools: [
-      { name: 'scrape', description: 'Scrape full page HTML/markdown', handler_type: 'command', command: 'curl -sL $URL' },
-      { name: 'extract', description: 'Extract DOM selector elements', handler_type: 'command', command: 'cheerio-query $URL $SELECTOR' },
-      { name: 'parse_table', description: 'Extract table to JSON format', handler_type: 'command', command: 'table-parser $HTML' },
-    ],
-  },
-  {
-    id: 'image-gen',
-    name: 'image-gen',
-    description: 'Image synthesis and generation tool installed via session.',
-    version: '0.9.4',
-    author: 'installed from chat',
-    enabled: true,
-    source: 'workspace',
-    tools: [
-      { name: 'generate', description: 'Generate image with prompt and size', handler_type: 'command', command: 'python3 -m gen_img --prompt "$PROMPT"' },
-    ],
-  },
-  {
-    id: 'db-query',
-    name: 'db-query',
-    description: 'Direct SQL querying against local SQLite and PostgreSQL schemas.',
-    version: '2.1.0',
-    author: 'user authored',
-    enabled: true,
-    source: 'workspace',
-    tools: [
-      { name: 'query', description: 'Execute readonly SQL query', handler_type: 'command', command: 'sqlite3 app.db "$QUERY"' },
-      { name: 'tables', description: 'List available tables and schema', handler_type: 'command', command: 'sqlite3 app.db ".schema"' },
-    ],
-  },
-  {
-    id: 'csv-report',
-    name: 'csv-report',
-    description: 'Tabular report generation and column statistics.',
-    version: '1.0.1',
-    author: 'created by Coder',
-    enabled: false,
-    source: 'workspace',
-    tools: [
-      { name: 'parse', description: 'Parse CSV file and report row count', handler_type: 'command', command: 'python3 -m csv_tool parse $FILE' },
-      { name: 'summarize', description: 'Generate statistics summary of numeric columns', handler_type: 'command', command: 'python3 -m csv_tool summarize $FILE' },
-    ],
-  },
-];
-
 export const PluginsPane: React.FC = () => {
   const { createSession } = useAppStore();
   const [pluginsList, setPluginsList] = useState<Plugin[]>([]);
@@ -121,16 +66,16 @@ export const PluginsPane: React.FC = () => {
       const res = await fetch('/api/plugins');
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           setPluginsList(data);
         } else {
-          setPluginsList(DEFAULT_PLUGINS);
+          setPluginsList([]);
         }
       } else {
-        setPluginsList(DEFAULT_PLUGINS);
+        setPluginsList([]);
       }
     } catch {
-      setPluginsList(DEFAULT_PLUGINS);
+      setPluginsList([]);
     } finally {
       setIsLoading(false);
     }
@@ -292,8 +237,25 @@ export const PluginsPane: React.FC = () => {
 
           {/* Plugin Cards */}
           {filteredPlugins.length === 0 ? (
-            <div className="w-full p-12 text-center bg-[#FFFFFF] border border-[#E5E7EB] rounded-[8px] text-[#8A8A85] text-xs">
-              No plugins match your filter.
+            <div className="w-full p-12 text-center bg-[#FFFFFF] border border-dashed border-[#E5E7EB] rounded-[8px] flex flex-col items-center justify-center gap-2">
+              <Puzzle size={28} className="text-[#8A8A85]" />
+              <h3 className="text-[13px] font-bold text-black">
+                {pluginsList.length === 0 ? 'No Custom Plugins Installed' : 'No plugins match your filter'}
+              </h3>
+              <p className="text-[11px] text-[#8A8A85] max-w-sm">
+                {pluginsList.length === 0
+                  ? 'Plugins extend KendaliAI agents with custom bash tools, external CLI integrations, and domain rules.'
+                  : 'Try clearing your search query or create a new plugin.'}
+              </p>
+              {pluginsList.length === 0 && (
+                <button
+                  onClick={() => setShowAddModal(true)}
+                  className="mt-2 flex items-center gap-1.5 px-3 py-1.5 bg-[#0F0F0F] text-white text-[11px] font-bold rounded-[6px]"
+                >
+                  <Plus size={13} />
+                  <span>Create Plugin</span>
+                </button>
+              )}
             </div>
           ) : (
             filteredPlugins.map((plugin) => {

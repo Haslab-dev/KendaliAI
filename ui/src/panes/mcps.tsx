@@ -14,6 +14,7 @@ import {
 // 4. MCP Servers Tab
 export const McpsPane: React.FC = () => {
   const [mcps, setMcps] = useState<MCPServerConfig[]>([]);
+  const [isFetchingTools, setIsFetchingTools] = useState(false);
   const [form, setForm] = useState<Partial<MCPServerConfig>>({
     name: '',
     transport: 'stdio',
@@ -27,13 +28,68 @@ export const McpsPane: React.FC = () => {
   const [apiKeyTarget, setApiKeyTarget] = useState<'firecrawl' | 'exa' | 'all'>('all');
 
   const fetchMCPs = async () => {
-    const res = await fetch('/api/mcps');
-    setMcps(await res.json());
+    try {
+      const res = await fetch('/api/mcps');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setMcps(data);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch MCPs:', err);
+    }
   };
 
   useEffect(() => {
     fetchMCPs();
   }, []);
+
+  const totalTools = useMemo(() => {
+    return mcps.reduce((acc, m) => acc + (m.toolsCached?.length || 0), 0);
+  }, [mcps]);
+
+  const activeCount = useMemo(() => {
+    return mcps.filter((m) => m.enabled !== false).length;
+  }, [mcps]);
+
+  const handleToggle = async (mcp: MCPServerConfig) => {
+    const nextState = mcp.enabled === false ? true : false;
+    setMcps((prev) =>
+      prev.map((m) => (m.id === mcp.id ? { ...m, enabled: nextState } : m))
+    );
+    try {
+      await fetch('/api/mcps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...mcp,
+          enabled: nextState,
+        }),
+      });
+    } catch (err) {
+      console.error('Failed to toggle MCP server:', err);
+      fetchMCPs();
+    }
+  };
+
+  const handleFetchTools = async (id?: string) => {
+    setIsFetchingTools(true);
+    try {
+      const res = await fetch('/api/mcps/fetch-tools', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: id || '' }),
+      });
+      if (res.ok) {
+        await fetchMCPs();
+      }
+    } catch (err) {
+      console.error('Failed to fetch MCP tools:', err);
+    } finally {
+      setIsFetchingTools(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!form.name) return alert('Name required');
@@ -67,6 +123,16 @@ export const McpsPane: React.FC = () => {
         <div className="flex items-center gap-2">
           <button
             type="button"
+            onClick={() => handleFetchTools()}
+            disabled={isFetchingTools}
+            className="px-2.5 py-1.5 bg-raised hover:bg-hoverbg border border-line rounded-lg text-xs font-semibold text-hi flex items-center gap-1.5 transition-colors cursor-pointer"
+            title="Probe and update cached tools for all servers"
+          >
+            <RefreshCw size={13} className={isFetchingTools ? 'animate-spin' : ''} />
+            <span>Sync All Tools</span>
+          </button>
+          <button
+            type="button"
             onClick={() => {
               setApiKeyTarget('all');
               setShowApiKeyModal(true);
@@ -76,26 +142,31 @@ export const McpsPane: React.FC = () => {
             <Key size={13} />
             <span>Configure API Keys</span>
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              setApiKeyTarget('firecrawl');
-              setShowApiKeyModal(true);
-            }}
-            className="px-2.5 py-1.5 bg-raised hover:bg-hoverbg border border-line rounded-lg text-xs font-medium text-hi transition-colors cursor-pointer"
-          >
-            + Firecrawl Key
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setApiKeyTarget('exa');
-              setShowApiKeyModal(true);
-            }}
-            className="px-2.5 py-1.5 bg-raised hover:bg-hoverbg border border-line rounded-lg text-xs font-medium text-hi transition-colors cursor-pointer"
-          >
-            + Exa Key
-          </button>
+        </div>
+      </div>
+
+      {/* Stats Overview Banner */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="p-3 bg-raised border border-line rounded-xl flex items-center justify-between">
+          <div>
+            <span className="text-[10px] text-mid font-semibold uppercase tracking-wider">Registered Servers</span>
+            <div className="text-xl font-bold text-hi mt-0.5">{mcps.length}</div>
+          </div>
+          <Plug size={22} className="text-mid" />
+        </div>
+        <div className="p-3 bg-raised border border-line rounded-xl flex items-center justify-between">
+          <div>
+            <span className="text-[10px] text-mid font-semibold uppercase tracking-wider">Active Providers</span>
+            <div className="text-xl font-bold text-emerald-500 mt-0.5">{activeCount}</div>
+          </div>
+          <CheckCircle size={22} className="text-emerald-500" />
+        </div>
+        <div className="p-3 bg-raised border border-line rounded-xl flex items-center justify-between">
+          <div>
+            <span className="text-[10px] text-mid font-semibold uppercase tracking-wider">Total Discovered Tools</span>
+            <div className="text-xl font-bold text-blue-500 mt-0.5">{totalTools}</div>
+          </div>
+          <Wrench size={22} className="text-blue-500" />
         </div>
       </div>
 
@@ -110,24 +181,48 @@ export const McpsPane: React.FC = () => {
             : isEx
             ? Boolean(exaH && !exaH.includes('<') && !exaH.includes('YOUR_'))
             : Boolean(m.headers && Object.keys(m.headers).length > 0);
+          const isEnabled = m.enabled !== false;
 
           return (
-            <div key={m.id} className="p-4 bg-raised border border-line rounded-xl space-y-2.5">
+            <div
+              key={m.id}
+              className={`p-4 bg-raised border rounded-xl space-y-2.5 transition-all ${
+                isEnabled ? 'border-line' : 'border-line/40 opacity-70'
+              }`}
+            >
               <div className="flex items-center justify-between">
                 <div className="font-semibold text-sm text-hi flex items-center gap-1.5">
-                  <Plug size={15} className="text-hi" />
+                  <Plug size={15} className={isEnabled ? 'text-hi' : 'text-lo'} />
                   <span>{m.name}</span>
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10 text-mid uppercase font-mono">
                     {m.transport || 'stdio'}
                   </span>
                 </div>
-                <button
-                  onClick={() => handleDelete(m.id)}
-                  className="text-lo hover:text-red-400 p-1 transition-colors cursor-pointer"
-                  title="Delete MCP Server"
-                >
-                  <Trash2 size={13} />
-                </button>
+
+                <div className="flex items-center gap-2">
+                  {/* Enable / Disable Toggle */}
+                  <button
+                    type="button"
+                    onClick={() => handleToggle(m)}
+                    className={`text-[10px] px-2 py-0.5 rounded font-sans font-medium transition-colors cursor-pointer flex items-center gap-1 ${
+                      isEnabled
+                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                        : 'bg-zinc-500/10 text-zinc-400 border border-zinc-500/20'
+                    }`}
+                    title={isEnabled ? 'Click to disable' : 'Click to enable'}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${isEnabled ? 'bg-emerald-400' : 'bg-zinc-400'}`} />
+                    <span>{isEnabled ? 'Enabled' : 'Disabled'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleDelete(m.id)}
+                    className="text-lo hover:text-red-400 p-1 transition-colors cursor-pointer"
+                    title="Delete MCP Server"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
               </div>
 
               {m.transport === 'http' || m.transport === 'sse' ? (
@@ -160,17 +255,30 @@ export const McpsPane: React.FC = () => {
                   ) : null}
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setApiKeyTarget(isFc ? 'firecrawl' : isEx ? 'exa' : 'all');
-                    setShowApiKeyModal(true);
-                  }}
-                  className="text-[11px] text-blue-400 hover:text-blue-300 font-medium flex items-center gap-1 cursor-pointer transition-colors"
-                >
-                  <Key size={11} />
-                  <span>Configure Key</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleFetchTools(m.id)}
+                    disabled={isFetchingTools}
+                    className="text-[11px] text-mid hover:text-hi font-medium flex items-center gap-1 cursor-pointer transition-colors"
+                    title="Fetch / Refresh tools from this server"
+                  >
+                    <RefreshCw size={11} className={isFetchingTools ? 'animate-spin' : ''} />
+                    <span>{m.toolsCached?.length || 0} tools</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setApiKeyTarget(isFc ? 'firecrawl' : isEx ? 'exa' : 'all');
+                      setShowApiKeyModal(true);
+                    }}
+                    className="text-[11px] text-blue-400 hover:text-blue-300 font-medium flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <Key size={11} />
+                    <span>Configure Key</span>
+                  </button>
+                </div>
               </div>
 
               {m.toolsCached && m.toolsCached.length > 0 && (

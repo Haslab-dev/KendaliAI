@@ -28,61 +28,8 @@ interface ScheduleItem {
   target?: string;
 }
 
-const DEFAULT_SCHEDULES: ScheduleItem[] = [
-  {
-    id: 'sch-1',
-    title: 'Wake-up reminder',
-    cron: '0 5 * * *',
-    humanSchedule: 'daily 5:00 AM',
-    nextRun: 'in 6h 12m',
-    status: 'running',
-    prompt: 'Wake up! Good morning, here is your daily agenda.',
-    target: 'telegram',
-  },
-  {
-    id: 'sch-2',
-    title: 'Stretch reminder',
-    cron: '*/45 9-17 * * 1-5',
-    humanSchedule: 'weekdays, every 45 min',
-    nextRun: 'in 22m',
-    status: 'running',
-    prompt: 'Time to stretch 🧘 Take a short break and drink water.',
-    target: 'web',
-  },
-  {
-    id: 'sch-3',
-    title: 'Weekly research digest',
-    cron: '0 18 * * 5',
-    humanSchedule: 'fridays 6:00 PM',
-    nextRun: 'in 2d 4h',
-    status: 'running',
-    prompt: 'Compile a summary of all knowledge base updates this week.',
-    target: 'web',
-  },
-  {
-    id: 'sch-4',
-    title: 'Standup notes to Telegram',
-    cron: '30 8 * * 1-5',
-    humanSchedule: 'weekdays 8:30 AM',
-    nextRun: 'in 14h',
-    status: 'running',
-    prompt: 'Send daily standup questions to @kendaliai_bot channel.',
-    target: 'telegram',
-  },
-  {
-    id: 'sch-5',
-    title: 'Old backup job',
-    cron: '0 23 * * *',
-    humanSchedule: 'daily 11:00 PM',
-    nextRun: '—',
-    status: 'paused',
-    prompt: 'Run git worktree backup and export database snapshot.',
-    target: 'local',
-  },
-];
-
 export const SchedulerPane: React.FC = () => {
-  const [schedules, setSchedules] = useState<ScheduleItem[]>(DEFAULT_SCHEDULES);
+  const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
 
@@ -91,8 +38,8 @@ export const SchedulerPane: React.FC = () => {
   const [parsedCron, setParsedCron] = useState('*/45 9-17 * * 1-5');
 
   // Active Reminder Banner
-  const [activeToast, setActiveToast] = useState<boolean>(true);
-  const [toastMessage, setToastMessage] = useState('Time to stretch 🧘');
+  const [activeToast, setActiveToast] = useState<boolean>(false);
+  const [toastMessage, setToastMessage] = useState('');
 
   // Modal Form
   const [formTitle, setFormTitle] = useState('');
@@ -106,7 +53,7 @@ export const SchedulerPane: React.FC = () => {
       const res = await fetch('/api/schedules');
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           const mapped: ScheduleItem[] = data.map((d: any, idx: number) => ({
             id: d.id || `sch-${idx}`,
             title: d.name || d.title || 'Scheduled Agent Task',
@@ -118,10 +65,12 @@ export const SchedulerPane: React.FC = () => {
             target: d.channel || 'web',
           }));
           setSchedules(mapped);
+        } else {
+          setSchedules([]);
         }
       }
     } catch {
-      // Use defaults
+      setSchedules([]);
     } finally {
       setIsLoading(false);
     }
@@ -286,84 +235,101 @@ export const SchedulerPane: React.FC = () => {
             </div>
           </div>
 
-          {/* Schedule List matching scheduler.html */}
-          <div className="flex flex-col gap-3 w-full">
-            {schedules.map((s) => (
-              <div
-                key={s.id}
-                className="w-full bg-[#FFFFFF] shadow-[0px_1px_2px_0px_#0000000a] border border-[#E5E7EB] rounded-[8px] p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5 transition-all hover:border-[#D4D4D0]"
+          {/* Schedule List */}
+          {schedules.length === 0 ? (
+            <div className="w-full p-8 text-center bg-white dark:bg-[#161616] border border-dashed border-[#E5E7EB] dark:border-[#27272A] rounded-[8px] flex flex-col items-center justify-center gap-2">
+              <AlarmClock size={28} className="text-[#8A8A85]" />
+              <h3 className="text-[13px] font-bold text-black dark:text-white">No Scheduled Tasks</h3>
+              <p className="text-[11px] text-[#8A8A85] max-w-sm">
+                Create a recurring background reminder or job using natural language or cron format above.
+              </p>
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="mt-2 flex items-center gap-1.5 px-3 py-1.5 bg-[#0F0F0F] dark:bg-white text-white dark:text-black text-[11px] font-bold rounded-[6px]"
               >
-                {/* Left: Icon & Info */}
-                <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                  <div className="w-[38px] h-[38px] shrink-0 flex items-center justify-center bg-[#FFF5EB] rounded-[4px]">
-                    <AlarmClock size={17} className="text-[#F97316]" />
-                  </div>
+                <Plus size={13} />
+                <span>New Schedule</span>
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3 w-full">
+              {schedules.map((s) => (
+                <div
+                  key={s.id}
+                  className="w-full bg-[#FFFFFF] shadow-[0px_1px_2px_0px_#0000000a] border border-[#E5E7EB] rounded-[8px] p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5 transition-all hover:border-[#D4D4D0]"
+                >
+                  {/* Left: Icon & Info */}
+                  <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                    <div className="w-[38px] h-[38px] shrink-0 flex items-center justify-center bg-[#FFF5EB] rounded-[4px]">
+                      <AlarmClock size={17} className="text-[#F97316]" />
+                    </div>
 
-                  <div className="min-w-0 flex-1 flex flex-col gap-[3px]">
-                    {/* Row 1: Title & Status Badge */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[13px] font-bold text-[#000000] font-sans">
-                        {s.title}
-                      </span>
-                      <div
-                        className={`rounded-[4px] px-2 py-[2px] flex items-center ${
-                          s.status === 'running' ? 'bg-[#DCFCE7]' : 'bg-[#FEF3C7]'
-                        }`}
-                      >
-                        <span
-                          className={`text-[10px] font-bold font-['Funnel_Sans',sans-serif] ${
-                            s.status === 'running' ? 'text-[#16A34A]' : 'text-[#D97706]'
+                    <div className="min-w-0 flex-1 flex flex-col gap-[3px]">
+                      {/* Row 1: Title & Status Badge */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[13px] font-bold text-[#000000] font-sans">
+                          {s.title}
+                        </span>
+                        <div
+                          className={`rounded-[4px] px-2 py-[2px] flex items-center ${
+                            s.status === 'running' ? 'bg-[#DCFCE7]' : 'bg-[#FEF3C7]'
                           }`}
                         >
-                          {s.status}
-                        </span>
+                          <span
+                            className={`text-[10px] font-bold font-['Funnel_Sans',sans-serif] ${
+                              s.status === 'running' ? 'text-[#16A34A]' : 'text-[#D97706]'
+                            }`}
+                          >
+                            {s.status}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Cron string & description */}
+                      <div className="text-[11px] text-[#333333] font-['Geist_Mono',monospace] truncate">
+                        {s.cron} · {s.humanSchedule}
                       </div>
                     </div>
+                  </div>
 
-                    {/* Cron string & description */}
-                    <div className="text-[11px] text-[#333333] font-['Geist_Mono',monospace] truncate">
-                      {s.cron} · {s.humanSchedule}
-                    </div>
+                  {/* Next run time */}
+                  <div className="text-[11px] text-[#8A8A85] font-['Funnel_Sans',sans-serif] shrink-0 sm:px-3">
+                    next {s.nextRun}
+                  </div>
+
+                  {/* Right: Actions */}
+                  <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                    <button
+                      type="button"
+                      title="Run Now"
+                      onClick={() => handleRunNow(s)}
+                      className="w-[30px] h-[30px] flex items-center justify-center bg-[#FFFFFF] border border-[#E5E7EB] rounded-[4px] text-[#333333] hover:bg-[#F7F7F5] transition-colors"
+                    >
+                      <Play size={12} className="text-[#16A34A]" />
+                    </button>
+
+                    <button
+                      type="button"
+                      title={s.status === 'running' ? 'Pause' : 'Resume'}
+                      onClick={() => handleToggleStatus(s.id, s.status)}
+                      className="w-[30px] h-[30px] flex items-center justify-center bg-[#FFFFFF] border border-[#E5E7EB] rounded-[4px] text-[#333333] hover:bg-[#F7F7F5] transition-colors"
+                    >
+                      {s.status === 'running' ? <Pause size={12} /> : <Play size={12} />}
+                    </button>
+
+                    <button
+                      type="button"
+                      title="Delete"
+                      onClick={() => handleDelete(s.id)}
+                      className="w-[30px] h-[30px] flex items-center justify-center bg-[#FFFFFF] border border-[#E5E7EB] rounded-[4px] text-[#DC2626] hover:bg-red-50 hover:border-red-200 transition-colors"
+                    >
+                      <Trash2 size={12} />
+                    </button>
                   </div>
                 </div>
-
-                {/* Next run time */}
-                <div className="text-[11px] text-[#8A8A85] font-['Funnel_Sans',sans-serif] shrink-0 sm:px-3">
-                  next {s.nextRun}
-                </div>
-
-                {/* Right: Actions */}
-                <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
-                  <button
-                    type="button"
-                    title="Run Now"
-                    onClick={() => handleRunNow(s)}
-                    className="w-[30px] h-[30px] flex items-center justify-center bg-[#FFFFFF] border border-[#E5E7EB] rounded-[4px] text-[#333333] hover:text-[#007AFF] hover:border-[#007AFF] transition-colors"
-                  >
-                    <Play size={12} />
-                  </button>
-
-                  <button
-                    type="button"
-                    title={s.status === 'running' ? 'Pause' : 'Resume'}
-                    onClick={() => handleToggleStatus(s.id, s.status)}
-                    className="w-[30px] h-[30px] flex items-center justify-center bg-[#FFFFFF] border border-[#E5E7EB] rounded-[4px] text-[#333333] hover:text-[#000000] hover:border-[#000000] transition-colors"
-                  >
-                    {s.status === 'running' ? <Pause size={12} /> : <Play size={12} />}
-                  </button>
-
-                  <button
-                    type="button"
-                    title="Delete"
-                    onClick={() => handleDelete(s.id)}
-                    className="w-[30px] h-[30px] flex items-center justify-center bg-[#FFFFFF] border border-[#E5E7EB] rounded-[4px] text-[#DC2626] hover:bg-red-50 hover:border-red-200 transition-colors"
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Right Column matching scheduler.html (Reminder Toast + Daemon Card) */}

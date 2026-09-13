@@ -343,7 +343,7 @@ func (s *Store) SeedInitialData(cfg *config.Config) {
 			Model:        "",
 			SystemPrompt: "You are Coding Agent, a world-class senior software engineer and architect. You write clean, idiomatic, robust code, inspect systems thoroughly, diagnose bugs, and execute commands safely.",
 			Skills:       []string{"coding", "debugging", "code-review"},
-			Tools:        []string{"filesystem.*", "shell.*", "git.*", "search"},
+			Tools:        []string{"filesystem.*", "shell.*", "git.*", "search", "skill.*", "plugin.*"},
 			MCP:          []string{"github"},
 			MemoryScopes: []string{"user", "agent", "session", "workspace"},
 			Policy: map[string]string{
@@ -449,35 +449,9 @@ func (s *Store) SeedInitialData(cfg *config.Config) {
 			})
 		}
 
-		if len(mcps) == 0 {
-			_ = s.SaveMCPServer(MCPServerConfig{
-				ID:        "github",
-				Name:      "github",
-				Transport: "stdio",
-				Command:   "npx",
-				Args:      []string{"-y", "@modelcontextprotocol/server-github"},
-				URL:       "",
-				Env:       map[string]string{"GITHUB_PERSONAL_ACCESS_TOKEN": ""},
-				Enabled:   false,
-				Status:    "configured",
-				CreatedAt: now,
-				UpdatedAt: now,
-			})
-
-			_ = s.SaveMCPServer(MCPServerConfig{
-				ID:        "postgres",
-				Name:      "postgres",
-				Transport: "stdio",
-				Command:   "npx",
-				Args:      []string{"-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost/kendaliai"},
-				URL:       "",
-				Env:       map[string]string{},
-				Enabled:   false,
-				Status:    "configured",
-				CreatedAt: now,
-				UpdatedAt: now,
-			})
-		}
+		// Ensure legacy default github and postgres servers are removed
+		_ = s.DeleteMCPServer("github")
+		_ = s.DeleteMCPServer("postgres")
 	}
 
 	// 4. Default Telegram Bot from config if provided
@@ -936,6 +910,9 @@ func (s *Store) SaveMCPServer(m MCPServerConfig) error {
 		existing, _ = s.GetMCPServer(m.Name)
 	}
 	if existing != nil {
+		if m.Name == "" {
+			m.Name = existing.Name
+		}
 		if m.Transport == "" {
 			m.Transport = existing.Transport
 		}

@@ -6,6 +6,7 @@ export const ROUTES = [
   'dashboard',
   'chat',
   'editor',
+  'terminal',
   'agents',
   'docs',
   'plugins',

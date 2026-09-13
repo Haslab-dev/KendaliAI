@@ -1,6 +1,6 @@
 # KendaliAI (Go Edition)
 
-KendaliAI is a self-hosted **AI Agent Gateway & Personal AI Runtime** built natively in Go. Designed as a lightweight daemon, KendaliAI unifies multiple specialized agents across **Web UI, Telegram bots, CLI, and REST/WebSocket APIs** with shared sessions, event sourcing, multi-tiered memory, and capability sandboxing.
+KendaliAI is a self-hosted **AI Agent Gateway & Personal AI Runtime** built natively in Go. Designed as a lightweight daemon, KendaliAI unifies multiple specialized agents across **Web UI, Telegram bots, CLI, and REST/WebSocket APIs** with shared sessions, event sourcing, multi-tiered memory, full-featured PTY terminal, and capability sandboxing.
 
 > **One lightweight Go daemon → many agents → many channels → shared sessions/memory/tools → Web + Telegram bidirectional.**
 
@@ -10,7 +10,7 @@ KendaliAI is a self-hosted **AI Agent Gateway & Personal AI Runtime** built nati
 
 ### Prerequisites
 - Go 1.20+
-- Node / Bun (for Web UI)
+- Node 18+ or Bun (for Web UI)
 - SQLite3
 - CGO (required by `go-sqlite3`)
 
@@ -40,12 +40,12 @@ Key fields in `config.yaml`:
 
 | Field | Description |
 | :--- | :--- |
-| `chatProviders` | LLM providers (OpenAI-compatible, DeepSeek, etc.) |
-| `embedding` | Embedding model endpoint and key |
-| `channels` | Telegram bot token and channel config |
-| `storage` | Local or Cloudflare R2 artifact storage |
-| `permissions` | File access allow/deny rules |
-| `reflection` | Daily reflection cron schedule |
+| `chatProviders` | LLM providers (OpenAI-compatible, DeepSeek, Anthropic, Ollama, etc.) |
+| `embedding` | Embedding model endpoint and key for vector search |
+| `channels` | Telegram bot token and channel routing config |
+| `storage` | Local (`./storage`) or Cloudflare R2 / S3 artifact storage |
+| `permissions` | File access allow/deny rules and sandboxing policies |
+| `reflection` | Daily reflection and consolidation cron schedule |
 
 ---
 
@@ -76,7 +76,7 @@ Run backend and frontend with live hot-reloading:
 make dev
 ```
 
-Open **`http://localhost:5173`** for instant Vite HMR. API and WebSocket requests are proxied to `:8080`.
+Open **`http://localhost:5173`** for instant Vite HMR. API, WebSocket events, and PTY terminal connections are proxied to `:8080`.
 
 ### Production Mode
 
@@ -91,7 +91,7 @@ make start
 # or: make start-daemon
 ```
 
-Open **`http://localhost:8080`** to access the Web UI.
+Open **`http://localhost:8080`** to access the full Web UI.
 
 ---
 
@@ -116,29 +116,83 @@ Operate the gateway daemon using the unified command suite:
 
 ---
 
-## 4. Web UI
+## 4. Web UI & Workspaces
 
-The **React/TypeScript** Web UI (`ui/`) is a LibreChat-inspired interface served directly from the Go daemon in production. Key components:
+The **React/TypeScript** Web UI (`ui/`) is a clean, modern interface served directly from the Go daemon in production with responsive desktop and mobile layouts:
 
-| Component | Description |
+| View / Pane | Description |
 | :--- | :--- |
-| `ChatArea` | Real-time chat with streaming SSE responses and tool execution cards |
-| `ManagementCenter` | Full management dashboard: agents, sessions, providers, channels, memory, tools |
-| `LogsStreamingView` | Live log streaming panel with level filtering |
-| `Sidebar` | Session list, conversation switcher, and new chat actions |
-| `IconRail` | Collapsible navigation rail |
-| `ToolExecutionCard` | Expandable card rendering tool call arguments and results |
-
-**Dev**: `make dev` → open `http://localhost:5173`  
-**Production**: `make build && make start` → open `http://localhost:8080`
+| **Chat Area** | Real-time chat with streaming SSE responses, rich Markdown formatting, auto-generated session titles (≤ 20 chars), and collapsible tool call inspection cards. |
+| **PTY Terminal** | Dedicated, full-featured interactive pseudo-terminal running in its own tab. Supports `vim`, `htop`, `nano`, ANSI escape colors, and raw keyboard controls. |
+| **Workspace Editor** | Integrated workspace browser and code editor with file tree navigation and code editing. |
+| **Skills Pane** | Browse active built-in and generated agent skills; inspect trigger phrases, domains, and dependencies. |
+| **Plugins Pane** | View installed extensions, active capabilities, and plugin statuses. |
+| **MCP Manager** | Model Context Protocol servers management with individual enable/disable toggles and live tool counting. |
+| **Providers & Models** | Configure LLM providers, set default models, test latencies, and manage token limits. |
+| **Scheduler & Worktrees** | Automated recurring cron jobs, reflection tasks, and git worktree environments. |
+| **Logs Streamer** | Live log viewer with severity level filters (`DEBUG`, `INFO`, `WARN`, `ERROR`). |
 
 ---
 
-## 5. Platform Architecture
+## 5. Full-Feature PTY Terminal
 
-KendaliAI is structured around an **AI Agent Gateway & Event Bus** architecture rather than a rigid workflow monolith. Channels (Web, Telegram, CLI) bind to **Agents**, conversations belong to **Sessions**, and execution is driven by an interactive **Agent Runtime** connected to a central **Event Bus**.
+KendaliAI includes a real pseudo-terminal (PTY) engine:
 
-### 5.1 Conceptual Topology
+- **True PTY Engine**: Backed by `github.com/creack/pty` on macOS and Linux. Spawns your actual login shell (`$SHELL -l` or `/bin/zsh -l`) with all user environment variables, aliases, and paths.
+- **Interactive TUI Support**: Seamlessly executes programs requiring interactive terminal capabilities like `top`, `htop`, `vim`, `nano`, `fzf`, `less`, and `git log` with ANSI/VT100 escape sequences, 256-color, and TrueColor (`COLORTERM=truecolor`).
+- **Dynamic Window Resizing (`SIGWINCH`)**: Terminal dimensions adjust automatically to browser resizing or fullscreen toggles via `@xterm/addon-fit`. Dimension changes are sent via JSON WebSocket messages (`{"type":"resize","cols":N,"rows":M}`) to trigger real `pty.Setsize` updates.
+- **Built-in Controls**: Mac-style window controls, quick directory switcher (`~`, `~/workspaces`, `/tmp`), clear buffer (`⌘K`), restart session, and fullscreen mode.
+- **WebSocket Endpoint**: Dedicated streaming at `/api/terminal/ws?cwd=...&cols=...&rows=...`.
+
+---
+
+## 6. Dynamic Skills & Plugins via Agent Chat
+
+You can instruct KendaliAI agents to create skills and plugins directly during conversation.
+
+### Safe Workspace Isolation
+All user-created or agent-generated assets are strictly saved to user workspace directories:
+- **Generated Skills**: `~/workspaces/skills/generated/<name>/skill.yaml`
+- **Generated Plugins**: `~/workspaces/plugins/<id>/plugin.yaml`
+- **Core Immutability**: The core `kendali-ai` source repository is never altered.
+
+### Example Chat Interactions
+
+#### 1. Creating a Skill via Chat
+> **User:**  
+> *"Create a skill named 'docker-auditor' that inspects local Docker containers, audits memory/CPU limits, and flags insecure port exposures."*
+
+**Agent Action:**  
+The agent calls `create_skill` with domain, responsibilities, and dependencies. The skill is written to `~/workspaces/skills/generated/docker-auditor/skill.yaml` and loaded into the active runtime.
+
+**Invoking the Skill:**
+> **User:**  
+> *"/skill:docker-auditor audit all running containers and flag any running as root"*
+
+#### 2. Creating a Plugin via Chat
+> **User:**  
+> *"Create a plugin named 'jira-bridge' version '1.0.0' that provides ticket fetching and issue transition capabilities."*
+
+**Agent Action:**  
+The agent calls `create_plugin`. It writes `~/workspaces/plugins/jira-bridge/plugin.yaml` and exposes the new capabilities to the agent tool catalog.
+
+---
+
+## 7. Auto-Generated Session Titles
+
+KendaliAI automatically titles your conversation sessions:
+- On the first turn of a new conversation, the runtime asynchronously generates a concise topic summary.
+- The title is cleaned of quotes, punctuation, and conversational prefixes (`"Title:"`, `"Topic:"`, etc.).
+- **Strict Limit**: Titles are capped at **20 characters** for clean display across mobile chips, sidebar lists, and Telegram chats.
+- Updates are broadcasted immediately via `session.updated` events.
+
+---
+
+## 8. Platform Architecture
+
+KendaliAI is structured around an **AI Agent Gateway & Event Bus** architecture. Channels (Web, Telegram, CLI) bind to **Agents**, conversations belong to **Sessions**, and execution is driven by an interactive **Agent Runtime** connected to a central **Event Bus**.
+
+### 8.1 Conceptual Topology
 
 ```text
                          ┌───────────────────────┐
@@ -148,39 +202,39 @@ KendaliAI is structured around an **AI Agent Gateway & Event Bus** architecture 
                                      │
              ┌───────────────────────┼────────────────────────┐
              │                       │                        │
-        Telegram                   Web UI                  API/WS
+        Telegram                   Web UI                  API/WS/PTY
              │                       │                        │
-      ┌──────┴──────┐         ┌──────┴──────┐          ┌──────┴──────┐
-      │ engineer    │         │ engineer    │          │ external    │
-      │ finance     │         │ finance     │          │ clients     │
-      │ data-science│         │ data-science│          │             │
-      └──────┬──────┘         └──────┬──────┘          └─────────────┘
-             │                       │
-             └───────────┬───────────┘
-                         │
-                  Session / Message
-                         │
-                  Agent Runtime
-                         │
-       ┌─────────────────┼─────────────────┐
-       │                 │                 │
-     Tools             Memory             MCP
-       │                 │                 │
-    Shell             Working           Servers
-    Filesystem         Session           GitHub
-    HTTP               Long-term         Postgres
-    Browser            Semantic/RAG       etc.
-       │                 │
-       └─────────────────┼─────────────────┘
-                         │
-                    Model Router
-                         │
-             ┌───────────┼───────────┐
-          OpenAI       Claude      Gemini
-          DeepSeek     Qwen        Ollama
+       ┌──────┴──────┐         ┌──────┴──────┐          ┌──────┴──────┐
+       │ engineer    │         │ engineer    │          │ PTY Shell   │
+       │ personal    │         │ personal    │          │ external    │
+       │ researcher  │         │ researcher  │          │ clients     │
+       └──────┬──────┘         └──────┬──────┘          └─────────────┘
+              │                       │
+              └───────────┬───────────┘
+                          │
+                   Session / Message
+                          │
+                   Agent Runtime
+                          │
+        ┌─────────────────┼─────────────────┐
+        │                 │                 │
+      Tools             Memory             MCP
+        │                 │                 │
+     Shell / PTY       Working           Servers
+     Filesystem        Session           (Toggleable)
+     HTTP              Long-term         GitHub
+     Browser           Semantic/RAG      Postgres, etc.
+        │                 │
+        └─────────────────┼─────────────────┘
+                          │
+                     Model Router
+                          │
+              ┌───────────┼───────────┐
+           OpenAI       Claude      Gemini
+           DeepSeek     Qwen        Ollama
 ```
 
-### 5.2 Execution Pipeline
+### 8.2 Execution Pipeline
 
 ```text
                                  User Channel / API Gateway
@@ -189,185 +243,150 @@ KendaliAI is structured around an **AI Agent Gateway & Event Bus** architecture 
                                   Conversation Engine
                                              │
                                              ▼
-                                      Goal Tree Engine
+                                       Goal Tree Engine
                                              │
                                              ▼
-                                     Planner / Reasoner
+                                      Planner / Reasoner
                                              │
                                              ▼
-                                      Execution Graph
+                                       Execution Graph
                                              │
                                              ▼
-                                     Execution Scheduler
+                                      Execution Scheduler
                                              │
                                              ▼
-                                      Supervisor Tree
+                                       Supervisor Tree
                                              │
                                              ▼
-                                      Agent Processes
+                                       Agent Processes
                                              │
                                              ▼
-                                    Capability Runtime
+                                     Capability Runtime
                                              │
                                              ▼
-                                      Executor Registry
+                                       Executor Registry
                                              │
                                              ▼
-                                     Runtime Environment
+                                      Runtime Environment
                                              │
                                              ▼
-                                     Target Workspaces
+                                      Target Workspaces
+                                 (~/workspaces/skills/generated)
+                                 (~/workspaces/plugins)
 
-   ────────────────────────────────────────────────────────────────────────────
-    Event Store • Projection Engine • Telemetry & Tracing • Memory Broker Bus
+    ────────────────────────────────────────────────────────────────────────────
+     Event Store • Projection Engine • Telemetry & Tracing • Memory Broker Bus
 ```
 
-### 5.3 Core Architectural Layers
+### 8.3 Core Architectural Layers
 
 1. **Ingress & Gateway Layer (`internal/channels`, `internal/server`, `internal/gateways`)**
-   - Ingests prompts and interaction events across multiple channels (Telegram bot, HTTP REST server, TUI dashboard).
-   - Manages user sessions, credentials, and message routing into the kernel.
+   - Ingests prompts and interaction events across channels (Telegram bot, HTTP REST, SSE, WebSocket, PTY).
+   - Manages user sessions, credentials, and message routing into the runtime kernel.
 
 2. **Conversation & Intent Engine (`internal/conversation`, `internal/intent`)**
-   - Parses user intents (e.g., plan, execute, fix, review, retry, undo) and connects them to the active session.
-   - Maps user requests to high-level goals and initializes workflows.
+   - Parses user intents (e.g., plan, execute, fix, review, retry, undo, skill triggers) and links them to the active session.
+   - Generates compact, clean session titles (≤ 20 chars) asynchronously.
 
 3. **Goal Tree Engine (`internal/goals`)**
-   - Evolved from static string prompts into structured, hierarchical **Goal Trees (`GoalGraph`)**.
-   - Supports parent-child sub-goal relationships, prioritization, hard/soft constraints (budget, technology, time), acceptance criteria verification, and dependency management.
+   - Hierarchical **Goal Trees (`GoalGraph`)** for complex multi-step objectives.
+   - Parent-child sub-goals, prioritization, constraints, and acceptance criteria verification.
 
 4. **Planner & Workflow Engine (`internal/workflow`, `internal/scheduler`)**
-   - **Separation of Reasoning and Execution**: The Planner handles reasoning and sub-task decomposition, but the **Workflow Engine owns the DAG** (`ExecutionDAG`).
-   - The Execution Scheduler evaluates DAG node dependencies (`DAGPending`, `DAGRunning`, `DAGCompleted`, `DAGFailed`), dispatching ready nodes concurrently or sequentially.
+   - Planner decomposes goals into tasks; Workflow Engine executes the DAG (`ExecutionDAG`).
+   - Dependency scheduling (`DAGPending`, `DAGRunning`, `DAGCompleted`, `DAGFailed`).
 
 5. **Microkernel & Process Supervision (`internal/kernel`, `internal/runtime`)**
-   - **Microkernel (`internal/kernel`)**: Lightweight coordination center providing process registration (`Spawn`, `Kill`, `Wait`), inter-process communication (Mailbox IPC), and pub/sub event bus without containing business logic.
-   - **Supervisor (`internal/runtime/supervisor.go`)**: Manages process trees, health, restarts, and links workflow tasks to agent manifests.
+   - Microkernel coordinates process lifecycles (`Spawn`, `Kill`, `Wait`), inter-process communication (Mailbox IPC), and pub/sub events.
+   - Supervisor tracks health, auto-restarts, and binds workflow tasks to agent manifests.
 
 6. **Generic Agent Runtime (GAR) (`internal/runtime/agent.go`, `internal/agent`)**
-   - Agents (Coder, Planner, Reviewer, Researcher) share a **single generic agent runtime** rather than distinct implementations.
-   - Agents are instantiated dynamically via **Agent Manifests (`AgentManifest`)** specifying system prompts, allowed capabilities, default skills, and model preferences.
-   - Executes recursive LLM cognition loops (`internal/agent/cognition.go`): *Plan → Validate → Execute → Observe → Complete*.
-   - Uses the **Model Router (`internal/providers`)** for intelligent multi-provider LLM dispatch (DeepSeek, OpenAI, Anthropic, Ollama) with automatic fallback and token context estimation.
+   - Manifest-driven agents (`AgentManifest`) specifying prompt templates, permissions, and tool access.
+   - Cognition loop (`internal/agent/cognition.go`): *Plan → Validate → Execute → Observe → Complete*.
+   - Model Router (`internal/providers`) for multi-provider routing (DeepSeek, OpenAI, Anthropic, Ollama) with fallback.
 
-7. **Capability Runtime & Policy Engine (`internal/capability`, `internal/policy`, `internal/runtime/executor`)**
-   - **Capability Broker**: Brokering layer restricting dangerous actions (`write_files`, `exec`, shell execution) behind human approval gates when required.
-   - **Policy Engine**: Fine-grained RBAC rule evaluation (ALLOW / DENY) restricting actions per agent role.
-   - **Executor Registry & Sandbox**: Directs approved actions to sandboxed runtime environments (Filesystem, Shell, MCP tool servers, Unified Skill Packages).
+7. **Capability Runtime & Policy Engine (`internal/capability`, `internal/policy`)**
+   - Fine-grained RBAC rule evaluation (ALLOW / DENY) restricting actions per agent role.
+   - Capability broker gates sensitive filesystem or execution operations.
 
-8. **Gateway Runtime (`internal/gateway`)**
-   - **Runtime & Store**: Core execution engine managing agent sessions, tool invocations, and conversation state.
-   - **Chunker & Extractor**: Document ingestion pipeline for chunking and extracting structured content.
-   - **Model Fetcher & SSE Client**: Streaming model inference with Server-Sent Events support.
-
-9. **Messaging Bus (`internal/messaging`)**
-   - Lightweight pub/sub event bus for decoupled communication between gateway components.
-   - Typed event definitions for session lifecycle, tool execution, and model events.
-
-10. **State, Event Sourcing & Cross-Cutting Bus (`internal/events`, `internal/memory`, `internal/checkpoint`, `internal/blackboard`)**
-    - **Event Store (`internal/events/store.go`)**: Append-only event stream (`event_traces`) recording all session actions, tool outputs, and state transitions for auditability and replay.
-    - **Memory Broker (`internal/memory/broker.go`)**: Multi-tiered memory scoping (Working, Session, Goal, Workspace, User preferences, Vector embeddings).
-    - **Blackboard (`internal/blackboard`)**: Shared ephemeral scratchpad for asynchronous multi-agent coordination (facts, hypotheses, questions).
-    - **Checkpoint Manager (`internal/checkpoint`)**: Workspace and state snapshots for disaster recovery, rollbacks, and session resumption.
-
-### 5.4 Key Design Principles
-
-| Principle | Description |
-| :--- | :--- |
-| **Microkernel Coordination** | Kernel coordinates processes, mailboxes, and events; all execution logic resides in pluggable services. |
-| **Workflow Owns the DAG** | Planner reasons about subtasks; Workflow Engine owns execution lifecycle and dependency state. |
-| **Generic Agent Runtime** | Agents are defined declaratively via YAML manifests rather than separate codebases. |
-| **Zero-Trust Policy & Capabilities** | Every tool execution is evaluated by the Policy Engine and gated by approval brokers when needed. |
-| **Event Sourcing & Auditing** | All transitions are persisted in an immutable event trace supporting session replay and recovery. |
-| **Streaming-First** | Responses are streamed via SSE; logs, tool outputs, and model tokens are emitted in real-time. |
+8. **PTY Terminal Engine (`internal/server/terminal_pty.go`)**
+   - Full bidirectional pseudo-terminal emulation over WebSocket.
+   - Spawns interactive login shells, handles terminal resizing signals, and streams raw ANSI sequences.
 
 ---
 
-## 6. Channels
+## 9. Channels
 
 ### Telegram
 
-Configure a Telegram bot in `config.yaml`:
+Configure your Telegram bot in `config.yaml`:
 
 ```yaml
 channels:
   - id: telegram-main
     channelName: telegram
     channelType: telegram
-    token: your-telegram-token-here
+    token: your-telegram-bot-token
 ```
 
-The Telegram adapter (`internal/channels/telegram_adapter.go`) supports:
-- Bidirectional message routing to/from agent sessions
-- Multi-user session isolation
-- Inline command handling
+The Telegram adapter (`internal/channels/telegram_adapter.go`) provides:
+- Bidirectional messaging to/from agent sessions
+- Multi-user isolation with user-specific sessions
+- Markdown message formatting adapter
+- Slash-command parsing (`/skill:name`, `/clear`, `/help`)
 
-### Web UI & REST/WebSocket
+### Web UI & REST/WebSocket APIs
 
 The Go server (`internal/server/server.go`) exposes:
-- `GET /` — Serves the embedded React SPA
-- `POST /api/chat` — Chat completions with SSE streaming
-- `GET /ws` — WebSocket connection for real-time agent events
-- Full CRUD API for agents, sessions, providers, tools, and memory
+- `GET /` — Serves embedded React production build
+- `POST /api/chat` — Chat completions with Server-Sent Events (SSE) streaming
+- `GET /ws` — Agent event stream WebSocket
+- `GET /api/terminal/ws` — Real PTY terminal WebSocket stream
+- Full REST CRUD API for agents, sessions, providers, skills, plugins, and MCP servers
 
 ---
 
-## 7. Custom Skills
-
-KendaliAI supports custom skills located in `~/.kendaliai/skills/` (global) or `.agents/skills/` (workspace).
-Add specialized instruction guidelines by creating a Markdown file with YAML frontmatter:
-
-**Example: `.agents/skills/frontend-design/SKILL.md`**
-```markdown
----
-name: frontend-design
-description: Create distinctive, production-grade frontend interfaces.
----
-## Principles
-- Use Outfit/Roboto fonts.
-- Avoid generic colors.
-- Use smooth gradients.
-```
-
-Skills are discovered at startup and registered as on-demand tools available to all agents.
-
----
-
-## 8. Storage
+## 10. Storage
 
 KendaliAI supports two storage backends for artifacts, uploads, and session data:
 
 | Backend | Config |
 | :--- | :--- |
 | **Local** (default) | `storage.provider: local`, `storage.localPath: ./storage` |
-| **Cloudflare R2 / S3** | Set `storage.r2.*` fields in `config.yaml` |
-
-Local storage is always available with no additional configuration. R2/S3 is layered on top.
+| **Cloudflare R2 / S3** | Set `storage.r2.*` credentials in `config.yaml` |
 
 ---
 
-## 9. Verification & Tests
+## 11. Verification & Tests
 
-To run the full suite of integration tests:
+Run unit and integration tests across all packages:
+
 ```bash
-go run ./tests/test_mak_run.go
+# Run all Go tests
+go test ./...
+
+# Run session title tests
+go test -v ./internal/gateway -run TestCleanSessionTitle
+
+# Run Telegram adapter tests
+go test -v ./internal/channels -run TestTelegramFormatting
 ```
 
 ---
 
-## 10. Project Structure
+## 12. Project Structure
 
 ```
 kendali-ai/
 ├── cmd/kendaliai/       # CLI entry point (start, stop, status, dev, install)
 ├── internal/
-│   ├── agent/           # Generic Agent Runtime (GAR) & cognition loop
+│   ├── agent/           # Generic Agent Runtime (GAR), cognition loop, agent tools
 │   ├── capability/      # Capability broker & policy enforcement
-│   ├── channels/        # Ingress adapters (Telegram)
+│   ├── channels/        # Ingress adapters (Telegram bot & message formatting)
 │   ├── config/          # Config loading & validation
 │   ├── db/              # SQLite schema & migrations
 │   ├── embedding/       # Embedding client for vector memory
-│   ├── gateway/         # Core runtime, store, SSE client, chunker, extractor
+│   ├── gateway/         # Core runtime, store, SSE client, title generator
 │   ├── goals/           # Goal Tree & GoalGraph engine
 │   ├── kernel/          # Microkernel: process registry, mailbox IPC, pub/sub
 │   ├── memory/          # Multi-tiered memory broker
@@ -375,16 +394,19 @@ kendali-ai/
 │   ├── providers/       # LLM provider adapters (OpenAI, DeepSeek, Anthropic, Ollama)
 │   ├── runtime/         # Supervisor, agent runner, executor registry
 │   ├── scheduler/       # DAG execution scheduler
-│   ├── server/          # HTTP REST & WebSocket server
-│   ├── skills/          # Skill discovery & registration
+│   ├── server/          # HTTP REST, WebSocket, metrics, & terminal PTY
+│   │   ├── server.go        # HTTP router & handlers
+│   │   └── terminal_pty.go  # Pseudo-terminal WebSocket handler (creack/pty)
+│   ├── skills/          # Skill discovery, generation & registration
 │   ├── storage/         # Local & R2/S3 artifact storage
 │   ├── telemetry/       # Tracing & observability
 │   ├── tools/           # Built-in tool implementations
 │   └── workflow/        # Workflow engine & execution DAG
-├── ui/                  # React/TypeScript frontend (Vite + Tailwind)
+├── ui/                  # React/TypeScript frontend (Vite + Tailwind + xterm.js)
 │   └── src/
-│       ├── components/  # ChatArea, ManagementCenter, Sidebar, LogsStreamingView, etc.
-│       ├── hooks/       # useAgentSocket (WebSocket hook)
+│       ├── components/  # ChatArea, MarkdownView, BottomNav, IconRail, PaneHost
+│       ├── panes/       # terminal.tsx, editor.tsx, skills.tsx, plugins.tsx, mcps.tsx, etc.
+│       ├── hooks/       # WebSocket and agent hooks
 │       ├── store/       # Zustand global state
 │       └── types.ts     # Shared TypeScript types
 ├── web/                 # Static build output (embedded in Go binary)

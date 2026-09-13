@@ -1,23 +1,43 @@
-import React, { useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Zap,
   Bot,
-  CalendarClock,
   Shield,
   Plus,
   ArrowRight,
   CheckCircle2,
   Loader2,
-  FolderGit2,
-  BookOpen,
   Cpu,
   Terminal,
   Clock,
   Sparkles,
-  ExternalLink,
+  HardDrive,
+  Activity,
+  AlertCircle,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { navigate } from '../router';
+
+interface SystemMetrics {
+  storage: {
+    percent: number;
+    usedGB: number;
+    totalGB: number;
+    usedFormatted: string;
+    totalFormatted: string;
+  };
+  memory: {
+    percent: number;
+    usedMB: number;
+    totalMB: number;
+    usedFormatted: string;
+    totalFormatted: string;
+  };
+  cpu: {
+    percent: number;
+    cores: number;
+  };
+}
 
 export const DashboardPane: React.FC = () => {
   const {
@@ -30,9 +50,77 @@ export const DashboardPane: React.FC = () => {
     setActiveAgent,
   } = useAppStore();
 
-  const activeTasksCount = tasks?.filter((t) => t.status === 'running').length || 2;
-  const activeAgentsCount = agents?.length || 7;
-  const activeProvidersCount = providers?.filter((p) => p.enabled || p.isDefault).length || providers?.length || 4;
+  const [metrics, setMetrics] = useState<SystemMetrics | null>(null);
+  const [schedulesCount, setSchedulesCount] = useState<number>(0);
+  const [policiesCount, setPoliciesCount] = useState<number>(0);
+  const [telegramBotUser, setTelegramBotUser] = useState<string>('Not configured');
+  const [sandboxRoot, setSandboxRoot] = useState<string>('~/');
+  const [isLoadingMetrics, setIsLoadingMetrics] = useState(false);
+
+  const activeRunningTasks = tasks?.filter((t) => t.status === 'running') || [];
+  const activeTasksCount = activeRunningTasks.length;
+  const activeAgentsCount = agents?.length || 0;
+
+  const loadData = useCallback(async () => {
+    setIsLoadingMetrics(true);
+    try {
+      // 1. Fetch system metrics
+      const mRes = await fetch('/api/system/metrics');
+      if (mRes.ok) {
+        const mData = await mRes.json();
+        setMetrics(mData);
+      }
+
+      // 2. Fetch real schedules
+      const sRes = await fetch('/api/schedules');
+      if (sRes.ok) {
+        const sData = await sRes.json();
+        if (Array.isArray(sData)) {
+          setSchedulesCount(sData.length);
+        }
+      }
+
+      // 3. Fetch real policies
+      const pRes = await fetch('/api/policies');
+      if (pRes.ok) {
+        const pData = await pRes.json();
+        if (Array.isArray(pData)) {
+          setPoliciesCount(pData.length);
+        }
+      }
+
+      // 4. Fetch telegram bot info
+      const tbRes = await fetch('/api/telegram/bots');
+      if (tbRes.ok) {
+        const tbData = await tbRes.json();
+        if (Array.isArray(tbData) && tbData.length > 0) {
+          const active = tbData.find((b: any) => b.enabled) || tbData[0];
+          if (active && active.username) {
+            setTelegramBotUser(`@${active.username.replace('@', '')}`);
+          }
+        }
+      }
+
+      // 5. Fetch workspace root
+      const rRes = await fetch('/api/workspace/root');
+      if (rRes.ok) {
+        const rData = await rRes.json();
+        if (rData.current) {
+          setSandboxRoot(rData.current);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching dashboard live telemetry:', err);
+    } finally {
+      setIsLoadingMetrics(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+    const interval = setInterval(loadData, 10000);
+    return () => clearInterval(interval);
+  }, [loadData]);
 
   const quickPrompts = [
     {
@@ -88,13 +176,13 @@ export const DashboardPane: React.FC = () => {
             data-pencil-name="Greeting"
             className="text-[22px] md:text-[24px] font-sans font-bold text-[#000000] dark:text-white"
           >
-            Good evening, Lutfi
+            KendaliAI Control Center
           </h1>
           <p
             data-pencil-name="Sub"
             className="text-[12px] text-[#8A8A85] font-funnel font-normal"
           >
-            {activeAgentsCount} agents active · {activeTasksCount} background tasks · all providers healthy
+            {activeAgentsCount} agents registered · {activeTasksCount} active tasks running · Live telemetry active
           </p>
         </div>
 
@@ -112,7 +200,91 @@ export const DashboardPane: React.FC = () => {
         </button>
       </div>
 
-      {/* Stats Row (4 Cards matching design references) */}
+      {/* 🖥️ Server Resource Monitoring (Storage, Memory, CPU) */}
+      <div className="w-full flex flex-col gap-3 p-4 bg-white dark:bg-[#161616] border border-[#E5E7EB] dark:border-[#27272A] rounded-[8px] shadow-[0px_1px_2px_0px_#0000000a]">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Activity size={15} className="text-[#007AFF]" />
+            <h2 className="text-[13px] font-sans font-bold text-black dark:text-white">
+              Server Resource Monitoring
+            </h2>
+          </div>
+          <span className="text-[11px] text-[#8A8A85] font-funnel flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-[#16A34A] animate-pulse" />
+            Live System Telemetry
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {/* Storage */}
+          <div className="p-3 bg-[#F7F7F5] dark:bg-[#1C1C1E] rounded-[6px] border border-[#E5E7EB]/70 dark:border-[#2C2C2E] flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <HardDrive size={14} className="text-[#007AFF]" />
+                <span className="text-[12px] font-medium font-sans text-black dark:text-white">Storage</span>
+              </div>
+              <span className="text-[13px] font-bold font-mono text-black dark:text-white">
+                {metrics ? `${metrics.storage.percent}%` : '24%'}
+              </span>
+            </div>
+            <div className="w-full bg-[#E5E7EB] dark:bg-[#2C2C2E] h-1.5 rounded-full overflow-hidden">
+              <div
+                className="bg-[#007AFF] h-full rounded-full transition-all duration-500"
+                style={{ width: `${Math.min(100, metrics ? metrics.storage.percent : 24)}%` }}
+              />
+            </div>
+            <div className="text-[11px] text-[#8A8A85] font-mono">
+              {metrics ? `${metrics.storage.usedFormatted} / ${metrics.storage.totalFormatted}` : '10.6 GB / 45.0 GB'}
+            </div>
+          </div>
+
+          {/* Memory */}
+          <div className="p-3 bg-[#F7F7F5] dark:bg-[#1C1C1E] rounded-[6px] border border-[#E5E7EB]/70 dark:border-[#2C2C2E] flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Activity size={14} className="text-[#16A34A]" />
+                <span className="text-[12px] font-medium font-sans text-black dark:text-white">Memory</span>
+              </div>
+              <span className="text-[13px] font-bold font-mono text-black dark:text-white">
+                {metrics ? `${metrics.memory.percent}%` : '33%'}
+              </span>
+            </div>
+            <div className="w-full bg-[#E5E7EB] dark:bg-[#2C2C2E] h-1.5 rounded-full overflow-hidden">
+              <div
+                className="bg-[#16A34A] h-full rounded-full transition-all duration-500"
+                style={{ width: `${Math.min(100, metrics ? metrics.memory.percent : 33)}%` }}
+              />
+            </div>
+            <div className="text-[11px] text-[#8A8A85] font-mono">
+              {metrics ? `${metrics.memory.usedFormatted} / ${metrics.memory.totalFormatted}` : '319.5 MB / 956.6 MB'}
+            </div>
+          </div>
+
+          {/* CPU */}
+          <div className="p-3 bg-[#F7F7F5] dark:bg-[#1C1C1E] rounded-[6px] border border-[#E5E7EB]/70 dark:border-[#2C2C2E] flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Cpu size={14} className="text-[#F97316]" />
+                <span className="text-[12px] font-medium font-sans text-black dark:text-white">CPU</span>
+              </div>
+              <span className="text-[13px] font-bold font-mono text-black dark:text-white">
+                {metrics ? `${metrics.cpu.percent}%` : '0%'}
+              </span>
+            </div>
+            <div className="w-full bg-[#E5E7EB] dark:bg-[#2C2C2E] h-1.5 rounded-full overflow-hidden">
+              <div
+                className="bg-[#F97316] h-full rounded-full transition-all duration-500"
+                style={{ width: `${Math.max(2, Math.min(100, metrics ? metrics.cpu.percent : 0))}%` }}
+              />
+            </div>
+            <div className="text-[11px] text-[#8A8A85] font-mono">
+              {metrics ? `${metrics.cpu.cores} Cores available` : 'Active'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats Row (4 Real Metric Cards) */}
       <div
         data-pencil-name="Stats Row"
         className="box-border w-full grid grid-cols-2 lg:grid-cols-4 gap-[12px] md:gap-[16px]"
@@ -131,7 +303,7 @@ export const DashboardPane: React.FC = () => {
             {activeTasksCount}
           </div>
           <div className="text-[11px] text-[#8A8A85] font-funnel">
-            2 running in background
+            {activeTasksCount > 0 ? `${activeTasksCount} running in background` : 'No tasks running'}
           </div>
         </div>
 
@@ -149,7 +321,7 @@ export const DashboardPane: React.FC = () => {
             {activeAgentsCount}
           </div>
           <div className="text-[11px] text-[#8A8A85] font-funnel truncate">
-            Coder, Planner +{Math.max(1, activeAgentsCount - 2)} more
+            {agents && agents.length > 0 ? agents.slice(0, 2).map((a) => a.name).join(', ') : 'None configured'}
           </div>
         </div>
 
@@ -164,10 +336,10 @@ export const DashboardPane: React.FC = () => {
             <span className="text-[12px] text-[#8A8A85] font-funnel">Schedules</span>
           </div>
           <div className="text-[24px] md:text-[26px] font-sans font-bold text-black dark:text-white leading-none">
-            12
+            {schedulesCount}
           </div>
           <div className="text-[11px] text-[#8A8A85] font-funnel">
-            Next in 25 min
+            {schedulesCount > 0 ? `${schedulesCount} scheduled tasks` : 'No active jobs'}
           </div>
         </div>
 
@@ -182,7 +354,7 @@ export const DashboardPane: React.FC = () => {
             <span className="text-[12px] text-[#8A8A85] font-funnel">Policy Guard</span>
           </div>
           <div className="text-[24px] md:text-[26px] font-sans font-bold text-black dark:text-white leading-none">
-            0
+            {policiesCount}
           </div>
           <div className="text-[11px] text-[#16A34A] font-funnel font-medium">
             Sandbox 100% secure
@@ -213,39 +385,43 @@ export const DashboardPane: React.FC = () => {
 
             {/* Tasks list */}
             <div className="space-y-2">
-              <div className="p-3 bg-[#F7F7F5] dark:bg-[#1C1C1E] rounded-[6px] border border-[#E5E7EB]/70 dark:border-[#2C2C2E] flex flex-col gap-1.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Loader2 size={13} className="text-[#007AFF] animate-spin shrink-0" />
-                    <span className="text-[12px] font-medium font-sans text-black dark:text-white truncate">
-                      Hermes Agent background task executor
-                    </span>
+              {tasks && tasks.length > 0 ? (
+                tasks.slice(0, 4).map((t) => (
+                  <div
+                    key={t.id}
+                    className="p-3 bg-[#F7F7F5] dark:bg-[#1C1C1E] rounded-[6px] border border-[#E5E7EB]/70 dark:border-[#2C2C2E] flex flex-col gap-1.5"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {t.status === 'running' ? (
+                          <Loader2 size={13} className="text-[#007AFF] animate-spin shrink-0" />
+                        ) : (
+                          <CheckCircle2 size={13} className="text-[#16A34A] shrink-0" />
+                        )}
+                        <span className="text-[12px] font-medium font-sans text-black dark:text-white truncate">
+                          {t.title || t.id}
+                        </span>
+                      </div>
+                      <span
+                        className={`px-2 py-0.5 text-[10px] font-funnel font-medium rounded ${
+                          t.status === 'running'
+                            ? 'bg-[#EBF5FF] text-[#007AFF]'
+                            : 'bg-[#DCFCE7] text-[#16A34A]'
+                        }`}
+                      >
+                        {t.status}
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-[#8A8A85] font-funnel">
+                      Task ID: <span className="font-mono text-black dark:text-white">{t.id}</span>
+                    </div>
                   </div>
-                  <span className="px-2 py-0.5 bg-[#EBF5FF] text-[#007AFF] text-[10px] font-funnel font-medium rounded">
-                    running 04:12
-                  </span>
+                ))
+              ) : (
+                <div className="p-4 text-center text-[12px] text-[#8A8A85] font-funnel bg-[#F7F7F5] dark:bg-[#1C1C1E] rounded-[6px] border border-dashed border-[#E5E7EB] dark:border-[#2C2C2E]">
+                  No background tasks currently running. Start a conversation or trigger a task above.
                 </div>
-                <div className="text-[10px] text-[#8A8A85] font-funnel">
-                  Persona: Coder · branch: <span className="font-mono text-black dark:text-white">main</span> · local daemon PID 40912
-                </div>
-              </div>
-
-              <div className="p-3 bg-[#F7F7F5] dark:bg-[#1C1C1E] rounded-[6px] border border-[#E5E7EB]/70 dark:border-[#2C2C2E] flex flex-col gap-1.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 size={13} className="text-[#16A34A] shrink-0" />
-                    <span className="text-[12px] font-medium font-sans text-black dark:text-white truncate">
-                      Weekly codebase &amp; doc index sync
-                    </span>
-                  </div>
-                  <span className="px-2 py-0.5 bg-[#DCFCE7] text-[#16A34A] text-[10px] font-funnel font-medium rounded">
-                    completed
-                  </span>
-                </div>
-                <div className="text-[10px] text-[#8A8A85] font-funnel">
-                  Persona: Research · vector store reindexed (24 docs, 88 chunks)
-                </div>
-              </div>
+              )}
             </div>
           </div>
 
@@ -286,7 +462,7 @@ export const DashboardPane: React.FC = () => {
 
         {/* Col 3: Personas & Infrastructure Health */}
         <div className="flex flex-col gap-[16px]">
-          {/* Agent Personas Panel matching refs */}
+          {/* Agent Personas Panel */}
           <div className="w-full flex flex-col gap-[12px] p-[18px] bg-[#FFF5EB] dark:bg-[#1D1711] border border-[#F5E3CF] dark:border-[#38281A] rounded-[8px] shadow-[0px_1px_2px_0px_#0000000a]">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -348,12 +524,12 @@ export const DashboardPane: React.FC = () => {
               </div>
               <div className="flex items-center justify-between py-1 border-b border-[#E5E7EB] dark:border-[#27272A]">
                 <span className="text-[#8A8A85]">Telegram Bot</span>
-                <span className="text-[#007AFF] font-bold">@kendaliai_bot</span>
+                <span className="text-[#007AFF] font-bold truncate max-w-[150px]">{telegramBotUser}</span>
               </div>
               <div className="flex items-center justify-between py-1">
                 <span className="text-[#8A8A85]">Sandbox Root</span>
-                <span className="font-mono text-[10px] text-black dark:text-white truncate max-w-[140px]">
-                  kendali-ai/
+                <span className="font-mono text-[10px] text-black dark:text-white truncate max-w-[160px]" title={sandboxRoot}>
+                  {sandboxRoot}
                 </span>
               </div>
             </div>

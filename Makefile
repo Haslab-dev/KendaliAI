@@ -8,11 +8,17 @@ VERSION   := $(shell cat VERSION 2>/dev/null || echo "0.2.0")
 PM  := $(shell command -v bun 2>/dev/null || echo "npm")
 AIR := $(shell command -v air 2>/dev/null || echo "$$(go env GOPATH)/bin/air")
 
-.PHONY: all build build-go build-ui dev dev-go dev-ui start start-daemon stop restart status clean lint tidy install air-install bump-version
+.PHONY: all build build-go build-ui dev dev-go dev-ui start start-daemon stop restart status clean lint tidy install air-install bump-version ui-deps
 
 all: build
 
 # ── Build Targets ──
+
+ui-deps:
+	@if [ ! -d "$(UI_DIR)/node_modules" ]; then \
+		echo "📦 Installing UI dependencies with $(PM)..."; \
+		cd $(UI_DIR) && $(PM) install; \
+	fi
 
 build: build-ui build-go
 	@echo "✅ KendaliAI full build complete: $(BUILD_DIR)/$(BINARY)"
@@ -21,14 +27,14 @@ build-go:
 	@mkdir -p $(BUILD_DIR)
 	go build -o $(BUILD_DIR)/$(BINARY) $(CMD)
 
-build-ui:
+build-ui: ui-deps
 	@echo "📦 Building React Vite UI with $(PM)..."
 	@cd $(UI_DIR) && $(PM) run build
 
 # ── Development Targets (Live Hot-Reload) ──
 
 # Full-stack dev mode: Air (Go live-reload :8080) + Vite (UI live-reload :5173)
-dev:
+dev: ui-deps
 	@echo "🚀 Starting KendaliAI Full-Stack Dev (Air + Vite)..."
 	@$(BUILD_DIR)/$(BINARY) stop >/dev/null 2>&1 || true
 	@trap 'kill 0' EXIT; $(AIR) & (cd $(UI_DIR) && $(PM) run dev)
@@ -40,7 +46,7 @@ dev-go:
 	@$(AIR)
 
 # Frontend only with Vite hot-reload
-dev-ui:
+dev-ui: ui-deps
 	@echo "⚡ Starting React Vite frontend..."
 	@cd $(UI_DIR) && $(PM) run dev
 

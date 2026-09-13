@@ -39,8 +39,12 @@ func (g *Generator) Generate(req GenerateRequest) (*SkillPackage, error) {
 
 	req.SkillID = id
 
-	storageDir := filepath.Join(req.WorkspaceRoot, "storage", "skills", id)
-	os.MkdirAll(storageDir, 0755)
+	homeDir, _ := os.UserHomeDir()
+	workspacesRoot := filepath.Join(homeDir, "workspaces")
+	_ = os.MkdirAll(workspacesRoot, 0755)
+
+	storageDir := filepath.Join(workspacesRoot, "skills", id)
+	_ = os.MkdirAll(storageDir, 0755)
 
 	spec := SkillSpec{
 		ID:          id,
@@ -133,10 +137,13 @@ func (g *Generator) buildPrompt(req GenerateRequest) string {
 		}
 		sb.WriteString("\n")
 	}
+	homeDir, _ := os.UserHomeDir()
+	workspacesRoot := filepath.Join(homeDir, "workspaces")
+	storagePath := filepath.Join(workspacesRoot, "skills", req.SkillID)
 	sb.WriteString("File Storage:\n\n")
-	sb.WriteString(fmt.Sprintf("- ALL files you create MUST be saved to: storage/skills/%s/\n", req.SkillID))
+	sb.WriteString(fmt.Sprintf("- ALL files you create MUST be saved to: %s or ~/workspaces/\n", storagePath))
 	sb.WriteString("- Use this directory for tasks, notes, reports, transactions, or any skill-related data.\n")
-	sb.WriteString("- NEVER write skill documents outside this directory.\n\n")
+	sb.WriteString("- CRITICAL: NEVER write, edit, or create files inside the KendaliAI application codebase (kendali-ai). DO NOT ever change this repo.\n\n")
 	sb.WriteString("Guidelines:\n\n")
 	sb.WriteString("- Provide accurate, up-to-date information.\n")
 	sb.WriteString("- Structure answers clearly with steps when appropriate.\n")

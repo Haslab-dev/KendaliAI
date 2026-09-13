@@ -147,6 +147,7 @@ func StreamOpenAICompatible(
 	var accumulatedContent strings.Builder
 	var accumulatedThought strings.Builder
 	var inThinkingTag bool
+	var inToolCallTag bool
 	var inputTokens, outputTokens int
 	var finishReason string
 
@@ -246,7 +247,7 @@ func StreamOpenAICompatible(
 							acc.args.WriteString(tcd.Function.Arguments)
 						}
 
-						// 3. Visible Content Delta & In-Band <think> Healing
+						// 3. Visible Content Delta & In-Band <think> Healing & Tool-Call Tag Suppression
 						if delta.Content != "" {
 							text := delta.Content
 
@@ -254,7 +255,7 @@ func StreamOpenAICompatible(
 								parts := strings.SplitN(text, "<think>", 2)
 								if len(parts[0]) > 0 {
 									accumulatedContent.WriteString(parts[0])
-									if callbacks.OnText != nil {
+									if callbacks.OnText != nil && !inToolCallTag {
 										callbacks.OnText(parts[0])
 									}
 								}
@@ -274,7 +275,7 @@ func StreamOpenAICompatible(
 									inThinkingTag = false
 									if len(parts[1]) > 0 {
 										accumulatedContent.WriteString(parts[1])
-										if callbacks.OnText != nil {
+										if callbacks.OnText != nil && !inToolCallTag {
 											callbacks.OnText(parts[1])
 										}
 									}
@@ -286,8 +287,21 @@ func StreamOpenAICompatible(
 								}
 							} else {
 								accumulatedContent.WriteString(text)
-								if callbacks.OnText != nil {
-									callbacks.OnText(text)
+
+								// Check for in-band tool call markers (DSML or XML)
+								if !inToolCallTag && (strings.Contains(text, "<||DSML") || strings.Contains(text, "<｜｜DSML") || strings.Contains(text, "<tool_call>")) {
+									inToolCallTag = true
+								}
+
+								if inToolCallTag {
+									// Check for closing tool call tags
+									if strings.Contains(text, "</||DSML") || strings.Contains(text, "</｜｜DSML") || strings.Contains(text, "</tool_call>") {
+										inToolCallTag = false
+									}
+								} else {
+									if callbacks.OnText != nil {
+										callbacks.OnText(text)
+									}
 								}
 							}
 						}

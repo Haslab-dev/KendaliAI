@@ -267,6 +267,11 @@ If the task is complete and NO tools are needed:
    - Each conversation ISOLATED. Do NOT reference previous chat turns unless explicitly asked.
    - Start fresh with only the ACTIVE GOAL as context.
 
+12. WORKSPACE DESTINATION & REPO IMMUTABILITY (CRITICAL):
+   - NEVER create, edit, or delete files inside the KendaliAI application codebase (kendali-ai).
+   - NEVER touch or modify this repository unless explicitly instructed by the user to develop KendaliAI itself.
+   - When creating user files, projects, scratchpads, or skills (e.g. via create_skill), ALWAYS place them in ~/workspaces.
+
 ---
 
 ## CONTEXT-AWARE SHORT-CIRCUIT

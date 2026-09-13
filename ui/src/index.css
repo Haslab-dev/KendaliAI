@@ -78,3 +78,97 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* Markdown Content Typography */
+.markdown-content h1 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+  line-height: 1.4;
+  color: rgb(var(--c-hi));
+}
+.markdown-content h2 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-top: 0.85rem;
+  margin-bottom: 0.4rem;
+  line-height: 1.4;
+  color: rgb(var(--c-hi));
+}
+.markdown-content h3 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-top: 0.75rem;
+  margin-bottom: 0.35rem;
+  line-height: 1.4;
+  color: rgb(var(--c-hi));
+}
+.markdown-content h4, .markdown-content h5, .markdown-content h6 {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-top: 0.5rem;
+  margin-bottom: 0.25rem;
+  color: rgb(var(--c-hi));
+}
+.markdown-content p {
+  margin-bottom: 0.65rem;
+  line-height: 1.6;
+}
+.markdown-content p:last-child {
+  margin-bottom: 0;
+}
+.markdown-content ul {
+  list-style-type: disc;
+  padding-left: 1.35rem;
+  margin-top: 0.35rem;
+  margin-bottom: 0.65rem;
+}
+.markdown-content ol {
+  list-style-type: decimal;
+  padding-left: 1.35rem;
+  margin-top: 0.35rem;
+  margin-bottom: 0.65rem;
+}
+.markdown-content li {
+  margin-bottom: 0.25rem;
+  line-height: 1.5;
+}
+.markdown-content blockquote {
+  border-left: 3px solid #007AFF;
+  padding-left: 0.85rem;
+  margin: 0.65rem 0;
+  color: rgb(var(--c-mid));
+  font-style: italic;
+}
+.markdown-content hr {
+  border: 0;
+  border-top: 1px solid rgb(var(--c-line));
+  margin: 1rem 0;
+}
+.markdown-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+  font-size: 0.8rem;
+  border: 1px solid rgb(var(--c-line));
+}
+.markdown-content th {
+  background: rgb(var(--c-raised));
+  padding: 0.4rem 0.6rem;
+  font-weight: 600;
+  text-align: left;
+  border: 1px solid rgb(var(--c-line));
+}
+.markdown-content td {
+  padding: 0.35rem 0.6rem;
+  border: 1px solid rgb(var(--c-line));
+}
+.markdown-content :not(pre) > code {
+  background: rgb(var(--c-line) / 0.5);
+  padding: 0.15rem 0.35rem;
+  border-radius: 0.25rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.85em;
+  color: rgb(var(--c-hi));
+}

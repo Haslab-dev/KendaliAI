@@ -1013,19 +1013,29 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 				}
 				name, _ := args["name"].(string)
 				desc, _ := args["description"].(string)
-				respStr, _ := args["responsibilities"].(string)
 
 				if name == "" {
 					return "error: 'name' is required"
 				}
 
 				var responsibilities []string
-				for _, r := range strings.Split(respStr, ",") {
-					r = strings.TrimSpace(r)
-					if r != "" {
-						responsibilities = append(responsibilities, r)
+				if respSlice, ok := args["responsibilities"].([]interface{}); ok {
+					for _, r := range respSlice {
+						if s := strings.TrimSpace(fmt.Sprint(r)); s != "" {
+							responsibilities = append(responsibilities, s)
+						}
+					}
+				} else if respStr, ok := args["responsibilities"].(string); ok && respStr != "" {
+					for _, r := range strings.Split(respStr, ",") {
+						if s := strings.TrimSpace(r); s != "" {
+							responsibilities = append(responsibilities, s)
+						}
 					}
 				}
+
+				homeDir, _ := os.UserHomeDir()
+				workspacesRoot := filepath.Join(homeDir, "workspaces")
+				_ = os.MkdirAll(workspacesRoot, 0755)
 
 				gen := skills.NewGenerator(skills.DefaultManager)
 				pkg, err := gen.Generate(skills.GenerateRequest{
@@ -1033,7 +1043,7 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 					Description:      desc,
 					Responsibilities: responsibilities,
 					Research:         false,
-					WorkspaceRoot:    workspaceRoot,
+					WorkspaceRoot:    workspacesRoot,
 				})
 				if err != nil {
 					return fmt.Sprintf("error creating skill: %v", err)
@@ -1349,8 +1359,11 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 				scope, _ := args["scope"].(string)
 				sysPrompt, _ := args["system_prompt"].(string)
 
+				if id == "" && name != "" {
+					id = strings.ToLower(strings.ReplaceAll(strings.TrimSpace(name), " ", "-"))
+				}
 				if id == "" {
-					return "error: 'id' is required (kebab-case identifier)"
+					return "error: 'id' or 'name' is required (kebab-case identifier)"
 				}
 				if name == "" {
 					name = id

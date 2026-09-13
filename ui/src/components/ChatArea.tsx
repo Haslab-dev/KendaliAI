@@ -4,7 +4,7 @@ import {
   ChevronDown, ChevronUp, Search, Brain, Zap, Settings, Command, AlertCircle,
   CornerDownLeft, Terminal, Sparkles, Smartphone, Database, RefreshCw, FileText, X,
   ShieldCheck, GitFork, Code2, Clock, Bell, ExternalLink, Activity, BookOpen,
-  Folder, Upload, Menu, Bot, Feather, Cpu, Send
+  Folder, Upload, Menu, Bot, Feather, Cpu, Send, MessageSquare
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { navigate } from '../router';
@@ -13,6 +13,7 @@ import { ToolExecutionCard } from './ToolExecutionCard';
 import { InstallPromptModal } from './InstallPromptModal';
 import { GrokAvatar } from './GrokAvatar';
 import { Sidebar } from './Sidebar';
+import { MarkdownView } from './MarkdownView';
 import { isReasoningModel, SessionMessage } from '../types';
 
 interface SlashCommand {
@@ -641,6 +642,12 @@ export const ChatArea: React.FC = () => {
             <span className="hidden xs:inline-block text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.2 rounded-full font-bold font-sans uppercase tracking-wider bg-blue-50 dark:bg-blue-950/40 text-[#007AFF] border border-blue-100 dark:border-blue-900/40 shrink-0">
               {activeAgent?.role || activeAgent?.department || 'Specialist'}
             </span>
+            {currentSession?.title && currentSession.title !== 'New Chat' && (
+              <span className="hidden md:inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-mono bg-[#F7F7F5] dark:bg-[#1F1F1F] text-[#8A8A85] border border-[#E5E7EB] dark:border-[#2C2C2E] truncate max-w-[160px]" title={`Session: ${currentSession.title}`}>
+                <MessageSquare size={9} className="shrink-0" />
+                <span className="truncate">{currentSession.title}</span>
+              </span>
+            )}
           </div>
           <div className="text-[11px] leading-tight text-[#8A8A85] font-sans truncate flex items-center gap-1 mt-0.5">
             <span className="text-emerald-600 dark:text-emerald-400 font-medium">● Online</span>
@@ -1342,92 +1349,6 @@ const ThoughtProcessAccordion: React.FC<{ thought: string; isStreaming?: boolean
   );
 };
 
-// Markdown Renderer with Code Block formatting & Copy
-const MarkdownRenderer: React.FC<{ text: string; isStreaming?: boolean }> = ({ text, isStreaming = false }) => {
-  if (!text) return null;
-
-  // If streaming and text has an unclosed code block fence, temporarily close it for rendering
-  // so the user sees a smoothly growing code block instead of raw markdown text flashing.
-  let formattedText = text;
-  if (isStreaming) {
-    const codeFences = (text.match(/```/g) || []).length;
-    if (codeFences % 2 !== 0) {
-      formattedText = text + '\n```';
-    }
-  }
-
-  const parts = formattedText.split(/(```[\s\S]*?```)/g);
-
-  return (
-    <div className="space-y-2">
-      {parts.map((part, index) => {
-        if (part.startsWith('```') && part.endsWith('```')) {
-          const firstLineEnd = part.indexOf('\n');
-          const lang = part.slice(3, firstLineEnd).trim();
-          const code = part.slice(firstLineEnd + 1, -3);
-
-          return <CodeBlock key={index} code={code} language={lang} />;
-        }
-
-        return (
-          <p key={index} className="whitespace-pre-wrap">
-            {renderInlineMarkdown(part)}
-          </p>
-        );
-      })}
-    </div>
-  );
-};
-
-const CodeBlock: React.FC<{ code: string; language: string }> = ({ code, language }) => {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <div className="rounded-[8px] border border-[#E5E7EB] dark:border-[#2E2E2E] bg-[#0F0F0F] text-[#FFFFFF] overflow-hidden my-3 text-xs">
-      <div className="flex items-center justify-between px-3.5 py-1.5 bg-[#1F1F1F] border-b border-[#2E2E2E] text-[#8A8A85] font-mono text-[11px]">
-        <span>{language || 'code'}</span>
-        <button
-          onClick={handleCopy}
-          className="flex items-center gap-1 hover:text-[#FFFFFF] transition-colors cursor-pointer"
-        >
-          {copied ? <Check size={12} className="text-[#16A34A]" /> : <Copy size={12} />}
-          <span>{copied ? 'Copied' : 'Copy'}</span>
-        </button>
-      </div>
-      <pre className="p-3 font-mono text-[#F7F7F5] overflow-x-auto text-[12px] leading-relaxed">
-        <code>{code}</code>
-      </pre>
-    </div>
-  );
-};
-
-function renderInlineMarkdown(text: string): React.ReactNode {
-  const chunks = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
-  return chunks.map((chunk, i) => {
-    if (chunk.startsWith('`') && chunk.endsWith('`')) {
-      return (
-        <code key={i} className="bg-[#E5E7EB] dark:bg-[#2C2C2E] text-[#0F0F0F] dark:text-[#E5E7EB] px-1.5 py-0.5 rounded text-xs font-mono">
-          {chunk.slice(1, -1)}
-        </code>
-      );
-    }
-    if (chunk.startsWith('**') && chunk.endsWith('**')) {
-      return (
-        <strong key={i} className="font-bold text-[#000000] dark:text-white">
-          {chunk.slice(2, -2)}
-        </strong>
-      );
-    }
-    return chunk;
-  });
-}
-
 // Optimized, Memoized Chat Message Item
 // Only the active streaming message re-renders on token deltas; previous messages are untouched.
 interface ChatMessageItemProps {
@@ -1487,7 +1408,7 @@ const ChatMessageItem = React.memo<ChatMessageItemProps>(({
 
         {/* Message Content with Markdown */}
         <div className="text-[13px]/[21px] text-[#000000] dark:text-[#E5E7EB] font-geist leading-relaxed break-words">
-          <MarkdownRenderer text={msg.content} isStreaming={isCurrentStreaming} />
+          <MarkdownView content={msg.content} isStreaming={isCurrentStreaming} />
           {isCurrentStreaming && msg.content && (
             <span className="inline-block w-1.5 h-3.5 bg-[#007AFF] animate-pulse ml-1 align-middle rounded-[1px]" />
           )}

@@ -83,7 +83,7 @@ export const App: React.FC = () => {
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-app text-hi font-sans">
+    <div className="flex h-screen w-screen max-h-screen overflow-hidden bg-app text-hi font-sans">
       {/* Desktop Icon Rail (hidden on mobile — BottomNav takes over) */}
       <IconRail />
 
@@ -91,17 +91,17 @@ export const App: React.FC = () => {
       {route === 'chat' || route === 'dashboard' ? (
         <>
           {/* Session sidebar — desktop only */}
-          <div className="hidden md:flex h-full">
+          <div className="hidden md:flex h-full shrink-0">
             <Sidebar />
           </div>
 
           {/* Central Workspace Canvas */}
-          <div className="flex-1 flex flex-col h-full min-w-0 relative overflow-hidden bg-app pb-[60px] md:pb-0">
+          <div className="flex-1 flex flex-col h-full min-h-0 min-w-0 relative overflow-hidden bg-app pb-[60px] md:pb-0">
             {route === 'chat' ? <ChatArea /> : <PaneHost route="dashboard" />}
           </div>
         </>
       ) : (
-        <div className="flex-1 flex h-full min-w-0 pb-[60px] md:pb-0">
+        <div className="flex-1 flex flex-col h-full min-h-0 min-w-0 relative overflow-hidden pb-[60px] md:pb-0">
           <PaneHost route={route} />
         </div>
       )}

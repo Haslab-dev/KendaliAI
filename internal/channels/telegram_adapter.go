@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"log"
 	"regexp"
 	"strconv"
@@ -269,8 +270,8 @@ func (a *TelegramAdapter) listenGlobalEvents() {
 		case messaging.EventMessageCreated:
 			// If a user sent a message from Web in this session, mirror it to Telegram
 			if msgPayload, ok := ev.Payload.(gateway.SessionMessage); ok && msgPayload.Role == "user" {
-				notice := fmt.Sprintf("💻 *[Web User]:*\n%s", msgPayload.Content)
-				_, _ = a.sendTelegramMessage(runner.Bot, target.ChatID, target.MessageThreadID, notice, "Markdown")
+				notice := fmt.Sprintf("💻 <b>[Web User]:</b>\n%s", FormatMarkdownForTelegram(msgPayload.Content))
+				_, _ = a.sendTelegramMessage(runner.Bot, target.ChatID, target.MessageThreadID, notice, "HTML")
 			}
 
 		case messaging.EventAgentCompleted:
@@ -363,6 +364,108 @@ func (a *TelegramAdapter) deleteTelegramMessage(bot *tgbotapi.BotAPI, chatID int
 	return err
 }
 
+var (
+	reDSMLSentence = regexp.MustCompile(`<｜(?:begin|end) of sentence｜>`)
+	reDSMLThought  = regexp.MustCompile(`(?s)<｜thought｜>.*?<\/｜thought｜>`)
+	reDSMLUnclosed = regexp.MustCompile(`(?s)<｜thought｜>.*`)
+	reDSMLTags     = regexp.MustCompile(`<｜DSML.*?｜>`)
+	reToolCalls    = regexp.MustCompile(`(?s)<tool_call>.*?<\/tool_call>`)
+
+	reCodeBlock = regexp.MustCompile("(?s)```(\\w*)\\n?(.*?)```")
+	reInlineCode = regexp.MustCompile("`([^`\\n]+)`")
+	reHeadings   = regexp.MustCompile(`(?m)^#{1,6}\s+(.+)$`)
+	reBold       = regexp.MustCompile(`\*\*(.+?)\*\*`)
+	reStrike     = regexp.MustCompile(`~~(.+?)~~`)
+	reLink       = regexp.MustCompile(`\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)`)
+	reBullet     = regexp.MustCompile(`(?m)^[\*\-]\s+`)
+)
+
+// SanitizeModelArtifacts strips internal model tokens, DSML thinking blocks, and raw XML tool_calls.
+func SanitizeModelArtifacts(raw string) string {
+	cleaned := reDSMLSentence.ReplaceAllString(raw, "")
+	cleaned = reDSMLThought.ReplaceAllString(cleaned, "")
+	cleaned = reDSMLUnclosed.ReplaceAllString(cleaned, "")
+	cleaned = reDSMLTags.ReplaceAllString(cleaned, "")
+	cleaned = reToolCalls.ReplaceAllString(cleaned, "")
+	return strings.TrimSpace(cleaned)
+}
+
+// FormatMarkdownForTelegram transforms standard Markdown into Telegram-compatible HTML tags (<b>, <i>, <code>, <pre>).
+func FormatMarkdownForTelegram(raw string) string {
+	cleaned := SanitizeModelArtifacts(raw)
+	if cleaned == "" {
+		return ""
+	}
+
+	// Auto-close any trailing unclosed code fences to prevent raw unformatted dumps
+	fenceCount := strings.Count(cleaned, "```")
+	if fenceCount%2 != 0 {
+		cleaned += "\n```"
+	}
+
+	// 1. Extract code blocks first to protect code from escaping and markdown formatting
+	var codeBlocks []string
+	cleaned = reCodeBlock.ReplaceAllStringFunc(cleaned, func(match string) string {
+		sub := reCodeBlock.FindStringSubmatch(match)
+		code := ""
+		if len(sub) > 2 {
+			code = sub[2]
+		}
+		escapedCode := html.EscapeString(code)
+		block := fmt.Sprintf("<pre><code>%s</code></pre>", escapedCode)
+		idx := len(codeBlocks)
+		codeBlocks = append(codeBlocks, block)
+		return fmt.Sprintf("\x00CB_%d\x00", idx)
+	})
+
+	// 2. Extract inline code
+	var inlineCodes []string
+	cleaned = reInlineCode.ReplaceAllStringFunc(cleaned, func(match string) string {
+		sub := reInlineCode.FindStringSubmatch(match)
+		code := ""
+		if len(sub) > 1 {
+			code = sub[1]
+		}
+		escapedCode := html.EscapeString(code)
+		inline := fmt.Sprintf("<code>%s</code>", escapedCode)
+		idx := len(inlineCodes)
+		inlineCodes = append(inlineCodes, inline)
+		return fmt.Sprintf("\x00IC_%d\x00", idx)
+	})
+
+	// 3. HTML-escape all text outside code blocks
+	cleaned = html.EscapeString(cleaned)
+
+	// 4. Convert markdown headings -> <b>Title</b>
+	cleaned = reHeadings.ReplaceAllString(cleaned, "<b>$1</b>")
+
+	// 5. Convert bold **text** -> <b>text</b>
+	cleaned = reBold.ReplaceAllString(cleaned, "<b>$1</b>")
+
+	// 6. Convert bullet lists -> • item
+	cleaned = reBullet.ReplaceAllString(cleaned, "• ")
+
+	// 7. Convert strikethrough ~~text~~ -> <s>text</s>
+	cleaned = reStrike.ReplaceAllString(cleaned, "<s>$1</s>")
+
+	// 8. Convert links [title](url) -> <a href="url">title</a>
+	cleaned = reLink.ReplaceAllString(cleaned, `<a href="$2">$1</a>`)
+
+	// 9. Restore inline code
+	for idx, inline := range inlineCodes {
+		placeholder := fmt.Sprintf("\x00IC_%d\x00", idx)
+		cleaned = strings.ReplaceAll(cleaned, placeholder, inline)
+	}
+
+	// 10. Restore code blocks
+	for idx, block := range codeBlocks {
+		placeholder := fmt.Sprintf("\x00CB_%d\x00", idx)
+		cleaned = strings.ReplaceAll(cleaned, placeholder, block)
+	}
+
+	return cleaned
+}
+
 func escapeMarkdown(s string) string {
 	replacer := strings.NewReplacer(
 		"_", "\\_",
@@ -374,21 +477,22 @@ func escapeMarkdown(s string) string {
 }
 
 func (a *TelegramAdapter) sendTelegramChunks(bot *tgbotapi.BotAPI, chatID int64, threadID int, text string) {
+	formatted := FormatMarkdownForTelegram(text)
 	const maxLen = 4000
-	for len(text) > 0 {
-		if len(text) <= maxLen {
-			_, _ = a.sendTelegramMessage(bot, chatID, threadID, text, "")
+	for len(formatted) > 0 {
+		if len(formatted) <= maxLen {
+			_, _ = a.sendTelegramMessage(bot, chatID, threadID, formatted, "HTML")
 			break
 		}
-		chunk := text[:maxLen]
+		chunk := formatted[:maxLen]
 		lastIdx := strings.LastIndexAny(chunk, "\n ")
 		if lastIdx > 2000 {
-			chunk = text[:lastIdx]
-			text = text[lastIdx+1:]
+			chunk = formatted[:lastIdx]
+			formatted = formatted[lastIdx+1:]
 		} else {
-			text = text[maxLen:]
+			formatted = formatted[maxLen:]
 		}
-		_, _ = a.sendTelegramMessage(bot, chatID, threadID, chunk, "")
+		_, _ = a.sendTelegramMessage(bot, chatID, threadID, chunk, "HTML")
 	}
 }
 
@@ -894,10 +998,11 @@ func (a *TelegramAdapter) handleRawTelegramMessage(runner *BotRunner, msg *RawTe
 			case messaging.EventAgentCompleted:
 				if payload, ok := ev.Payload.(gateway.SessionMessage); ok {
 					content := payload.Content
-					if len(content) <= 4000 {
-						err := a.editTelegramMessage(runner.Bot, chatID, sentMsgID, content, "")
+					formatted := FormatMarkdownForTelegram(content)
+					if len(formatted) <= 4000 {
+						err := a.editTelegramMessage(runner.Bot, chatID, sentMsgID, formatted, "HTML")
 						if err != nil {
-							_, _ = a.sendTelegramMessage(runner.Bot, chatID, threadID, content, "")
+							_, _ = a.sendTelegramMessage(runner.Bot, chatID, threadID, formatted, "HTML")
 						}
 					} else {
 						_ = a.deleteTelegramMessage(runner.Bot, chatID, sentMsgID)

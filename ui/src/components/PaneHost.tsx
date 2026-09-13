@@ -35,6 +35,7 @@ import { PluginsPane } from '../panes/plugins';
 import { DashboardPane } from '../panes/dashboard';
 import { AgencyHQPane } from '../panes/agency';
 import { LogsStreamingView } from './LogsStreamingView';
+import { TerminalPane } from '../panes/terminal';
 import { Layers, Building2 } from 'lucide-react';
 
 const PANES: Record<
@@ -44,6 +45,7 @@ const PANES: Record<
   dashboard: { label: 'Dashboard', icon: Layers },
   agency: { label: 'Agency HQ', icon: Building2 },
   editor: { label: 'Files & Code Editor', icon: Code2 },
+  terminal: { label: 'Shell Terminal', icon: Terminal },
   worktrees: { label: 'Git Worktrees', icon: GitFork },
   scheduler: { label: 'Scheduler & Cron', icon: Clock },
   plugins: { label: 'Plugins & Extensions', icon: Puzzle },
@@ -74,6 +76,7 @@ export const PaneHost: React.FC<{ route: Exclude<RouteName, 'chat'> }> = ({ rout
     'dashboard',
     'agency',
     'editor',
+    'terminal',
     'worktrees',
     'scheduler',
     'plugins',
@@ -102,27 +105,39 @@ export const PaneHost: React.FC<{ route: Exclude<RouteName, 'chat'> }> = ({ rout
           <h1 className="text-sm font-bold text-hi">{meta.label}</h1>
         </div>
       )}
-      <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col">
-        {/* Inner padding for supplementary panes; full-bleed for dedicated reference layouts */}
-        <div className={isFullBleed ? 'flex-1 flex flex-col' : 'flex-1 flex flex-col px-4 py-4 md:px-6 md:py-6'}>
-          {route === 'dashboard' && <DashboardPane />}
-          {route === 'agency' && <AgencyHQPane />}
-          {route === 'editor' && <EditorPane />}
-          {route === 'worktrees' && <WorktreesPane />}
-          {route === 'scheduler' && <SchedulerPane />}
-          {route === 'plugins' && <PluginsPane />}
-          {route === 'providers' && <ProvidersPane />}
-          {route === 'agents' && <AgentsPane />}
-          {route === 'logs' && <LogsStreamingView onClose={() => navigate('chat')} />}
-          {route === 'sessions' && <SessionsPane onSelectSession={openInChat} />}
-          {route === 'docs' && <DocsPane onChatWithDoc={() => navigate('chat')} />}
-          {route === 'mcps' && <McpsPane />}
-          {route === 'skills' && <SkillsPane />}
-          {route === 'tools' && <ToolsPane />}
-          {route === 'telegram' && <TelegramPane />}
-          {route === 'settings' && <SettingsPane />}
+      {route === 'editor' ? (
+        <div className="flex-1 min-h-0 h-full overflow-hidden flex flex-col">
+          <EditorPane />
         </div>
-      </div>
+      ) : route === 'terminal' ? (
+        <div className="flex-1 min-h-0 h-full overflow-hidden flex flex-col">
+          <TerminalPane />
+        </div>
+      ) : route === 'logs' ? (
+        <div className="flex-1 min-h-0 h-full overflow-hidden flex flex-col">
+          <LogsStreamingView onClose={() => navigate('chat')} />
+        </div>
+      ) : (
+        <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar flex flex-col">
+          {/* Inner padding for supplementary panes; full-bleed for dedicated reference layouts */}
+          <div className={isFullBleed ? 'flex-1 flex flex-col min-h-0' : 'flex-1 flex flex-col px-4 py-4 md:px-6 md:py-6'}>
+            {route === 'dashboard' && <DashboardPane />}
+            {route === 'agency' && <AgencyHQPane />}
+            {route === 'worktrees' && <WorktreesPane />}
+            {route === 'scheduler' && <SchedulerPane />}
+            {route === 'plugins' && <PluginsPane />}
+            {route === 'providers' && <ProvidersPane />}
+            {route === 'agents' && <AgentsPane />}
+            {route === 'sessions' && <SessionsPane onSelectSession={openInChat} />}
+            {route === 'docs' && <DocsPane onChatWithDoc={() => navigate('chat')} />}
+            {route === 'mcps' && <McpsPane />}
+            {route === 'skills' && <SkillsPane />}
+            {route === 'tools' && <ToolsPane />}
+            {route === 'telegram' && <TelegramPane />}
+            {route === 'settings' && <SettingsPane />}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

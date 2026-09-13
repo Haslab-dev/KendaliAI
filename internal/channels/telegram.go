@@ -153,21 +153,31 @@ User message: %s`, historyContext, upd.Message.Text)
 
 				session.DefaultBuffer.Add(chatID, "assistant", replyText)
 
-				// Chunk the response to avoid Telegram MESSAGE_TOO_LONG
-				chunks := chunkText(replyText, telegramMaxLength)
+				// Format markdown into Telegram HTML and chunk the response
+				formattedResp := FormatMarkdownForTelegram(replyText)
+				chunks := chunkText(formattedResp, telegramMaxLength)
 
 				// Edit the "Thinking..." message with the first chunk
 				editMsg := tgbotapi.NewEditMessageText(upd.Message.Chat.ID, tMsg.MessageID, chunks[0])
+				editMsg.ParseMode = "HTML"
 				if _, err := bot.Send(editMsg); err != nil {
-					log.Printf("Error editing telegram message: %v", err)
+					// Fallback to plain text if HTML parse fails
+					editMsg.ParseMode = ""
+					if _, err2 := bot.Send(editMsg); err2 != nil {
+						log.Printf("Error editing telegram message: %v", err2)
+					}
 				}
 
 				// Send remaining chunks as new messages
 				for i := 1; i < len(chunks); i++ {
 					followUp := tgbotapi.NewMessage(upd.Message.Chat.ID, chunks[i])
+					followUp.ParseMode = "HTML"
 					followUp.ReplyToMessageID = tMsg.MessageID
 					if _, err := bot.Send(followUp); err != nil {
-						log.Printf("Error sending follow-up message chunk %d: %v", i+1, err)
+						followUp.ParseMode = ""
+						if _, err2 := bot.Send(followUp); err2 != nil {
+							log.Printf("Error sending follow-up message chunk %d: %v", i+1, err2)
+						}
 					}
 				}
 			}(update, thinkingMsg)

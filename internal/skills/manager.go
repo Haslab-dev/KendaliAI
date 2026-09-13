@@ -19,7 +19,8 @@ var DefaultRouter *Router
 
 func Init() {
 	homeDir, _ := os.UserHomeDir()
-	basePath := filepath.Join(homeDir, ".kendaliai", "skills")
+	basePath := filepath.Join(homeDir, "workspaces", "skills")
+	_ = os.MkdirAll(basePath, 0755)
 	DefaultManager = NewManager(basePath)
 	DefaultRouter = NewRouter(DefaultManager)
 }
@@ -112,7 +113,14 @@ func (m *Manager) Get(id string) (*SkillPackage, error) {
 
 	data, err := os.ReadFile(specPath)
 	if err != nil {
-		return nil, fmt.Errorf("skill not found: %s", id)
+		// Fallback check legacy ~/.kendaliai/skills/generated/<id>
+		homeDir, _ := os.UserHomeDir()
+		legacyDir := filepath.Join(homeDir, ".kendaliai", "skills", "generated", id)
+		data, err = os.ReadFile(filepath.Join(legacyDir, "skill.yaml"))
+		if err != nil {
+			return nil, fmt.Errorf("skill not found: %s", id)
+		}
+		dir = legacyDir
 	}
 
 	var spec SkillSpec
@@ -176,31 +184,39 @@ func (m *Manager) Delete(id string) error {
 }
 
 func (m *Manager) List() ([]SkillSpec, error) {
-	genDir := filepath.Join(m.basePath, "generated")
-	if _, err := os.Stat(genDir); os.IsNotExist(err) {
-		return nil, nil
-	}
-
-	entries, err := os.ReadDir(genDir)
-	if err != nil {
-		return nil, fmt.Errorf("read generated dir: %w", err)
-	}
-
+	seen := make(map[string]bool)
 	var specs []SkillSpec
-	for _, e := range entries {
-		if !e.IsDir() {
+
+	homeDir, _ := os.UserHomeDir()
+	dirs := []string{
+		filepath.Join(m.basePath, "generated"),
+		filepath.Join(homeDir, ".kendaliai", "skills", "generated"),
+	}
+
+	for _, genDir := range dirs {
+		if _, err := os.Stat(genDir); os.IsNotExist(err) {
 			continue
 		}
-		specPath := filepath.Join(genDir, e.Name(), "skill.yaml")
-		data, err := os.ReadFile(specPath)
+		entries, err := os.ReadDir(genDir)
 		if err != nil {
 			continue
 		}
-		var spec SkillSpec
-		if err := yaml.Unmarshal(data, &spec); err != nil {
-			continue
+		for _, e := range entries {
+			if !e.IsDir() || seen[e.Name()] {
+				continue
+			}
+			specPath := filepath.Join(genDir, e.Name(), "skill.yaml")
+			data, err := os.ReadFile(specPath)
+			if err != nil {
+				continue
+			}
+			var spec SkillSpec
+			if err := yaml.Unmarshal(data, &spec); err != nil {
+				continue
+			}
+			seen[e.Name()] = true
+			specs = append(specs, spec)
 		}
-		specs = append(specs, spec)
 	}
 
 	sort.Slice(specs, func(i, j int) bool {

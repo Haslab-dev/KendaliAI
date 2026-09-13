@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -95,5 +96,73 @@ func TestParseActionPlan_MultiLineHeredoc(t *testing.T) {
 	}
 	if reqs[0].Name != "exec" {
 		t.Errorf("expected tool name 'exec', got '%s'", reqs[0].Name)
+	}
+}
+
+func TestParseActionPlan_DSML(t *testing.T) {
+	input := `<｜｜DSML｜｜ calls>
+<｜｜DSML｜｜ invoke name="exec">
+<｜｜DSML｜｜ parameter name="command" string="true">ls -la && echo "--- personal/ ---"</｜｜DSML｜｜ parameter>
+</｜｜DSML｜｜ invoke>
+</｜｜DSML｜｜ calls>`
+
+	reqs := ParseActionPlan(input)
+	if len(reqs) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(reqs))
+	}
+	if reqs[0].Name != "exec" {
+		t.Errorf("expected tool name 'exec', got '%s'", reqs[0].Name)
+	}
+	if reqs[0].Args["command"] != `ls -la && echo "--- personal/ ---"` {
+		t.Errorf("unexpected command arg: %v", reqs[0].Args["command"])
+	}
+}
+
+func TestParseActionPlan_DSMLNoParams(t *testing.T) {
+	input := `<｜｜DSML｜｜ calls>
+<｜｜DSML｜｜ invoke name="list_skills">
+
+</｜｜DSML｜｜ invoke>
+</｜｜DSML｜｜ calls>`
+
+	reqs := ParseActionPlan(input)
+	if len(reqs) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(reqs))
+	}
+	if reqs[0].Name != "list_skills" {
+		t.Errorf("expected tool name 'list_skills', got '%s'", reqs[0].Name)
+	}
+}
+
+func TestParseActionPlan_ToolCallXML(t *testing.T) {
+	input := `<tool_call>
+{"name": "read_file", "arguments": {"path": "test.txt", "limit": 100}}
+</tool_call>`
+
+	reqs := ParseActionPlan(input)
+	if len(reqs) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(reqs))
+	}
+	if reqs[0].Name != "read_file" {
+		t.Errorf("expected tool name 'read_file', got '%s'", reqs[0].Name)
+	}
+	if reqs[0].Args["path"] != "test.txt" {
+		t.Errorf("expected path 'test.txt', got '%v'", reqs[0].Args["path"])
+	}
+}
+
+func TestStripToolCallMarkup(t *testing.T) {
+	input := `Here is the result:
+<｜｜DSML｜｜ calls>
+<｜｜DSML｜｜ invoke name="list_skills">
+</｜｜DSML｜｜ invoke>
+</｜｜DSML｜｜ calls>
+All done!`
+	stripped := StripToolCallMarkup(input)
+	if strings.Contains(stripped, "DSML") {
+		t.Errorf("expected DSML stripped, got %q", stripped)
+	}
+	if !strings.Contains(stripped, "Here is the result:") || !strings.Contains(stripped, "All done!") {
+		t.Errorf("expected outer text preserved, got %q", stripped)
 	}
 }

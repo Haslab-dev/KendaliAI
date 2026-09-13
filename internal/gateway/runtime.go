@@ -92,11 +92,11 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 	}
 	if sess == nil {
 		if agentID == "" {
-			agentID = "engineer"
+			agentID = "personal-assistant"
 		}
-		title := userPrompt
-		if len(title) > 40 {
-			title = title[:40] + "..."
+		title := CleanSessionTitle("", userPrompt)
+		if title == "" {
+			title = "New Chat"
 		}
 		sess = &Session{
 			ID:        sessionID,
@@ -484,6 +484,19 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		sysPrompt += "\nTool definitions are also attached via the native function-calling API. Prefer issuing tool calls through it; the `tool: NAME({...})` text format remains available as a fallback.\n"
 	}
 
+	// Harness Extensibility instructions: Creating Skills & Plugins directly via chat
+	sysPrompt += "\n\n## EXTENDING THE HARNESS (CREATING SKILLS & PLUGINS VIA CHAT):\n" +
+		"You have full capability to create new skills and plugins directly when requested by the user:\n" +
+		"1. To create a new reusable skill:\n" +
+		"   Use tool: `create_skill({\"name\": \"Skill Name\", \"description\": \"Detailed description\", \"responsibilities\": \"comma, separated, duties\"})`\n" +
+		"   This creates skill spec, routing keywords, and prompt files in ~/workspaces/skills/generated.\n" +
+		"2. To create a plugin (custom tools, scripts, commands, or bundled files):\n" +
+		"   Use tool: `create_plugin({\"id\": \"my-plugin\", \"name\": \"My Plugin\", \"description\": \"...\", \"scope\": \"global\", \"system_prompt\": \"...\", \"tools\": [{\"name\": \"tool_name\", \"description\": \"...\", \"command\": \"...\"}], \"skills\": [], \"files\": {\"script.sh\": \"...\"}})`\n" +
+		"   This registers the plugin and its tools into the agent runtime.\n" +
+		"3. To list installed skills/plugins:\n" +
+		"   Use `list_skills({})` and `list_plugins({})`.\n" +
+		"ALWAYS execute these tools when the user asks to create or list skills or plugins. Never hallucinate that you cannot create them.\n"
+
 	// 6. Vector RAG Retrieval & Auto-Ingest
 	embCfg, _ := r.store.GetEmbeddingConfig()
 	var embClient *embedding.Client
@@ -630,6 +643,11 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 	if provCfg != nil {
 		endpoint = provCfg.Endpoint
 		apiKey = provCfg.APIKey
+	}
+
+	// Auto-generate AI short title (max 20 chars) in the background on initial turn
+	if sess.Title == "" || sess.Title == "New Chat" || strings.HasPrefix(sess.Title, "New Chat") {
+		go r.autoGenerateSessionTitle(sessionID, endpoint, apiKey, modelToUse, cleanPrompt)
 	}
 
 	// Native function calling (GOALS.md Gate-1): pass tool definitions to the
@@ -804,6 +822,7 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 			finalContent = strings.TrimSpace(finalContent[:start-len("<think>")] + finalContent[end+len("</think>"):])
 		}
 	}
+	finalContent = agent.StripToolCallMarkup(finalContent)
 
 	// 9. Save Assistant Message
 	assistantMsg := SessionMessage{
@@ -1001,6 +1020,12 @@ func (r *Runtime) isToolAllowed(toolName string, allowedPatterns []string) bool 
 		if (toolName == "web_search" || toolName == "web_scrape") && (pat == "web" || pat == "web.*" || pat == "web.fetch" || pat == "web.search" || pat == "fetch_url") {
 			return true
 		}
+		if strings.Contains(toolName, "skill") && (pat == "skill" || pat == "skills" || pat == "skill.*" || pat == "skills.*") {
+			return true
+		}
+		if strings.Contains(toolName, "plugin") && (pat == "plugin" || pat == "plugins" || pat == "plugin.*" || pat == "plugins.*") {
+			return true
+		}
 		if strings.HasSuffix(pat, ".*") {
 			prefix := strings.TrimSuffix(pat, ".*")
 			if strings.HasPrefix(toolName, prefix) {
@@ -1090,4 +1115,97 @@ func (w *openAIWrapper) ChatCompletion(ctx context.Context, msgs []agent.Message
 		InputTokens:  resp.Usage.PromptTokens,
 		OutputTokens: resp.Usage.CompletionTokens,
 	}, nil
+}
+
+// CleanSessionTitle cleans, formats, and strictly caps session titles at 20 characters.
+func CleanSessionTitle(aiTitle, fallbackPrompt string) string {
+	candidate := strings.TrimSpace(aiTitle)
+
+	// Strip common conversational or labeling artifacts
+	for _, prefix := range []string{"Title:", "title:", "Topic:", "topic:", "Subject:", "subject:", "Re:", "re:"} {
+		candidate = strings.TrimPrefix(candidate, prefix)
+	}
+	candidate = strings.Trim(candidate, `"'` + "`" + `“”.!?;: `)
+
+	// If candidate is empty, fallback to prompt
+	if candidate == "" {
+		candidate = strings.TrimSpace(fallbackPrompt)
+		candidate = strings.ReplaceAll(candidate, "\n", " ")
+		candidate = strings.Trim(candidate, `"'` + "`" + `“”.!?;: `)
+	}
+
+	// Normalize whitespace
+	candidate = strings.Join(strings.Fields(candidate), " ")
+
+	// Strictly limit to 20 runes (characters)
+	runes := []rune(candidate)
+	if len(runes) > 20 {
+		cut := string(runes[:20])
+		if lastSpace := strings.LastIndex(cut, " "); lastSpace > 8 {
+			cut = strings.TrimSpace(cut[:lastSpace])
+		}
+		candidate = strings.Trim(cut, `"'` + "`" + `“”.,!?;: `)
+		if candidate == "" {
+			candidate = string(runes[:20])
+		}
+	}
+
+	return candidate
+}
+
+// autoGenerateSessionTitle summarizes the initial user prompt into a short (<= 20 char) session title.
+func (r *Runtime) autoGenerateSessionTitle(sessionID, endpoint, apiKey, model, userPrompt string) {
+	cleanPrompt := strings.TrimSpace(userPrompt)
+	if cleanPrompt == "" {
+		return
+	}
+
+	sess, err := r.store.GetSession(sessionID)
+	if err != nil || sess == nil {
+		return
+	}
+	// Only auto-generate if title is empty, "New Chat", or generic
+	if sess.Title != "" && sess.Title != "New Chat" && !strings.HasPrefix(sess.Title, "New Chat") {
+		return
+	}
+
+	var generatedTitle string
+	if endpoint != "" && model != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		systemMsg := "Generate a short topic title (maximum 20 characters, plain text, no quotes, no period) summarizing the user's prompt."
+		msgs := []agent.Message{
+			{Role: "system", Content: systemMsg},
+			{Role: "user", Content: cleanPrompt},
+		}
+
+		var titleBuf strings.Builder
+		_, err := StreamOpenAICompatible(ctx, endpoint, apiKey, model, msgs, nil, StreamCallbacks{
+			OnText: func(delta string) {
+				titleBuf.WriteString(delta)
+			},
+		})
+		if err == nil {
+			generatedTitle = titleBuf.String()
+		}
+	}
+
+	newTitle := CleanSessionTitle(generatedTitle, cleanPrompt)
+	if newTitle == "" {
+		return
+	}
+
+	sess.Title = newTitle
+	_ = r.store.SaveSession(*sess)
+
+	r.bus.Publish(messaging.Event{
+		ID:        uuid.New().String(),
+		Type:      messaging.EventSessionUpdated,
+		SessionID: sess.ID,
+		AgentID:   sess.AgentID,
+		Channel:   sess.ChannelID,
+		Payload:   *sess,
+		Timestamp: time.Now(),
+	})
 }

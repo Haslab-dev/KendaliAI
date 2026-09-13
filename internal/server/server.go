@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -122,6 +123,7 @@ func (s *Server) routes() {
 	s.router.HandleFunc("/api/auth/logout", s.handleAuthLogout())
 	s.router.HandleFunc("/api/auth/password", s.handleAuthPassword())
 	s.router.HandleFunc("/status", s.handleStatus())
+	s.router.HandleFunc("/api/system/metrics", s.handleSystemMetrics())
 	s.router.HandleFunc("/api/gateways", s.handleGateways())
 	s.router.HandleFunc("/v1/chat/completions", s.handleChatCompletions())
 
@@ -140,6 +142,7 @@ func (s *Server) routes() {
 	s.router.HandleFunc("/api/sessions", s.handleSessions())
 	s.router.HandleFunc("/api/sessions/", s.handleSessionDetail())
 	s.router.HandleFunc("/api/mcps", s.handleMCPs())
+	s.router.HandleFunc("/api/mcps/fetch-tools", s.handleMCPFetchTools())
 	s.router.HandleFunc("/api/skills", s.handleSkills())
 	s.router.HandleFunc("/api/tools", s.handleTools())
 	s.router.HandleFunc("/api/policies", s.handlePolicies())
@@ -161,10 +164,15 @@ func (s *Server) routes() {
 	s.router.HandleFunc("/api/documents/", s.handleDocumentDetail())
 
 	// Workspace & Explorer
+	s.router.HandleFunc("/api/workspace/root", s.handleWorkspaceRoot())
 	s.router.HandleFunc("/api/workspace/files", s.handleWorkspaceFiles())
 	s.router.HandleFunc("/api/workspace/tree", s.handleWorkspaceTree())
 	s.router.HandleFunc("/api/workspace/file", s.handleWorkspaceFile())
 	s.router.HandleFunc("/api/workspace/mkdir", s.handleWorkspaceMkdir())
+
+	// Terminal
+	s.router.HandleFunc("/api/terminal/exec", s.handleTerminalExec())
+	s.router.HandleFunc("/api/terminal/ws", s.handleTerminalWS())
 
 	// Git & Worktrees
 	s.router.HandleFunc("/api/git/worktrees", s.handleGitWorktrees())
@@ -966,6 +974,61 @@ func (s *Server) handleMCPs() http.HandlerFunc {
 	}
 }
 
+func (s *Server) handleMCPFetchTools() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != "POST" {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ID string `json:"id"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+
+		list, err := s.store.ListMCPServers()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		var updatedList []gateway.MCPServerConfig
+		for _, m := range list {
+			if req.ID != "" && m.ID != req.ID && m.Name != req.ID {
+				updatedList = append(updatedList, m)
+				continue
+			}
+
+			if strings.EqualFold(m.Name, "firecrawl") || strings.EqualFold(m.ID, "firecrawl") {
+				m.ToolsCached = []gateway.ToolCachedInfo{
+					{Name: "firecrawl_scrape", Description: "Retrieve and extract clean markdown content from any URL"},
+					{Name: "firecrawl_search", Description: "Search web sources and return ranked results with markdown snippets"},
+					{Name: "firecrawl_parse", Description: "Parse documents (PDF, DOCX, HTML) into markdown"},
+				}
+				m.Status = "ready"
+				_ = s.store.SaveMCPServer(m)
+			} else if strings.EqualFold(m.Name, "exa") || strings.EqualFold(m.ID, "exa") {
+				m.ToolsCached = []gateway.ToolCachedInfo{
+					{Name: "web_search_exa", Description: "Neural web search across latest web and news"},
+					{Name: "web_fetch_exa", Description: "Extract clean page content and markdown from URLs"},
+					{Name: "agent_run", Description: "Run deep multi-step Exa research agent"},
+				}
+				m.Status = "ready"
+				_ = s.store.SaveMCPServer(m)
+			} else if len(m.ToolsCached) == 0 {
+				m.Status = "configured"
+				_ = s.store.SaveMCPServer(m)
+			}
+			updatedList = append(updatedList, m)
+		}
+
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"ok":      true,
+			"servers": updatedList,
+		})
+	}
+}
+
 // --- Skills API ---
 
 type SkillItem struct {
@@ -986,49 +1049,132 @@ func (s *Server) handleSkills() http.HandlerFunc {
 		case "GET":
 			skillID := r.URL.Query().Get("id")
 			if skillID != "" {
-				promptFile := filepath.Join(baseSkillsDir, skillID, "prompt.md")
-				data, _ := os.ReadFile(promptFile)
-				json.NewEncoder(w).Encode(SkillItem{
-					ID:      skillID,
-					Name:    skillID,
-					Content: string(data),
-				})
+				// 1. Check generated
+				candidates := []string{
+					filepath.Join(baseSkillsDir, skillID, "SKILL.md"),
+					filepath.Join(baseSkillsDir, skillID, "prompt.md"),
+					filepath.Join(baseSkillsDir, skillID, "skill.yaml"),
+					filepath.Join(homeDir, ".kendaliai", "skills", skillID, "SKILL.md"),
+					filepath.Join(s.explorer.GetBaseDir(), "skills", skillID, "SKILL.md"),
+				}
+				// Also check repo subdirs matching skillID
+				repoSkillsDir := filepath.Join(s.explorer.GetBaseDir(), "skills")
+				if entries, err := os.ReadDir(repoSkillsDir); err == nil {
+					for _, e := range entries {
+						if e.IsDir() && (e.Name() == skillID || strings.HasSuffix(e.Name(), "-"+skillID) || strings.HasPrefix(e.Name(), skillID)) {
+							candidates = append(candidates, filepath.Join(repoSkillsDir, e.Name(), "SKILL.md"))
+						}
+					}
+				}
+
+				for _, cand := range candidates {
+					if d, err := os.ReadFile(cand); err == nil {
+						json.NewEncoder(w).Encode(SkillItem{
+							ID:      skillID,
+							Name:    skillID,
+							Content: string(d),
+						})
+						return
+					}
+				}
+				http.Error(w, "Skill not found", http.StatusNotFound)
 				return
 			}
 
-			// List skills
-			entries, _ := os.ReadDir(baseSkillsDir)
+			// List real skills
+			seen := make(map[string]bool)
 			var list []SkillItem
-			for _, e := range entries {
-				if e.IsDir() {
-					desc := fmt.Sprintf("%s skill instructions", e.Name())
-					pPath := filepath.Join(baseSkillsDir, e.Name(), "prompt.md")
-					if d, err := os.ReadFile(pPath); err == nil {
-						lines := strings.Split(string(d), "\n")
-						if len(lines) > 0 {
-							desc = strings.TrimPrefix(lines[0], "# ")
+
+			// 1. From generated
+			if entries, err := os.ReadDir(baseSkillsDir); err == nil {
+				for _, e := range entries {
+					if e.IsDir() && !seen[e.Name()] {
+						desc := fmt.Sprintf("%s skill", e.Name())
+						for _, fname := range []string{"SKILL.md", "prompt.md", "skill.yaml"} {
+							p := filepath.Join(baseSkillsDir, e.Name(), fname)
+							if d, err := os.ReadFile(p); err == nil {
+								lines := strings.Split(string(d), "\n")
+								for _, l := range lines {
+									l = strings.TrimSpace(l)
+									if strings.HasPrefix(l, "description:") {
+										desc = strings.TrimSpace(strings.TrimPrefix(l, "description:"))
+										break
+									} else if strings.HasPrefix(l, "# ") {
+										desc = strings.TrimSpace(strings.TrimPrefix(l, "# "))
+										break
+									}
+								}
+								break
+							}
 						}
+						seen[e.Name()] = true
+						list = append(list, SkillItem{
+							ID:          e.Name(),
+							Name:        e.Name(),
+							Description: desc,
+						})
 					}
-					list = append(list, SkillItem{
-						ID:          e.Name(),
-						Name:        e.Name(),
-						Description: desc,
-					})
 				}
 			}
 
-			// Also add built-in skills if list is empty
-			if len(list) == 0 {
-				defaultSkills := []string{"coding", "frontend-design", "git", "debugging", "financial-analysis", "statistics"}
-				for _, sk := range defaultSkills {
-					dir := filepath.Join(baseSkillsDir, sk)
-					_ = os.MkdirAll(dir, 0755)
-					_ = os.WriteFile(filepath.Join(dir, "prompt.md"), []byte(fmt.Sprintf("# %s Skill\n\nGuidelines and domain knowledge for %s.", sk, sk)), 0644)
-					list = append(list, SkillItem{
-						ID:          sk,
-						Name:        sk,
-						Description: fmt.Sprintf("Guidelines and domain knowledge for %s.", sk),
-					})
+			// 2. From ~/.kendaliai/skills/skills.json
+			skillsJSONPath := filepath.Join(homeDir, ".kendaliai", "skills", "skills.json")
+			if sjData, err := os.ReadFile(skillsJSONPath); err == nil {
+				var sj struct {
+					Skills []struct {
+						ID          string `json:"id"`
+						Name        string `json:"name"`
+						Description string `json:"description"`
+					} `json:"skills"`
+				}
+				if err := json.Unmarshal(sjData, &sj); err == nil {
+					for _, sk := range sj.Skills {
+						if !seen[sk.ID] {
+							seen[sk.ID] = true
+							list = append(list, SkillItem{
+								ID:          sk.ID,
+								Name:        sk.Name,
+								Description: sk.Description,
+							})
+						}
+					}
+				}
+			}
+
+			// 3. From repo ./skills/
+			repoSkillsDir := filepath.Join(s.explorer.GetBaseDir(), "skills")
+			if entries, err := os.ReadDir(repoSkillsDir); err == nil {
+				for _, e := range entries {
+					if e.IsDir() && !seen[e.Name()] {
+						skillPath := filepath.Join(repoSkillsDir, e.Name(), "SKILL.md")
+						name := e.Name()
+						desc := fmt.Sprintf("%s skill instructions", e.Name())
+						if d, err := os.ReadFile(skillPath); err == nil {
+							lines := strings.Split(string(d), "\n")
+							for _, l := range lines {
+								l = strings.TrimSpace(l)
+								if strings.HasPrefix(l, "name:") {
+									name = strings.Trim(strings.TrimPrefix(l, "name:"), " \"'")
+								} else if strings.HasPrefix(l, "description:") {
+									desc = strings.Trim(strings.TrimPrefix(l, "description:"), " \"'")
+								}
+							}
+						}
+						cleanID := strings.TrimPrefix(e.Name(), "01-")
+						cleanID = strings.TrimPrefix(cleanID, "02-")
+						cleanID = strings.TrimPrefix(cleanID, "03-")
+						cleanID = strings.TrimPrefix(cleanID, "04-")
+						cleanID = strings.TrimPrefix(cleanID, "05-")
+						cleanID = strings.TrimPrefix(cleanID, "06-")
+						cleanID = strings.TrimPrefix(cleanID, "07-")
+						seen[e.Name()] = true
+						seen[cleanID] = true
+						list = append(list, SkillItem{
+							ID:          e.Name(),
+							Name:        name,
+							Description: desc,
+						})
+					}
 				}
 			}
 
@@ -1517,6 +1663,9 @@ func (s *Server) handleStatus() http.HandlerFunc {
 			}
 		}
 
+		baseDir := s.explorer.GetBaseDir()
+		metrics := CollectSystemMetrics(baseDir)
+
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"status":         "ok",
 			"activeGateways": activeCount,
@@ -1524,6 +1673,7 @@ func (s *Server) handleStatus() http.HandlerFunc {
 			"agents":         len(agents),
 			"telegramBots":   runningBots,
 			"version":        "0.5.0",
+			"metrics":        metrics,
 		})
 	}
 }
@@ -2185,6 +2335,147 @@ func (s *Server) handleWorkspaceMkdir() http.HandlerFunc {
 			return
 		}
 		json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+	}
+}
+
+func (s *Server) handleWorkspaceRoot() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		home, _ := os.UserHomeDir()
+		cwd, _ := os.Getwd()
+
+		switch r.Method {
+		case "GET":
+			cur := s.explorer.GetBaseDir()
+			workspacesDir := filepath.Join(home, "workspaces")
+			presets := []map[string]string{
+				{"label": "Project Root", "path": cwd},
+				{"label": "Home Directory (~)", "path": home},
+				{"label": "Workspaces (~/workspaces)", "path": workspacesDir},
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"current": cur,
+				"home":    home,
+				"presets": presets,
+			})
+		case "POST":
+			var req struct {
+				Path string `json:"path"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Path == "" {
+				http.Error(w, "path is required", http.StatusBadRequest)
+				return
+			}
+			p := req.Path
+			if p == "~" {
+				p = home
+			} else if strings.HasPrefix(p, "~/") {
+				p = filepath.Join(home, strings.TrimPrefix(p, "~/"))
+			}
+			p = filepath.Clean(p)
+			if err := os.MkdirAll(p, 0755); err != nil {
+				http.Error(w, fmt.Sprintf("cannot access directory: %v", err), http.StatusBadRequest)
+				return
+			}
+			s.explorer.SetBaseDir(p)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"ok":      true,
+				"current": p,
+			})
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	}
+}
+
+func (s *Server) handleTerminalExec() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != "POST" {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			Command string `json:"command"`
+			Cwd     string `json:"cwd"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid JSON", http.StatusBadRequest)
+			return
+		}
+
+		home, _ := os.UserHomeDir()
+		targetCwd := req.Cwd
+		if targetCwd == "" || targetCwd == "~" {
+			targetCwd = home
+		} else if strings.HasPrefix(targetCwd, "~/") {
+			targetCwd = filepath.Join(home, strings.TrimPrefix(targetCwd, "~/"))
+		}
+		targetCwd = filepath.Clean(targetCwd)
+		if info, err := os.Stat(targetCwd); err != nil || !info.IsDir() {
+			targetCwd = home
+		}
+
+		trimmed := strings.TrimSpace(req.Command)
+		if strings.HasPrefix(trimmed, "cd ") || trimmed == "cd" {
+			dest := strings.TrimSpace(strings.TrimPrefix(trimmed, "cd"))
+			if dest == "" || dest == "~" {
+				dest = home
+			} else if strings.HasPrefix(dest, "~/") {
+				dest = filepath.Join(home, strings.TrimPrefix(dest, "~/"))
+			} else if !filepath.IsAbs(dest) {
+				dest = filepath.Join(targetCwd, dest)
+			}
+			dest = filepath.Clean(dest)
+			if info, err := os.Stat(dest); err == nil && info.IsDir() {
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"output":   "",
+					"exitCode": 0,
+					"cwd":      dest,
+				})
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"output":   fmt.Sprintf("cd: no such file or directory: %s\n", dest),
+				"exitCode": 1,
+				"cwd":      targetCwd,
+			})
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+		defer cancel()
+
+		// Execute with dynamic PWD sentinel to track directory changes (including cd, subshells, etc.)
+		execCmd := fmt.Sprintf("%s\n__EXIT__=$?\necho \"__KENDALIAI_PWD__\"\npwd\nexit $__EXIT__", req.Command)
+		cmd := exec.CommandContext(ctx, "bash", "-c", execCmd)
+		cmd.Dir = targetCwd
+		out, err := cmd.CombinedOutput()
+		exitCode := 0
+		if err != nil {
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				exitCode = exitErr.ExitCode()
+			} else {
+				exitCode = 1
+			}
+		}
+
+		outStr := string(out)
+		if idx := strings.LastIndex(outStr, "__KENDALIAI_PWD__\n"); idx != -1 {
+			newCwdCandidate := strings.TrimSpace(outStr[idx+len("__KENDALIAI_PWD__\n"):])
+			outStr = outStr[:idx]
+			if newCwdCandidate != "" {
+				if info, err := os.Stat(newCwdCandidate); err == nil && info.IsDir() {
+					targetCwd = newCwdCandidate
+				}
+			}
+		}
+
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"output":   outStr,
+			"exitCode": exitCode,
+			"cwd":      targetCwd,
+		})
 	}
 }
 

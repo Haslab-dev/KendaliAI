@@ -26,38 +26,11 @@ interface WorktreeCard {
   isMain?: boolean;
 }
 
-const DEFAULT_SHOWCASE_WORKTREES: WorktreeCard[] = [
-  {
-    id: 'wt-1',
-    branch: 'feature/landing-page',
-    path: '~/worktrees/kendaliai-landing',
-    agent: 'Coder',
-    status: 'active',
-    commitsAhead: 12,
-  },
-  {
-    id: 'wt-2',
-    branch: 'fix/auth-secret-scan',
-    path: '~/worktrees/kendaliai-audit',
-    agent: 'Reviewer',
-    status: 'diff under review',
-    commitsAhead: 2,
-  },
-  {
-    id: 'wt-3',
-    branch: 'exp/rag-retrieval-v2',
-    path: '~/worktrees/kendaliai-rag',
-    agent: 'Research',
-    status: 'idle',
-    commitsAhead: 3,
-  },
-];
-
 export const WorktreesPane: React.FC = () => {
   const { createSession } = useAppStore();
 
-  const [worktrees, setWorktrees] = useState<WorktreeCard[]>(DEFAULT_SHOWCASE_WORKTREES);
-  const [mainRepoPath, setMainRepoPath] = useState('main — /Users/lutfi/hasdev/kendali-ai');
+  const [worktrees, setWorktrees] = useState<WorktreeCard[]>([]);
+  const [mainRepoPath, setMainRepoPath] = useState('main — loading...');
   const [isLoading, setIsLoading] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
@@ -77,29 +50,29 @@ export const WorktreesPane: React.FC = () => {
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
-          const main = data.find((w: any) => w.isBare || w.branch === 'main' || w.branch === 'master');
+          const main = data.find((w: any) => w.isBare || w.branch === 'main' || w.branch === 'master') || data[0];
           if (main) {
             setMainRepoPath(`${main.branch || 'main'} — ${main.path}`);
           }
 
           const linked = data
-            .filter((w: any) => w !== main)
+            .filter((w: any) => w !== main && w.path !== main?.path)
             .map((w: any, idx: number) => ({
               id: `wt-${idx}`,
               branch: w.branch || 'detached-head',
               path: w.path,
-              agent: idx % 3 === 0 ? 'Coder' : idx % 3 === 1 ? 'Reviewer' : 'Research',
-              status: 'active',
-              commitsAhead: 4,
+              agent: 'Coder',
+              status: w.isLocked ? 'locked' : 'active',
+              commitsAhead: 0,
             }));
 
-          if (linked.length > 0) {
-            setWorktrees(linked);
-          }
+          setWorktrees(linked);
+        } else {
+          setWorktrees([]);
         }
       }
     } catch {
-      // Fallback to showcase worktrees
+      setWorktrees([]);
     } finally {
       setIsLoading(false);
     }
@@ -235,81 +208,103 @@ export const WorktreesPane: React.FC = () => {
         </div>
 
         {/* Worktrees List */}
-        <div className="flex flex-col gap-3 w-full">
-          {worktrees.map((wt) => (
-            <div
-              key={wt.id}
-              className="w-full bg-[#FFFFFF] shadow-[0px_1px_2px_0px_#0000000a] border border-[#E5E7EB] rounded-[8px] p-[18px] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5 transition-all hover:border-[#D4D4D0]"
+        {worktrees.length === 0 ? (
+          <div className="w-full p-8 text-center bg-white dark:bg-[#161616] border border-dashed border-[#E5E7EB] dark:border-[#27272A] rounded-[8px] flex flex-col items-center justify-center gap-2">
+            <FolderGit2 size={28} className="text-[#8A8A85]" />
+            <h3 className="text-[13px] font-bold text-black dark:text-white">No Linked Worktrees Active</h3>
+            <p className="text-[11px] text-[#8A8A85] max-w-sm">
+              Git worktrees allow agents to write and test changes in completely isolated directories without modifying your main branch.
+            </p>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="mt-2 flex items-center gap-1.5 px-3 py-1.5 bg-[#0F0F0F] dark:bg-white text-white dark:text-black text-[11px] font-bold rounded-[6px]"
             >
-              {/* Left: Icon & Info */}
-              <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                <div className="w-[40px] h-[40px] shrink-0 flex items-center justify-center bg-[#FFF5EB] rounded-[4px]">
-                  <GitBranch size={18} className="text-[#F97316]" />
-                </div>
+              <Plus size={13} />
+              <span>Create Worktree</span>
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3 w-full">
+            {worktrees.map((wt) => (
+              <div
+                key={wt.id}
+                className="w-full bg-[#FFFFFF] shadow-[0px_1px_2px_0px_#0000000a] border border-[#E5E7EB] rounded-[8px] p-[18px] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5 transition-all hover:border-[#D4D4D0]"
+              >
+                {/* Left: Icon & Info */}
+                <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                  <div className="w-[40px] h-[40px] shrink-0 flex items-center justify-center bg-[#FFF5EB] rounded-[4px]">
+                    <GitBranch size={18} className="text-[#F97316]" />
+                  </div>
 
-                <div className="min-w-0 flex-1 flex flex-col gap-[3px]">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[14px] font-bold text-[#000000] font-sans">
-                      {wt.branch}
-                    </span>
-                    <div className="bg-[#F7F7F5] rounded-[4px] px-2 py-[2px] flex items-center">
-                      <span className="text-[10px] text-[#333333] font-['Funnel_Sans',sans-serif]">
-                        {wt.agent}
+                  <div className="min-w-0 flex-1 flex flex-col gap-[3px]">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[14px] font-bold text-[#000000] font-sans">
+                        {wt.branch}
                       </span>
+                      <div className="bg-[#F7F7F5] rounded-[4px] px-2 py-[2px] flex items-center">
+                        <span className="text-[10px] text-[#333333] font-['Funnel_Sans',sans-serif]">
+                          {wt.agent}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="text-[11px] text-[#8A8A85] font-['Geist_Mono',monospace] truncate">
+                      {wt.path} · {wt.status}
                     </div>
                   </div>
+                </div>
 
-                  <div className="text-[11px] text-[#8A8A85] font-['Geist_Mono',monospace] truncate">
-                    {wt.path} · {wt.status} · {wt.commitsAhead} commits ahead
-                  </div>
+                {/* Right: Actions matching worktrees.html */}
+                <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                  {/* Copy Path */}
+                  <button
+                    type="button"
+                    onClick={() => handleCopyPath(wt.path)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FFFFFF] border border-[#E5E7EB] rounded-[4px] text-[11px] text-[#333333] font-['Funnel_Sans',sans-serif] hover:bg-[#F7F7F5] transition-colors cursor-pointer"
+                  >
+                    {copiedPath === wt.path ? (
+                      <>
+                        <Check size={12} className="text-[#16A34A]" />
+                        <span className="text-[#16A34A]">Copied</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy size={12} className="text-[#8A8A85]" />
+                        <span>Copy Path</span>
+                      </>
+                    )}
+                  </button>
+
+                  {/* Open Session */}
+                  <button
+                    type="button"
+                    onClick={() => handleOpenSession(wt.branch)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FFFFFF] border border-[#E5E7EB] rounded-[4px] text-[11px] text-[#333333] font-['Funnel_Sans',sans-serif] hover:bg-[#F7F7F5] transition-colors cursor-pointer"
+                  >
+                    <ExternalLink size={12} className="text-[#333333]" />
+                    <span>Open Session</span>
+                  </button>
+
+                  {/* Remove */}
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveWorktree(wt.path)}
+                    className="p-1.5 bg-[#FFFFFF] border border-[#FECACA] rounded-[4px] text-[#DC2626] hover:bg-red-50 transition-colors"
+                    title="Remove Worktree"
+                  >
+                    <Trash2 size={12} />
+                  </button>
                 </div>
               </div>
+            ))}
+          </div>
+        )}
 
-              {/* Right: Actions matching worktrees.html */}
-              <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                {/* Copy Path */}
-                <button
-                  type="button"
-                  onClick={() => handleCopyPath(wt.path)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FFFFFF] border border-[#E5E7EB] rounded-[4px] text-[11px] text-[#333333] font-['Funnel_Sans',sans-serif] hover:bg-[#F7F7F5] transition-colors"
-                >
-                  {copiedPath === wt.path ? (
-                    <Check size={12} className="text-[#16A34A]" />
-                  ) : (
-                    <Copy size={12} className="text-[#333333]" />
-                  )}
-                  <span>{copiedPath === wt.path ? 'Copied' : 'Copy Path'}</span>
-                </button>
-
-                {/* Open Session */}
-                <button
-                  type="button"
-                  onClick={() => handleOpenSession(wt.branch)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FFFFFF] border border-[#E5E7EB] rounded-[4px] text-[11px] text-[#333333] font-['Funnel_Sans',sans-serif] hover:bg-[#F7F7F5] transition-colors cursor-pointer"
-                >
-                  <ExternalLink size={12} className="text-[#333333]" />
-                  <span>Open Session</span>
-                </button>
-
-                {/* Remove */}
-                <button
-                  type="button"
-                  onClick={() => handleRemoveWorktree(wt.path)}
-                  className="p-1.5 bg-[#FFFFFF] border border-[#FECACA] rounded-[4px] text-[#DC2626] hover:bg-red-50 transition-colors"
-                  title="Remove Worktree"
-                >
-                  <Trash2 size={12} />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Prune Hint / Action matching worktrees.html */}
+        {/* Prune Hint / Action */}
         <div className="w-full flex items-center justify-center gap-2 py-3">
           <Recycle size={13} className="text-[#8A8A85]" />
           <span className="text-[11px] text-[#8A8A85] font-['Funnel_Sans',sans-serif]">
-            2 stale worktrees pruned automatically last week
+            Prune stale or unreferenced worktrees safely
           </span>
           <button
             type="button"

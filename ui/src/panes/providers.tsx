@@ -120,32 +120,27 @@ interface ShowcaseMCP {
   commandOrUrl: string;
   toolsCount: number;
   status: 'connected' | 'cached' | 'error';
+  enabled?: boolean;
 }
 
 const DEFAULT_SHOWCASE_MCPS: ShowcaseMCP[] = [
   {
-    id: 'github',
-    name: 'github',
-    transport: 'stdio',
-    commandOrUrl: 'npx @modelcontextprotocol/server-github',
-    toolsCount: 9,
-    status: 'connected',
-  },
-  {
     id: 'exa',
     name: 'exa',
-    transport: 'sse',
-    commandOrUrl: 'https://mcp.exa.ai/sse',
+    transport: 'http',
+    commandOrUrl: 'https://mcp.exa.ai/mcp',
     toolsCount: 3,
     status: 'connected',
+    enabled: true,
   },
   {
-    id: 'postgres',
-    name: 'postgres',
-    transport: 'stdio',
-    commandOrUrl: 'pg-mcp',
-    toolsCount: 4,
+    id: 'firecrawl',
+    name: 'firecrawl',
+    transport: 'http',
+    commandOrUrl: 'https://mcp.firecrawl.dev/v2/mcp',
+    toolsCount: 3,
     status: 'connected',
+    enabled: true,
   },
 ];
 
@@ -239,8 +234,9 @@ export const ProvidersPane: React.FC = () => {
             name: m.name,
             transport: m.transport || 'stdio',
             commandOrUrl: (m.transport === 'sse' || m.transport === 'http') ? m.url || '' : `${m.command} ${(m.args || []).join(' ')}`,
-            toolsCount: 4,
+            toolsCount: Array.isArray(m.toolsCached) ? m.toolsCached.length : 0,
             status: 'connected',
+            enabled: m.enabled !== false,
           }));
           setMcps(mappedMcp);
         }
@@ -610,6 +606,21 @@ export const ProvidersPane: React.FC = () => {
     }
   };
 
+  const handleToggleMcpEnabled = async (id: string, newEnabled: boolean) => {
+    setMcps((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, enabled: newEnabled } : m))
+    );
+    try {
+      await fetch('/api/mcps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, enabled: newEnabled }),
+      });
+    } catch (err) {
+      console.warn('Failed to toggle MCP:', err);
+    }
+  };
+
   // Filter models inside modal
   const filteredModalModels = useMemo(() => {
     if (!modelSearch.trim()) return modelsList;
@@ -969,6 +980,19 @@ export const ProvidersPane: React.FC = () => {
                   </div>
 
                   <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleMcpEnabled(m.id, !m.enabled)}
+                      className={`text-[10px] px-2 py-0.5 rounded font-sans font-medium transition-colors cursor-pointer flex items-center gap-1 ${
+                        m.enabled
+                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                          : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                      }`}
+                      title={m.enabled ? 'Click to disable' : 'Click to enable'}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${m.enabled ? 'bg-emerald-400' : 'bg-zinc-500'}`} />
+                      <span>{m.enabled ? 'Enabled' : 'Disabled'}</span>
+                    </button>
                     <div className="bg-[#262626] rounded px-2 py-0.5">
                       <span className="text-[9px] text-[#A3A3A0] font-sans font-medium">
                         {m.toolsCount} tools
