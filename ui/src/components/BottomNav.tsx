@@ -15,23 +15,25 @@ import {
   X,
   Sun,
   Moon,
+  Building2,
   type LucideIcon,
 } from 'lucide-react';
 import { navigate, RouteName, useRoute } from '../router';
 import { useAppStore } from '../store/useAppStore';
 
 // Matches mobile design references (refs/mobile/dashboard.html):
-// Bottom Nav: Chat/Dashboard, Branches (worktrees), Planner (scheduler), Settings + More Drawer
+// Bottom Nav: Dashboard, Agency HQ (Office), Chat, Branches (worktrees), Settings + More Drawer
 const PRIMARY_MOBILE_ITEMS: { id: RouteName; label: string; icon: LucideIcon }[] = [
   { id: 'dashboard', label: 'Overview', icon: Layers },
+  { id: 'agency', label: 'Office', icon: Building2 },
   { id: 'chat', label: 'Chat', icon: MessageSquare },
   { id: 'worktrees', label: 'Branches', icon: FolderGit2 },
-  { id: 'scheduler', label: 'Planner', icon: CalendarClock },
   { id: 'settings', label: 'Settings', icon: SettingsIcon },
 ];
 
 const ALL_MOBILE_FEATURES: { id: RouteName; label: string; desc: string; icon: LucideIcon }[] = [
   { id: 'dashboard', label: 'Dashboard', desc: 'System overview & executive metrics', icon: Layers },
+  { id: 'agency', label: 'Agency HQ', desc: 'Office staff, worker roles & bot pairing', icon: Building2 },
   { id: 'chat', label: 'Hermes Chat', desc: 'Coding agent & reasoning canvas', icon: MessageSquare },
   { id: 'editor', label: 'Workspace Editor', desc: 'File explorer & in-browser editor', icon: Code2 },
   { id: 'agents', label: 'Agent Personas', desc: 'Autonomous personas, prompts & tools', icon: Bot },

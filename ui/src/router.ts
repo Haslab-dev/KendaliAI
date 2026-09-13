@@ -14,6 +14,7 @@ export const ROUTES = [
   'telegram',
   'worktrees',
   'settings',
+  'agency',
   'sessions',
   'mcps',
   'skills',

@@ -13,6 +13,7 @@ import {
   Send,
   Sun,
   Moon,
+  Building2,
   type LucideIcon,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
@@ -27,6 +28,7 @@ interface NavItem {
 
 const PRIMARY_NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Executive Dashboard', icon: Layers },
+  { id: 'agency', label: 'Agency HQ (Office & Staff)', icon: Building2 },
   { id: 'chat', label: 'Chat & Coding Agent', icon: MessageSquare },
   { id: 'editor', label: 'Workspace Editor', icon: Code2 },
   { id: 'agents', label: 'Agent Personas', icon: Bot },

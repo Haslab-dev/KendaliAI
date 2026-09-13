@@ -33,14 +33,16 @@ import { WorktreesPane } from '../panes/worktrees';
 import { SchedulerPane } from '../panes/scheduler';
 import { PluginsPane } from '../panes/plugins';
 import { DashboardPane } from '../panes/dashboard';
+import { AgencyHQPane } from '../panes/agency';
 import { LogsStreamingView } from './LogsStreamingView';
-import { Layers } from 'lucide-react';
+import { Layers, Building2 } from 'lucide-react';
 
 const PANES: Record<
   Exclude<RouteName, 'chat'>,
   { label: string; icon: LucideIcon }
 > = {
   dashboard: { label: 'Dashboard', icon: Layers },
+  agency: { label: 'Agency HQ', icon: Building2 },
   editor: { label: 'Files & Code Editor', icon: Code2 },
   worktrees: { label: 'Git Worktrees', icon: GitFork },
   scheduler: { label: 'Scheduler & Cron', icon: Clock },
@@ -70,6 +72,7 @@ export const PaneHost: React.FC<{ route: Exclude<RouteName, 'chat'> }> = ({ rout
 
   const isFullBleed = [
     'dashboard',
+    'agency',
     'editor',
     'worktrees',
     'scheduler',
@@ -103,6 +106,7 @@ export const PaneHost: React.FC<{ route: Exclude<RouteName, 'chat'> }> = ({ rout
         {/* Inner padding for supplementary panes; full-bleed for dedicated reference layouts */}
         <div className={isFullBleed ? 'flex-1 flex flex-col' : 'flex-1 flex flex-col px-4 py-4 md:px-6 md:py-6'}>
           {route === 'dashboard' && <DashboardPane />}
+          {route === 'agency' && <AgencyHQPane />}
           {route === 'editor' && <EditorPane />}
           {route === 'worktrees' && <WorktreesPane />}
           {route === 'scheduler' && <SchedulerPane />}

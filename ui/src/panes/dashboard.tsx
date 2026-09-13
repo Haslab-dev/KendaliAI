@@ -60,6 +60,12 @@ export const DashboardPane: React.FC = () => {
       action: () => navigate('docs'),
     },
     {
+      title: 'Agency HQ Office & Department Staff',
+      desc: 'Supervise Legal, Lead Frontend, Backend, and Architecture agents paired with Telegram bots',
+      tag: '🏢 Agency HQ',
+      action: () => navigate('agency'),
+    },
+    {
       title: 'Manage Agent Worktrees',
       desc: 'Spin up isolated git worktree checkouts so agents code safely without touching main',
       tag: '🌿 Worktrees',
