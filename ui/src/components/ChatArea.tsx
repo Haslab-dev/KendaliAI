@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
-  Plus, Trash2, Moon, Sun, Paperclip, Mic, ArrowUp, Copy, Check,
+  Plus, Trash2, Moon, Sun, Paperclip, Mic, ArrowUp, ArrowDown, Copy, Check,
   ChevronDown, ChevronUp, Search, Brain, Zap, Settings, Command, AlertCircle,
   CornerDownLeft, Terminal, Sparkles, Smartphone, Database, RefreshCw, FileText, X,
   ShieldCheck, GitFork, Code2, Clock, Bell, ExternalLink, Activity, BookOpen,
@@ -13,7 +13,7 @@ import { ToolExecutionCard } from './ToolExecutionCard';
 import { InstallPromptModal } from './InstallPromptModal';
 import { GrokAvatar } from './GrokAvatar';
 import { Sidebar } from './Sidebar';
-import { isReasoningModel } from '../types';
+import { isReasoningModel, SessionMessage } from '../types';
 
 interface SlashCommand {
   key: string;
@@ -202,6 +202,76 @@ export const ChatArea: React.FC = () => {
   };
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const isAutoScrollEnabledRef = useRef<boolean>(true);
+  const [showScrollBottomBtn, setShowScrollBottomBtn] = useState(false);
+  const isProgrammaticScrollRef = useRef<boolean>(false);
+  const rafIdRef = useRef<number | null>(null);
+
+  // Detect user manual scroll to disable auto-scroll when user scrolls up
+  const handleScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+
+    const threshold = 90;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const isAtBottom = distanceFromBottom <= threshold;
+
+    if (isProgrammaticScrollRef.current) return;
+
+    if (isAtBottom) {
+      isAutoScrollEnabledRef.current = true;
+      setShowScrollBottomBtn(false);
+    } else {
+      // User manually scrolled up: pause auto-scroll and show jump button
+      isAutoScrollEnabledRef.current = false;
+      setShowScrollBottomBtn(true);
+    }
+  }, []);
+
+  // When switching chat sessions, reset auto-scroll and jump to bottom
+  useEffect(() => {
+    isAutoScrollEnabledRef.current = true;
+    setShowScrollBottomBtn(false);
+    const timer = setTimeout(() => {
+      if (scrollContainerRef.current) {
+        isProgrammaticScrollRef.current = true;
+        scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+        setTimeout(() => {
+          isProgrammaticScrollRef.current = false;
+        }, 50);
+      }
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [activeSessionId]);
+
+  // Non-jittery, non-flickering throttled streaming auto-scroll
+  // Uses direct scrollTop inside requestAnimationFrame only when user has NOT scrolled up
+  useEffect(() => {
+    if (!isAutoScrollEnabledRef.current) return;
+
+    if (rafIdRef.current) {
+      cancelAnimationFrame(rafIdRef.current);
+    }
+
+    rafIdRef.current = requestAnimationFrame(() => {
+      const el = scrollContainerRef.current;
+      if (!el || !isAutoScrollEnabledRef.current) return;
+
+      isProgrammaticScrollRef.current = true;
+      el.scrollTop = el.scrollHeight;
+
+      setTimeout(() => {
+        isProgrammaticScrollRef.current = false;
+      }, 40);
+    });
+
+    return () => {
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+      }
+    };
+  }, [messages, isGenerating, thinkingStatus]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -273,10 +343,6 @@ export const ChatArea: React.FC = () => {
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isGenerating, thinkingStatus]);
 
   // Catalog of Slash Commands (Skills, MCPs, Gateway actions)
   const slashSuggestions: SlashCommand[] = useMemo(() => {
@@ -458,11 +524,25 @@ export const ChatArea: React.FC = () => {
     const trimmed = inputText.trim();
     if (!trimmed || isGenerating) return;
 
+    // Force re-enable auto-scroll when user sends a new message
+    isAutoScrollEnabledRef.current = true;
+    setShowScrollBottomBtn(false);
+
     sendMessage(trimmed);
     setInputText('');
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
+
+    setTimeout(() => {
+      if (scrollContainerRef.current) {
+        isProgrammaticScrollRef.current = true;
+        scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+        setTimeout(() => {
+          isProgrammaticScrollRef.current = false;
+        }, 50);
+      }
+    }, 30);
   };
 
   const effectiveModel = activeModel || activeAgent?.model || defaultModel || 'gpt-4o';
@@ -760,187 +840,147 @@ export const ChatArea: React.FC = () => {
         </div>
       </div>
 
-      {/* Messages Scroll Area */}
-      <div className="flex-1 overflow-y-auto px-4 sm:px-14 py-6 flex flex-col gap-5">
-        {/* Parallel Running Background Tasks Banner */}
-        {runningTasks.length > 0 && (
-          <div className="w-full shrink-0 flex flex-row gap-2.5 p-[10px_14px] items-center bg-[#EBF5FF] border border-[#BFDBFE] rounded-[8px] shadow-2xs">
-            <RefreshCw size={14} className="animate-spin text-[#007AFF] shrink-0" />
-            <div className="text-[12px] text-[#333333] font-geist flex-1 truncate">
-              {runningTasks[0].title} — running {Math.max(1, Math.round((Date.now() - runningTasks[0].startedAt) / 1000))}s
-            </div>
-            <button
-              onClick={() => selectSession(runningTasks[0].sessionId)}
-              className="px-2.5 py-1 bg-[#007AFF] text-white text-[11px] font-funnel font-bold rounded-[4px] transition-colors"
-            >
-              View
-            </button>
-            <button
-              onClick={() => cancelTask(runningTasks[0].id)}
-              className="px-2.5 py-1 bg-[#FFFFFF] border border-[#E5E7EB] text-[#333333] text-[11px] font-funnel rounded-[4px] hover:bg-[#F7F7F5] transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-        )}
-
-        {/* Zero State View with Big Grok Bot Avatar */}
-        {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center text-center my-auto py-10 animate-fade-in">
-            <div className="relative mb-5 group cursor-pointer" onClick={() => setIsAgentPickerOpen(true)} title="Switch Specialist Agent Worker">
-              <GrokAvatar
-                id={activeAgent?.avatar || activeAgent?.id || 'purple-pebble'}
-                size={96}
-                className="drop-shadow-xl transition-all duration-300 group-hover:scale-108"
-              />
-              <span className="absolute bottom-1 right-1 w-5 h-5 rounded-full bg-[#16A34A] border-3 border-white ring-2 ring-emerald-500/20" title="Online" />
-            </div>
-            <h1 className="text-2xl font-bold font-sans text-[#000000] mb-1.5 tracking-tight flex items-center justify-center gap-2">
-              <span>{activeAgent?.name || 'Chief of Staff'}</span>
-              <button
-                onClick={() => setIsAgentPickerOpen(true)}
-                className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-[#007AFF] border border-blue-100 hover:bg-blue-100 cursor-pointer"
-                title="Switch agent"
-              >
-                Change Agent
-              </button>
-            </h1>
-            <p className="text-xs text-[#8A8A85] font-sans mb-7 max-w-md leading-relaxed">
-              {activeAgent?.description || 'Autonomous specialist agent equipped with dedicated skills, tools, and Telegram gateway routing.'}
-            </p>
-
-            {/* Quick Starters */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full max-w-xl">
-              {[
-                {
-                  title: 'Review Workspace Security',
-                  desc: 'Run security scan and check for secrets in diff',
-                  prompt: 'Please review the workspace and git diff for security vulnerabilities and code quality using review_code.',
-                  icon: <ShieldCheck size={14} className="text-[#16A34A]" />,
-                },
-                {
-                  title: 'Build Landing Page',
-                  desc: 'Scaffold responsive layout with clean CSS',
-                  prompt: 'Let\'s build a responsive modern landing page component with clean design tokens.',
-                  icon: <Code2 size={14} className="text-[#007AFF]" />,
-                },
-                {
-                  title: 'Create Background Agent Task',
-                  desc: 'Run autonomous task in isolated worker pool',
-                  prompt: 'Please create a background agent task to monitor our endpoint health every 5 minutes.',
-                  icon: <Clock size={14} className="text-[#D97706]" />,
-                },
-                {
-                  title: 'Git Worktree Branch',
-                  desc: 'Create isolated worktree for parallel development',
-                  prompt: 'Create a new git worktree for feature refactoring and report its status.',
-                  icon: <GitFork size={14} className="text-[#8A8A85]" />,
-                },
-              ].map((item) => (
-                <div
-                  key={item.title}
-                  onClick={() => sendMessage(item.prompt)}
-                  className="p-3 bg-[#FFFFFF] hover:bg-[#FFF5EB] border border-[#E5E7EB] hover:border-[#D97706] rounded-[8px] text-left cursor-pointer transition-all shadow-2xs group"
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <span>{item.icon}</span>
-                    <span className="text-xs font-bold font-funnel text-[#000000]">{item.title}</span>
-                  </div>
-                  <div className="text-[11px] text-[#8A8A85] font-geist">{item.desc}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Message Stream */}
-        {messages.map((msg, index) => {
-          const isLastMessage = index === messages.length - 1;
-          const isCurrentStreaming = isGenerating && isLastMessage && msg.role === 'assistant';
-
-          if (msg.role === 'user') {
-            return (
-              <div key={msg.id} className="w-full flex flex-row justify-end items-start">
-                <div className="w-full max-w-[520px] p-[12px_16px] bg-[#0F0F0F] text-[#FFFFFF] rounded-[8px] shadow-sm">
-                  <div className="text-[13px]/[20px] font-geist whitespace-pre-wrap break-words">
-                    {msg.content}
-                  </div>
-                </div>
+      {/* Messages Scroll Area Container */}
+      <div className="flex-1 min-h-0 relative flex flex-col">
+        <div
+          ref={scrollContainerRef}
+          onScroll={handleScroll}
+          className="flex-1 overflow-y-auto px-4 sm:px-14 py-6 flex flex-col gap-5 custom-scrollbar"
+        >
+          {/* Parallel Running Background Tasks Banner */}
+          {runningTasks.length > 0 && (
+            <div className="w-full shrink-0 flex flex-row gap-2.5 p-[10px_14px] items-center bg-[#EBF5FF] border border-[#BFDBFE] rounded-[8px] shadow-2xs">
+              <RefreshCw size={14} className="animate-spin text-[#007AFF] shrink-0" />
+              <div className="text-[12px] text-[#333333] font-geist flex-1 truncate">
+                {runningTasks[0].title} — running {Math.max(1, Math.round((Date.now() - runningTasks[0].startedAt) / 1000))}s
               </div>
-            );
-          }
+              <button
+                onClick={() => selectSession(runningTasks[0].sessionId)}
+                className="px-2.5 py-1 bg-[#007AFF] text-white text-[11px] font-funnel font-bold rounded-[4px] transition-colors"
+              >
+                View
+              </button>
+              <button
+                onClick={() => cancelTask(runningTasks[0].id)}
+                className="px-2.5 py-1 bg-[#FFFFFF] border border-[#E5E7EB] text-[#333333] text-[11px] font-funnel rounded-[4px] hover:bg-[#F7F7F5] transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
 
-          return (
-            <div key={msg.id} className="w-full flex flex-row gap-3.5 justify-start items-start">
-              {/* Big Grok Avatar */}
-              <div className="shrink-0 mt-0.5 relative group">
+          {/* Zero State View with Big Grok Bot Avatar */}
+          {messages.length === 0 && (
+            <div className="flex flex-col items-center justify-center text-center my-auto py-10 animate-fade-in">
+              <div className="relative mb-5 group cursor-pointer" onClick={() => setIsAgentPickerOpen(true)} title="Switch Specialist Agent Worker">
                 <GrokAvatar
                   id={activeAgent?.avatar || activeAgent?.id || 'purple-pebble'}
-                  size={38}
-                  className="drop-shadow-xs transition-transform group-hover:scale-105"
+                  size={96}
+                  className="drop-shadow-xl transition-all duration-300 group-hover:scale-108"
                 />
+                <span className="absolute bottom-1 right-1 w-5 h-5 rounded-full bg-[#16A34A] border-3 border-white ring-2 ring-emerald-500/20" title="Online" />
               </div>
+              <h1 className="text-2xl font-bold font-sans text-[#000000] mb-1.5 tracking-tight flex items-center justify-center gap-2">
+                <span>{activeAgent?.name || 'Chief of Staff'}</span>
+                <button
+                  onClick={() => setIsAgentPickerOpen(true)}
+                  className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-[#007AFF] border border-blue-100 hover:bg-blue-100 cursor-pointer"
+                  title="Switch agent"
+                >
+                  Change Agent
+                </button>
+              </h1>
+              <p className="text-xs text-[#8A8A85] font-sans mb-7 max-w-md leading-relaxed">
+                {activeAgent?.description || 'Autonomous specialist agent equipped with dedicated skills, tools, and Telegram gateway routing.'}
+              </p>
 
-              {/* Agent Bubble Container */}
-              <div className="flex-1 flex flex-col gap-2.5 min-w-0">
-                {/* Collapsible Thought Process */}
-                {msg.thought && (
-                  <ThoughtProcessAccordion
-                    thought={msg.thought}
-                    isStreaming={isCurrentStreaming && !msg.content}
-                  />
-                )}
-
-                {/* Tool Execution Cards */}
-                {msg.toolCalls && msg.toolCalls.length > 0 && (
-                  <div className="space-y-1.5 my-1">
-                    {msg.toolCalls.map((tc) => (
-                      <ToolExecutionCard key={tc.id} toolCall={tc} />
-                    ))}
-                  </div>
-                )}
-
-                {/* Message Content with Markdown */}
-                <div className="text-[13px]/[21px] text-[#000000] font-geist leading-relaxed break-words">
-                  <MarkdownRenderer text={msg.content} />
-                  {isCurrentStreaming && msg.content && (
-                    <span className="inline-block w-1.5 h-3.5 bg-[#007AFF] animate-pulse ml-1 align-middle rounded-[1px]" />
-                  )}
-                  {isCurrentStreaming && !msg.content && !msg.thought && (!msg.toolCalls || msg.toolCalls.length === 0) && (
-                    <div className="flex items-center gap-2 text-xs text-[#8A8A85] py-1 font-mono">
-                      <RefreshCw size={12} className="animate-spin text-[#007AFF]" />
-                      <span>{thinkingStatus || 'Agent thinking...'}</span>
+              {/* Quick Starters */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full max-w-xl">
+                {[
+                  {
+                    title: 'Review Workspace Security',
+                    desc: 'Run security scan and check for secrets in diff',
+                    prompt: 'Please review the workspace and git diff for security vulnerabilities and code quality using review_code.',
+                    icon: <ShieldCheck size={14} className="text-[#16A34A]" />,
+                  },
+                  {
+                    title: 'Build Landing Page',
+                    desc: 'Scaffold responsive layout with clean CSS',
+                    prompt: 'Let\'s build a responsive modern landing page component with clean design tokens.',
+                    icon: <Code2 size={14} className="text-[#007AFF]" />,
+                  },
+                  {
+                    title: 'Create Background Agent Task',
+                    desc: 'Run autonomous task in isolated worker pool',
+                    prompt: 'Please create a background agent task to monitor our endpoint health every 5 minutes.',
+                    icon: <Clock size={14} className="text-[#D97706]" />,
+                  },
+                  {
+                    title: 'Git Worktree Branch',
+                    desc: 'Create isolated worktree for parallel development',
+                    prompt: 'Create a new git worktree for feature refactoring and report its status.',
+                    icon: <GitFork size={14} className="text-[#8A8A85]" />,
+                  },
+                ].map((item) => (
+                  <div
+                    key={item.title}
+                    onClick={() => sendMessage(item.prompt)}
+                    className="p-3 bg-[#FFFFFF] hover:bg-[#FFF5EB] border border-[#E5E7EB] hover:border-[#D97706] rounded-[8px] text-left cursor-pointer transition-all shadow-2xs group"
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span>{item.icon}</span>
+                      <span className="text-xs font-bold font-funnel text-[#000000]">{item.title}</span>
                     </div>
-                  )}
-                </div>
-
-                {/* Grounding RAG Chips */}
-                {msg.ragSources && msg.ragSources.length > 0 && (
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {msg.ragSources.map((rs, idx) => (
-                      <div
-                        key={`${rs.title}-${idx}`}
-                        className="flex items-center gap-1 px-2 py-0.5 bg-[#FFF5EB] rounded-[4px] text-[10px] text-[#F97316] font-funnel"
-                        title={`RAG grounded: ${rs.title} (score: ${rs.score.toFixed(2)})`}
-                      >
-                        <BookOpen size={10} className="text-[#F97316]" />
-                        <span>doc:{rs.title}</span>
-                      </div>
-                    ))}
+                    <div className="text-[11px] text-[#8A8A85] font-geist">{item.desc}</div>
                   </div>
-                )}
-
-                {/* Token Count & Time Footer */}
-                <div className="text-[10px] text-[#8A8A85] font-funnel">
-                  {msg.tokens ? `${msg.tokens} tokens` : 'local execution'} ·{' '}
-                  {new Date(msg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </div>
+                ))}
               </div>
             </div>
-          );
-        })}
+          )}
 
-        <div ref={messagesEndRef} />
+          {/* Message Stream */}
+          {messages.map((msg, index) => {
+            const isLastMessage = index === messages.length - 1;
+            const isCurrentStreaming = isGenerating && isLastMessage && msg.role === 'assistant';
+            return (
+              <ChatMessageItem
+                key={msg.id || `msg-${index}`}
+                msg={msg}
+                isCurrentStreaming={isCurrentStreaming}
+                activeAgent={activeAgent}
+                thinkingStatus={thinkingStatus}
+              />
+            );
+          })}
+
+          <div ref={messagesEndRef} className="h-1 shrink-0" />
+        </div>
+
+        {/* Floating Jump to Bottom Button when scrolled up */}
+        {showScrollBottomBtn && (
+          <button
+            type="button"
+            onClick={() => {
+              isAutoScrollEnabledRef.current = true;
+              setShowScrollBottomBtn(false);
+              const el = scrollContainerRef.current;
+              if (el) {
+                isProgrammaticScrollRef.current = true;
+                el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+                setTimeout(() => {
+                  isProgrammaticScrollRef.current = false;
+                }, 400);
+              }
+            }}
+            className="absolute bottom-4 left-1/2 -translate-x-1/2 px-3.5 py-1.5 bg-[#0F0F0F] dark:bg-white text-white dark:text-black rounded-full shadow-lg border border-black/10 dark:border-white/20 text-xs font-semibold flex items-center gap-1.5 transition-all animate-in fade-in slide-in-from-bottom-2 z-20 hover:scale-105 cursor-pointer select-none"
+          >
+            <ArrowDown size={13} />
+            <span>Jump to bottom</span>
+            {isGenerating && (
+              <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse ml-0.5" />
+            )}
+          </button>
+        )}
       </div>
 
       {/* WhatsApp-Style Clean Floating Input Bar */}
@@ -1268,13 +1308,13 @@ const ThoughtProcessAccordion: React.FC<{ thought: string; isStreaming?: boolean
   );
 
   return (
-    <div className="w-full bg-[#FFFFFF] border border-[#E5E7EB] rounded-[8px] overflow-hidden my-1 shadow-2xs">
+    <div className="w-full bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[8px] overflow-hidden my-1 shadow-2xs">
       <div
         onClick={() => setIsOpen(!isOpen)}
         className="w-full flex flex-row gap-2 p-[10px_14px] items-center cursor-pointer select-none"
       >
         <Brain size={14} className={`text-[#007AFF] ${isStreaming ? 'animate-pulse' : ''}`} />
-        <div className="text-[12px] text-[#333333] font-funnel font-bold">
+        <div className="text-[12px] text-[#333333] dark:text-[#E5E7EB] font-funnel font-bold">
           Thought process
         </div>
         <div className="text-[11px] text-[#007AFF] font-funnel">
@@ -1290,7 +1330,7 @@ const ThoughtProcessAccordion: React.FC<{ thought: string; isStreaming?: boolean
 
       {isOpen && (
         <div className="w-full p-[0px_14px_12px_14px]">
-          <div className="text-[12px]/[19px] text-[#8A8A85] font-geist whitespace-pre-wrap">
+          <div className="text-[12px]/[19px] text-[#8A8A85] dark:text-[#A1A1AA] font-geist whitespace-pre-wrap">
             {thought}
             {isStreaming && (
               <span className="inline-block w-1.5 h-3 bg-[#007AFF] animate-pulse ml-1 align-middle" />
@@ -1303,10 +1343,20 @@ const ThoughtProcessAccordion: React.FC<{ thought: string; isStreaming?: boolean
 };
 
 // Markdown Renderer with Code Block formatting & Copy
-const MarkdownRenderer: React.FC<{ text: string }> = ({ text }) => {
+const MarkdownRenderer: React.FC<{ text: string; isStreaming?: boolean }> = ({ text, isStreaming = false }) => {
   if (!text) return null;
 
-  const parts = text.split(/(```[\s\S]*?```)/g);
+  // If streaming and text has an unclosed code block fence, temporarily close it for rendering
+  // so the user sees a smoothly growing code block instead of raw markdown text flashing.
+  let formattedText = text;
+  if (isStreaming) {
+    const codeFences = (text.match(/```/g) || []).length;
+    if (codeFences % 2 !== 0) {
+      formattedText = text + '\n```';
+    }
+  }
+
+  const parts = formattedText.split(/(```[\s\S]*?```)/g);
 
   return (
     <div className="space-y-2">
@@ -1339,12 +1389,12 @@ const CodeBlock: React.FC<{ code: string; language: string }> = ({ code, languag
   };
 
   return (
-    <div className="rounded-[8px] border border-[#E5E7EB] bg-[#0F0F0F] text-[#FFFFFF] overflow-hidden my-3 text-xs">
+    <div className="rounded-[8px] border border-[#E5E7EB] dark:border-[#2E2E2E] bg-[#0F0F0F] text-[#FFFFFF] overflow-hidden my-3 text-xs">
       <div className="flex items-center justify-between px-3.5 py-1.5 bg-[#1F1F1F] border-b border-[#2E2E2E] text-[#8A8A85] font-mono text-[11px]">
         <span>{language || 'code'}</span>
         <button
           onClick={handleCopy}
-          className="flex items-center gap-1 hover:text-[#FFFFFF] transition-colors"
+          className="flex items-center gap-1 hover:text-[#FFFFFF] transition-colors cursor-pointer"
         >
           {copied ? <Check size={12} className="text-[#16A34A]" /> : <Copy size={12} />}
           <span>{copied ? 'Copied' : 'Copy'}</span>
@@ -1362,14 +1412,14 @@ function renderInlineMarkdown(text: string): React.ReactNode {
   return chunks.map((chunk, i) => {
     if (chunk.startsWith('`') && chunk.endsWith('`')) {
       return (
-        <code key={i} className="bg-[#E5E7EB] text-[#0F0F0F] px-1.5 py-0.5 rounded text-xs font-mono">
+        <code key={i} className="bg-[#E5E7EB] dark:bg-[#2C2C2E] text-[#0F0F0F] dark:text-[#E5E7EB] px-1.5 py-0.5 rounded text-xs font-mono">
           {chunk.slice(1, -1)}
         </code>
       );
     }
     if (chunk.startsWith('**') && chunk.endsWith('**')) {
       return (
-        <strong key={i} className="font-bold text-[#000000]">
+        <strong key={i} className="font-bold text-[#000000] dark:text-white">
           {chunk.slice(2, -2)}
         </strong>
       );
@@ -1377,3 +1427,100 @@ function renderInlineMarkdown(text: string): React.ReactNode {
     return chunk;
   });
 }
+
+// Optimized, Memoized Chat Message Item
+// Only the active streaming message re-renders on token deltas; previous messages are untouched.
+interface ChatMessageItemProps {
+  msg: SessionMessage;
+  isCurrentStreaming: boolean;
+  activeAgent: any;
+  thinkingStatus: string;
+}
+
+const ChatMessageItem = React.memo<ChatMessageItemProps>(({
+  msg,
+  isCurrentStreaming,
+  activeAgent,
+  thinkingStatus,
+}) => {
+  if (msg.role === 'user') {
+    return (
+      <div className="w-full flex flex-row justify-end items-start">
+        <div className="w-full max-w-[520px] p-[12px_16px] bg-[#0F0F0F] dark:bg-[#1C1C1E] text-[#FFFFFF] rounded-[8px] shadow-sm border border-transparent dark:border-[#2C2C2E]">
+          <div className="text-[13px]/[20px] font-geist whitespace-pre-wrap break-words">
+            {msg.content}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full flex flex-row gap-3.5 justify-start items-start">
+      {/* Big Grok Avatar */}
+      <div className="shrink-0 mt-0.5 relative group">
+        <GrokAvatar
+          id={activeAgent?.avatar || activeAgent?.id || 'purple-pebble'}
+          size={38}
+          className="drop-shadow-xs transition-transform group-hover:scale-105"
+        />
+      </div>
+
+      {/* Agent Bubble Container */}
+      <div className="flex-1 flex flex-col gap-2.5 min-w-0">
+        {/* Collapsible Thought Process */}
+        {msg.thought && (
+          <ThoughtProcessAccordion
+            thought={msg.thought}
+            isStreaming={isCurrentStreaming && !msg.content}
+          />
+        )}
+
+        {/* Tool Execution Cards */}
+        {msg.toolCalls && msg.toolCalls.length > 0 && (
+          <div className="space-y-1.5 my-1">
+            {msg.toolCalls.map((tc) => (
+              <ToolExecutionCard key={tc.id} toolCall={tc} />
+            ))}
+          </div>
+        )}
+
+        {/* Message Content with Markdown */}
+        <div className="text-[13px]/[21px] text-[#000000] dark:text-[#E5E7EB] font-geist leading-relaxed break-words">
+          <MarkdownRenderer text={msg.content} isStreaming={isCurrentStreaming} />
+          {isCurrentStreaming && msg.content && (
+            <span className="inline-block w-1.5 h-3.5 bg-[#007AFF] animate-pulse ml-1 align-middle rounded-[1px]" />
+          )}
+          {isCurrentStreaming && !msg.content && !msg.thought && (!msg.toolCalls || msg.toolCalls.length === 0) && (
+            <div className="flex items-center gap-2 text-xs text-[#8A8A85] py-1 font-mono">
+              <RefreshCw size={12} className="animate-spin text-[#007AFF]" />
+              <span>{thinkingStatus || 'Agent thinking...'}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Grounding RAG Chips */}
+        {msg.ragSources && msg.ragSources.length > 0 && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {msg.ragSources.map((rs, idx) => (
+              <div
+                key={`${rs.title}-${idx}`}
+                className="flex items-center gap-1 px-2 py-0.5 bg-[#FFF5EB] dark:bg-amber-950/30 rounded-[4px] text-[10px] text-[#F97316] font-funnel border border-amber-500/10"
+                title={`RAG grounded: ${rs.title} (score: ${rs.score.toFixed(2)})`}
+              >
+                <BookOpen size={10} className="text-[#F97316]" />
+                <span>doc:{rs.title}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Token Count & Time Footer */}
+        <div className="text-[10px] text-[#8A8A85] font-funnel">
+          {msg.tokens ? `${msg.tokens} tokens` : 'local execution'} ·{' '}
+          {new Date(msg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        </div>
+      </div>
+    </div>
+  );
+});
