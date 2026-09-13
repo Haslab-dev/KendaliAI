@@ -206,5 +206,32 @@ export interface ReminderNotification {
   triggeredAt: number;
 }
 
+export interface TelegramAuthorizedUser {
+  userId: number;
+  username: string;
+  firstName: string;
+  lastName: string;
+  authMethod: 'otp' | 'admin_approval' | 'manual';
+  botId?: string;
+  createdAt: number;
+}
+
+export interface TelegramPendingRequest {
+  userId: number;
+  chatId: number;
+  username: string;
+  firstName: string;
+  lastName: string;
+  botId?: string;
+  lastMessage?: string;
+  createdAt: number;
+}
+
+export interface TelegramAuthStatus {
+  authRequired: boolean;
+  authorizedUsersCount: number;
+  pendingRequestsCount: number;
+}
+
 
 

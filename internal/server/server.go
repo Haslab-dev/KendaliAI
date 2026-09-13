@@ -146,6 +146,8 @@ func (s *Server) routes() {
 	s.router.HandleFunc("/api/logs", s.handleLogs())
 	s.router.HandleFunc("/api/telegram/bots", s.handleTelegramBots())
 	s.router.HandleFunc("/api/telegram/bots/", s.handleTelegramBotAction())
+	s.router.HandleFunc("/api/telegram/auth", s.handleTelegramAuth())
+	s.router.HandleFunc("/api/telegram/auth/", s.handleTelegramAuthAction())
 
 	// Embedding & Vector RAG
 	s.router.HandleFunc("/api/embedding", s.handleEmbeddingConfig())
@@ -1209,6 +1211,213 @@ func (s *Server) handleTelegramBotAction() http.HandlerFunc {
 
 		default:
 			http.Error(w, "unknown action", http.StatusBadRequest)
+		}
+	}
+}
+
+// --- Telegram Auth & Security API ---
+
+func (s *Server) handleTelegramAuth() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case "GET":
+			authReq := s.store.GetTelegramAuthRequired()
+			authUsers, _ := s.store.ListTelegramAuthorizedUsers()
+			pending, _ := s.store.ListTelegramPendingRequests()
+
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"authRequired":         authReq,
+				"authorizedUsersCount": len(authUsers),
+				"pendingRequestsCount": len(pending),
+			})
+
+		case "POST":
+			var body struct {
+				AuthRequired *bool `json:"authRequired"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err == nil && body.AuthRequired != nil {
+				_ = s.store.SetTelegramAuthRequired(*body.AuthRequired)
+			} else {
+				cur := s.store.GetTelegramAuthRequired()
+				_ = s.store.SetTelegramAuthRequired(!cur)
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"authRequired": s.store.GetTelegramAuthRequired(),
+			})
+
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	}
+}
+
+func (s *Server) handleTelegramAuthAction() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		path := strings.TrimPrefix(r.URL.Path, "/api/telegram/auth/")
+		parts := strings.Split(strings.Trim(path, "/"), "/")
+		if len(parts) == 0 || parts[0] == "" {
+			http.Error(w, "invalid path", http.StatusBadRequest)
+			return
+		}
+
+		action := parts[0]
+		switch action {
+		case "status":
+			authReq := s.store.GetTelegramAuthRequired()
+			authUsers, _ := s.store.ListTelegramAuthorizedUsers()
+			pending, _ := s.store.ListTelegramPendingRequests()
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"authRequired":         authReq,
+				"authorizedUsersCount": len(authUsers),
+				"pendingRequestsCount": len(pending),
+			})
+
+		case "users":
+			switch r.Method {
+			case "GET":
+				users, err := s.store.ListTelegramAuthorizedUsers()
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				json.NewEncoder(w).Encode(users)
+
+			case "POST":
+				var u gateway.TelegramAuthorizedUser
+				if err := json.NewDecoder(r.Body).Decode(&u); err != nil {
+					http.Error(w, "invalid JSON", http.StatusBadRequest)
+					return
+				}
+				if u.AuthMethod == "" {
+					u.AuthMethod = "manual"
+				}
+				if err := s.store.AuthorizeTelegramUser(u); err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				json.NewEncoder(w).Encode(u)
+
+			case "DELETE":
+				idStr := r.URL.Query().Get("userId")
+				if idStr == "" {
+					idStr = r.URL.Query().Get("id")
+				}
+				uid, _ := strconv.ParseInt(idStr, 10, 64)
+				if uid == 0 {
+					http.Error(w, "missing or invalid userId", http.StatusBadRequest)
+					return
+				}
+				if err := s.store.RevokeTelegramUser(uid); err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+
+			default:
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			}
+
+		case "pending":
+			switch r.Method {
+			case "GET":
+				pending, err := s.store.ListTelegramPendingRequests()
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				json.NewEncoder(w).Encode(pending)
+			default:
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			}
+
+		case "approve":
+			if r.Method != "POST" {
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			var body struct {
+				UserID int64 `json:"userId"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.UserID == 0 {
+				http.Error(w, "missing userId", http.StatusBadRequest)
+				return
+			}
+
+			// Find request details to keep username/name
+			pendingList, _ := s.store.ListTelegramPendingRequests()
+			var target *gateway.TelegramPendingRequest
+			for _, p := range pendingList {
+				if p.UserID == body.UserID {
+					target = &p
+					break
+				}
+			}
+
+			username := ""
+			firstName := ""
+			lastName := ""
+			var chatID int64
+			botID := ""
+			if target != nil {
+				username = target.Username
+				firstName = target.FirstName
+				lastName = target.LastName
+				chatID = target.ChatID
+				botID = target.BotID
+			}
+
+			_ = s.store.AuthorizeTelegramUser(gateway.TelegramAuthorizedUser{
+				UserID:     body.UserID,
+				Username:   username,
+				FirstName:  firstName,
+				LastName:   lastName,
+				AuthMethod: "admin_approval",
+				BotID:      botID,
+				CreatedAt:  time.Now().Unix(),
+			})
+			_ = s.store.DeleteTelegramPendingRequest(body.UserID)
+
+			// Notify user in Telegram!
+			if chatID != 0 {
+				s.tg.NotifyUserApproved(chatID, botID)
+			}
+
+			json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "userId": body.UserID})
+
+		case "deny":
+			if r.Method != "POST" {
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			var body struct {
+				UserID int64 `json:"userId"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.UserID == 0 {
+				http.Error(w, "missing userId", http.StatusBadRequest)
+				return
+			}
+			_ = s.store.DeleteTelegramPendingRequest(body.UserID)
+			json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "userId": body.UserID})
+
+		case "code":
+			if r.Method != "POST" {
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			code, err := s.store.CreateTelegramPairingCode(10*time.Minute, "")
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"code":      code,
+				"expiresIn": 600,
+			})
+
+		default:
+			http.Error(w, "unknown auth action", http.StatusBadRequest)
 		}
 	}
 }

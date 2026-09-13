@@ -1,10 +1,12 @@
 package gateway
 
 import (
+	"crypto/rand"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"math"
+	"math/big"
 	"sort"
 	"strings"
 	"time"
@@ -215,6 +217,37 @@ func (s *Store) SeedInitialData(cfg *config.Config) {
 	)`)
 	_, _ = s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_doc_chunks_session ON document_chunks(session_id)`)
 	_, _ = s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_doc_chunks_doc ON document_chunks(document_id)`)
+
+	// Telegram Auth Tables
+	_, _ = s.db.Exec(`CREATE TABLE IF NOT EXISTS system_settings (
+		key TEXT PRIMARY KEY,
+		value TEXT
+	)`)
+	_, _ = s.db.Exec(`CREATE TABLE IF NOT EXISTS telegram_authorized_users (
+		user_id INTEGER PRIMARY KEY,
+		username TEXT DEFAULT '',
+		first_name TEXT DEFAULT '',
+		last_name TEXT DEFAULT '',
+		auth_method TEXT DEFAULT 'manual',
+		bot_id TEXT DEFAULT '',
+		created_at INTEGER
+	)`)
+	_, _ = s.db.Exec(`CREATE TABLE IF NOT EXISTS telegram_pending_requests (
+		user_id INTEGER PRIMARY KEY,
+		chat_id INTEGER,
+		username TEXT DEFAULT '',
+		first_name TEXT DEFAULT '',
+		last_name TEXT DEFAULT '',
+		bot_id TEXT DEFAULT '',
+		last_message TEXT DEFAULT '',
+		created_at INTEGER
+	)`)
+	_, _ = s.db.Exec(`CREATE TABLE IF NOT EXISTS telegram_pairing_codes (
+		code TEXT PRIMARY KEY,
+		created_at INTEGER,
+		expires_at INTEGER,
+		bot_id TEXT DEFAULT ''
+	)`)
 
 	// 1. Providers
 	providers, err := s.ListProviders()
@@ -1327,3 +1360,193 @@ func (s *Store) searchChunks(query string, args []interface{}, queryEmbedding []
 	}
 	return results, nil
 }
+
+// --- Telegram Auth & Pairing ---
+
+type TelegramAuthorizedUser struct {
+	UserID     int64  `json:"userId"`
+	Username   string `json:"username"`
+	FirstName  string `json:"firstName"`
+	LastName   string `json:"lastName"`
+	AuthMethod string `json:"authMethod"` // "otp", "admin_approval", "manual"
+	BotID      string `json:"botId,omitempty"`
+	CreatedAt  int64  `json:"createdAt"`
+}
+
+type TelegramPendingRequest struct {
+	UserID      int64  `json:"userId"`
+	ChatID      int64  `json:"chatId"`
+	Username    string `json:"username"`
+	FirstName   string `json:"firstName"`
+	LastName    string `json:"lastName"`
+	BotID       string `json:"botId,omitempty"`
+	LastMessage string `json:"lastMessage,omitempty"`
+	CreatedAt   int64  `json:"createdAt"`
+}
+
+type TelegramPairingCode struct {
+	Code      string `json:"code"`
+	CreatedAt int64  `json:"createdAt"`
+	ExpiresAt int64  `json:"expiresAt"`
+	BotID     string `json:"botId,omitempty"`
+}
+
+func (s *Store) ListTelegramAuthorizedUsers() ([]TelegramAuthorizedUser, error) {
+	rows, err := s.db.Query("SELECT user_id, username, first_name, last_name, auth_method, bot_id, created_at FROM telegram_authorized_users ORDER BY created_at DESC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	res := make([]TelegramAuthorizedUser, 0)
+	for rows.Next() {
+		var u TelegramAuthorizedUser
+		if err := rows.Scan(&u.UserID, &u.Username, &u.FirstName, &u.LastName, &u.AuthMethod, &u.BotID, &u.CreatedAt); err != nil {
+			continue
+		}
+		res = append(res, u)
+	}
+	return res, nil
+}
+
+func (s *Store) IsTelegramUserAuthorized(userID int64, username string) (bool, error) {
+	cleanUser := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(username)), "@")
+
+	var count int
+	err := s.db.QueryRow(`
+		SELECT COUNT(*) FROM telegram_authorized_users 
+		WHERE user_id = ? OR (username != '' AND LOWER(username) = ?)`,
+		userID, cleanUser).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func (s *Store) AuthorizeTelegramUser(u TelegramAuthorizedUser) error {
+	if u.CreatedAt == 0 {
+		u.CreatedAt = time.Now().Unix()
+	}
+	u.Username = strings.TrimPrefix(strings.TrimSpace(u.Username), "@")
+	_, err := s.db.Exec(`
+		INSERT INTO telegram_authorized_users (user_id, username, first_name, last_name, auth_method, bot_id, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(user_id) DO UPDATE SET
+			username = excluded.username,
+			first_name = excluded.first_name,
+			last_name = excluded.last_name,
+			auth_method = excluded.auth_method,
+			bot_id = excluded.bot_id`,
+		u.UserID, u.Username, u.FirstName, u.LastName, u.AuthMethod, u.BotID, u.CreatedAt)
+	return err
+}
+
+func (s *Store) RevokeTelegramUser(userID int64) error {
+	_, err := s.db.Exec("DELETE FROM telegram_authorized_users WHERE user_id = ?", userID)
+	return err
+}
+
+func (s *Store) ListTelegramPendingRequests() ([]TelegramPendingRequest, error) {
+	rows, err := s.db.Query("SELECT user_id, chat_id, username, first_name, last_name, bot_id, last_message, created_at FROM telegram_pending_requests ORDER BY created_at DESC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	res := make([]TelegramPendingRequest, 0)
+	for rows.Next() {
+		var r TelegramPendingRequest
+		if err := rows.Scan(&r.UserID, &r.ChatID, &r.Username, &r.FirstName, &r.LastName, &r.BotID, &r.LastMessage, &r.CreatedAt); err != nil {
+			continue
+		}
+		res = append(res, r)
+	}
+	return res, nil
+}
+
+func (s *Store) SaveTelegramPendingRequest(r TelegramPendingRequest) error {
+	if r.CreatedAt == 0 {
+		r.CreatedAt = time.Now().Unix()
+	}
+	r.Username = strings.TrimPrefix(strings.TrimSpace(r.Username), "@")
+	_, err := s.db.Exec(`
+		INSERT INTO telegram_pending_requests (user_id, chat_id, username, first_name, last_name, bot_id, last_message, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(user_id) DO UPDATE SET
+			chat_id = excluded.chat_id,
+			username = excluded.username,
+			first_name = excluded.first_name,
+			last_name = excluded.last_name,
+			bot_id = excluded.bot_id,
+			last_message = excluded.last_message,
+			created_at = excluded.created_at`,
+		r.UserID, r.ChatID, r.Username, r.FirstName, r.LastName, r.BotID, r.LastMessage, r.CreatedAt)
+	return err
+}
+
+func (s *Store) DeleteTelegramPendingRequest(userID int64) error {
+	_, err := s.db.Exec("DELETE FROM telegram_pending_requests WHERE user_id = ?", userID)
+	return err
+}
+
+func (s *Store) CreateTelegramPairingCode(ttl time.Duration, botID string) (string, error) {
+	n, err := rand.Int(rand.Reader, big.NewInt(900000))
+	if err != nil {
+		return "", err
+	}
+	code := fmt.Sprintf("%06d", n.Int64()+100000)
+	now := time.Now().Unix()
+	exp := now + int64(ttl.Seconds())
+
+	_, err = s.db.Exec(`
+		INSERT INTO telegram_pairing_codes (code, created_at, expires_at, bot_id)
+		VALUES (?, ?, ?, ?)`,
+		code, now, exp, botID)
+	if err != nil {
+		return "", err
+	}
+	return code, nil
+}
+
+func (s *Store) VerifyTelegramPairingCode(code string) (bool, error) {
+	cleanCode := strings.ToUpper(strings.TrimSpace(code))
+	now := time.Now().Unix()
+
+	var botID string
+	err := s.db.QueryRow(`
+		SELECT bot_id FROM telegram_pairing_codes 
+		WHERE UPPER(code) = ? AND expires_at >= ?`,
+		cleanCode, now).Scan(&botID)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+
+	// Consume code
+	_, _ = s.db.Exec("DELETE FROM telegram_pairing_codes WHERE UPPER(code) = ?", cleanCode)
+	return true, nil
+}
+
+func (s *Store) GetTelegramAuthRequired() bool {
+	var val string
+	err := s.db.QueryRow("SELECT value FROM system_settings WHERE key = 'telegram_auth_required'").Scan(&val)
+	if err != nil {
+		// Default to true for security if not set
+		return true
+	}
+	return val == "true" || val == "1"
+}
+
+func (s *Store) SetTelegramAuthRequired(required bool) error {
+	val := "false"
+	if required {
+		val = "true"
+	}
+	_, err := s.db.Exec(`
+		INSERT INTO system_settings (key, value) VALUES ('telegram_auth_required', ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value`, val)
+	return err
+}
+
