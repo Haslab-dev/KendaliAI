@@ -5,7 +5,7 @@ import (
 	"sync"
 )
 
-type ScheduledTask struct {
+type ExecutionTask struct {
 	ID         string
 	Priority   int
 	Resource   string
@@ -16,7 +16,7 @@ type ScheduledTask struct {
 type ExecutionScheduler struct {
 	mu             sync.Mutex
 	leases         map[string]string
-	taskQueue      []*ScheduledTask
+	taskQueue      []*ExecutionTask
 	maxConcurrency int
 	runningCount   int
 }
@@ -49,7 +49,7 @@ func (s *ExecutionScheduler) ReleaseLease(resource, pid string) {
 	}
 }
 
-func (s *ExecutionScheduler) Submit(ctx context.Context, task *ScheduledTask) error {
+func (s *ExecutionScheduler) Submit(ctx context.Context, task *ExecutionTask) error {
 	s.mu.Lock()
 	s.taskQueue = append(s.taskQueue, task)
 	s.mu.Unlock()

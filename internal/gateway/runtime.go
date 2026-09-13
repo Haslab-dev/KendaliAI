@@ -14,6 +14,7 @@ import (
 	"github.com/kendaliai/app/internal/config"
 	"github.com/kendaliai/app/internal/embedding"
 	"github.com/kendaliai/app/internal/messaging"
+	"github.com/kendaliai/app/internal/plugins"
 	"github.com/kendaliai/app/internal/providers"
 	openai "github.com/sashabaranov/go-openai"
 )
@@ -22,6 +23,7 @@ type Runtime struct {
 	store    *Store
 	bus      *messaging.EventBus
 	workRoot string
+	taskMgr  *TaskManager
 }
 
 func NewRuntime(store *Store, bus *messaging.EventBus, workRoot string) *Runtime {
@@ -32,7 +34,12 @@ func NewRuntime(store *Store, bus *messaging.EventBus, workRoot string) *Runtime
 		store:    store,
 		bus:      bus,
 		workRoot: workRoot,
+		taskMgr:  NewTaskManager(bus),
 	}
+}
+
+func (r *Runtime) GetTaskManager() *TaskManager {
+	return r.taskMgr
 }
 
 func (r *Runtime) ExecuteTurn(ctx context.Context, sessionID, agentID, userPrompt, channel string) (*SessionMessage, error) {
@@ -219,6 +226,7 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		AgentID:   activeAgentID,
 		Channel:   channel,
 	})
+	bgTask := r.taskMgr.Register(sessionID, activeAgentID, rawPrompt, nil)
 	r.bus.Publish(messaging.Event{
 		Type:      messaging.EventAgentThinking,
 		SessionID: sessionID,
@@ -371,6 +379,15 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 				toolSummary = " — Tools: " + strings.Join(names, ", ")
 			}
 			sysPrompt += fmt.Sprintf("- /mcp:%s: %s (Transport: %s)%s\n", m.Name, m.ID, m.Transport, toolSummary)
+		}
+	}
+
+	// Inject active plugins system prompts
+	if plugins.DefaultManager != nil {
+		for _, p := range plugins.DefaultManager.List() {
+			if p.Enabled && p.SystemPrompt != "" {
+				sysPrompt += fmt.Sprintf("\n\n### PLUGIN INSTRUCTION (%s):\n%s\n", p.Name, p.SystemPrompt)
+			}
 		}
 	}
 
@@ -620,6 +637,7 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 					Channel:   channel,
 					Payload:   err.Error(),
 				})
+				r.taskMgr.Fail(bgTask.ID, err.Error())
 				return nil, fmt.Errorf("LLM error: %w", err)
 			}
 
@@ -743,6 +761,7 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		Channel:   channel,
 		Payload:   assistantMsg,
 	})
+	r.taskMgr.Complete(bgTask.ID, assistantMsg.Content)
 
 	return &assistantMsg, nil
 }

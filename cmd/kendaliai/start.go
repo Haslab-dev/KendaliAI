@@ -13,7 +13,9 @@ import (
 	"github.com/kendaliai/app/internal/config"
 	"github.com/kendaliai/app/internal/db"
 	"github.com/kendaliai/app/internal/gateways"
+	"github.com/kendaliai/app/internal/messaging"
 	"github.com/kendaliai/app/internal/reflection"
+	"github.com/kendaliai/app/internal/scheduler"
 	"github.com/kendaliai/app/internal/server"
 	"github.com/kendaliai/app/internal/skills"
 	"github.com/kendaliai/app/internal/storage"
@@ -120,6 +122,9 @@ func runStart(cmd *cobra.Command, args []string) {
 	}
 	daemon := reflection.NewDaemon(database, reflectionCfg)
 	go daemon.Start(context.Background())
+
+	schedDaemon := scheduler.NewDaemon(messaging.DefaultBus)
+	go schedDaemon.Start(context.Background())
 
 	// 1. Auto-onboard gateway/channels database configurations
 	gateways.HandleOnboard(database)

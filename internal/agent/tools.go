@@ -17,9 +17,13 @@ import (
 	"github.com/kendaliai/app/internal/config"
 	"github.com/kendaliai/app/internal/data"
 	"github.com/kendaliai/app/internal/embedding"
+	"github.com/kendaliai/app/internal/git"
 	"github.com/kendaliai/app/internal/intelligence"
 	"github.com/kendaliai/app/internal/logger"
+	"github.com/kendaliai/app/internal/plugins"
 	"github.com/kendaliai/app/internal/reflection"
+	"github.com/kendaliai/app/internal/review"
+	"github.com/kendaliai/app/internal/scheduler"
 	"github.com/kendaliai/app/internal/skills"
 	"github.com/kendaliai/app/internal/storage"
 	"github.com/mark3labs/mcp-go/client"
@@ -507,6 +511,117 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 					return fmt.Sprintf("Git Apply Failed: %s", string(out))
 				}
 				return "Patch applied successfully."
+			},
+		},
+		"git_worktree": {
+			Name:        "git_worktree",
+			Description: "Manages Git Worktrees for isolated parallel branch/folder development. Actions: 'list', 'add', 'remove', 'prune'. Useful for developing websites, features, or tests in parallel without dirtying the main working tree.",
+			Signature:   `{"action": "list|add|remove|prune", "path": "string", "branch": "string", "create_branch": "boolean"}`,
+			Category:    "Git",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				action, _ := args["action"].(string)
+				path, _ := args["path"].(string)
+				branch, _ := args["branch"].(string)
+				createBranch := false
+				if cb, ok := args["create_branch"].(bool); ok {
+					createBranch = cb
+				}
+
+				switch strings.ToLower(action) {
+				case "list", "":
+					wtList, err := git.DefaultWorktreeManager.ListWorktrees(ctx, workspaceRoot)
+					if err != nil {
+						return fmt.Sprintf("Error listing worktrees: %v", err)
+					}
+					data, _ := json.MarshalIndent(wtList, "", "  ")
+					return string(data)
+
+				case "add", "create":
+					if path == "" {
+						return "error: 'path' is required to add worktree"
+					}
+					wt, err := git.DefaultWorktreeManager.AddWorktree(ctx, workspaceRoot, path, branch, createBranch)
+					if err != nil {
+						return fmt.Sprintf("Error adding worktree: %v", err)
+					}
+					return fmt.Sprintf("✅ Worktree created at %s on branch %s (HEAD: %s)", wt.Path, wt.Branch, wt.HEAD)
+
+				case "remove", "delete":
+					if path == "" {
+						return "error: 'path' is required to remove worktree"
+					}
+					err := git.DefaultWorktreeManager.RemoveWorktree(ctx, workspaceRoot, path, true)
+					if err != nil {
+						return fmt.Sprintf("Error removing worktree: %v", err)
+					}
+					return fmt.Sprintf("✅ Worktree at %s removed successfully", path)
+
+				case "prune":
+					err := git.DefaultWorktreeManager.PruneWorktrees(ctx, workspaceRoot)
+					if err != nil {
+						return fmt.Sprintf("Error pruning worktrees: %v", err)
+					}
+					return "✅ Git worktrees pruned successfully"
+
+				default:
+					return fmt.Sprintf("Unknown action '%s'. Valid actions: list, add, remove, prune", action)
+				}
+			},
+		},
+		"review_code": {
+			Name:        "review_code",
+			Description: "Inspects code diffs, files, or workspace for security vulnerabilities, secret leaks, bugs, and quality issues. Actions: 'diff' (default), 'file', 'workspace'.",
+			Signature:   `{"action": "diff|file|workspace", "path": "string"}`,
+			Category:    "Review",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				engine := review.NewReviewEngine()
+				action, _ := args["action"].(string)
+				path, _ := args["path"].(string)
+
+				switch strings.ToLower(action) {
+				case "file":
+					if path == "" {
+						return "error: 'path' is required for file review"
+					}
+					fullPath := path
+					if !filepath.IsAbs(fullPath) {
+						fullPath = filepath.Join(workspaceRoot, path)
+					}
+					report, err := engine.ReviewFile(fullPath)
+					if err != nil {
+						return fmt.Sprintf("Error reviewing file: %v", err)
+					}
+					data, _ := json.MarshalIndent(report, "", "  ")
+					return string(data)
+
+				case "workspace":
+					target := workspaceRoot
+					if path != "" {
+						if !filepath.IsAbs(path) {
+							target = filepath.Join(workspaceRoot, path)
+						} else {
+							target = path
+						}
+					}
+					issues, err := engine.Scan(target)
+					if err != nil {
+						return fmt.Sprintf("Error scanning workspace: %v", err)
+					}
+					data, _ := json.MarshalIndent(map[string]interface{}{
+						"target":     target,
+						"issueCount": len(issues),
+						"issues":     issues,
+					}, "", "  ")
+					return string(data)
+
+				default: // "diff"
+					report, err := engine.AnalyzeDiff(ctx, workspaceRoot)
+					if err != nil {
+						return fmt.Sprintf("Error analyzing diff: %v", err)
+					}
+					data, _ := json.MarshalIndent(report, "", "  ")
+					return string(data)
+				}
 			},
 		},
 
@@ -1198,6 +1313,214 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 				return string(out)
 			},
 		},
+		"create_plugin": {
+			Name:        "create_plugin",
+			Description: "Creates and registers a new agent plugin. Plugins can provide custom tools, scripts, system prompt instructions, and skills to extend the agent harness.",
+			Signature:   `{"id": "string", "name": "string", "description": "string", "scope": "workspace|global", "system_prompt": "string", "tools": "array", "skills": "array", "files": "object"}`,
+			Category:    "Plugin",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				if plugins.DefaultManager == nil {
+					plugins.NewManager(workspaceRoot, nil)
+				}
+
+				id, _ := args["id"].(string)
+				name, _ := args["name"].(string)
+				desc, _ := args["description"].(string)
+				scope, _ := args["scope"].(string)
+				sysPrompt, _ := args["system_prompt"].(string)
+
+				if id == "" {
+					return "error: 'id' is required (kebab-case identifier)"
+				}
+				if name == "" {
+					name = id
+				}
+
+				var toolsList []plugins.PluginToolDef
+				if rawTools, ok := args["tools"].([]interface{}); ok {
+					for _, rt := range rawTools {
+						if m, ok := rt.(map[string]interface{}); ok {
+							tDef := plugins.PluginToolDef{
+								Name:        fmt.Sprint(m["name"]),
+								Description: fmt.Sprint(m["description"]),
+								HandlerType: plugins.HandlerType(fmt.Sprint(m["handler_type"])),
+								Command:     fmt.Sprint(m["command"]),
+								Script:      fmt.Sprint(m["script"]),
+							}
+							if tDef.HandlerType == "" {
+								tDef.HandlerType = plugins.HandlerCommand
+							}
+							toolsList = append(toolsList, tDef)
+						}
+					}
+				}
+
+				var skillsList []plugins.PluginSkillDef
+				if rawSkills, ok := args["skills"].([]interface{}); ok {
+					for _, rs := range rawSkills {
+						if m, ok := rs.(map[string]interface{}); ok {
+							skillsList = append(skillsList, plugins.PluginSkillDef{
+								Name:        fmt.Sprint(m["name"]),
+								Description: fmt.Sprint(m["description"]),
+								Body:        fmt.Sprint(m["body"]),
+							})
+						}
+					}
+				}
+
+				filesMap := make(map[string]string)
+				if rawFiles, ok := args["files"].(map[string]interface{}); ok {
+					for k, v := range rawFiles {
+						filesMap[k] = fmt.Sprint(v)
+					}
+				}
+
+				p, err := plugins.DefaultManager.Create(plugins.CreatePluginRequest{
+					ID:           id,
+					Name:         name,
+					Description:  desc,
+					Scope:        scope,
+					SystemPrompt: sysPrompt,
+					Tools:        toolsList,
+					Skills:       skillsList,
+					Files:        filesMap,
+				})
+				if err != nil {
+					return fmt.Sprintf("Error creating plugin: %v", err)
+				}
+
+				return fmt.Sprintf("✅ Plugin '%s' created successfully at %s with %d tools and %d skills.",
+					p.Name, p.Path, len(p.Tools), len(p.Skills))
+			},
+		},
+		"list_plugins": {
+			Name:        "list_plugins",
+			Description: "Lists all installed agent plugins, their status, source, and exposed tools.",
+			Signature:   `{}`,
+			Category:    "Plugin",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				if plugins.DefaultManager == nil {
+					plugins.NewManager(workspaceRoot, nil)
+				}
+				list := plugins.DefaultManager.List()
+				data, _ := json.MarshalIndent(list, "", "  ")
+				return string(data)
+			},
+		},
+		"toggle_plugin": {
+			Name:        "toggle_plugin",
+			Description: "Enables or disables an agent plugin by ID.",
+			Signature:   `{"id": "string", "enabled": "boolean"}`,
+			Category:    "Plugin",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				if plugins.DefaultManager == nil {
+					plugins.NewManager(workspaceRoot, nil)
+				}
+				id, _ := args["id"].(string)
+				enabled := true
+				if e, ok := args["enabled"].(bool); ok {
+					enabled = e
+				}
+				p, err := plugins.DefaultManager.Toggle(id, enabled)
+				if err != nil {
+					return fmt.Sprintf("Error updating plugin: %v", err)
+				}
+				state := "enabled"
+				if !p.Enabled {
+					state = "disabled"
+				}
+				return fmt.Sprintf("✅ Plugin '%s' is now %s.", p.Name, state)
+			},
+		},
+		"schedule_task": {
+			Name:        "schedule_task",
+			Description: "Schedules a recurring cron job or natural-language reminder (e.g. 'make reminder every 1 am to wake me up', '0 1 * * *', 'every 30 minutes', 'tomorrow at 9am'). Fires notifications and executes instructions automatically.",
+			Signature:   `{"name": "string", "schedule": "string", "prompt": "string"}`,
+			Category:    "Scheduler",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				if scheduler.DefaultDaemon == nil {
+					scheduler.NewDaemon(nil)
+				}
+				name, _ := args["name"].(string)
+				scheduleExpr, _ := args["schedule"].(string)
+				prompt, _ := args["prompt"].(string)
+
+				if name == "" {
+					name = prompt
+					if len(name) > 30 {
+						name = name[:30] + "..."
+					}
+					if name == "" {
+						name = "Scheduled Reminder"
+					}
+				}
+
+				task, err := scheduler.DefaultDaemon.AddTask(name, scheduleExpr, prompt, "", "web")
+				if err != nil {
+					return fmt.Sprintf("Error scheduling task: %v", err)
+				}
+
+				return fmt.Sprintf("✅ Scheduled task '%s' [%s] created. Schedule: '%s'. Next run: %s.",
+					task.Name, task.ID, task.Schedule, task.NextRun.Format(time.RFC3339))
+			},
+		},
+		"list_schedules": {
+			Name:        "list_schedules",
+			Description: "Lists all scheduled cron tasks and reminders with their next run times, statuses, and run counts.",
+			Signature:   `{}`,
+			Category:    "Scheduler",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				if scheduler.DefaultDaemon == nil {
+					scheduler.NewDaemon(nil)
+				}
+				tasks := scheduler.DefaultDaemon.ListTasks()
+				if len(tasks) == 0 {
+					return "No scheduled tasks found."
+				}
+				data, _ := json.MarshalIndent(tasks, "", "  ")
+				return string(data)
+			},
+		},
+		"cancel_schedule": {
+			Name:        "cancel_schedule",
+			Description: "Cancels and deletes a scheduled task or reminder by ID.",
+			Signature:   `{"id": "string"}`,
+			Category:    "Scheduler",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				if scheduler.DefaultDaemon == nil {
+					scheduler.NewDaemon(nil)
+				}
+				id, _ := args["id"].(string)
+				if id == "" {
+					return "error: 'id' is required"
+				}
+				err := scheduler.DefaultDaemon.CancelTask(id)
+				if err != nil {
+					return fmt.Sprintf("Error cancelling schedule: %v", err)
+				}
+				return fmt.Sprintf("✅ Scheduled task '%s' cancelled.", id)
+			},
+		},
+		"run_schedule_now": {
+			Name:        "run_schedule_now",
+			Description: "Triggers a scheduled reminder or cron task immediately.",
+			Signature:   `{"id": "string"}`,
+			Category:    "Scheduler",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				if scheduler.DefaultDaemon == nil {
+					scheduler.NewDaemon(nil)
+				}
+				id, _ := args["id"].(string)
+				if id == "" {
+					return "error: 'id' is required"
+				}
+				err := scheduler.DefaultDaemon.RunNow(ctx, id)
+				if err != nil {
+					return fmt.Sprintf("Error triggering task: %v", err)
+				}
+				return fmt.Sprintf("✅ Scheduled task '%s' triggered immediately.", id)
+			},
+		},
 		"mcp_call": {
 			Name:        "mcp_call",
 			Description: "Calls a tool on an MCP (Model Context Protocol) server. You can specify a configured 'server' name (e.g. 'exa') or provide 'server_url'/'server_cmd' directly.",
@@ -1442,6 +1765,43 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 							}
 						}
 					}
+				}
+			}
+		}
+	}
+
+	// Dynamically register tools from enabled plugins
+	if plugins.DefaultManager != nil {
+		for _, p := range plugins.DefaultManager.List() {
+			if !p.Enabled {
+				continue
+			}
+			for _, t := range p.Tools {
+				toolName := t.Name
+				pluginID := p.ID
+				tSig, _ := json.Marshal(t.Parameters)
+				sigStr := string(tSig)
+				if sigStr == "" || sigStr == "null" {
+					sigStr = "{}"
+				}
+				registry[toolName] = ToolDef{
+					Name:        toolName,
+					Description: fmt.Sprintf("[%s Plugin] %s", p.Name, t.Description),
+					Signature:   sigStr,
+					Category:    "Plugin",
+					Execute: func(ctx context.Context, args map[string]interface{}) string {
+						res, err := plugins.DefaultManager.ExecuteTool(ctx, pluginID, toolName, args)
+						if err != nil {
+							return fmt.Sprintf("Plugin execution error: %v", err)
+						}
+						if res.Stdout != "" {
+							return res.Stdout
+						}
+						if res.Stderr != "" {
+							return fmt.Sprintf("Exit code %d: %s", res.ExitCode, res.Stderr)
+						}
+						return fmt.Sprintf("Tool executed successfully (exit code: %d)", res.ExitCode)
+					},
 				}
 			}
 		}

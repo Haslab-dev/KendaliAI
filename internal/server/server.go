@@ -22,7 +22,12 @@ import (
 	"github.com/kendaliai/app/internal/embedding"
 	"github.com/kendaliai/app/internal/gateway"
 	"github.com/kendaliai/app/internal/gateways"
+	"github.com/kendaliai/app/internal/git"
 	"github.com/kendaliai/app/internal/messaging"
+	"github.com/kendaliai/app/internal/plugins"
+	"github.com/kendaliai/app/internal/review"
+	"github.com/kendaliai/app/internal/scheduler"
+	"github.com/kendaliai/app/internal/workspace"
 )
 
 type Server struct {
@@ -32,6 +37,7 @@ type Server struct {
 	runtime  *gateway.Runtime
 	bus      *messaging.EventBus
 	tg       *channels.TelegramAdapter
+	explorer *workspace.Explorer
 	upgrader websocket.Upgrader
 }
 
@@ -41,16 +47,24 @@ func NewServer(db *sql.DB) *Server {
 	store.SeedInitialData(config.Cfg)
 
 	cwd, _ := os.Getwd()
+	exp := workspace.NewExplorer(cwd)
 	rt := gateway.NewRuntime(store, bus, cwd)
 	tg := channels.InitTelegramAdapter(store, rt, bus)
 
+	// Ensure plugin manager and scheduler daemon are initialized
+	plugins.NewManager(cwd, bus)
+	if scheduler.DefaultDaemon == nil {
+		scheduler.NewDaemon(bus)
+	}
+
 	s := &Server{
-		db:      db,
-		router:  http.NewServeMux(),
-		store:   store,
-		runtime: rt,
-		bus:     bus,
-		tg:      tg,
+		db:       db,
+		router:   http.NewServeMux(),
+		store:    store,
+		runtime:  rt,
+		bus:      bus,
+		tg:       tg,
+		explorer: exp,
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
 				return true // allow web clients
@@ -140,6 +154,31 @@ func (s *Server) routes() {
 	s.router.HandleFunc("/api/documents", s.handleDocuments())
 	s.router.HandleFunc("/api/documents/", s.handleDocumentDetail())
 
+	// Workspace & Explorer
+	s.router.HandleFunc("/api/workspace/files", s.handleWorkspaceFiles())
+	s.router.HandleFunc("/api/workspace/tree", s.handleWorkspaceTree())
+	s.router.HandleFunc("/api/workspace/file", s.handleWorkspaceFile())
+	s.router.HandleFunc("/api/workspace/mkdir", s.handleWorkspaceMkdir())
+
+	// Git & Worktrees
+	s.router.HandleFunc("/api/git/worktrees", s.handleGitWorktrees())
+	s.router.HandleFunc("/api/git/branches", s.handleGitBranches())
+
+	// Reviewer
+	s.router.HandleFunc("/api/review/scan", s.handleReviewScan())
+
+	// Background Tasks
+	s.router.HandleFunc("/api/tasks", s.handleTasks())
+	s.router.HandleFunc("/api/tasks/", s.handleTaskAction())
+
+	// Plugins
+	s.router.HandleFunc("/api/plugins", s.handlePlugins())
+	s.router.HandleFunc("/api/plugins/", s.handlePluginAction())
+
+	// Schedules & Cron
+	s.router.HandleFunc("/api/schedules", s.handleSchedules())
+	s.router.HandleFunc("/api/schedules/", s.handleScheduleAction())
+
 	// Web UI Static Files
 	s.router.HandleFunc("/", s.handleWebUI())
 }
@@ -205,16 +244,12 @@ func (s *Server) handleWebSocket() http.HandlerFunc {
 
 			case "message.send":
 				if msg.SessionID == "" {
-					msg.SessionID = currentSession
-				}
-				if msg.SessionID == "" {
 					msg.SessionID = "sess_" + uuid.New().String()[:8]
 				}
 
-				// If not subscribed yet, subscribe
-				if sub == nil || currentSession != msg.SessionID {
-					cleanup()
-					currentSession = msg.SessionID
+				// If not subscribed yet, subscribe to all events so parallel turns never drop
+				if sub == nil {
+					currentSession = "*"
 					sub = s.bus.Subscribe(currentSession)
 					go func(sSub *messaging.Subscription, sConn *websocket.Conn) {
 						for ev := range sSub.Ch {
@@ -1452,6 +1487,457 @@ func (s *Server) handleDocumentDetail() http.HandlerFunc {
 			json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 			return
 		}
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// --- Workspace & Explorer APIs ---
+
+func (s *Server) handleWorkspaceFiles() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		relPath := r.URL.Query().Get("path")
+		items, err := s.explorer.ListDirectory(relPath)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if items == nil {
+			items = []*workspace.FileItem{}
+		}
+		json.NewEncoder(w).Encode(items)
+	}
+}
+
+func (s *Server) handleWorkspaceTree() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		depthStr := r.URL.Query().Get("depth")
+		depth := 3
+		if d, err := strconv.Atoi(depthStr); err == nil && d > 0 {
+			depth = d
+		}
+		tree, err := s.explorer.GetTree(depth)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if tree == nil {
+			tree = []*workspace.FileItem{}
+		}
+		json.NewEncoder(w).Encode(tree)
+	}
+}
+
+func (s *Server) handleWorkspaceFile() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case "GET":
+			filePath := r.URL.Query().Get("path")
+			if filePath == "" {
+				http.Error(w, "missing path query param", http.StatusBadRequest)
+				return
+			}
+			content, mimeType, err := s.explorer.ReadFile(filePath)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"path":     filePath,
+				"content":  content,
+				"mimeType": mimeType,
+				"size":     len(content),
+			})
+
+		case "POST", "PUT":
+			var req struct {
+				Path    string `json:"path"`
+				Content string `json:"content"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, "invalid JSON", http.StatusBadRequest)
+				return
+			}
+			if req.Path == "" {
+				http.Error(w, "path is required", http.StatusBadRequest)
+				return
+			}
+			if err := s.explorer.WriteFile(req.Path, req.Content); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+
+		case "DELETE":
+			filePath := r.URL.Query().Get("path")
+			if filePath == "" {
+				http.Error(w, "missing path query param", http.StatusBadRequest)
+				return
+			}
+			if err := s.explorer.DeletePath(filePath); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	}
+}
+
+func (s *Server) handleWorkspaceMkdir() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != "POST" {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			Path string `json:"path"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Path == "" {
+			http.Error(w, "path is required", http.StatusBadRequest)
+			return
+		}
+		if err := s.explorer.CreateDirectory(req.Path); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+	}
+}
+
+// --- Git & Worktree APIs ---
+
+func (s *Server) handleGitWorktrees() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		baseDir := s.explorer.GetBaseDir()
+
+		switch r.Method {
+		case "GET":
+			list, err := git.DefaultWorktreeManager.ListWorktrees(r.Context(), baseDir)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			if list == nil {
+				list = []git.Worktree{}
+			}
+			json.NewEncoder(w).Encode(list)
+
+		case "POST":
+			var req struct {
+				Path         string `json:"path"`
+				Branch       string `json:"branch"`
+				CreateBranch bool   `json:"createBranch"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Path == "" {
+				http.Error(w, "path is required", http.StatusBadRequest)
+				return
+			}
+			wt, err := git.DefaultWorktreeManager.AddWorktree(r.Context(), baseDir, req.Path, req.Branch, req.CreateBranch)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			json.NewEncoder(w).Encode(wt)
+
+		case "DELETE":
+			targetPath := r.URL.Query().Get("path")
+			if targetPath == "" {
+				http.Error(w, "path query param is required", http.StatusBadRequest)
+				return
+			}
+			force := r.URL.Query().Get("force") == "true"
+			if err := git.DefaultWorktreeManager.RemoveWorktree(r.Context(), baseDir, targetPath, force); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	}
+}
+
+func (s *Server) handleGitBranches() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		baseDir := s.explorer.GetBaseDir()
+		branches, current, err := git.DefaultWorktreeManager.ListBranches(r.Context(), baseDir)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"branches": branches,
+			"current":  current,
+		})
+	}
+}
+
+// --- Reviewer APIs ---
+
+func (s *Server) handleReviewScan() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		engine := review.NewReviewEngine()
+		baseDir := s.explorer.GetBaseDir()
+
+		target := r.URL.Query().Get("target")
+		if target == "" {
+			target = "diff"
+		}
+
+		switch target {
+		case "file":
+			filePath := r.URL.Query().Get("path")
+			if filePath == "" {
+				http.Error(w, "path is required for file review", http.StatusBadRequest)
+				return
+			}
+			if !filepath.IsAbs(filePath) {
+				filePath = filepath.Join(baseDir, filePath)
+			}
+			report, err := engine.ReviewFile(filePath)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			json.NewEncoder(w).Encode(report)
+
+		case "workspace":
+			issues, err := engine.Scan(baseDir)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"target":     baseDir,
+				"issueCount": len(issues),
+				"issues":     issues,
+			})
+
+		default: // "diff"
+			report, err := engine.AnalyzeDiff(r.Context(), baseDir)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			json.NewEncoder(w).Encode(report)
+		}
+	}
+}
+
+// --- Background Task APIs ---
+
+func (s *Server) handleTasks() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		tasks := s.runtime.GetTaskManager().List()
+		json.NewEncoder(w).Encode(tasks)
+	}
+}
+
+func (s *Server) handleTaskAction() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		path := strings.TrimPrefix(r.URL.Path, "/api/tasks/")
+		parts := strings.Split(strings.Trim(path, "/"), "/")
+		if len(parts) == 0 || parts[0] == "" {
+			http.Error(w, "task ID required", http.StatusBadRequest)
+			return
+		}
+		taskID := parts[0]
+		action := ""
+		if len(parts) > 1 {
+			action = parts[1]
+		}
+
+		if action == "cancel" && r.Method == "POST" {
+			if err := s.runtime.GetTaskManager().Cancel(taskID); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+			return
+		}
+
+		task := s.runtime.GetTaskManager().Get(taskID)
+		if task == nil {
+			http.Error(w, "task not found", http.StatusNotFound)
+			return
+		}
+		json.NewEncoder(w).Encode(task)
+	}
+}
+
+// --- Plugin APIs ---
+
+func (s *Server) handlePlugins() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if plugins.DefaultManager == nil {
+			plugins.NewManager(s.explorer.GetBaseDir(), s.bus)
+		}
+
+		switch r.Method {
+		case "GET":
+			list := plugins.DefaultManager.List()
+			json.NewEncoder(w).Encode(list)
+
+		case "POST":
+			var req plugins.CreatePluginRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, "invalid JSON", http.StatusBadRequest)
+				return
+			}
+			p, err := plugins.DefaultManager.Create(req)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			json.NewEncoder(w).Encode(p)
+
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	}
+}
+
+func (s *Server) handlePluginAction() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if plugins.DefaultManager == nil {
+			plugins.NewManager(s.explorer.GetBaseDir(), s.bus)
+		}
+
+		path := strings.TrimPrefix(r.URL.Path, "/api/plugins/")
+		parts := strings.Split(strings.Trim(path, "/"), "/")
+		if len(parts) == 0 || parts[0] == "" {
+			http.Error(w, "plugin ID required", http.StatusBadRequest)
+			return
+		}
+		pluginID := parts[0]
+
+		if len(parts) > 1 && parts[1] == "toggle" && r.Method == "POST" {
+			var req struct {
+				Enabled bool `json:"enabled"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			p, err := plugins.DefaultManager.Toggle(pluginID, req.Enabled)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			json.NewEncoder(w).Encode(p)
+			return
+		}
+
+		if r.Method == "DELETE" {
+			if err := plugins.DefaultManager.Delete(pluginID); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+			return
+		}
+
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// --- Scheduler & Cron APIs ---
+
+func (s *Server) handleSchedules() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if scheduler.DefaultDaemon == nil {
+			scheduler.NewDaemon(s.bus)
+		}
+
+		switch r.Method {
+		case "GET":
+			tasks := scheduler.DefaultDaemon.ListTasks()
+			json.NewEncoder(w).Encode(tasks)
+
+		case "POST":
+			var req struct {
+				Name      string `json:"name"`
+				Schedule  string `json:"schedule"`
+				Prompt    string `json:"prompt"`
+				SessionID string `json:"sessionId"`
+				Channel   string `json:"channel"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, "invalid JSON", http.StatusBadRequest)
+				return
+			}
+			task, err := scheduler.DefaultDaemon.AddTask(req.Name, req.Schedule, req.Prompt, req.SessionID, req.Channel)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			json.NewEncoder(w).Encode(task)
+
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	}
+}
+
+func (s *Server) handleScheduleAction() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if scheduler.DefaultDaemon == nil {
+			scheduler.NewDaemon(s.bus)
+		}
+
+		path := strings.TrimPrefix(r.URL.Path, "/api/schedules/")
+		parts := strings.Split(strings.Trim(path, "/"), "/")
+		if len(parts) == 0 || parts[0] == "" {
+			http.Error(w, "schedule ID required", http.StatusBadRequest)
+			return
+		}
+		schedID := parts[0]
+
+		if len(parts) > 1 && parts[1] == "run" && r.Method == "POST" {
+			if err := scheduler.DefaultDaemon.RunNow(r.Context(), schedID); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+			return
+		}
+
+		if len(parts) > 1 && parts[1] == "toggle" && r.Method == "POST" {
+			var req struct {
+				Enabled bool `json:"enabled"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			task, err := scheduler.DefaultDaemon.ToggleTask(schedID, req.Enabled)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			json.NewEncoder(w).Encode(task)
+			return
+		}
+
+		if r.Method == "DELETE" {
+			if err := scheduler.DefaultDaemon.CancelTask(schedID); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+			return
+		}
+
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
