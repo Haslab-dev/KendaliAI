@@ -356,6 +356,24 @@ func (a *TelegramAdapter) sendTelegramChunks(bot *tgbotapi.BotAPI, chatID int64,
 
 func pickDefaultAgentForTopic(topicName string, fallback string) string {
 	lower := strings.ToLower(topicName)
+	if strings.Contains(lower, "front") || strings.Contains(lower, "ui") || strings.Contains(lower, "react") {
+		return "lead-frontend"
+	}
+	if strings.Contains(lower, "back") || strings.Contains(lower, "api") || strings.Contains(lower, "server") {
+		return "lead-backend"
+	}
+	if strings.Contains(lower, "arch") || strings.Contains(lower, "system") || strings.Contains(lower, "rfc") {
+		return "lead-architecture"
+	}
+	if strings.Contains(lower, "legal") || strings.Contains(lower, "law") || strings.Contains(lower, "compliance") || strings.Contains(lower, "license") {
+		return "legal-counsel"
+	}
+	if strings.Contains(lower, "sec") || strings.Contains(lower, "audit") || strings.Contains(lower, "vuln") {
+		return "chief-security"
+	}
+	if strings.Contains(lower, "devops") || strings.Contains(lower, "infra") || strings.Contains(lower, "deploy") || strings.Contains(lower, "docker") {
+		return "devops-lead"
+	}
 	if strings.Contains(lower, "code") || strings.Contains(lower, "dev") || strings.Contains(lower, "program") || strings.Contains(lower, "tech") {
 		return "coding-agent"
 	}

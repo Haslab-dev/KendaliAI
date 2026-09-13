@@ -131,6 +131,10 @@ export interface TelegramBotConfig {
   providerId?: string;
   enabled: boolean;
   status: 'running' | 'stopped' | 'error';
+  mode?: 'direct' | 'topic_group';
+  chatId?: string;
+  topicId?: number;
+  topicName?: string;
   lastActiveAt?: number;
   createdAt?: number;
 }

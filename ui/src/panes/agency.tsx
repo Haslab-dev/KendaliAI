@@ -29,30 +29,13 @@ import {
   Cpu,
   Layers,
   Zap,
+  Hash,
+  HelpCircle,
+  Unlink,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
-import { navigate } from '../router';
 import { AgentConfig, TelegramBotConfig } from '../types';
-
-export interface WorkerPresetIcon {
-  id: string;
-  icon: string;
-  label: string;
-  desc: string;
-}
-
-export const WORKER_PRESET_ICONS: WorkerPresetIcon[] = [
-  { id: 'legal', icon: '⚖️', label: 'Legal & Law', desc: 'Counsel, compliance, licenses, contracts' },
-  { id: 'frontend', icon: '💻', label: 'Lead Frontend', desc: 'UI/UX, React, Tailwind, web apps' },
-  { id: 'backend', icon: '⚙️', label: 'Lead Backend', desc: 'APIs, Go, database schemas, queues' },
-  { id: 'architect', icon: '🏛️', label: 'Lead Architecture', desc: 'System design, RFCs, blueprints' },
-  { id: 'devops', icon: '🚀', label: 'DevOps & Cloud', desc: 'CI/CD, Docker, Tailscale, scale' },
-  { id: 'security', icon: '🛡️', label: 'Chief Security', desc: 'Auditing, secret scan, vulnerability QA' },
-  { id: 'product', icon: '📊', label: 'Product Lead', desc: 'Roadmaps, analytics, sprint backlog' },
-  { id: 'design', icon: '🎨', label: 'Creative / Design', desc: 'Tokens, aesthetics, visual mockups' },
-  { id: 'ai-ops', icon: '🤖', label: 'AI Operations', desc: 'Autonomous pipelines, prompt tuning' },
-  { id: 'growth', icon: '🎯', label: 'Growth / Marketing', desc: 'Content strategy, documentation, SEO' },
-];
+import { GrokAvatar, GROK_AVATARS } from '../components/GrokAvatar';
 
 export interface OfficeWorker {
   id: string;
@@ -70,6 +53,10 @@ export interface OfficeWorker {
     username?: string;
     token?: string;
     status: 'connected' | 'unlinked' | 'error';
+    mode?: 'direct' | 'topic_group';
+    topicName?: string;
+    topicId?: number;
+    chatId?: string;
   };
   currentTask?: string;
   tasksCompleted?: number;
@@ -77,31 +64,11 @@ export interface OfficeWorker {
 
 const DEFAULT_OFFICE_WORKERS: OfficeWorker[] = [
   {
-    id: 'legal-counsel',
-    name: 'Sarah Vance',
-    role: 'Legal Counsel & Compliance',
-    department: 'Legal',
-    avatar: '⚖️',
-    description: 'Corporate law, software licenses (Apache/MIT/GPL), GDPR privacy, and regulatory risk audits.',
-    systemPrompt:
-      'You are the Chief Legal Counsel & Compliance Officer of KendaliAI. You review licensing terms, analyze intellectual property implications, check terms of service, and highlight regulatory risks with structured legal opinions.',
-    skills: ['contract-review', 'license-compliance', 'gdpr-privacy', 'ip-protection', 'risk-mitigation'],
-    tools: ['file.read', 'web.fetch', 'rag.query', 'telegram.send'],
-    status: 'active',
-    telegramBot: {
-      id: 'tg-legal',
-      username: '@kendali_legal_bot',
-      status: 'connected',
-    },
-    currentTask: 'Reviewing open-source dependency licenses in go.mod',
-    tasksCompleted: 42,
-  },
-  {
     id: 'lead-frontend',
     name: 'Alex Rivera',
     role: 'Lead Frontend Dev',
     department: 'Engineering',
-    avatar: '💻',
+    avatar: 'blue-drop',
     description: 'Lead web developer specialized in React, TypeScript, Tailwind CSS, and mobile-responsive architectures.',
     systemPrompt:
       'You are the Lead Frontend Developer of KendaliAI. You architect modern, responsive user interfaces with React, TypeScript, and Tailwind CSS. You write clean, decoupled components, handle state management gracefully, and ensure 60fps animations.',
@@ -112,36 +79,17 @@ const DEFAULT_OFFICE_WORKERS: OfficeWorker[] = [
       id: 'tg-frontend',
       username: '@kendali_frontend_bot',
       status: 'connected',
+      mode: 'direct',
     },
     currentTask: 'Refactoring mobile navigation drawer and Touch feedback',
     tasksCompleted: 88,
-  },
-  {
-    id: 'lead-backend',
-    name: 'Marcus Chen',
-    role: 'Lead Backend Dev',
-    department: 'Engineering',
-    avatar: '⚙️',
-    description: 'Distributed systems engineer handling Go microservices, SQLite persistence, and WebSocket streaming.',
-    systemPrompt:
-      'You are the Lead Backend Developer of KendaliAI. You design high-throughput Go HTTP/WebSocket servers, database persistence layers, background task workers, and external API gateways with zero runtime overhead.',
-    skills: ['go-runtime', 'sqlite-database', 'websocket-streaming', 'concurrency-routines', 'rest-api'],
-    tools: ['bash', 'file.write', 'file.read', 'git_worktree', 'exec.plugin', 'telegram.send'],
-    status: 'active',
-    telegramBot: {
-      id: 'tg-backend',
-      username: '@kendali_backend_bot',
-      status: 'connected',
-    },
-    currentTask: 'Optimizing background task scheduler execution queue',
-    tasksCompleted: 114,
   },
   {
     id: 'lead-architecture',
     name: 'Elena Rostova',
     role: 'Lead Solution Architecture',
     department: 'Architecture',
-    avatar: '🏛️',
+    avatar: 'cyan-bubble',
     description: 'System architect designing modular component boundaries, git worktree branching, and RFC specifications.',
     systemPrompt:
       'You are the Lead Solution Architect of KendaliAI. You define architectural blueprints, evaluate trade-offs between speed and modularity, specify API protocols, and govern worktree branching policies.',
@@ -152,16 +100,61 @@ const DEFAULT_OFFICE_WORKERS: OfficeWorker[] = [
       id: 'tg-arch',
       username: '@kendali_arch_bot',
       status: 'connected',
+      mode: 'topic_group',
+      topicName: 'Architecture',
+      topicId: 108,
     },
     currentTask: 'Drafting RFC for dynamic agent worker delegation protocol',
     tasksCompleted: 56,
+  },
+  {
+    id: 'lead-backend',
+    name: 'Marcus Chen',
+    role: 'Lead Backend Dev',
+    department: 'Engineering',
+    avatar: 'green-cloud',
+    description: 'Distributed systems engineer handling Go microservices, SQLite persistence, and WebSocket streaming.',
+    systemPrompt:
+      'You are the Lead Backend Developer of KendaliAI. You design high-throughput Go HTTP/WebSocket servers, database persistence layers, background task workers, and external API gateways with zero runtime overhead.',
+    skills: ['go-runtime', 'sqlite-database', 'websocket-streaming', 'concurrency-routines', 'rest-api'],
+    tools: ['bash', 'file.write', 'file.read', 'git_worktree', 'exec.plugin', 'telegram.send'],
+    status: 'active',
+    telegramBot: {
+      id: 'tg-backend',
+      username: '@kendali_backend_bot',
+      status: 'connected',
+      mode: 'direct',
+    },
+    currentTask: 'Optimizing background task scheduler execution queue',
+    tasksCompleted: 114,
+  },
+  {
+    id: 'legal-counsel',
+    name: 'Sarah Vance',
+    role: 'Legal Counsel & Compliance',
+    department: 'Legal',
+    avatar: 'bronze-shield',
+    description: 'Corporate law, software licenses (Apache/MIT/GPL), GDPR privacy, and regulatory risk audits.',
+    systemPrompt:
+      'You are the Chief Legal Counsel & Compliance Officer of KendaliAI. You review licensing terms, analyze intellectual property implications, check terms of service, and highlight regulatory risks with structured legal opinions.',
+    skills: ['contract-review', 'license-compliance', 'gdpr-privacy', 'ip-protection', 'risk-mitigation'],
+    tools: ['file.read', 'web.fetch', 'rag.query', 'telegram.send'],
+    status: 'active',
+    telegramBot: {
+      id: 'tg-legal',
+      username: '@kendali_legal_bot',
+      status: 'connected',
+      mode: 'direct',
+    },
+    currentTask: 'Reviewing open-source dependency licenses in go.mod',
+    tasksCompleted: 42,
   },
   {
     id: 'devops-lead',
     name: 'Darius Thorne',
     role: 'DevOps & Infrastructure Lead',
     department: 'Operations',
-    avatar: '🚀',
+    avatar: 'orange-leaf',
     description: 'Automates CI/CD pipelines, Docker virtualization, server daemon supervisors, and Tailscale mesh networks.',
     systemPrompt:
       'You are the DevOps & Infrastructure Lead of KendaliAI. You automate build pipelines, manage process supervision, maintain remote access network tunnels, and ensure 99.99% uptime for background worker agents.',
@@ -179,7 +172,7 @@ const DEFAULT_OFFICE_WORKERS: OfficeWorker[] = [
     name: 'Kavita Patel',
     role: 'Chief Security & QA Officer',
     department: 'Security',
-    avatar: '🛡️',
+    avatar: 'ruby-capsule',
     description: 'Audits git diffs for leaked secrets, enforces OWASP top 10 rules, and executes vulnerability test suites.',
     systemPrompt:
       'You are the Chief Security & QA Officer of KendaliAI. You inspect every pull request and git worktree for exposed API keys, memory leaks, SQL/command injection vectors, and unauthorized network egress.',
@@ -190,9 +183,60 @@ const DEFAULT_OFFICE_WORKERS: OfficeWorker[] = [
       id: 'tg-security',
       username: '@kendali_sec_bot',
       status: 'connected',
+      mode: 'direct',
     },
     currentTask: 'Continuous background diff scanner active',
     tasksCompleted: 95,
+  },
+];
+
+const FALLBACK_REGISTERED_BOTS: TelegramBotConfig[] = [
+  {
+    id: 'tg-frontend',
+    name: 'Frontend Dev Bot (@kendali_frontend_bot)',
+    token: '7192840192:AAFn...masked',
+    agentId: 'lead-frontend',
+    enabled: true,
+    status: 'running',
+    mode: 'direct',
+  },
+  {
+    id: 'tg-arch',
+    name: 'Architecture Bot (@kendali_arch_bot)',
+    token: '6829104821:BBKx...masked',
+    agentId: 'lead-architecture',
+    enabled: true,
+    status: 'running',
+    mode: 'topic_group',
+    topicName: 'Architecture',
+    topicId: 108,
+  },
+  {
+    id: 'tg-legal',
+    name: 'Legal Counsel Bot (@kendali_legal_bot)',
+    token: '5920194812:CCJm...masked',
+    agentId: 'legal-counsel',
+    enabled: true,
+    status: 'running',
+    mode: 'direct',
+  },
+  {
+    id: 'tg-backend',
+    name: 'Backend Dev Bot (@kendali_backend_bot)',
+    token: '6192849102:DDLp...masked',
+    agentId: 'lead-backend',
+    enabled: true,
+    status: 'running',
+    mode: 'direct',
+  },
+  {
+    id: 'tg-security',
+    name: 'Chief Security Bot (@kendali_sec_bot)',
+    token: '7829104821:EEQz...masked',
+    agentId: 'chief-security',
+    enabled: true,
+    status: 'running',
+    mode: 'direct',
   },
 ];
 
@@ -205,13 +249,19 @@ export const AgencyHQPane: React.FC = () => {
   const [workers, setWorkers] = useState<OfficeWorker[]>(() => {
     try {
       const saved = localStorage.getItem('kendali_office_workers');
-      return saved ? JSON.parse(saved) : DEFAULT_OFFICE_WORKERS;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+      return DEFAULT_OFFICE_WORKERS;
     } catch {
       return DEFAULT_OFFICE_WORKERS;
     }
   });
 
-  const [telegramBots, setTelegramBots] = useState<TelegramBotConfig[]>([]);
+  const [telegramBots, setTelegramBots] = useState<TelegramBotConfig[]>(FALLBACK_REGISTERED_BOTS);
   const [selectedDepartment, setSelectedDepartment] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -228,7 +278,7 @@ export const AgencyHQPane: React.FC = () => {
   const [formName, setFormName] = useState('');
   const [formRole, setFormRole] = useState('');
   const [formDepartment, setFormDepartment] = useState('Engineering');
-  const [formAvatar, setFormAvatar] = useState('💻');
+  const [formAvatar, setFormAvatar] = useState('blue-drop');
   const [formDescription, setFormDescription] = useState('');
   const [formSystemPrompt, setFormSystemPrompt] = useState('');
   const [formSkillsInput, setFormSkillsInput] = useState('react, typescript, ui');
@@ -238,7 +288,15 @@ export const AgencyHQPane: React.FC = () => {
   const [taskPrompt, setTaskPrompt] = useState('');
   const [delegationNotice, setDelegationNotice] = useState<string | null>(null);
 
-  // Telegram binding form state
+  // Telegram pairing modal tab & forms
+  const [tgPairTab, setTgPairTab] = useState<'registered' | 'topic' | 'new_bot'>('registered');
+  const [selectedBotId, setSelectedBotId] = useState<string>('');
+  // Topic config
+  const [tgTopicParentBotId, setTgTopicParentBotId] = useState<string>('');
+  const [tgTopicName, setTgTopicName] = useState<string>('');
+  const [tgTopicId, setTgTopicId] = useState<string>('');
+  const [tgChatId, setTgChatId] = useState<string>('');
+  // New bot token config
   const [tgBotName, setTgBotName] = useState('');
   const [tgBotToken, setTgBotToken] = useState('');
   const [isLinkingTg, setIsLinkingTg] = useState(false);
@@ -258,14 +316,22 @@ export const AgencyHQPane: React.FC = () => {
 
   // Load telegram bots from backend
   const loadTelegramBots = useCallback(async () => {
+    setIsLoading(true);
     try {
       const res = await fetch('/api/telegram/bots');
       if (res.ok) {
         const data = await res.json();
-        setTelegramBots(data || []);
+        if (Array.isArray(data) && data.length > 0) {
+          setTelegramBots(data);
+        } else {
+          setTelegramBots(FALLBACK_REGISTERED_BOTS);
+        }
       }
     } catch (err) {
       console.warn('Telegram bots fetch fallback:', err);
+      setTelegramBots(FALLBACK_REGISTERED_BOTS);
+    } finally {
+      setIsLoading(false);
     }
   }, []);
 
@@ -273,12 +339,12 @@ export const AgencyHQPane: React.FC = () => {
     loadTelegramBots();
   }, [loadTelegramBots]);
 
-  // Helper to pick a random icon from the 10 presets
+  // Helper to pick a random icon from the 10 Grok SVG presets
   const handlePickRandomIcon = () => {
-    const randomIndex = Math.floor(Math.random() * WORKER_PRESET_ICONS.length);
-    const chosen = WORKER_PRESET_ICONS[randomIndex];
-    setFormAvatar(chosen.icon);
-    triggerToast(`Random icon selected: ${chosen.icon} ${chosen.label}`);
+    const randomIndex = Math.floor(Math.random() * GROK_AVATARS.length);
+    const chosen = GROK_AVATARS[randomIndex];
+    setFormAvatar(chosen.id);
+    triggerToast(`Random avatar selected: ${chosen.name} (${chosen.role})`);
   };
 
   // Open Hire / Add Worker Modal
@@ -288,8 +354,8 @@ export const AgencyHQPane: React.FC = () => {
     setFormRole('');
     setFormDepartment('Engineering');
     // Randomize initial avatar from 10 presets for delight
-    const randomPreset = WORKER_PRESET_ICONS[Math.floor(Math.random() * WORKER_PRESET_ICONS.length)];
-    setFormAvatar(randomPreset.icon);
+    const randomPreset = GROK_AVATARS[Math.floor(Math.random() * GROK_AVATARS.length)];
+    setFormAvatar(randomPreset.id);
     setFormDescription('');
     setFormSystemPrompt(
       'You are an expert specialist worker agent. You report to the user and execute tasks autonomously.'
@@ -339,6 +405,7 @@ export const AgencyHQPane: React.FC = () => {
               skills,
               telegramBot: formTelegramBot
                 ? {
+                    ...w.telegramBot,
                     username: formTelegramBot.startsWith('@') ? formTelegramBot : `@${formTelegramBot}`,
                     status: 'connected',
                   }
@@ -369,9 +436,10 @@ export const AgencyHQPane: React.FC = () => {
           ? {
               username: formTelegramBot.startsWith('@') ? formTelegramBot : `@${formTelegramBot}`,
               status: 'connected',
+              mode: 'direct',
             }
           : { status: 'unlinked' },
-        currentTask: 'Ready for new assignments',
+        currentTask: 'Ready for assignments',
         tasksCompleted: 0,
       };
 
@@ -384,7 +452,7 @@ export const AgencyHQPane: React.FC = () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             id: newWorker.id,
-            name: `${newWorker.avatar} ${newWorker.role} (${newWorker.name})`,
+            name: `${newWorker.role} (${newWorker.name})`,
             description: newWorker.description,
             systemPrompt: newWorker.systemPrompt,
             skills: newWorker.skills,
@@ -418,14 +486,13 @@ export const AgencyHQPane: React.FC = () => {
   // Start direct chat session with this specific agent worker
   const handleChatWithWorker = async (worker: OfficeWorker) => {
     const sessionId = await createSession(worker.id);
-    // Find or construct agent object to set as active in store
     const matched = agents.find((a) => a.id === worker.id);
     if (matched) {
       setActiveAgent(matched);
     } else {
       setActiveAgent({
         id: worker.id,
-        name: `${worker.avatar} ${worker.role}`,
+        name: worker.role,
         description: worker.description,
         providerId: '',
         model: '',
@@ -445,56 +512,195 @@ export const AgencyHQPane: React.FC = () => {
   // Open Telegram connection modal for worker
   const handleOpenTelegramConnect = (worker: OfficeWorker) => {
     setSelectedWorkerForTg(worker);
+
+    const existingBot = telegramBots.find(
+      (b) => b.agentId === worker.id || b.id === worker.telegramBot?.id
+    );
+
+    if (existingBot) {
+      setSelectedBotId(existingBot.id);
+      if (existingBot.mode === 'topic_group' || worker.telegramBot?.mode === 'topic_group') {
+        setTgPairTab('topic');
+        setTgTopicParentBotId(existingBot.id);
+        setTgTopicName(worker.telegramBot?.topicName || existingBot.topicName || worker.department || '');
+        setTgTopicId(worker.telegramBot?.topicId?.toString() || existingBot.topicId?.toString() || '');
+        setTgChatId(worker.telegramBot?.chatId || existingBot.chatId || '');
+      } else {
+        setTgPairTab('registered');
+      }
+    } else {
+      setSelectedBotId(telegramBots[0]?.id || '');
+      setTgPairTab('registered');
+      setTgTopicParentBotId(telegramBots[0]?.id || '');
+      setTgTopicName(worker.department || 'General');
+      setTgTopicId('');
+      setTgChatId('');
+    }
+
     setTgBotName(worker.telegramBot?.username?.replace('@', '') || `${worker.id}_bot`);
     setTgBotToken('');
     setShowTelegramModal(true);
   };
 
-  // Save Telegram bot link
+  // Unlink Telegram bot from worker
+  const handleUnlinkBot = async () => {
+    if (!selectedWorkerForTg) return;
+
+    setWorkers((prev) =>
+      prev.map((w) =>
+        w.id === selectedWorkerForTg.id
+          ? {
+              ...w,
+              telegramBot: {
+                status: 'unlinked',
+              },
+            }
+          : w
+      )
+    );
+
+    triggerToast(`Unlinked Telegram bot from ${selectedWorkerForTg.role}`);
+    setShowTelegramModal(false);
+  };
+
+  // Save Telegram bot link (3 tabs: registered, topic, new_bot)
   const handleSaveTelegramBot = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedWorkerForTg || !tgBotToken.trim()) return;
+    if (!selectedWorkerForTg) return;
 
     setIsLinkingTg(true);
-    const cleanUsername = tgBotName.trim().startsWith('@')
-      ? tgBotName.trim()
-      : `@${tgBotName.trim()}`;
 
     try {
-      // Connect to backend Telegram API
-      await fetch('/api/telegram/bots', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: `tg-${selectedWorkerForTg.id}`,
-          name: cleanUsername.replace('@', ''),
-          token: tgBotToken.trim(),
-          agentId: selectedWorkerForTg.id,
-          enabled: true,
-        }),
-      });
+      if (tgPairTab === 'registered') {
+        const chosenBot = telegramBots.find((b) => b.id === selectedBotId) || telegramBots[0];
+        if (!chosenBot) throw new Error('No registered bot selected');
 
-      // Update worker local status
-      setWorkers((prev) =>
-        prev.map((w) =>
-          w.id === selectedWorkerForTg.id
-            ? {
-                ...w,
-                telegramBot: {
-                  id: `tg-${w.id}`,
-                  username: cleanUsername,
-                  status: 'connected',
-                },
-              }
-            : w
-        )
-      );
+        // Persist to backend
+        await fetch('/api/telegram/bots', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...chosenBot,
+            agentId: selectedWorkerForTg.id,
+            enabled: true,
+          }),
+        });
 
-      triggerToast(`Telegram Bot linked: ${cleanUsername} -> ${selectedWorkerForTg.role}`);
+        // Update local worker state
+        const cleanUsername = chosenBot.name.includes('(@')
+          ? '@' + chosenBot.name.split('(@')[1].replace(')', '')
+          : chosenBot.name.startsWith('@')
+          ? chosenBot.name
+          : `@${chosenBot.name}`;
+
+        setWorkers((prev) =>
+          prev.map((w) =>
+            w.id === selectedWorkerForTg.id
+              ? {
+                  ...w,
+                  telegramBot: {
+                    id: chosenBot.id,
+                    username: cleanUsername,
+                    status: 'connected',
+                    mode: chosenBot.mode || 'direct',
+                    topicName: chosenBot.topicName,
+                    topicId: chosenBot.topicId,
+                  },
+                }
+              : w
+          )
+        );
+
+        triggerToast(`Paired ${selectedWorkerForTg.role} to bot: ${cleanUsername}`);
+      } else if (tgPairTab === 'topic') {
+        const parentBot =
+          telegramBots.find((b) => b.id === tgTopicParentBotId) || telegramBots[0];
+        const topicName = tgTopicName.trim() || selectedWorkerForTg.department || 'Topic';
+        const topicThreadId = tgTopicId ? parseInt(tgTopicId, 10) : undefined;
+
+        // Persist to backend
+        await fetch('/api/telegram/bots', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...parentBot,
+            agentId: selectedWorkerForTg.id,
+            mode: 'topic_group',
+            topicName,
+            topicId: topicThreadId,
+            chatId: tgChatId.trim(),
+            enabled: true,
+          }),
+        });
+
+        const cleanUsername = parentBot?.name?.includes('(@')
+          ? '@' + parentBot.name.split('(@')[1].replace(')', '')
+          : parentBot?.name || '@kendali_bot';
+
+        setWorkers((prev) =>
+          prev.map((w) =>
+            w.id === selectedWorkerForTg.id
+              ? {
+                  ...w,
+                  telegramBot: {
+                    id: parentBot?.id,
+                    username: cleanUsername,
+                    status: 'connected',
+                    mode: 'topic_group',
+                    topicName,
+                    topicId: topicThreadId,
+                    chatId: tgChatId.trim(),
+                  },
+                }
+              : w
+          )
+        );
+
+        triggerToast(`Routed Telegram Topic '#${topicName}' to ${selectedWorkerForTg.role}`);
+      } else if (tgPairTab === 'new_bot') {
+        if (!tgBotToken.trim()) throw new Error('Bot token is required');
+
+        const cleanUsername = tgBotName.trim().startsWith('@')
+          ? tgBotName.trim()
+          : `@${tgBotName.trim()}`;
+        const newBotId = `tg-${Date.now()}`;
+
+        await fetch('/api/telegram/bots', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: newBotId,
+            name: `${selectedWorkerForTg.role} Bot (${cleanUsername})`,
+            token: tgBotToken.trim(),
+            agentId: selectedWorkerForTg.id,
+            enabled: true,
+            mode: 'direct',
+          }),
+        });
+
+        setWorkers((prev) =>
+          prev.map((w) =>
+            w.id === selectedWorkerForTg.id
+              ? {
+                  ...w,
+                  telegramBot: {
+                    id: newBotId,
+                    username: cleanUsername,
+                    status: 'connected',
+                    mode: 'direct',
+                  },
+                }
+              : w
+          )
+        );
+
+        triggerToast(`New bot created and linked: ${cleanUsername}`);
+      }
+
       setShowTelegramModal(false);
       loadTelegramBots();
     } catch (err: any) {
-      alert(`Failed to connect Telegram Bot: ${err.message}`);
+      alert(`Failed to pair Telegram Bot: ${err.message}`);
     } finally {
       setIsLinkingTg(false);
     }
@@ -516,7 +722,6 @@ export const AgencyHQPane: React.FC = () => {
     const worker = selectedWorkerForDelegate;
     const taskTitle = taskPrompt.slice(0, 50);
 
-    // Update worker current task
     setWorkers((prev) =>
       prev.map((w) =>
         w.id === worker.id
@@ -530,7 +735,6 @@ export const AgencyHQPane: React.FC = () => {
       )
     );
 
-    // Create background task in backend
     try {
       await fetch('/api/tasks', {
         method: 'POST',
@@ -586,9 +790,9 @@ export const AgencyHQPane: React.FC = () => {
       )}
 
       {/* Page Header */}
-      <div className="w-full bg-[#FFFFFF] border-b border-[#E5E7EB] px-6 lg:px-9 py-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="w-full bg-[#FFFFFF] border-b border-[#E5E7EB] px-4 sm:px-6 lg:px-9 py-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex flex-col gap-[2px]">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-[20px] font-bold text-[#000000] font-sans tracking-tight">
               Agency HQ
             </h1>
@@ -597,7 +801,7 @@ export const AgencyHQPane: React.FC = () => {
             </span>
           </div>
           <p className="text-[12px] text-[#8A8A85] font-['Funnel_Sans',sans-serif]">
-            Autonomous digital office · departmental staff workers (Legal, Lead Frontend, Backend, Architecture) paired with Telegram bots
+            Autonomous digital office · Grok-style companion bots with specialty personas &amp; Telegram routing
           </p>
         </div>
 
@@ -605,7 +809,7 @@ export const AgencyHQPane: React.FC = () => {
           <button
             onClick={loadTelegramBots}
             title="Refresh office status"
-            className="flex items-center gap-1.5 px-3 py-2 rounded-[8px] border border-[#E5E7EB] text-[#8A8A85] hover:text-[#000000] hover:bg-[#F7F7F5] text-xs transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-[8px] border border-[#E5E7EB] text-[#8A8A85] hover:text-[#000000] hover:bg-[#F7F7F5] text-xs transition-colors cursor-pointer"
           >
             <RefreshCw size={13} className={isLoading ? 'animate-spin' : ''} />
             <span className="hidden sm:inline">Sync Status</span>
@@ -621,7 +825,7 @@ export const AgencyHQPane: React.FC = () => {
       </div>
 
       {/* Office KPI Cards */}
-      <div className="w-full px-6 lg:px-9 pt-6 grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="w-full px-4 sm:px-6 lg:px-9 pt-6 grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-[#FFFFFF] border border-[#E5E7EB] rounded-[8px] p-3.5 flex flex-col gap-1">
           <div className="flex items-center justify-between text-[#8A8A85]">
             <span className="text-[11px] font-medium uppercase tracking-wider">Workforce</span>
@@ -637,7 +841,7 @@ export const AgencyHQPane: React.FC = () => {
             <Send size={15} className="text-[#007AFF]" />
           </div>
           <div className="text-xl font-bold text-[#000000]">{stats.telegramConnected} Connected</div>
-          <div className="text-[10px] text-[#007AFF] font-medium">Bi-directional bot channels</div>
+          <div className="text-[10px] text-[#007AFF] font-medium">Direct &amp; Topic Routing</div>
         </div>
 
         <div className="bg-[#FFFFFF] border border-[#E5E7EB] rounded-[8px] p-3.5 flex flex-col gap-1">
@@ -660,7 +864,7 @@ export const AgencyHQPane: React.FC = () => {
       </div>
 
       {/* Filter Bar & Search */}
-      <div className="w-full px-6 lg:px-9 pt-6 pb-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+      <div className="w-full px-4 sm:px-6 lg:px-9 pt-6 pb-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         {/* Department Pills */}
         <div className="flex flex-wrap items-center gap-1.5">
           {DEPARTMENTS.map((dept) => {
@@ -695,26 +899,27 @@ export const AgencyHQPane: React.FC = () => {
       </div>
 
       {/* Main Staff Workers Grid */}
-      <div className="w-full px-6 lg:px-9 py-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div className="w-full px-4 sm:px-6 lg:px-9 py-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {filteredWorkers.map((worker) => {
           const isTgLinked = worker.telegramBot?.status === 'connected';
+          const isTopicGroup = worker.telegramBot?.mode === 'topic_group';
 
           return (
             <div
               key={worker.id}
               className="bg-[#FFFFFF] border border-[#E5E7EB] rounded-[10px] p-5 flex flex-col justify-between gap-4 shadow-xs hover:border-[#BFDBFE] transition-all group relative"
             >
-              {/* Top Row: Avatar, Identity, Status */}
+              {/* Top Row: Grok SVG Avatar, Identity, Status */}
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
-                  <div className="w-12 h-12 rounded-[10px] bg-[#F7F7F5] border border-[#E5E7EB] flex items-center justify-center text-2xl shrink-0 group-hover:scale-105 transition-transform">
-                    {worker.avatar}
+                  <div className="w-12 h-12 rounded-[10px] bg-[#F7F7F5] border border-[#E5E7EB] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform p-1">
+                    <GrokAvatar id={worker.avatar} size={38} />
                   </div>
-                  <div className="flex flex-col">
-                    <h3 className="text-[15px] font-bold text-[#000000] font-sans tracking-tight">
+                  <div className="flex flex-col min-w-0">
+                    <h3 className="text-[15px] font-bold text-[#000000] font-sans tracking-tight truncate">
                       {worker.role}
                     </h3>
-                    <div className="flex items-center gap-2 mt-0.5">
+                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                       <span className="text-xs text-[#8A8A85] font-medium">{worker.name}</span>
                       <span className="text-[10px] px-2 py-0.5 rounded-[4px] font-semibold bg-[#F3F4F6] text-[#4B5563]">
                         {worker.department}
@@ -765,23 +970,44 @@ export const AgencyHQPane: React.FC = () => {
                 )}
               </div>
 
-              {/* Telegram Bot Connection Pill */}
-              <div className="flex items-center justify-between p-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-[6px]">
-                <div className="flex items-center gap-2">
-                  <Send size={14} className={isTgLinked ? 'text-[#007AFF]' : 'text-[#9CA3AF]'} />
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-[#8A8A85]">
-                      Telegram Bot
-                    </span>
-                    <span className="text-xs font-mono font-medium text-[#000000]">
-                      {isTgLinked ? worker.telegramBot?.username : 'Not connected'}
+              {/* Telegram Connection Pill */}
+              <div className="flex items-center justify-between p-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-[8px] gap-2">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div
+                    className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
+                      isTgLinked ? 'bg-[#007AFF]/10 text-[#007AFF]' : 'bg-gray-100 text-gray-400'
+                    }`}
+                  >
+                    <Send size={13} />
+                  </div>
+                  <div className="flex flex-col min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85]">
+                        Telegram
+                      </span>
+                      {isTgLinked && (
+                        <span
+                          className={`text-[9px] px-1.5 py-0.2 rounded font-bold uppercase ${
+                            isTopicGroup ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                          }`}
+                        >
+                          {isTopicGroup ? 'Topic Group' : 'Direct Bot'}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-xs font-mono font-semibold text-[#000000] truncate">
+                      {isTgLinked
+                        ? isTopicGroup
+                          ? `${worker.telegramBot?.username || 'Bot'} #${worker.telegramBot?.topicName || 'Topic'}`
+                          : worker.telegramBot?.username
+                        : 'Not connected'}
                     </span>
                   </div>
                 </div>
 
                 <button
                   onClick={() => handleOpenTelegramConnect(worker)}
-                  className={`px-2.5 py-1 text-[11px] font-bold rounded-[4px] border transition-colors cursor-pointer ${
+                  className={`shrink-0 px-2.5 py-1 text-[11px] font-bold rounded-[6px] border transition-all cursor-pointer ${
                     isTgLinked
                       ? 'border-[#BFDBFE] bg-[#EBF5FF] text-[#007AFF] hover:bg-blue-100'
                       : 'border-[#E5E7EB] bg-[#FFFFFF] text-[#333333] hover:bg-gray-100'
@@ -833,14 +1059,14 @@ export const AgencyHQPane: React.FC = () => {
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => handleOpenEditModal(worker)}
-                    className="p-1.5 text-[#8A8A85] hover:text-[#000000] hover:bg-gray-100 rounded-[4px] transition-colors"
+                    className="p-1.5 text-[#8A8A85] hover:text-[#000000] hover:bg-gray-100 rounded-[4px] transition-colors cursor-pointer"
                     title="Edit staff details"
                   >
                     <Edit3 size={14} />
                   </button>
                   <button
                     onClick={() => handleDeleteWorker(worker)}
-                    className="p-1.5 text-[#8A8A85] hover:text-red-600 hover:bg-red-50 rounded-[4px] transition-colors"
+                    className="p-1.5 text-[#8A8A85] hover:text-red-600 hover:bg-red-50 rounded-[4px] transition-colors cursor-pointer"
                     title="Dismiss worker"
                   >
                     <Trash2 size={14} />
@@ -860,7 +1086,7 @@ export const AgencyHQPane: React.FC = () => {
             </p>
             <button
               onClick={handleOpenAddModal}
-              className="mt-2 px-4 py-2 bg-[#0F0F0F] text-white text-xs font-bold rounded-[6px]"
+              className="mt-2 px-4 py-2 bg-[#0F0F0F] text-white text-xs font-bold rounded-[6px] cursor-pointer"
             >
               Hire First Worker in this Department
             </button>
@@ -869,27 +1095,29 @@ export const AgencyHQPane: React.FC = () => {
       </div>
 
       {/* ------------------------------------------------------------- */}
-      {/* MODAL 1: Hire / Edit Custom Worker Modal with 10 Preset Icons */}
+      {/* MODAL 1: Hire / Edit Custom Worker with 10 Grok SVG Avatars   */}
       {/* ------------------------------------------------------------- */}
       {showWorkerModal && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in overflow-y-auto">
           <div className="bg-[#FFFFFF] border border-[#E5E7EB] rounded-[12px] w-full max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col custom-scrollbar">
             {/* Modal Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E7EB] sticky top-0 bg-[#FFFFFF] z-10">
-              <div className="flex items-center gap-2">
-                <span className="text-xl">{formAvatar}</span>
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-[8px] bg-[#F7F7F5] border border-[#E5E7EB] flex items-center justify-center p-1">
+                  <GrokAvatar id={formAvatar} size={28} />
+                </div>
                 <div>
                   <h2 className="text-base font-bold text-[#000000]">
                     {editingWorkerId ? 'Edit Staff Worker' : 'Hire New Staff Worker'}
                   </h2>
                   <p className="text-[11px] text-[#8A8A85]">
-                    Configure autonomous worker persona, skills, and Telegram bot connectivity
+                    Grok-style companion worker persona with Telegram connectivity
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setShowWorkerModal(false)}
-                className="p-1.5 text-[#8A8A85] hover:text-[#000000] rounded-md hover:bg-gray-100"
+                className="p-1.5 text-[#8A8A85] hover:text-[#000000] rounded-md hover:bg-gray-100 cursor-pointer"
               >
                 <X size={18} />
               </button>
@@ -897,38 +1125,38 @@ export const AgencyHQPane: React.FC = () => {
 
             {/* Modal Form */}
             <form onSubmit={handleSaveWorker} className="p-6 space-y-4">
-              {/* 10 Preset Icon Selector + Randomizer */}
+              {/* 10 Grok SVG Preset Icons + Shuffle */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold uppercase tracking-wider text-[#333333]">
-                    1. Choose Worker Icon (10 Specialty Presets)
+                    1. Choose Grok-Style Avatar (10 Specialty Presets)
                   </label>
                   <button
                     type="button"
                     onClick={handlePickRandomIcon}
-                    className="flex items-center gap-1 text-[11px] font-bold text-[#007AFF] hover:underline cursor-pointer"
+                    className="flex items-center gap-1 text-[11px] font-bold text-[#007AFF] hover:underline cursor-pointer bg-blue-50 px-2 py-0.5 rounded"
                   >
                     <Shuffle size={12} />
                     <span>🎲 Shuffle / Random Icon</span>
                   </button>
                 </div>
 
-                <div className="grid grid-cols-5 sm:grid-cols-10 gap-2 p-3 bg-[#F7F7F5] border border-[#E5E7EB] rounded-[8px]">
-                  {WORKER_PRESET_ICONS.map((preset) => {
-                    const isSelected = formAvatar === preset.icon;
+                <div className="grid grid-cols-5 sm:grid-cols-10 gap-2 p-3 bg-[#F7F7F5] border border-[#E5E7EB] rounded-[10px]">
+                  {GROK_AVATARS.map((preset) => {
+                    const isSelected = formAvatar === preset.id;
                     return (
                       <button
                         key={preset.id}
                         type="button"
-                        onClick={() => setFormAvatar(preset.icon)}
-                        className={`h-11 flex flex-col items-center justify-center rounded-[6px] text-lg transition-all cursor-pointer ${
+                        onClick={() => setFormAvatar(preset.id)}
+                        className={`h-11 flex flex-col items-center justify-center rounded-[8px] transition-all cursor-pointer ${
                           isSelected
-                            ? 'bg-[#0F0F0F] text-white scale-110 shadow-md ring-2 ring-[#007AFF]'
-                            : 'bg-white hover:bg-gray-100 border border-[#E5E7EB]'
+                            ? 'bg-[#FFFFFF] ring-2 ring-[#007AFF] shadow-md scale-105'
+                            : 'bg-white/80 hover:bg-white border border-[#E5E7EB]'
                         }`}
-                        title={`${preset.label} — ${preset.desc}`}
+                        title={`${preset.name} — ${preset.role}`}
                       >
-                        <span>{preset.icon}</span>
+                        <GrokAvatar id={preset.id} size={26} />
                       </button>
                     );
                   })}
@@ -1049,7 +1277,7 @@ export const AgencyHQPane: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowWorkerModal(false)}
-                  className="px-4 py-2 border border-[#E5E7EB] text-xs font-semibold rounded-[6px] hover:bg-gray-50"
+                  className="px-4 py-2 border border-[#E5E7EB] text-xs font-semibold rounded-[6px] hover:bg-gray-50 cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -1066,78 +1294,267 @@ export const AgencyHQPane: React.FC = () => {
       )}
 
       {/* ------------------------------------------------------------- */}
-      {/* MODAL 2: Connect Telegram Bot to Worker                        */}
+      {/* MODAL 2: Connect Telegram Bot (Registered Bot vs Topic Group)  */}
       {/* ------------------------------------------------------------- */}
       {showTelegramModal && selectedWorkerForTg && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-[#FFFFFF] border border-[#E5E7EB] rounded-[12px] w-full max-w-md shadow-2xl flex flex-col overflow-hidden">
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in overflow-y-auto">
+          <div className="bg-[#FFFFFF] border border-[#E5E7EB] rounded-[12px] w-full max-w-lg shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
             <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E7EB]">
-              <div className="flex items-center gap-2">
-                <Send size={18} className="text-[#007AFF]" />
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-[8px] bg-blue-50 text-[#007AFF] flex items-center justify-center shrink-0">
+                  <Send size={16} />
+                </div>
                 <div>
-                  <h2 className="text-base font-bold text-[#000000]">Pair Telegram Bot</h2>
+                  <h2 className="text-base font-bold text-[#000000]">Connect Telegram Gateway</h2>
                   <p className="text-[11px] text-[#8A8A85]">
-                    Link dedicated Telegram bot to {selectedWorkerForTg.role}
+                    Pair bot or topic group to {selectedWorkerForTg.role}
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setShowTelegramModal(false)}
-                className="p-1.5 text-[#8A8A85] hover:text-[#000000] rounded-md hover:bg-gray-100"
+                className="p-1.5 text-[#8A8A85] hover:text-[#000000] rounded-md hover:bg-gray-100 cursor-pointer"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleSaveTelegramBot} className="p-6 space-y-4">
-              <div className="p-3 bg-[#EBF5FF] border border-[#BFDBFE] rounded-[8px] text-xs text-[#007AFF]">
-                Messages sent to this bot will be routed directly to {selectedWorkerForTg.name} ({selectedWorkerForTg.role}) with its specialized system prompt &amp; tools.
-              </div>
+            {/* Navigation Tabs */}
+            <div className="flex border-b border-[#E5E7EB] px-6 bg-[#FAFAFA]">
+              <button
+                type="button"
+                onClick={() => setTgPairTab('registered')}
+                className={`py-2.5 px-3 text-xs font-bold border-b-2 transition-all cursor-pointer ${
+                  tgPairTab === 'registered'
+                    ? 'border-[#007AFF] text-[#007AFF]'
+                    : 'border-transparent text-[#8A8A85] hover:text-[#000000]'
+                }`}
+              >
+                Registered Bots
+              </button>
+              <button
+                type="button"
+                onClick={() => setTgPairTab('topic')}
+                className={`py-2.5 px-3 text-xs font-bold border-b-2 transition-all cursor-pointer ${
+                  tgPairTab === 'topic'
+                    ? 'border-[#007AFF] text-[#007AFF]'
+                    : 'border-transparent text-[#8A8A85] hover:text-[#000000]'
+                }`}
+              >
+                Forum Supergroup Topic
+              </button>
+              <button
+                type="button"
+                onClick={() => setTgPairTab('new_bot')}
+                className={`py-2.5 px-3 text-xs font-bold border-b-2 transition-all cursor-pointer ${
+                  tgPairTab === 'new_bot'
+                    ? 'border-[#007AFF] text-[#007AFF]'
+                    : 'border-transparent text-[#8A8A85] hover:text-[#000000]'
+                }`}
+              >
+                + Register New Bot
+              </button>
+            </div>
 
-              <div>
-                <label className="text-xs font-bold uppercase tracking-wider text-[#333333]">
-                  Bot Username
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. @kendali_legal_bot"
-                  value={tgBotName}
-                  onChange={(e) => setTgBotName(e.target.value)}
-                  className="w-full mt-1 px-3 py-2 bg-[#F7F7F5] border border-[#E5E7EB] rounded-[6px] text-xs text-[#000000] outline-none focus:border-[#0F0F0F]"
-                />
-              </div>
+            <form onSubmit={handleSaveTelegramBot} className="p-6 space-y-4 overflow-y-auto">
+              {/* TAB 1: PICK FROM REGISTERED BOTS */}
+              {tgPairTab === 'registered' && (
+                <div className="space-y-3">
+                  <div className="p-3 bg-[#EBF5FF] border border-[#BFDBFE] rounded-[8px] text-xs text-[#007AFF] leading-relaxed">
+                    Select a bot from your registered bot list. Messages sent to this bot on Telegram will be routed directly to <strong>{selectedWorkerForTg.name} ({selectedWorkerForTg.role})</strong>.
+                  </div>
 
-              <div>
-                <label className="text-xs font-bold uppercase tracking-wider text-[#333333]">
-                  Bot Token (from @BotFather)
-                </label>
-                <input
-                  type="password"
-                  required
-                  placeholder="123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ"
-                  value={tgBotToken}
-                  onChange={(e) => setTgBotToken(e.target.value)}
-                  className="w-full mt-1 px-3 py-2 bg-[#F7F7F5] border border-[#E5E7EB] rounded-[6px] text-xs font-mono text-[#000000] outline-none focus:border-[#0F0F0F]"
-                />
-              </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase tracking-wider text-[#333333]">
+                      Choose Connected Bot:
+                    </label>
+                    <div className="space-y-2 max-h-56 overflow-y-auto custom-scrollbar pr-1">
+                      {telegramBots.map((b) => {
+                        const isSelected = selectedBotId === b.id;
+                        return (
+                          <div
+                            key={b.id}
+                            onClick={() => setSelectedBotId(b.id)}
+                            className={`p-3 rounded-[8px] border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                              isSelected
+                                ? 'border-[#007AFF] bg-blue-50/50 ring-1 ring-[#007AFF]'
+                                : 'border-[#E5E7EB] bg-white hover:bg-gray-50'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="w-8 h-8 rounded-full bg-blue-100 text-[#007AFF] flex items-center justify-center shrink-0">
+                                <Send size={14} />
+                              </div>
+                              <div className="flex flex-col min-w-0">
+                                <span className="text-xs font-bold text-[#000000] truncate">
+                                  {b.name}
+                                </span>
+                                <div className="flex items-center gap-1.5 text-[10px] text-[#8A8A85]">
+                                  <span
+                                    className={`w-1.5 h-1.5 rounded-full ${
+                                      b.status === 'running' ? 'bg-[#16A34A]' : 'bg-[#9CA3AF]'
+                                    }`}
+                                  />
+                                  <span>{b.status === 'running' ? 'Running' : 'Stopped'}</span>
+                                  <span>·</span>
+                                  <span className="capitalize">{b.mode || 'direct'}</span>
+                                </div>
+                              </div>
+                            </div>
 
-              <div className="pt-2 border-t border-[#E5E7EB] flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowTelegramModal(false)}
-                  className="px-4 py-2 border border-[#E5E7EB] text-xs font-semibold rounded-[6px] hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isLinkingTg}
-                  className="flex items-center gap-1.5 px-5 py-2 bg-[#0F0F0F] text-white text-xs font-bold rounded-[6px] hover:bg-black/90 disabled:opacity-50 cursor-pointer"
-                >
-                  <RefreshCw size={12} className={isLinkingTg ? 'animate-spin' : ''} />
-                  <span>{isLinkingTg ? 'Linking...' : 'Connect Telegram'}</span>
-                </button>
+                            {isSelected && (
+                              <div className="w-5 h-5 rounded-full bg-[#007AFF] text-white flex items-center justify-center shrink-0">
+                                <Check size={12} strokeWidth={3} />
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: FORUM SUPERGROUP TOPIC ROUTING */}
+              {tgPairTab === 'topic' && (
+                <div className="space-y-3">
+                  <div className="p-3 bg-purple-50 border border-purple-200 rounded-[8px] text-xs text-purple-900 leading-relaxed">
+                    <strong>How Topic Groups work:</strong> In a Telegram Supergroup with Forum Topics turned on, you can have one master bot handle your whole team. Messages posted inside this specific Topic will be dispatched to <strong>{selectedWorkerForTg.role}</strong>.
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold uppercase tracking-wider text-[#333333]">
+                      Parent Telegram Bot *
+                    </label>
+                    <select
+                      value={tgTopicParentBotId}
+                      onChange={(e) => setTgTopicParentBotId(e.target.value)}
+                      className="w-full mt-1 px-3 py-2 bg-[#F7F7F5] border border-[#E5E7EB] rounded-[6px] text-xs text-[#000000] outline-none focus:border-[#0F0F0F]"
+                    >
+                      {telegramBots.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-bold uppercase tracking-wider text-[#333333]">
+                        Topic Name *
+                      </label>
+                      <div className="relative mt-1">
+                        <Hash size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8A8A85]" />
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Frontend-Dev"
+                          value={tgTopicName}
+                          onChange={(e) => setTgTopicName(e.target.value)}
+                          className="w-full pl-8 pr-3 py-2 bg-[#F7F7F5] border border-[#E5E7EB] rounded-[6px] text-xs text-[#000000] outline-none focus:border-[#0F0F0F]"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold uppercase tracking-wider text-[#333333]">
+                        Thread ID (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 108"
+                        value={tgTopicId}
+                        onChange={(e) => setTgTopicId(e.target.value)}
+                        className="w-full mt-1 px-3 py-2 bg-[#F7F7F5] border border-[#E5E7EB] rounded-[6px] text-xs font-mono text-[#000000] outline-none focus:border-[#0F0F0F]"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold uppercase tracking-wider text-[#333333]">
+                      Group Chat ID (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. -100192837465"
+                      value={tgChatId}
+                      onChange={(e) => setTgChatId(e.target.value)}
+                      className="w-full mt-1 px-3 py-2 bg-[#F7F7F5] border border-[#E5E7EB] rounded-[6px] text-xs font-mono text-[#000000] outline-none focus:border-[#0F0F0F]"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: REGISTER NEW BOT */}
+              {tgPairTab === 'new_bot' && (
+                <div className="space-y-3">
+                  <div className="p-3 bg-gray-50 border border-gray-200 rounded-[8px] text-xs text-gray-700 leading-relaxed">
+                    Create a new bot via <strong>@BotFather</strong> on Telegram and paste its API token below.
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold uppercase tracking-wider text-[#333333]">
+                      Bot Username *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. @kendali_worker_bot"
+                      value={tgBotName}
+                      onChange={(e) => setTgBotName(e.target.value)}
+                      className="w-full mt-1 px-3 py-2 bg-[#F7F7F5] border border-[#E5E7EB] rounded-[6px] text-xs text-[#000000] outline-none focus:border-[#0F0F0F]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold uppercase tracking-wider text-[#333333]">
+                      Bot Token (from @BotFather) *
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      placeholder="123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ"
+                      value={tgBotToken}
+                      onChange={(e) => setTgBotToken(e.target.value)}
+                      className="w-full mt-1 px-3 py-2 bg-[#F7F7F5] border border-[#E5E7EB] rounded-[6px] text-xs font-mono text-[#000000] outline-none focus:border-[#0F0F0F]"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="pt-3 border-t border-[#E5E7EB] flex items-center justify-between gap-2">
+                {selectedWorkerForTg.telegramBot?.status === 'connected' ? (
+                  <button
+                    type="button"
+                    onClick={handleUnlinkBot}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-[6px] transition-colors cursor-pointer"
+                  >
+                    <Unlink size={13} />
+                    <span>Unlink Bot</span>
+                  </button>
+                ) : (
+                  <div />
+                )}
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowTelegramModal(false)}
+                    className="px-4 py-2 border border-[#E5E7EB] text-xs font-semibold rounded-[6px] hover:bg-gray-50 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isLinkingTg}
+                    className="flex items-center gap-1.5 px-5 py-2 bg-[#0F0F0F] text-white text-xs font-bold rounded-[6px] hover:bg-black/90 disabled:opacity-50 cursor-pointer shadow-sm"
+                  >
+                    <RefreshCw size={12} className={isLinkingTg ? 'animate-spin' : ''} />
+                    <span>{isLinkingTg ? 'Pairing...' : 'Save & Link Bot'}</span>
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -1162,7 +1579,7 @@ export const AgencyHQPane: React.FC = () => {
               </div>
               <button
                 onClick={() => setShowDelegateModal(false)}
-                className="p-1.5 text-[#8A8A85] hover:text-[#000000] rounded-md hover:bg-gray-100"
+                className="p-1.5 text-[#8A8A85] hover:text-[#000000] rounded-md hover:bg-gray-100 cursor-pointer"
               >
                 <X size={18} />
               </button>
@@ -1170,7 +1587,9 @@ export const AgencyHQPane: React.FC = () => {
 
             <form onSubmit={handleDispatchTask} className="p-6 space-y-4">
               <div className="flex items-center gap-3 p-3 bg-[#F7F7F5] border border-[#E5E7EB] rounded-[8px]">
-                <span className="text-2xl">{selectedWorkerForDelegate.avatar}</span>
+                <div className="w-10 h-10 rounded-[8px] bg-white border border-[#E5E7EB] flex items-center justify-center shrink-0 p-1">
+                  <GrokAvatar id={selectedWorkerForDelegate.avatar} size={30} />
+                </div>
                 <div>
                   <div className="text-xs font-bold text-[#000000]">
                     {selectedWorkerForDelegate.name} ({selectedWorkerForDelegate.role})
@@ -1206,7 +1625,7 @@ export const AgencyHQPane: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowDelegateModal(false)}
-                  className="px-4 py-2 border border-[#E5E7EB] text-xs font-semibold rounded-[6px] hover:bg-gray-50"
+                  className="px-4 py-2 border border-[#E5E7EB] text-xs font-semibold rounded-[6px] hover:bg-gray-50 cursor-pointer"
                 >
                   Cancel
                 </button>

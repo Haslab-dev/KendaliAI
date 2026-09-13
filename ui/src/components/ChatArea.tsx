@@ -11,6 +11,7 @@ import { navigate } from '../router';
 import { useAgentSocket } from '../hooks/useAgentSocket';
 import { ToolExecutionCard } from './ToolExecutionCard';
 import { InstallPromptModal } from './InstallPromptModal';
+import { GrokAvatar } from './GrokAvatar';
 import { isReasoningModel } from '../types';
 
 interface SlashCommand {
@@ -429,9 +430,7 @@ export const ChatArea: React.FC = () => {
         </button>
 
         {/* Agent Avatar */}
-        <div className="w-[30px] h-[30px] shrink-0 bg-[#0F0F0F] rounded-full flex items-center justify-center text-white">
-          <Bot size={15} />
-        </div>
+        <GrokAvatar id={activeAgent?.avatar || activeAgent?.id || 'purple-pebble'} size={32} />
 
         {/* Header Title */}
         <div className="flex flex-col gap-[1px] justify-start items-start">
@@ -439,7 +438,7 @@ export const ChatArea: React.FC = () => {
             {activeAgent?.name || 'Hermes Agent'}
           </div>
           <div className="text-[10px] leading-tight text-[#8A8A85] font-funnel font-normal">
-            🛠️ {activeAgent?.id || 'Coder'} persona · {effectiveModel} · {messages.length} messages
+            {activeAgent?.description || 'Autonomous staff agent'} · {effectiveModel} · {messages.length} messages
           </div>
         </div>
 
