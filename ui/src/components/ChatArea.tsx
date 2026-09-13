@@ -522,11 +522,12 @@ export const ChatArea: React.FC = () => {
       )}
 
       {/* Chat Header matching Grok Bot style */}
-      <div className="w-full min-h-[64px] shrink-0 flex flex-row gap-3 px-3 sm:px-6 items-center bg-[#FFFFFF] border-b border-[#E5E7EB] z-20 select-none py-2">
+      {/* Revamped Responsive Chat Header */}
+      <div className="w-full min-h-[58px] sm:min-h-[64px] shrink-0 flex flex-row gap-2.5 sm:gap-3 px-3 sm:px-6 items-center bg-[#FFFFFF] dark:bg-[#141414] border-b border-[#E5E7EB] dark:border-[#27272A] z-20 select-none py-1.5 sm:py-2">
         {/* Mobile menu trigger for Agents & Session History Drawer */}
         <button
           onClick={() => setIsMobileDrawerOpen(true)}
-          className="p-2 text-[#333333] hover:text-[#000000] md:hidden rounded-lg hover:bg-[#F7F7F5] cursor-pointer shrink-0"
+          className="p-1.5 text-[#333333] dark:text-[#E5E7EB] hover:text-[#000000] md:hidden rounded-lg hover:bg-[#F7F7F5] dark:hover:bg-[#1F1F1F] cursor-pointer shrink-0"
           title="Open Agents & Session History Drawer"
         >
           <Menu size={20} />
@@ -540,60 +541,59 @@ export const ChatArea: React.FC = () => {
         >
           <GrokAvatar
             id={activeAgent?.avatar || activeAgent?.id || 'purple-pebble'}
-            size={44}
+            size={38}
             className="drop-shadow-xs transition-transform group-hover:scale-105"
           />
-          <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-[#16A34A] border-2 border-white ring-1 ring-emerald-500/20" title="Online" />
+          <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#16A34A] border-2 border-white dark:border-black" title="Active" />
         </div>
 
         {/* Header Title & Role (Click to switch agent worker) */}
         <div
           onClick={() => setIsAgentPickerOpen(true)}
-          className="flex flex-col gap-[2px] justify-start items-start min-w-0 cursor-pointer group/agent-title"
+          className="flex flex-col justify-center min-w-0 flex-1 cursor-pointer group/agent-title overflow-hidden"
           title="Click to switch specialist agent worker"
         >
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-[15px] sm:text-[16px] leading-tight text-[#000000] font-sans font-bold tracking-tight truncate group-hover/agent-title:text-[#007AFF] transition-colors">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-[14px] sm:text-[16px] leading-tight text-[#000000] dark:text-white font-sans font-bold tracking-tight truncate group-hover/agent-title:text-[#007AFF] transition-colors">
               {activeAgent?.name || 'Chief of Staff'}
             </span>
-            <ChevronDown size={14} className="text-[#8A8A85] group-hover/agent-title:text-[#007AFF] transition-colors shrink-0" />
-            <span className="text-[9px] sm:text-[10px] px-2 py-0.5 rounded-full font-bold font-sans uppercase tracking-wider bg-blue-50 text-[#007AFF] border border-blue-100 truncate">
+            <ChevronDown size={13} className="text-[#8A8A85] group-hover/agent-title:text-[#007AFF] transition-colors shrink-0" />
+            <span className="hidden xs:inline-block text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.2 rounded-full font-bold font-sans uppercase tracking-wider bg-blue-50 dark:bg-blue-950/40 text-[#007AFF] border border-blue-100 dark:border-blue-900/40 shrink-0">
               {activeAgent?.role || activeAgent?.department || 'Specialist'}
             </span>
           </div>
-          <div className="text-[11px] leading-tight text-[#8A8A85] font-sans truncate max-w-[170px] sm:max-w-md">
-            {activeAgent?.description || 'Autonomous specialist agent'} · <span className="font-mono text-[#4B5563]">{effectiveModel}</span>
+          <div className="text-[11px] leading-tight text-[#8A8A85] font-sans truncate flex items-center gap-1 mt-0.5">
+            <span className="text-emerald-600 dark:text-emerald-400 font-medium">● Online</span>
+            <span className="hidden sm:inline">· {activeAgent?.description || 'Autonomous specialist agent'}</span>
           </div>
         </div>
 
-        <div className="flex-1" />
-
         {/* Action Chips */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Review Diff Chip */}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {/* Review Diff Chip (Desktop) */}
           <button
             onClick={handleQuickReview}
-            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-[#FFF5EB] border border-[#E5E7EB] hover:border-[#D97706] rounded-[4px] text-[11px] font-funnel text-[#333333] transition-colors shadow-2xs"
+            className="hidden sm:flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-[#FFF5EB] border border-[#E5E7EB] hover:border-[#D97706] rounded-[6px] text-[11px] font-sans text-[#333333] transition-colors shadow-2xs cursor-pointer"
             title="Run code & security review on workspace diff"
           >
-            <ShieldCheck size={13} className="text-[#333333]" />
+            <ShieldCheck size={13} className="text-[#D97706]" />
             <span>Review Diff</span>
           </button>
 
-          {/* Worktrees Chip */}
+          {/* Worktrees Chip (Desktop) */}
           <button
             onClick={() => navigate('worktrees')}
-            className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-[#FFFFFF] border border-[#E5E7EB] hover:border-[#333333] rounded-[4px] text-[11px] font-funnel text-[#333333] transition-colors shadow-2xs"
+            className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-[#FFFFFF] border border-[#E5E7EB] hover:border-[#333333] rounded-[6px] text-[11px] font-sans text-[#333333] transition-colors shadow-2xs cursor-pointer"
             title="Git Worktrees & Branch Isolation"
           >
             <GitFork size={13} className="text-[#333333]" />
             <span>Worktrees</span>
           </button>
 
-          {/* Files Chip */}
+          {/* Files Chip (Desktop) */}
           <button
             onClick={() => navigate('editor')}
-            className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-[#FFFFFF] border border-[#E5E7EB] hover:border-[#333333] rounded-[4px] text-[11px] font-funnel text-[#333333] transition-colors shadow-2xs"
+            className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-[#FFFFFF] border border-[#E5E7EB] hover:border-[#333333] rounded-[6px] text-[11px] font-sans text-[#333333] transition-colors shadow-2xs cursor-pointer"
             title="File Explorer & Code Editor"
           >
             <Folder size={13} className="text-[#333333]" />
@@ -601,29 +601,26 @@ export const ChatArea: React.FC = () => {
           </button>
 
           {/* Model Chip & Dropdown */}
-          <div className="relative" ref={modelDropdownRef}>
+          <div className="relative shrink-0" ref={modelDropdownRef}>
             <button
               onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FFFFFF] border border-[#E5E7EB] hover:border-[#333333] rounded-[6px] text-[11px] font-sans text-[#333333] transition-all shadow-2xs cursor-pointer"
-              title="Select LLM model"
+              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 bg-[#FFFFFF] dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] hover:border-[#333333] rounded-[6px] text-[11px] font-sans text-[#333333] dark:text-[#E5E7EB] transition-all shadow-2xs cursor-pointer"
+              title={`Active Model: ${effectiveModel} (Click to change)`}
             >
-              <Cpu size={13} className="text-[#007AFF]" />
-              <span className="font-semibold max-w-[130px] truncate">{effectiveModel}</span>
-              {defaultModel === effectiveModel && (
-                <span className="text-[9px] px-1 py-0.2 rounded bg-amber-100 text-amber-800 font-bold uppercase">
-                  Default
-                </span>
-              )}
-              <ChevronDown size={12} className={`text-[#8A8A85] transition-transform ${isModelDropdownOpen ? 'rotate-180' : ''}`} />
+              <Cpu size={13} className="text-[#007AFF] shrink-0" />
+              <span className="font-mono font-semibold max-w-[70px] xs:max-w-[90px] sm:max-w-[130px] truncate">
+                {effectiveModel}
+              </span>
+              <ChevronDown size={11} className={`text-[#8A8A85] shrink-0 transition-transform ${isModelDropdownOpen ? 'rotate-180' : ''}`} />
             </button>
 
             {isModelDropdownOpen && (
-              <div className="absolute right-0 mt-1 w-80 bg-[#FFFFFF] border border-[#E5E7EB] rounded-[10px] shadow-2xl p-2.5 z-50 animate-in fade-in duration-100 flex flex-col gap-2">
+              <div className="fixed sm:absolute inset-x-3 sm:inset-auto top-[62px] sm:top-auto sm:right-0 sm:mt-1 sm:w-80 bg-[#FFFFFF] dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[10px] shadow-2xl p-2.5 z-50 animate-in fade-in duration-100 flex flex-col gap-2 max-w-sm mx-auto sm:max-w-none">
                 {/* Header with Refresh */}
-                <div className="flex items-center justify-between px-1 pb-1.5 border-b border-[#E5E7EB]">
+                <div className="flex items-center justify-between px-1 pb-1.5 border-b border-[#E5E7EB] dark:border-[#2C2C2E]">
                   <div className="flex items-center gap-1.5">
                     <Cpu size={14} className="text-[#007AFF]" />
-                    <span className="text-xs font-bold text-[#000000] font-sans">
+                    <span className="text-xs font-bold text-[#000000] dark:text-white font-sans">
                       Select LLM Model
                     </span>
                   </div>
@@ -634,7 +631,7 @@ export const ChatArea: React.FC = () => {
                       loadModels(true);
                     }}
                     disabled={isLoadingModels}
-                    className="flex items-center gap-1 text-[10px] font-bold text-[#007AFF] hover:underline cursor-pointer p-1 rounded hover:bg-blue-50 transition-colors"
+                    className="flex items-center gap-1 text-[10px] font-bold text-[#007AFF] hover:underline cursor-pointer p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
                     title="Probe connected providers for latest models"
                   >
                     <RefreshCw size={11} className={isLoadingModels ? 'animate-spin' : ''} />
@@ -650,7 +647,7 @@ export const ChatArea: React.FC = () => {
                     placeholder="Search model (e.g. gpt-4o, qwen, claude)..."
                     value={modelSearch}
                     onChange={(e) => setModelSearch(e.target.value)}
-                    className="w-full pl-7 pr-2.5 py-1 bg-[#F7F7F5] border border-[#E5E7EB] rounded-[6px] text-xs text-[#000000] outline-none focus:border-[#0F0F0F]"
+                    className="w-full pl-7 pr-2.5 py-1 bg-[#F7F7F5] dark:bg-[#141414] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[6px] text-xs text-[#000000] dark:text-white outline-none focus:border-[#0F0F0F]"
                   />
                 </div>
 
@@ -663,7 +660,7 @@ export const ChatArea: React.FC = () => {
                   ) : (
                     filteredModels.map((m) => {
                       const isSelected = effectiveModel === m.id || effectiveModel === m.name;
-                      const isDefault = defaultModel === m.id;
+                      const isSysDefault = defaultModel === m.id;
 
                       return (
                         <div
@@ -672,45 +669,47 @@ export const ChatArea: React.FC = () => {
                             setActiveModel(m.id);
                             setIsModelDropdownOpen(false);
                           }}
-                          className={`group/item w-full flex items-center justify-between p-2 rounded-[6px] text-left transition-all cursor-pointer ${
+                          className={`flex items-center justify-between p-2 rounded-[8px] cursor-pointer transition-colors ${
                             isSelected
-                              ? 'bg-blue-50/70 border border-[#007AFF]/30'
-                              : 'hover:bg-[#F7F7F5] border border-transparent'
+                              ? 'bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900'
+                              : 'hover:bg-gray-50 dark:hover:bg-white/5 border border-transparent'
                           }`}
                         >
-                          <div className="flex flex-col min-w-0 flex-1 pr-2">
-                            <div className="flex items-center gap-1.5">
-                              <span className={`font-mono text-xs truncate ${isSelected ? 'font-bold text-[#007AFF]' : 'text-[#000000]'}`}>
-                                {m.name || m.id}
-                              </span>
-                              {isDefault && (
-                                <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 font-bold uppercase shrink-0">
-                                  Default
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <Cpu size={13} className={isSelected ? 'text-[#007AFF]' : 'text-[#8A8A85]'} />
+                            <div className="flex flex-col min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className={`text-xs font-mono font-semibold truncate ${isSelected ? 'text-[#007AFF]' : 'text-[#000000] dark:text-white'}`}>
+                                  {m.name}
                                 </span>
-                              )}
+                                {isSysDefault && (
+                                  <span className="text-[8px] font-bold px-1 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 uppercase">
+                                    Default
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[10px] text-[#8A8A85] truncate font-sans">
+                                {m.providerName || m.providerType}
+                              </span>
                             </div>
-                            <span className="text-[10px] text-[#8A8A85] truncate">
-                              {m.providerName || m.providerId} · {m.id}
-                            </span>
                           </div>
 
-                          <div className="flex items-center gap-1 shrink-0">
-                            {!isDefault && (
+                          <div className="flex items-center gap-1 shrink-0 ml-2">
+                            {/* Make Default Button */}
+                            {!isSysDefault && (
                               <button
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setDefaultModel(m.id, m.providerId);
                                 }}
-                                className="opacity-0 group-hover/item:opacity-100 text-[10px] px-1.5 py-0.5 rounded border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold transition-all"
-                                title="Set as default model for all purposes"
+                                className="text-[9px] px-1.5 py-0.5 rounded border border-[#E5E7EB] dark:border-[#2C2C2E] hover:bg-gray-100 dark:hover:bg-gray-800 text-[#8A8A85] hover:text-[#000000] dark:hover:text-white font-semibold transition-colors"
+                                title="Set as system default model"
                               >
                                 Set Default
                               </button>
                             )}
-                            {isSelected && (
-                              <Check size={14} className="text-[#007AFF]" />
-                            )}
+                            {isSelected && <Check size={14} className="text-[#007AFF]" />}
                           </div>
                         </div>
                       );
@@ -727,18 +726,18 @@ export const ChatArea: React.FC = () => {
                     setCustomModelInput('');
                     setIsModelDropdownOpen(false);
                   }}
-                  className="pt-2 border-t border-[#E5E7EB] flex items-center gap-1.5"
+                  className="pt-2 border-t border-[#E5E7EB] dark:border-[#2C2C2E] flex items-center gap-1.5"
                 >
                   <input
                     type="text"
                     placeholder="Enter custom model ID..."
                     value={customModelInput}
                     onChange={(e) => setCustomModelInput(e.target.value)}
-                    className="flex-1 px-2.5 py-1 bg-[#F7F7F5] border border-[#E5E7EB] rounded-[6px] text-xs font-mono text-[#000000] outline-none focus:border-[#0F0F0F]"
+                    className="flex-1 px-2.5 py-1 bg-[#F7F7F5] dark:bg-[#141414] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[6px] text-xs font-mono text-[#000000] dark:text-white outline-none focus:border-[#0F0F0F]"
                   />
                   <button
                     type="submit"
-                    className="px-2.5 py-1 bg-[#0F0F0F] text-white text-xs font-bold rounded-[6px] hover:bg-black/90 cursor-pointer"
+                    className="px-2.5 py-1 bg-[#0F0F0F] dark:bg-white text-white dark:text-black text-xs font-bold rounded-[6px] hover:bg-black/90 cursor-pointer"
                   >
                     Apply
                   </button>
@@ -750,7 +749,7 @@ export const ChatArea: React.FC = () => {
                     setIsModelDropdownOpen(false);
                     navigate('providers');
                   }}
-                  className="border-t border-[#E5E7EB] pt-1.5 px-1 text-[11px] text-[#007AFF] hover:underline cursor-pointer flex items-center justify-between font-sans"
+                  className="border-t border-[#E5E7EB] dark:border-[#2C2C2E] pt-1.5 px-1 text-[11px] text-[#007AFF] hover:underline cursor-pointer flex items-center justify-between font-sans"
                 >
                   <span>Manage Providers &amp; API Keys...</span>
                   <ExternalLink size={11} />
@@ -758,15 +757,6 @@ export const ChatArea: React.FC = () => {
               </div>
             )}
           </div>
-
-          {/* New Chat Button */}
-          <button
-            onClick={() => createSession()}
-            className="w-8 h-8 rounded-[4px] border border-[#E5E7EB] bg-[#FFFFFF] hover:bg-[#F7F7F5] text-[#333333] flex items-center justify-center transition-colors shadow-2xs"
-            title="New Chat Session"
-          >
-            <Plus size={14} />
-          </button>
         </div>
       </div>
 
@@ -953,8 +943,8 @@ export const ChatArea: React.FC = () => {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Floating Prompt Bar matching refs/desktop/chat.html */}
-      <div className="w-full shrink-0 p-[12px_16px_20px_16px] sm:p-[12px_56px_20px_56px] bg-[#F7F7F5] relative">
+      {/* WhatsApp-Style Clean Floating Input Bar */}
+      <div className="w-full shrink-0 px-3 sm:px-14 py-2 sm:py-3 bg-[#FFFFFF] dark:bg-[#141414] border-t border-[#E5E7EB] dark:border-[#27272A] relative select-none pb-[calc(env(safe-area-inset-bottom,0px)+8px)]">
         {/* Slash Command Autocomplete Popover Modal */}
         {isTypingSlash && filteredSuggestions.length > 0 && (
           <SlashAutocompleteModal
@@ -966,165 +956,86 @@ export const ChatArea: React.FC = () => {
 
         {/* Ingest Notification */}
         {ragNotice && (
-          <div className="mb-2 p-2.5 bg-[#FFFFFF] border border-[#E5E7EB] rounded-[8px] text-xs flex items-center justify-between shadow-sm">
-            <div className="flex items-center gap-2 text-[#333333] font-geist">
-              {isUploadingDoc ? <RefreshCw size={13} className="animate-spin text-[#007AFF]" /> : <Database size={13} className="text-[#007AFF]" />}
-              <span>{ragNotice.text}</span>
+          <div className="max-w-4xl mx-auto mb-2 p-2.5 bg-[#F7F7F5] dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[12px] text-xs flex items-center justify-between shadow-2xs">
+            <div className="flex items-center gap-2 text-[#333333] dark:text-[#E5E7EB] font-sans">
+              {isUploadingDoc ? <RefreshCw size={14} className="animate-spin text-[#007AFF]" /> : <Database size={14} className="text-[#007AFF]" />}
+              <span className="truncate">{ragNotice.text}</span>
             </div>
-            <button onClick={() => setRagNotice(null)} className="text-[#8A8A85] hover:text-[#000000]">
-              <X size={12} />
+            <button onClick={() => setRagNotice(null)} className="text-[#8A8A85] hover:text-[#000000] dark:hover:text-white cursor-pointer ml-2">
+              <X size={13} />
             </button>
           </div>
         )}
 
-        {/* Input Box Card */}
-        <div className="w-full bg-[#FFFFFF] border border-[#E5E7EB] rounded-[8px] p-3.5 shadow-sm flex flex-col gap-2.5 focus-within:border-[#007AFF] transition-colors">
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileUpload}
-            className="hidden"
-            accept=".txt,.md,.pdf,.json,.csv,.js,.ts,.py,.go,.html,.yaml,.yml"
-          />
+        {/* Hidden File Input for Attachments */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileUpload}
+          className="hidden"
+          accept=".txt,.md,.pdf,.json,.csv,.js,.ts,.py,.go,.html,.yaml,.yml"
+        />
 
-          <textarea
-            ref={textareaRef}
-            rows={1}
-            value={inputText}
-            onChange={handleTextareaInput}
-            onKeyDown={handleKeyDown}
-            placeholder={`Message ${activeAgent?.name || 'Chief of Staff'}… try /review, /scheduler, /skill:planner`}
-            className="w-full bg-transparent text-[13px] text-[#000000] placeholder:text-[#8A8A85] font-geist resize-none outline-none min-h-[36px] max-h-40 leading-relaxed"
-          />
-
-          {/* Toolbar */}
-          <div className="w-full flex items-center gap-2.5 flex-wrap pt-1 border-t border-[#F0F0EE]">
-            {/* Attachment */}
+        {/* WhatsApp-Style Row */}
+        <div className="w-full max-w-4xl mx-auto flex items-end gap-2">
+          {/* Main Input Pill Container */}
+          <div className="flex-1 min-w-0 bg-[#F7F7F5] dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[24px] px-3.5 py-1.5 shadow-2xs flex items-end gap-2 focus-within:border-[#007AFF] focus-within:bg-[#FFFFFF] dark:focus-within:bg-[#141414] focus-within:ring-2 focus-within:ring-[#007AFF]/15 transition-all">
+            {/* Attachment Button */}
             <button
               type="button"
               disabled={isUploadingDoc}
               onClick={() => fileInputRef.current?.click()}
-              className="p-1 text-[#333333] hover:text-[#000000] rounded hover:bg-[#F7F7F5] transition-colors"
+              className="p-1.5 text-[#8A8A85] hover:text-[#000000] dark:hover:text-white rounded-full hover:bg-black/5 dark:hover:bg-white/5 transition-colors shrink-0 mb-0.5 cursor-pointer"
               title="Upload document to Vector RAG"
             >
-              <Paperclip size={15} />
+              {isUploadingDoc ? <RefreshCw size={18} className="animate-spin text-[#007AFF]" /> : <Paperclip size={18} />}
             </button>
 
-            {/* Mic */}
+            {/* Auto-growing Textarea */}
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              value={inputText}
+              onChange={handleTextareaInput}
+              onKeyDown={handleKeyDown}
+              placeholder={`Message ${activeAgent?.name || 'agent'}…`}
+              className="flex-1 min-w-0 bg-transparent text-[14px] text-[#000000] dark:text-white placeholder:text-[#8A8A85] font-sans resize-none outline-none py-1.5 max-h-36 custom-scrollbar leading-relaxed"
+              style={{ minHeight: '26px' }}
+            />
+
+            {/* Quick Slash Commands Trigger */}
             <button
               type="button"
-              onClick={() => alert('Audio voice mode coming soon')}
-              className="p-1 text-[#333333] hover:text-[#000000] rounded hover:bg-[#F7F7F5] transition-colors"
-              title="Voice input"
+              onClick={() => {
+                if (!inputText.startsWith('/')) {
+                  setInputText('/' + inputText);
+                  textareaRef.current?.focus();
+                }
+              }}
+              className="p-1.5 text-[#8A8A85] hover:text-[#007AFF] rounded-full hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors shrink-0 mb-0.5 cursor-pointer"
+              title="Slash commands & skills (/)"
             >
-              <Mic size={15} />
-            </button>
-
-            {/* Upload code */}
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="p-1 text-[#333333] hover:text-[#000000] rounded hover:bg-[#F7F7F5] transition-colors"
-              title="Upload file or manifest"
-            >
-              <Upload size={15} />
-            </button>
-
-            {/* Divider */}
-            <div className="w-[1px] h-[16px] bg-[#E5E7EB]" />
-
-            {/* Persona Selector Dropdown */}
-            <div className="relative" ref={agentDropdownRef}>
-              <button
-                type="button"
-                onClick={() => setIsAgentDropdownOpen(!isAgentDropdownOpen)}
-                className="flex items-center gap-1 text-[11px] text-[#333333] font-funnel hover:text-[#000000] px-1 py-0.5 rounded hover:bg-[#F7F7F5]"
-              >
-                <span>{activeAgent?.name || 'default'}</span>
-                <ChevronDown size={11} className="text-[#8A8A85]" />
-              </button>
-
-              {isAgentDropdownOpen && (
-                <div className="absolute bottom-full left-0 mb-1 w-52 bg-[#FFFFFF] border border-[#E5E7EB] rounded-[8px] shadow-xl p-1 z-50 animate-in fade-in duration-100">
-                  <div className="px-2 py-1 text-[9px] font-bold text-[#8A8A85] uppercase tracking-wider font-funnel border-b border-[#E5E7EB] mb-1">
-                    Select Agent Persona
-                  </div>
-                  {agents.map((ag) => (
-                    <button
-                      key={ag.id}
-                      onClick={() => {
-                        setActiveAgent(ag);
-                        setIsAgentDropdownOpen(false);
-                      }}
-                      className={`w-full flex items-center justify-between px-2 py-1 text-left text-xs rounded hover:bg-[#F7F7F5] ${
-                        activeAgent?.id === ag.id ? 'font-bold text-[#007AFF]' : 'text-[#333333]'
-                      }`}
-                    >
-                      <span className="truncate">{ag.name}</span>
-                      {activeAgent?.id === ag.id && <Check size={12} className="text-[#007AFF]" />}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Worktree / Workspace Selector */}
-            <div className="relative" ref={worktreeDropdownRef}>
-              <button
-                type="button"
-                onClick={() => setIsWorktreeDropdownOpen(!isWorktreeDropdownOpen)}
-                className="flex items-center gap-1 text-[11px] text-[#333333] font-funnel hover:text-[#000000] px-1 py-0.5 rounded hover:bg-[#F7F7F5]"
-              >
-                <span>{activeWorktree}</span>
-                <ChevronDown size={11} className="text-[#8A8A85]" />
-              </button>
-
-              {isWorktreeDropdownOpen && (
-                <div className="absolute bottom-full left-0 mb-1 w-48 bg-[#FFFFFF] border border-[#E5E7EB] rounded-[8px] shadow-xl p-1 z-50">
-                  <div className="px-2 py-1 text-[9px] font-bold text-[#8A8A85] uppercase tracking-wider font-funnel border-b border-[#E5E7EB] mb-1">
-                    Active Git Worktree
-                  </div>
-                  {['Home', ...worktreesList.map((w) => w.branch)].map((wt) => (
-                    <button
-                      key={wt}
-                      onClick={() => {
-                        setActiveWorktree(wt);
-                        setIsWorktreeDropdownOpen(false);
-                      }}
-                      className={`w-full flex items-center justify-between px-2 py-1 text-left text-xs rounded hover:bg-[#F7F7F5] ${
-                        activeWorktree === wt ? 'font-bold text-[#007AFF]' : 'text-[#333333]'
-                      }`}
-                    >
-                      <span className="truncate font-mono text-[11px]">{wt}</span>
-                      {activeWorktree === wt && <Check size={12} className="text-[#007AFF]" />}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Model Selector Tag */}
-            <div className="flex items-center gap-1 text-[11px] text-[#333333] font-funnel">
-              <span className="truncate max-w-[130px]">{effectiveModel}</span>
-            </div>
-
-            <div className="flex-1" />
-
-            {/* Keyboard shortcut hint */}
-            <div className="hidden sm:block text-[10px] text-[#8A8A85] font-funnel">
-              Enter ↵ send · ⇧Enter newline
-            </div>
-
-            {/* Send Button */}
-            <button
-              onClick={handleSend}
-              disabled={!inputText.trim() || isGenerating}
-              className="w-[32px] h-[32px] shrink-0 bg-[#007AFF] hover:bg-[#0066D6] disabled:opacity-40 text-white rounded-[4px] flex items-center justify-center transition-colors"
-              title="Send Message"
-            >
-              <ArrowUp size={15} />
+              <Command size={16} />
             </button>
           </div>
+
+          {/* Circular Send Button */}
+          <button
+            onClick={handleSend}
+            disabled={!inputText.trim() || isGenerating}
+            className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 shadow-sm transition-all ${
+              inputText.trim() && !isGenerating
+                ? 'bg-[#007AFF] hover:bg-[#0066D6] text-white scale-100 active:scale-95 cursor-pointer shadow-blue-500/20'
+                : 'bg-[#E5E7EB] dark:bg-[#2C2C2E] text-[#9CA3AF] cursor-not-allowed opacity-70'
+            }`}
+            title="Send Message"
+          >
+            {isGenerating ? (
+              <RefreshCw size={18} className="animate-spin text-white" />
+            ) : (
+              <ArrowUp size={20} strokeWidth={2.4} />
+            )}
+          </button>
         </div>
       </div>
 

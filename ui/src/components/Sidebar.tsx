@@ -138,7 +138,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
     );
   }, [sessions, sessionSearch]);
 
-  // Group sessions under each staff agent
+  // Group sessions under each staff agent and sort by recent active activity
   const groupedSessions = useMemo(() => {
     const groups: { agent: AgentGroupMeta; sessions: typeof sessions }[] = [];
     const assignedSessionIds = new Set<string>();
@@ -153,6 +153,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
         return false;
       });
 
+      // Sort sessions within each agent by latest updated/created first
+      agentSessions.sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0));
+
       agentSessions.forEach((s) => assignedSessionIds.add(s.id));
       groups.push({ agent, sessions: agentSessions });
     });
@@ -160,6 +163,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
     // Unassigned or general sessions
     const unassigned = filteredSessions.filter((s) => !assignedSessionIds.has(s.id));
     if (unassigned.length > 0) {
+      unassigned.sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0));
       groups.push({
         agent: {
           id: 'general',
@@ -171,8 +175,61 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
       });
     }
 
+    // Sort groups so the agent worker with the most recent active session is on top!
+    const getGroupScore = (g: (typeof groups)[0]) => {
+      // If group has the currently active session, pin to top
+      if (activeSessionId && g.sessions.some((s) => s.id === activeSessionId)) {
+        return Infinity;
+      }
+      // If group matches the active agent worker, pin near top
+      if (activeAgent && g.agent.id === activeAgent.id) {
+        return Infinity - 1;
+      }
+      // Highest timestamp among sessions
+      let maxTime = 0;
+      for (const s of g.sessions) {
+        const t = s.updatedAt || s.createdAt || 0;
+        if (t > maxTime) maxTime = t;
+      }
+      return maxTime;
+    };
+
+    groups.sort((a, b) => {
+      const scoreA = getGroupScore(a);
+      const scoreB = getGroupScore(b);
+      if (scoreA !== scoreB) {
+        return scoreB - scoreA;
+      }
+      // Put workers with sessions before workers with 0 sessions
+      if (a.sessions.length > 0 && b.sessions.length === 0) return -1;
+      if (a.sessions.length === 0 && b.sessions.length > 0) return 1;
+      return 0;
+    });
+
     return groups;
-  }, [officeStaffList, filteredSessions]);
+  }, [officeStaffList, filteredSessions, activeSessionId, activeAgent]);
+
+  // Sorted staff list for mobile carousel (recent active agent worker first)
+  const sortedStaffList = useMemo(() => {
+    const list = [...officeStaffList];
+    list.sort((a, b) => {
+      if (activeSessionId) {
+        const aHasActive = sessions.some((s) => s.id === activeSessionId && s.agentId === a.id);
+        const bHasActive = sessions.some((s) => s.id === activeSessionId && s.agentId === b.id);
+        if (aHasActive && !bHasActive) return -1;
+        if (!aHasActive && bHasActive) return 1;
+      }
+      if (activeAgent && a.id === activeAgent.id) return -1;
+      if (activeAgent && b.id === activeAgent.id) return 1;
+
+      const aSessions = sessions.filter((s) => s.agentId === a.id);
+      const bSessions = sessions.filter((s) => s.agentId === b.id);
+      const aTime = aSessions.reduce((max, s) => Math.max(max, s.updatedAt || s.createdAt || 0), 0);
+      const bTime = bSessions.reduce((max, s) => Math.max(max, s.updatedAt || s.createdAt || 0), 0);
+      return bTime - aTime;
+    });
+    return list;
+  }, [officeStaffList, sessions, activeSessionId, activeAgent]);
 
   const toggleGroupCollapse = (agentId: string) => {
     setCollapsedGroups((prev) => ({
@@ -310,7 +367,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
               </button>
             </div>
             <div className="flex items-center gap-2 overflow-x-auto py-1 no-scrollbar px-1">
-              {officeStaffList.map((staff) => {
+              {sortedStaffList.map((staff) => {
                 const isCurrentActive = activeAgent?.id === staff.id;
                 return (
                   <button
