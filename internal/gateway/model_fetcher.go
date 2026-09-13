@@ -35,6 +35,15 @@ func FetchRemoteModels(ctx context.Context, pType, endpoint, apiKey string) ([]M
 		}
 	}
 
+	// Ensure http:// or https:// protocol is present
+	if !strings.HasPrefix(endpoint, "http://") && !strings.HasPrefix(endpoint, "https://") {
+		if strings.Contains(endpoint, "localhost") || strings.Contains(endpoint, "127.0.0.1") || strings.Contains(endpoint, ":11434") {
+			endpoint = "http://" + endpoint
+		} else {
+			endpoint = "https://" + endpoint
+		}
+	}
+
 	var candidateURLs []string
 	if pType == "ollama" {
 		// Ollama has /v1/models and /api/tags

@@ -130,6 +130,7 @@ func (s *Server) routes() {
 
 	// Configuration APIs
 	s.router.HandleFunc("/api/providers", s.handleProviders())
+	s.router.HandleFunc("/api/providers/", s.handleProviderAction())
 	s.router.HandleFunc("/api/providers/test", s.handleProviderTest())
 	s.router.HandleFunc("/api/providers/models", s.handleProviderModels())
 	s.router.HandleFunc("/api/providers/fetch-models", s.handleProviderModels())
@@ -290,15 +291,47 @@ func (s *Server) handleProviders() http.HandlerFunc {
 			}
 			json.NewEncoder(w).Encode(list)
 
-		case "POST":
+		case "POST", "PUT":
+			bodyBytes, err := io.ReadAll(r.Body)
+			if err != nil {
+				http.Error(w, "invalid request body", http.StatusBadRequest)
+				return
+			}
+
+			var rawMap map[string]interface{}
+			_ = json.Unmarshal(bodyBytes, &rawMap)
+
 			var p gateway.ProviderConfig
-			if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+			if err := json.Unmarshal(bodyBytes, &p); err != nil {
 				http.Error(w, "invalid JSON", http.StatusBadRequest)
 				return
 			}
+
 			if p.ID == "" {
-				p.ID = strings.ToLower(strings.ReplaceAll(p.Name, " ", "-"))
+				p.ID = strings.ToLower(strings.ReplaceAll(strings.TrimSpace(p.Name), " ", "-"))
 			}
+
+			// If enabled was not explicitly specified in payload, default to true
+			if rawMap != nil {
+				if _, hasEnabled := rawMap["enabled"]; !hasEnabled {
+					existing, _ := s.store.GetProvider(p.ID)
+					if existing != nil {
+						p.Enabled = existing.Enabled
+					} else {
+						p.Enabled = true
+					}
+				}
+			} else {
+				p.Enabled = true
+			}
+
+			// Ensure models have valid names
+			for i := range p.Models {
+				if p.Models[i].Name == "" {
+					p.Models[i].Name = p.Models[i].ID
+				}
+			}
+
 			if err := s.store.SaveProvider(p); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
@@ -317,6 +350,92 @@ func (s *Server) handleProviders() http.HandlerFunc {
 			}
 			json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	}
+}
+
+func (s *Server) handleProviderAction() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		path := strings.TrimPrefix(r.URL.Path, "/api/providers/")
+		parts := strings.Split(strings.Trim(path, "/"), "/")
+		if len(parts) == 0 || parts[0] == "" {
+			http.Error(w, "invalid provider path", http.StatusBadRequest)
+			return
+		}
+		id := parts[0]
+
+		if len(parts) >= 2 && parts[1] == "default" {
+			if r.Method != "POST" {
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			prov, err := s.store.GetProvider(id)
+			if err != nil || prov == nil {
+				http.Error(w, "provider not found", http.StatusNotFound)
+				return
+			}
+			prov.IsDefault = true
+			if err := s.store.SaveProvider(*prov); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "id": id, "isDefault": true})
+			return
+		}
+
+		if len(parts) >= 2 && (parts[1] == "toggle" || parts[1] == "enable") {
+			if r.Method != "POST" {
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			prov, err := s.store.GetProvider(id)
+			if err != nil || prov == nil {
+				http.Error(w, "provider not found", http.StatusNotFound)
+				return
+			}
+			prov.Enabled = !prov.Enabled
+			if err := s.store.SaveProvider(*prov); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			json.NewEncoder(w).Encode(prov)
+			return
+		}
+
+		switch r.Method {
+		case "GET":
+			prov, err := s.store.GetProvider(id)
+			if err != nil || prov == nil {
+				http.Error(w, "provider not found", http.StatusNotFound)
+				return
+			}
+			json.NewEncoder(w).Encode(prov)
+		case "POST", "PUT":
+			var p gateway.ProviderConfig
+			if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+				http.Error(w, "invalid JSON", http.StatusBadRequest)
+				return
+			}
+			p.ID = id
+			for i := range p.Models {
+				if p.Models[i].Name == "" {
+					p.Models[i].Name = p.Models[i].ID
+				}
+			}
+			if err := s.store.SaveProvider(p); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			json.NewEncoder(w).Encode(p)
+		case "DELETE":
+			if err := s.store.DeleteProvider(id); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 		default:
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -352,12 +471,12 @@ func (s *Server) handleProviderModels() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
-		var pType, endpoint, apiKey string
+		var pType, endpoint, apiKey, provID string
 
 		if r.Method == "GET" {
-			id := r.URL.Query().Get("id")
-			if id != "" {
-				prov, err := s.store.GetProvider(id)
+			provID = r.URL.Query().Get("id")
+			if provID != "" {
+				prov, err := s.store.GetProvider(provID)
 				if err == nil && prov != nil {
 					pType = prov.Type
 					endpoint = prov.Endpoint
@@ -381,6 +500,7 @@ func (s *Server) handleProviderModels() http.HandlerFunc {
 				APIKey   string `json:"apiKey"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&body); err == nil {
+				provID = body.ID
 				if body.ID != "" && (body.Type == "" || body.Endpoint == "") {
 					prov, _ := s.store.GetProvider(body.ID)
 					if prov != nil {
@@ -408,6 +528,15 @@ func (s *Server) handleProviderModels() http.HandlerFunc {
 		if err != nil {
 			http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusBadRequest)
 			return
+		}
+
+		// If save=true requested and provider exists, update provider models in DB
+		if (r.URL.Query().Get("save") == "true" || r.URL.Query().Get("persist") == "true") && provID != "" {
+			prov, _ := s.store.GetProvider(provID)
+			if prov != nil {
+				prov.Models = models
+				_ = s.store.SaveProvider(*prov)
+			}
 		}
 
 		json.NewEncoder(w).Encode(models)

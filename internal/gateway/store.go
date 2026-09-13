@@ -450,9 +450,27 @@ func parseModelsJSON(raw string) []ModelItem {
 	if raw == "" || raw == "null" {
 		return make([]ModelItem, 0)
 	}
-	var items []ModelItem
-	if err := json.Unmarshal([]byte(raw), &items); err == nil && len(items) > 0 && items[0].ID != "" {
-		return items
+	var rawMaps []map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &rawMaps); err == nil && len(rawMaps) > 0 {
+		items := make([]ModelItem, 0, len(rawMaps))
+		for _, m := range rawMaps {
+			id, _ := m["id"].(string)
+			if id == "" {
+				continue
+			}
+			name, _ := m["name"].(string)
+			if name == "" {
+				name = id
+			}
+			enabled := true
+			if en, ok := m["enabled"].(bool); ok {
+				enabled = en
+			}
+			items = append(items, ModelItem{ID: id, Name: name, Enabled: enabled})
+		}
+		if len(items) > 0 {
+			return items
+		}
 	}
 	var strs []string
 	if err := json.Unmarshal([]byte(raw), &strs); err == nil {

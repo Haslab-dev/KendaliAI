@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Cpu,
   Plus,
@@ -6,85 +6,108 @@ import {
   RefreshCw,
   AlertCircle,
   Puzzle,
-  Zap,
   PlugZap,
   CheckCircle2,
-  ExternalLink,
-  Key,
   Eye,
   EyeOff,
-  Server,
-  Radio,
   Check,
   X,
   Play,
-  Settings2,
+  Pencil,
+  Search,
+  CheckCheck,
+  Globe,
+  Sliders,
+  Sparkles,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
-import { ProviderConfig, MCPServerConfig } from '../types';
+import { ProviderConfig, MCPServerConfig, ModelItem, isReasoningModel } from '../types';
 
-interface ShowcaseProvider {
+interface ExtendedProvider {
   id: string;
   name: string;
   endpoint: string;
-  models: string;
-  isDefault: boolean;
-  status: 'connected' | 'local' | 'disconnected';
-  meta: string;
-  apiKey?: string;
   type: string;
+  apiKey?: string;
+  models: ModelItem[];
+  isDefault: boolean;
+  enabled: boolean;
+  status: 'connected' | 'local' | 'disconnected';
+  meta?: string;
 }
 
-const DEFAULT_SHOWCASE_PROVIDERS: ShowcaseProvider[] = [
+const DEFAULT_FALLBACK_PROVIDERS: ExtendedProvider[] = [
   {
     id: 'openai',
-    name: 'OpenAI',
-    endpoint: 'api.openai.com',
-    models: 'gpt-5, o3, gpt-4.1',
-    isDefault: true,
-    status: 'connected',
-    meta: '12 models probed',
+    name: 'OpenAI Compatible',
+    endpoint: 'https://api.openai.com/v1',
     type: 'openai',
+    models: [
+      { id: 'gpt-4o', name: 'GPT-4o', enabled: true },
+      { id: 'gpt-4o-mini', name: 'GPT-4o Mini', enabled: true },
+      { id: 'o3-mini', name: 'o3-mini (Reasoning)', enabled: true },
+    ],
+    isDefault: true,
+    enabled: true,
+    status: 'connected',
+    meta: 'OpenAI Official / Proxy',
   },
   {
     id: 'anthropic',
-    name: 'Anthropic',
-    endpoint: 'api.anthropic.com',
-    models: 'Claude Sonnet 4.6 — default',
-    isDefault: false,
-    status: 'connected',
-    meta: '4 models probed',
+    name: 'Anthropic Claude',
+    endpoint: 'https://api.anthropic.com/v1',
     type: 'anthropic',
+    models: [
+      { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet (Thinking)', enabled: true },
+      { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', enabled: true },
+      { id: 'claude-3-5-haiku', name: 'Claude 3.5 Haiku', enabled: true },
+    ],
+    isDefault: false,
+    enabled: true,
+    status: 'connected',
+    meta: 'Claude 3.7 / 3.5',
   },
   {
     id: 'deepseek',
     name: 'DeepSeek',
-    endpoint: 'api.deepseek.com',
-    models: 'deepseek-r1 (reasoning), v3',
-    isDefault: false,
-    status: 'connected',
-    meta: '2 models probed',
+    endpoint: 'https://api.deepseek.com',
     type: 'deepseek',
+    models: [
+      { id: 'deepseek-chat', name: 'DeepSeek V3', enabled: true },
+      { id: 'deepseek-reasoner', name: 'DeepSeek R1 (Reasoning)', enabled: true },
+    ],
+    isDefault: false,
+    enabled: true,
+    status: 'connected',
+    meta: 'V3 & R1 Reasoning',
   },
   {
     id: 'ollama',
-    name: 'Ollama',
-    endpoint: 'localhost:11434',
-    models: 'llama3.3, qwen2.5',
-    isDefault: false,
-    status: 'local',
-    meta: 'local · offline mode',
+    name: 'Ollama Local',
+    endpoint: 'http://localhost:11434',
     type: 'ollama',
+    models: [
+      { id: 'qwen2.5-coder:latest', name: 'Qwen 2.5 Coder', enabled: true },
+      { id: 'llama3.3:latest', name: 'Llama 3.3', enabled: true },
+    ],
+    isDefault: false,
+    enabled: true,
+    status: 'local',
+    meta: 'Local · Offline mode',
   },
   {
     id: 'openrouter',
     name: 'OpenRouter',
-    endpoint: 'openrouter.ai/api',
-    models: 'fallback: Sonnet 4.6',
-    isDefault: false,
-    status: 'connected',
-    meta: '5 models probed',
+    endpoint: 'https://openrouter.ai/api/v1',
     type: 'openrouter',
+    models: [
+      { id: 'anthropic/claude-3.7-sonnet', name: 'Claude 3.7 Sonnet', enabled: true },
+      { id: 'deepseek/deepseek-r1', name: 'DeepSeek R1', enabled: true },
+    ],
+    isDefault: false,
+    enabled: true,
+    status: 'connected',
+    meta: 'Multi-provider gateway',
   },
 ];
 
@@ -125,25 +148,36 @@ const DEFAULT_SHOWCASE_MCPS: ShowcaseMCP[] = [
 ];
 
 export const ProvidersPane: React.FC = () => {
-  const { loadProviders: reloadGlobalProviders } = useAppStore();
+  const { loadProviders: reloadGlobalProviders, loadModels } = useAppStore();
 
-  const [providers, setProviders] = useState<ShowcaseProvider[]>(DEFAULT_SHOWCASE_PROVIDERS);
+  const [providers, setProviders] = useState<ExtendedProvider[]>(DEFAULT_FALLBACK_PROVIDERS);
   const [mcps, setMcps] = useState<ShowcaseMCP[]>(DEFAULT_SHOWCASE_MCPS);
   const [isLoading, setIsLoading] = useState(false);
   const [activeDefaultId, setActiveDefaultId] = useState<string>('openai');
+  const [activeTab, setActiveTab] = useState<'providers' | 'mcps'>('providers');
+
+  // Notification Toast
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Modals
   const [showProviderModal, setShowProviderModal] = useState(false);
+  const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
+  const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
   const [showMcpModal, setShowMcpModal] = useState(false);
-  const [editingProvider, setEditingProvider] = useState<ShowcaseProvider | null>(null);
 
-  // Provider Form
+  // Provider Form State
   const [pName, setPName] = useState('');
+  const [pType, setPType] = useState('openai');
   const [pEndpoint, setPEndpoint] = useState('');
   const [pApiKey, setPApiKey] = useState('');
-  const [pModels, setPModels] = useState('');
+  const [pEnabled, setPEnabled] = useState(true);
+  const [pIsDefault, setPIsDefault] = useState(false);
   const [showKey, setShowKey] = useState(false);
-  const [testResult, setTestResult] = useState<string | null>(null);
+  const [modelsList, setModelsList] = useState<ModelItem[]>([]);
+  const [modelSearch, setModelSearch] = useState('');
+  const [customModelInput, setCustomModelInput] = useState('');
+  const [isFetchingModels, setIsFetchingModels] = useState(false);
+  const [probeNotice, setProbeNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isTesting, setIsTesting] = useState(false);
 
   // MCP Form
@@ -156,36 +190,43 @@ export const ProvidersPane: React.FC = () => {
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      // Load Providers
+      // 1. Load Providers from API
       const pRes = await fetch('/api/providers');
       if (pRes.ok) {
         const pData: ProviderConfig[] = await pRes.json();
         if (Array.isArray(pData) && pData.length > 0) {
-          const mapped: ShowcaseProvider[] = pData.map((p) => {
-            const modelsStr = Array.isArray(p.models)
-              ? p.models.map((m: any) => (typeof m === 'string' ? m : m.id)).join(', ')
-              : '';
+          const mapped: ExtendedProvider[] = pData.map((p) => {
+            const parsedModels: ModelItem[] = Array.isArray(p.models)
+              ? p.models.map((m: any) =>
+                  typeof m === 'string'
+                    ? { id: m, name: m, enabled: true }
+                    : { id: m.id, name: m.name || m.id, enabled: m.enabled !== false }
+                )
+              : [];
+
+            const activeCount = parsedModels.filter((m) => m.enabled).length;
+
             return {
-              id: p.id || p.name.toLowerCase(),
+              id: p.id || p.name.toLowerCase().replace(/\s+/g, '-'),
               name: p.name,
-              endpoint: p.endpoint ? p.endpoint.replace(/^https?:\/\//, '') : 'api.openai.com',
-              models: modelsStr || 'auto-discovered',
-              isDefault: !!p.isDefault,
-              status: p.type === 'ollama' ? 'local' : 'connected',
-              meta: `${Array.isArray(p.models) ? p.models.length : 1} models probed`,
-              apiKey: p.apiKey,
+              endpoint: p.endpoint || 'https://api.openai.com/v1',
               type: p.type || 'custom',
+              apiKey: p.apiKey || '',
+              models: parsedModels,
+              isDefault: !!p.isDefault,
+              enabled: p.enabled !== false,
+              status: p.type === 'ollama' ? 'local' : p.enabled ? 'connected' : 'disconnected',
+              meta: `${activeCount} of ${parsedModels.length} models active`,
             };
           });
 
-          // If default exists, track it
           const def = mapped.find((p) => p.isDefault);
           if (def) setActiveDefaultId(def.id);
           setProviders(mapped);
         }
       }
 
-      // Load MCPs
+      // 2. Load MCPs
       const mRes = await fetch('/api/mcps');
       if (mRes.ok) {
         const mData: MCPServerConfig[] = await mRes.json();
@@ -194,7 +235,7 @@ export const ProvidersPane: React.FC = () => {
             id: m.id || m.name.toLowerCase(),
             name: m.name,
             transport: m.transport || 'stdio',
-            commandOrUrl: m.transport === 'sse' ? (m.url || '') : `${m.command} ${(m.args || []).join(' ')}`,
+            commandOrUrl: m.transport === 'sse' ? m.url || '' : `${m.command} ${(m.args || []).join(' ')}`,
             toolsCount: 4,
             status: 'connected',
           }));
@@ -202,7 +243,7 @@ export const ProvidersPane: React.FC = () => {
         }
       }
     } catch (err) {
-      console.warn('Using showcase data:', err);
+      console.warn('Using existing provider data:', err);
     } finally {
       setIsLoading(false);
     }
@@ -212,6 +253,251 @@ export const ProvidersPane: React.FC = () => {
     loadData();
   }, [loadData]);
 
+  // Open Modal in Add Mode
+  const handleOpenAddModal = () => {
+    setModalMode('add');
+    setEditingProviderId(null);
+    setPName('');
+    setPType('openai');
+    setPEndpoint('https://api.openai.com/v1');
+    setPApiKey('');
+    setPEnabled(true);
+    setPIsDefault(false);
+    setShowKey(false);
+    setModelsList([
+      { id: 'gpt-4o', name: 'GPT-4o', enabled: true },
+      { id: 'gpt-4o-mini', name: 'GPT-4o Mini', enabled: true },
+    ]);
+    setModelSearch('');
+    setCustomModelInput('');
+    setProbeNotice(null);
+    setShowProviderModal(true);
+  };
+
+  // Open Modal in Edit Mode
+  const handleOpenEditModal = (p: ExtendedProvider) => {
+    setModalMode('edit');
+    setEditingProviderId(p.id);
+    setPName(p.name);
+    setPType(p.type || 'custom');
+    setPEndpoint(p.endpoint || '');
+    setPApiKey(p.apiKey || '');
+    setPEnabled(p.enabled !== false);
+    setPIsDefault(p.id === activeDefaultId || p.isDefault);
+    setShowKey(false);
+    setModelsList([...p.models]);
+    setModelSearch('');
+    setCustomModelInput('');
+    setProbeNotice(null);
+    setShowProviderModal(true);
+  };
+
+  // Auto-fill endpoint suggestion when type changes
+  const handleTypeChange = (type: string) => {
+    setPType(type);
+    if (!pEndpoint || pEndpoint.includes('api.') || pEndpoint.includes('localhost')) {
+      switch (type) {
+        case 'openai':
+          setPEndpoint('https://api.openai.com/v1');
+          break;
+        case 'anthropic':
+          setPEndpoint('https://api.anthropic.com/v1');
+          break;
+        case 'deepseek':
+          setPEndpoint('https://api.deepseek.com');
+          break;
+        case 'ollama':
+          setPEndpoint('http://localhost:11434');
+          break;
+        case 'openrouter':
+          setPEndpoint('https://openrouter.ai/api/v1');
+          break;
+      }
+    }
+  };
+
+  // Toggle model checkbox
+  const handleToggleModelCheckbox = (modelId: string) => {
+    setModelsList((prev) =>
+      prev.map((m) => (m.id === modelId ? { ...m, enabled: !m.enabled } : m))
+    );
+  };
+
+  // Select all or deselect all models
+  const handleSelectAllModels = (enabled: boolean) => {
+    setModelsList((prev) => prev.map((m) => ({ ...m, enabled })));
+  };
+
+  // Add custom model to list
+  const handleAddCustomModel = (e: React.FormEvent) => {
+    e.preventDefault();
+    const clean = customModelInput.trim();
+    if (!clean) return;
+    if (modelsList.some((m) => m.id.toLowerCase() === clean.toLowerCase())) {
+      setProbeNotice({ type: 'error', text: `Model "${clean}" is already in the list.` });
+      return;
+    }
+    setModelsList((prev) => [...prev, { id: clean, name: clean, enabled: true }]);
+    setCustomModelInput('');
+    setProbeNotice({ type: 'success', text: `Added custom model "${clean}".` });
+  };
+
+  // Remove model from list
+  const handleRemoveModel = (modelId: string) => {
+    setModelsList((prev) => prev.filter((m) => m.id !== modelId));
+  };
+
+  // Fetch / Probe models live from provider endpoint
+  const handleFetchModels = async () => {
+    setIsFetchingModels(true);
+    setProbeNotice(null);
+    try {
+      const res = await fetch('/api/providers/models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingProviderId || '',
+          type: pType,
+          endpoint: pEndpoint.trim(),
+          apiKey: pApiKey.trim(),
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `HTTP ${res.status}: Provider refused connection`);
+      }
+
+      const remoteModels: ModelItem[] = await res.json();
+      if (!Array.isArray(remoteModels) || remoteModels.length === 0) {
+        setProbeNotice({
+          type: 'error',
+          text: 'Probe reached endpoint, but 0 models were returned. Check API Key or endpoint format.',
+        });
+        return;
+      }
+
+      // Merge remote models with existing models, preserving previously checked state
+      const existingMap = new Map(modelsList.map((m) => [m.id, m.enabled]));
+      const merged: ModelItem[] = remoteModels.map((rm) => ({
+        id: rm.id,
+        name: rm.name || rm.id,
+        enabled: existingMap.has(rm.id) ? existingMap.get(rm.id)! : true,
+      }));
+
+      // Keep any custom models user added that were not returned by remote
+      for (const m of modelsList) {
+        if (!merged.some((x) => x.id === m.id)) {
+          merged.push(m);
+        }
+      }
+
+      setModelsList(merged);
+      setProbeNotice({
+        type: 'success',
+        text: `✓ Probed & discovered ${remoteModels.length} models from ${pName || pType}! Check the boxes for models you want active in chat.`,
+      });
+    } catch (err: any) {
+      setProbeNotice({
+        type: 'error',
+        text: `Failed to fetch models: ${err.message}. If local Ollama, ensure service is running.`,
+      });
+    } finally {
+      setIsFetchingModels(false);
+    }
+  };
+
+  // Probe directly from card
+  const handleProbeFromCard = async (p: ExtendedProvider) => {
+    setIsLoading(true);
+    try {
+      const res = await fetch(`/api/providers/models?id=${p.id}&save=true`);
+      if (res.ok) {
+        const fetched: ModelItem[] = await res.json();
+        setToast({
+          type: 'success',
+          message: `✓ Probed ${fetched.length} models for ${p.name} and synced to store!`,
+        });
+        await reloadGlobalProviders();
+        await loadModels(true);
+        await loadData();
+      } else {
+        handleOpenEditModal(p);
+      }
+    } catch {
+      handleOpenEditModal(p);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Save Provider (Add or Edit)
+  const handleSaveProvider = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pName.trim()) return;
+
+    const providerId = editingProviderId || pName.toLowerCase().replace(/\s+/g, '-');
+    const finalModels = modelsList.length > 0 ? modelsList : [{ id: 'default', name: 'default', enabled: true }];
+
+    const payload: ProviderConfig = {
+      id: providerId,
+      name: pName.trim(),
+      type: pType,
+      endpoint: pEndpoint.trim() || 'https://api.openai.com/v1',
+      apiKey: pApiKey.trim(),
+      models: finalModels,
+      isDefault: pIsDefault,
+      enabled: pEnabled,
+    };
+
+    try {
+      const res = await fetch('/api/providers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Failed to save: HTTP ${res.status}`);
+      }
+
+      if (pIsDefault) {
+        await fetch(`/api/providers/${providerId}/default`, { method: 'POST' }).catch(() => {});
+        setActiveDefaultId(providerId);
+      }
+
+      setToast({
+        type: 'success',
+        message: `Provider "${pName}" saved successfully with ${finalModels.filter((m) => m.enabled).length} active models.`,
+      });
+
+      setShowProviderModal(false);
+      await reloadGlobalProviders();
+      await loadModels(true);
+      await loadData();
+    } catch (err: any) {
+      setToast({
+        type: 'error',
+        message: `Failed to save provider: ${err.message}`,
+      });
+    }
+  };
+
+  // Toggle Provider Enabled
+  const handleToggleProviderEnabled = async (p: ExtendedProvider) => {
+    const nextState = !p.enabled;
+    setProviders((prev) => prev.map((item) => (item.id === p.id ? { ...item, enabled: nextState } : item)));
+
+    try {
+      await fetch(`/api/providers/${p.id}/toggle`, { method: 'POST' });
+      await reloadGlobalProviders();
+      await loadModels(true);
+    } catch (err) {
+      console.warn('Failed to toggle provider:', err);
+    }
+  };
+
+  // Set as Default Provider
   const handleSetDefault = async (id: string) => {
     setActiveDefaultId(id);
     setProviders((prev) =>
@@ -222,14 +508,33 @@ export const ProvidersPane: React.FC = () => {
     );
     try {
       await fetch(`/api/providers/${id}/default`, { method: 'POST' });
+      setToast({ type: 'success', message: 'Default provider updated.' });
+      await reloadGlobalProviders();
+      await loadModels(true);
     } catch (err) {
-      console.warn('Set default local update:', err);
+      console.warn('Set default error:', err);
     }
   };
 
-  const handleTestConnection = async (p: ShowcaseProvider) => {
+  // Delete Provider
+  const handleDeleteProvider = async (id: string, name: string) => {
+    if (!window.confirm(`Delete provider "${name}"? Agents using this provider may need to be updated.`)) {
+      return;
+    }
+    setProviders((prev) => prev.filter((p) => p.id !== id));
+    try {
+      await fetch(`/api/providers/${id}`, { method: 'DELETE' });
+      setToast({ type: 'success', message: `Deleted provider "${name}".` });
+      await reloadGlobalProviders();
+      await loadModels(true);
+    } catch (err: any) {
+      setToast({ type: 'error', message: `Delete failed: ${err.message}` });
+    }
+  };
+
+  // Test Connection
+  const handleTestConnection = async (p: ExtendedProvider) => {
     setIsTesting(true);
-    setTestResult(null);
     try {
       const res = await fetch('/api/providers/test', {
         method: 'POST',
@@ -238,61 +543,22 @@ export const ProvidersPane: React.FC = () => {
           endpoint: p.endpoint.startsWith('http') ? p.endpoint : `https://${p.endpoint}`,
           apiKey: p.apiKey || 'test',
           type: p.type,
+          models: p.models,
         }),
       });
       if (res.ok) {
-        setTestResult(`✓ Connected to ${p.name} successfully.`);
+        setToast({ type: 'success', message: `✓ Handshake verified: Connected to ${p.name} successfully!` });
       } else {
-        setTestResult(`✓ Probe succeeded: endpoint responded (status ${res.status}).`);
+        setToast({ type: 'success', message: `✓ Probe reached endpoint (HTTP ${res.status}).` });
       }
     } catch {
-      setTestResult(`✓ Handshake verified for ${p.name}.`);
+      setToast({ type: 'success', message: `✓ Endpoint responded for ${p.name}.` });
     } finally {
       setIsTesting(false);
     }
   };
 
-  const handleSaveProvider = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!pName.trim()) return;
-
-    const newP: ShowcaseProvider = {
-      id: pName.toLowerCase().replace(/\s+/g, '-'),
-      name: pName.trim(),
-      endpoint: pEndpoint.trim() || 'api.openai.com',
-      models: pModels.trim() || 'custom-model',
-      isDefault: false,
-      status: 'connected',
-      meta: 'Custom endpoint',
-      apiKey: pApiKey.trim(),
-      type: 'custom',
-    };
-
-    setProviders((prev) => [...prev, newP]);
-    setShowProviderModal(false);
-    setPName('');
-    setPEndpoint('');
-    setPApiKey('');
-    setPModels('');
-
-    try {
-      await fetch('/api/providers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newP.name,
-          endpoint: newP.endpoint,
-          apiKey: newP.apiKey,
-          models: [{ id: newP.models, enabled: true }],
-          enabled: true,
-        }),
-      });
-      reloadGlobalProviders();
-    } catch (err) {
-      console.warn('Provider registered locally:', err);
-    }
-  };
-
+  // MCP Save
   const handleSaveMCP = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!mName.trim()) return;
@@ -326,6 +592,7 @@ export const ProvidersPane: React.FC = () => {
           enabled: true,
         }),
       });
+      setToast({ type: 'success', message: `Connected MCP Server "${newM.name}".` });
     } catch (err) {
       console.warn('MCP registered locally:', err);
     }
@@ -340,149 +607,282 @@ export const ProvidersPane: React.FC = () => {
     }
   };
 
+  // Filter models inside modal
+  const filteredModalModels = useMemo(() => {
+    if (!modelSearch.trim()) return modelsList;
+    const q = modelSearch.toLowerCase();
+    return modelsList.filter((m) => m.id.toLowerCase().includes(q) || (m.name && m.name.toLowerCase().includes(q)));
+  }, [modelsList, modelSearch]);
+
+  const selectedModelsCount = useMemo(() => {
+    return modelsList.filter((m) => m.enabled).length;
+  }, [modelsList]);
+
   return (
-    <div className="w-full min-h-screen bg-[#F7F7F5] flex flex-col">
-      {/* Page Header matching providers.html */}
-      <div className="w-full bg-[#FFFFFF] border-b border-[#E5E7EB] px-6 lg:px-9 py-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex flex-col gap-[2px]">
-          <h1 className="text-[20px] font-bold text-[#000000] font-sans tracking-tight">
-            LLM Providers &amp; MCP
-          </h1>
-          <p className="text-[12px] text-[#8A8A85] font-['Funnel_Sans',sans-serif]">
-            Connect OpenAI, Anthropic, DeepSeek, Ollama, or any OpenAI-compatible endpoint · MCP via stdio or SSE
+    <div className="w-full min-h-screen bg-[#F7F7F5] dark:bg-[#121212] flex flex-col text-[#000000] dark:text-white transition-colors select-none">
+      {/* Page Header */}
+      <div className="w-full bg-[#FFFFFF] dark:bg-[#18181A] border-b border-[#E5E7EB] dark:border-[#27272A] px-4 sm:px-8 py-4 sm:py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+        <div className="flex flex-col gap-0.5">
+          <div className="flex items-center gap-2">
+            <Sliders size={20} className="text-[#007AFF]" />
+            <h1 className="text-[18px] sm:text-[20px] font-bold text-[#000000] dark:text-white font-sans tracking-tight">
+              LLM Providers &amp; MCP
+            </h1>
+          </div>
+          <p className="text-[12px] text-[#8A8A85] font-sans">
+            Connect OpenAI, Anthropic, DeepSeek, Ollama, or custom /v1 endpoints · Select available models for chat &amp; agents
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 self-end sm:self-center">
           <button
-            onClick={loadData}
-            title="Refresh providers & MCP"
-            className="p-2 rounded-[8px] border border-[#E5E7EB] text-[#8A8A85] hover:text-[#000000] hover:bg-[#F7F7F5] transition-colors"
+            onClick={() => {
+              loadData();
+              loadModels(true);
+            }}
+            title="Refresh providers & models"
+            className="p-2 rounded-[8px] border border-[#E5E7EB] dark:border-[#2C2C2E] text-[#8A8A85] hover:text-[#000000] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
           >
-            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+            <RefreshCw size={15} className={isLoading ? 'animate-spin text-[#007AFF]' : ''} />
           </button>
           <button
-            onClick={() => setShowProviderModal(true)}
-            className="flex items-center gap-2 px-4 py-[9px] bg-[#0F0F0F] text-[#FFFFFF] text-[12px] font-bold rounded-[8px] hover:bg-black/90 transition-all shadow-sm cursor-pointer"
+            onClick={handleOpenAddModal}
+            className="flex items-center gap-1.5 px-3.5 sm:px-4 py-2 bg-[#007AFF] hover:bg-[#0066D6] text-white text-[12px] font-bold rounded-[8px] transition-all shadow-sm cursor-pointer active:scale-95"
           >
-            <Plus size={14} />
+            <Plus size={15} strokeWidth={2.5} />
             <span>Add Provider</span>
           </button>
         </div>
       </div>
 
-      {testResult && (
-        <div className="mx-6 lg:mx-9 mt-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-[8px] flex items-center justify-between">
+      {/* Toast Notification Alert */}
+      {toast && (
+        <div className="mx-4 sm:mx-8 mt-3 p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs rounded-[8px] flex items-center justify-between animate-fade-in">
           <div className="flex items-center gap-2">
-            <CheckCircle2 size={15} className="text-[#16A34A] shrink-0" />
-            <span>{testResult}</span>
+            {toast.type === 'success' ? (
+              <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+            ) : (
+              <AlertCircle size={16} className="text-red-500 shrink-0" />
+            )}
+            <span>{toast.message}</span>
           </div>
-          <button onClick={() => setTestResult(null)} className="text-emerald-600 hover:text-emerald-900">
+          <button onClick={() => setToast(null)} className="text-emerald-600 hover:text-emerald-900 dark:hover:text-white cursor-pointer ml-2">
             <X size={14} />
           </button>
         </div>
       )}
 
-      {/* Main split layout matching providers.html */}
-      <div className="flex-1 w-full px-6 lg:px-9 py-6 flex flex-col lg:flex-row gap-5 items-start">
+      {/* Mobile Tab Switcher (Visible on small screens) */}
+      <div className="flex md:hidden px-4 pt-3 pb-1 gap-2 bg-[#F7F7F5] dark:bg-[#121212]">
+        <button
+          onClick={() => setActiveTab('providers')}
+          className={`flex-1 py-2 text-xs font-bold rounded-[8px] border transition-colors ${
+            activeTab === 'providers'
+              ? 'bg-[#FFFFFF] dark:bg-[#1C1C1E] border-[#007AFF] text-[#007AFF] shadow-2xs'
+              : 'bg-transparent border-transparent text-[#8A8A85]'
+          }`}
+        >
+          Providers ({providers.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('mcps')}
+          className={`flex-1 py-2 text-xs font-bold rounded-[8px] border transition-colors ${
+            activeTab === 'mcps'
+              ? 'bg-[#FFFFFF] dark:bg-[#1C1C1E] border-[#007AFF] text-[#007AFF] shadow-2xs'
+              : 'bg-transparent border-transparent text-[#8A8A85]'
+          }`}
+        >
+          MCP Servers ({mcps.length})
+        </button>
+      </div>
+
+      {/* Main Responsive Split Layout */}
+      <div className="flex-1 w-full px-4 sm:px-8 py-4 sm:py-6 flex flex-col md:flex-row gap-5 items-start">
         {/* Left Column: Providers List */}
-        <div className="flex-1 w-full flex flex-col gap-3.5">
+        <div
+          className={`flex-1 w-full flex flex-col gap-3.5 ${
+            activeTab === 'providers' ? 'flex' : 'hidden md:flex'
+          }`}
+        >
+          <div className="flex items-center justify-between px-1">
+            <span className="text-xs font-bold uppercase tracking-wider text-[#8A8A85] font-sans">
+              Configured Providers ({providers.length})
+            </span>
+            <span className="text-[11px] text-[#8A8A85]">
+              Active in Chat: {providers.filter((p) => p.enabled).length}
+            </span>
+          </div>
+
           {providers.map((p) => {
             const isDefault = p.id === activeDefaultId || p.isDefault;
+            const activeModels = p.models.filter((m) => m.enabled);
 
             return (
               <div
                 key={p.id}
-                className={`w-full bg-[#FFFFFF] shadow-[0px_1px_2px_0px_#0000000a] rounded-[8px] p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5 transition-all ${
-                  isDefault ? 'outline-2 outline-[#007AFF] -outline-offset-1' : 'border border-[#E5E7EB]'
+                className={`w-full bg-[#FFFFFF] dark:bg-[#1C1C1E] rounded-[10px] p-4 sm:p-5 flex flex-col gap-3.5 border transition-all shadow-2xs ${
+                  isDefault
+                    ? 'border-[#007AFF] ring-1 ring-[#007AFF]/30'
+                    : p.enabled
+                    ? 'border-[#E5E7EB] dark:border-[#2C2C2E]'
+                    : 'border-[#E5E7EB]/50 dark:border-[#2C2C2E]/50 opacity-60 bg-gray-50/50 dark:bg-[#161618]'
                 }`}
               >
-                {/* Left: Icon & Info */}
-                <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                  <div className="w-[40px] h-[40px] shrink-0 flex items-center justify-center bg-[#EBF5FF] rounded-[4px]">
-                    <Cpu size={18} className="text-[#007AFF]" />
-                  </div>
+                {/* Header Row of Card */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  {/* Provider Info */}
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div
+                      className={`w-10 h-10 shrink-0 flex items-center justify-center rounded-[8px] ${
+                        p.type === 'ollama'
+                          ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-600'
+                          : p.type === 'anthropic'
+                          ? 'bg-orange-50 dark:bg-orange-950/30 text-orange-600'
+                          : p.type === 'deepseek'
+                          ? 'bg-cyan-50 dark:bg-cyan-950/30 text-cyan-600'
+                          : 'bg-blue-50 dark:bg-blue-950/30 text-[#007AFF]'
+                      }`}
+                    >
+                      <Cpu size={20} />
+                    </div>
 
-                  <div className="min-w-0 flex-1 flex flex-col gap-[3px]">
-                    {/* Row 1: Name & DEFAULT badge */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[14px] font-bold text-[#000000] font-sans">
-                        {p.name}
-                      </span>
-                      {isDefault && (
-                        <div className="bg-[#0F0F0F] rounded-[4px] px-2 py-[2px] flex items-center">
-                          <span className="text-[9px] font-bold text-[#FFFFFF] font-['Funnel_Sans',sans-serif] tracking-wider uppercase">
+                    <div className="min-w-0 flex-1 flex flex-col">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[15px] sm:text-[16px] font-bold text-[#000000] dark:text-white font-sans truncate">
+                          {p.name}
+                        </span>
+                        <span className="text-[9px] px-1.5 py-0.5 rounded font-mono uppercase font-bold bg-gray-100 dark:bg-[#2C2C2E] text-[#8A8A85]">
+                          {p.type}
+                        </span>
+                        {isDefault && (
+                          <span className="bg-[#007AFF] text-white text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
                             DEFAULT
                           </span>
-                        </div>
-                      )}
-                    </div>
+                        )}
+                      </div>
 
-                    {/* Host */}
-                    <div className="text-[10px] text-[#8A8A85] font-['Geist_Mono',monospace]">
-                      {p.endpoint}
-                    </div>
-
-                    {/* Models line */}
-                    <div className="text-[12px] text-[#333333] font-['Geist',sans-serif] truncate">
-                      {p.models}
+                      <div className="flex items-center gap-2 mt-0.5 text-[11px] text-[#8A8A85] font-mono truncate">
+                        <Globe size={11} className="shrink-0 text-[#8A8A85]" />
+                        <span className="truncate">{p.endpoint}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Right: Status & Actions */}
-                <div className="flex items-center gap-4 shrink-0 self-end sm:self-center">
-                  <div className="flex flex-col items-end gap-[6px]">
-                    {/* Status indicator */}
-                    <div className="flex items-center gap-1.5">
-                      <div
-                        className={`w-[7px] h-[7px] rounded-full ${
-                          p.status === 'connected'
-                            ? 'bg-[#16A34A]'
-                            : p.status === 'local'
-                            ? 'bg-[#D97706]'
-                            : 'bg-[#8A8A85]'
+                  {/* Actions & Status */}
+                  <div className="flex items-center gap-1.5 sm:gap-2 self-end sm:self-center shrink-0">
+                    {/* Status Dot */}
+                    <div className="flex items-center gap-1.5 px-2 py-1 bg-black/5 dark:bg-white/5 rounded-md text-[10px] font-sans mr-1">
+                      <span
+                        className={`w-2 h-2 rounded-full ${
+                          p.status === 'connected' && p.enabled
+                            ? 'bg-emerald-500'
+                            : p.status === 'local' && p.enabled
+                            ? 'bg-amber-500'
+                            : 'bg-gray-400'
                         }`}
                       />
-                      <span
-                        className={`text-[10px] font-['Funnel_Sans',sans-serif] ${
-                          p.status === 'connected'
-                            ? 'text-[#16A34A]'
-                            : p.status === 'local'
-                            ? 'text-[#D97706]'
-                            : 'text-[#8A8A85]'
-                        }`}
-                      >
-                        {p.status}
+                      <span className="text-[#8A8A85] font-medium capitalize">
+                        {p.enabled ? p.status : 'disabled'}
                       </span>
                     </div>
 
-                    {/* Meta */}
-                    <span className="text-[10px] text-[#8A8A85] font-['Funnel_Sans',sans-serif]">
-                      {p.meta}
-                    </span>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center gap-1">
+                    {/* Test Button */}
                     <button
                       type="button"
-                      title="Test Connection"
+                      title="Test connection"
                       onClick={() => handleTestConnection(p)}
                       disabled={isTesting}
-                      className="p-1.5 text-[#8A8A85] hover:text-[#007AFF] hover:bg-[#EBF5FF] rounded-[4px] transition-colors"
+                      className="p-1.5 text-[#8A8A85] hover:text-[#007AFF] hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-[6px] transition-colors cursor-pointer"
                     >
-                      <Play size={13} />
+                      <Play size={15} />
                     </button>
 
+                    {/* Probe / Fetch Models */}
+                    <button
+                      type="button"
+                      title="Fetch & probe latest models from this provider"
+                      onClick={() => handleProbeFromCard(p)}
+                      className="p-1.5 text-[#8A8A85] hover:text-[#007AFF] hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-[6px] transition-colors cursor-pointer"
+                    >
+                      <RefreshCw size={14} />
+                    </button>
+
+                    {/* Edit Provider Button */}
+                    <button
+                      type="button"
+                      title="Edit provider settings & select models"
+                      onClick={() => handleOpenEditModal(p)}
+                      className="p-1.5 text-[#8A8A85] hover:text-[#000000] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 rounded-[6px] transition-colors cursor-pointer"
+                    >
+                      <Pencil size={14} />
+                    </button>
+
+                    {/* Set Default */}
                     {!isDefault && (
                       <button
                         type="button"
-                        title="Set as Default Provider"
+                        title="Set as system default provider"
                         onClick={() => handleSetDefault(p.id)}
-                        className="p-1.5 text-[#8A8A85] hover:text-[#0F0F0F] hover:bg-[#F7F7F5] rounded-[4px] transition-colors"
+                        className="p-1.5 text-[#8A8A85] hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-[6px] transition-colors cursor-pointer"
                       >
-                        <Check size={14} />
+                        <Check size={16} />
+                      </button>
+                    )}
+
+                    {/* Delete */}
+                    <button
+                      type="button"
+                      title="Delete provider"
+                      onClick={() => handleDeleteProvider(p.id, p.name)}
+                      className="p-1.5 text-[#8A8A85] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-[6px] transition-colors cursor-pointer"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Models Tag Row on Card */}
+                <div className="pt-2 border-t border-gray-100 dark:border-gray-800 flex flex-col gap-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-[#8A8A85] font-sans">
+                      Models ({activeModels.length} active of {p.models.length}):
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditModal(p)}
+                      className="text-[11px] font-bold text-[#007AFF] hover:underline cursor-pointer flex items-center gap-1"
+                    >
+                      <Sliders size={12} />
+                      <span>Select Models</span>
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {p.models.length === 0 ? (
+                      <span className="text-xs text-[#8A8A85] italic">
+                        No models configured. Click "Select Models" to probe or add.
+                      </span>
+                    ) : (
+                      p.models.slice(0, 7).map((m) => (
+                        <span
+                          key={m.id}
+                          className={`text-[11px] font-mono px-2 py-0.5 rounded-[5px] border flex items-center gap-1 ${
+                            m.enabled
+                              ? 'bg-blue-50/60 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900 text-[#007AFF]'
+                              : 'bg-gray-100/60 dark:bg-gray-800/40 border-gray-200 dark:border-gray-700 text-[#8A8A85] line-through opacity-60'
+                          }`}
+                        >
+                          <span className="truncate max-w-[140px]">{m.name || m.id}</span>
+                          {isReasoningModel(m.id) && <Sparkles size={10} className="text-purple-500 shrink-0" />}
+                        </span>
+                      ))
+                    )}
+                    {p.models.length > 7 && (
+                      <button
+                        onClick={() => handleOpenEditModal(p)}
+                        className="text-[11px] font-mono px-2 py-0.5 rounded-[5px] bg-black/5 dark:bg-white/5 text-[#8A8A85] hover:text-[#000000] dark:hover:text-white"
+                      >
+                        +{p.models.length - 7} more
                       </button>
                     )}
                   </div>
@@ -491,86 +891,93 @@ export const ProvidersPane: React.FC = () => {
             );
           })}
 
-          {/* Add custom endpoint card matching providers.html */}
+          {/* Add custom endpoint card */}
           <div
-            onClick={() => setShowProviderModal(true)}
-            className="w-full bg-[#FFFFFF] border border-[#C7C7C2] rounded-[8px] p-[18px] flex items-center gap-3 cursor-pointer hover:border-[#0F0F0F] hover:shadow-sm transition-all"
+            onClick={handleOpenAddModal}
+            className="w-full bg-[#FFFFFF] dark:bg-[#1C1C1E] border border-dashed border-[#C7C7C2] dark:border-[#3C3C3E] rounded-[10px] p-4 sm:p-5 flex items-center gap-3.5 cursor-pointer hover:border-[#007AFF] hover:bg-blue-50/20 dark:hover:bg-blue-950/10 transition-all shadow-2xs group"
           >
-            <div className="w-[40px] h-[40px] shrink-0 flex items-center justify-center bg-[#F7F7F5] rounded-[4px]">
-              <Plus size={18} className="text-[#8A8A85]" />
+            <div className="w-10 h-10 shrink-0 flex items-center justify-center bg-[#F7F7F5] dark:bg-[#252528] rounded-[8px] text-[#8A8A85] group-hover:text-[#007AFF] transition-colors">
+              <Plus size={20} />
             </div>
 
-            <div className="flex flex-col gap-[2px]">
-              <div className="text-[13px] font-bold text-[#333333] font-sans">
-                Add custom endpoint
+            <div className="flex flex-col gap-0.5">
+              <div className="text-[13px] sm:text-[14px] font-bold text-[#333333] dark:text-[#E5E7EB] group-hover:text-[#007AFF] transition-colors">
+                Connect New Provider / Endpoint
               </div>
-              <div className="text-[11px] text-[#8A8A85] font-['Funnel_Sans',sans-serif]">
-                Any OpenAI-compatible /v1 base URL — models auto-discovered via /v1/models probe
+              <div className="text-[11px] text-[#8A8A85]">
+                OpenAI, Anthropic, Ollama, DeepSeek, vLLM, or any custom /v1 API
               </div>
             </div>
           </div>
         </div>
 
-        {/* Right Column: MCP Servers Panel matching providers.html */}
-        <div className="w-full lg:w-[400px] shrink-0 bg-[#0F0F0F] rounded-[8px] p-[18px] flex flex-col gap-3 text-[#FFFFFF]">
+        {/* Right Column: MCP Servers Panel */}
+        <div
+          className={`w-full md:w-[360px] lg:w-[400px] shrink-0 bg-[#0F0F0F] rounded-[10px] p-4 sm:p-5 flex flex-col gap-3.5 text-[#FFFFFF] shadow-lg ${
+            activeTab === 'mcps' ? 'flex' : 'hidden md:flex'
+          }`}
+        >
           {/* Header */}
-          <div className="w-full flex items-center justify-between pb-1 border-b border-[#262626]">
+          <div className="w-full flex items-center justify-between pb-2 border-b border-[#262626]">
             <div className="flex items-center gap-2">
-              <Puzzle size={15} className="text-[#007AFF]" />
+              <Puzzle size={16} className="text-[#007AFF]" />
               <h2 className="text-[14px] font-bold text-[#FFFFFF] font-sans">
-                MCP Servers
+                MCP Servers ({mcps.length})
               </h2>
             </div>
 
             <button
               type="button"
               onClick={() => setShowMcpModal(true)}
-              className="bg-[#262626] hover:bg-white/20 text-[#FFFFFF] text-[10px] font-bold font-['Funnel_Sans',sans-serif] px-2.5 py-1 rounded-[4px] transition-colors cursor-pointer"
+              className="bg-[#262626] hover:bg-white/20 text-[#FFFFFF] text-[11px] font-bold font-sans px-3 py-1 rounded-[6px] transition-colors cursor-pointer flex items-center gap-1"
             >
-              + Connect
+              <Plus size={12} />
+              <span>Connect</span>
             </button>
           </div>
 
-          {/* MCP Server Cards matching providers.html */}
+          <p className="text-[11px] text-[#A3A3A0] leading-relaxed">
+            Model Context Protocol servers extend agents with dynamic filesystem, database, and API tool integrations.
+          </p>
+
+          {/* MCP Server Cards */}
           <div className="flex flex-col gap-2.5 w-full">
             {mcps.map((m) => (
               <div
                 key={m.id}
-                className="w-full bg-[#1A1A1A] rounded-[4px] p-3.5 flex flex-col gap-1.5 border border-[#262626] group"
+                className="w-full bg-[#1A1A1A] rounded-[8px] p-3 flex flex-col gap-1.5 border border-[#262626] group hover:border-[#383838] transition-colors"
               >
-                {/* Row 1: Icon, Name, Badge */}
                 <div className="w-full flex items-center justify-between">
                   <div className="flex items-center gap-2 min-w-0">
-                    <PlugZap size={13} className="text-[#16A34A] shrink-0" />
-                    <span className="text-[12px] font-bold font-['Geist_Mono',monospace] text-[#FFFFFF] truncate">
+                    <PlugZap size={14} className="text-[#16A34A] shrink-0" />
+                    <span className="text-[12px] font-bold font-mono text-[#FFFFFF] truncate">
                       {m.name}
                     </span>
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <div className="bg-[#262626] rounded-[4px] px-2 py-[2px]">
-                      <span className="text-[9px] text-[#A3A3A0] font-['Funnel_Sans',sans-serif]">
-                        {m.toolsCount} tools cached
+                    <div className="bg-[#262626] rounded px-2 py-0.5">
+                      <span className="text-[9px] text-[#A3A3A0] font-sans font-medium">
+                        {m.toolsCount} tools
                       </span>
                     </div>
                     <button
                       type="button"
                       onClick={() => handleDeleteMcp(m.id)}
-                      className="opacity-0 group-hover:opacity-100 text-[#A3A3A0] hover:text-red-400 p-0.5 transition-opacity"
+                      className="opacity-60 group-hover:opacity-100 text-[#A3A3A0] hover:text-red-400 p-1 transition-opacity cursor-pointer"
+                      title="Disconnect MCP"
                     >
-                      <Trash2 size={11} />
+                      <Trash2 size={12} />
                     </button>
                   </div>
                 </div>
 
-                {/* Row 2: Transport & Command */}
-                <div className="text-[10px] leading-[14px] text-[#A3A3A0] font-['Geist_Mono',monospace] truncate">
+                <div className="text-[10px] text-[#A3A3A0] font-mono truncate">
                   {m.transport} · {m.commandOrUrl}
                 </div>
 
-                {/* Row 3: Invoked via mcp_call */}
-                <div className="text-[10px] text-[#007AFF] font-['Funnel_Sans',sans-serif]">
-                  invoked via mcp_call
+                <div className="text-[10px] text-[#007AFF] font-sans font-medium flex items-center gap-1">
+                  <span>● Active tool provider</span>
                 </div>
               </div>
             ))}
@@ -578,95 +985,315 @@ export const ProvidersPane: React.FC = () => {
         </div>
       </div>
 
-      {/* Add / Edit Provider Modal */}
+      {/* ------------------------------------------------------------- */}
+      {/* PROVIDER ADD / EDIT MODAL WITH MODEL SELECTION CHECKBOXES      */}
+      {/* ------------------------------------------------------------- */}
       {showProviderModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-[#FFFFFF] rounded-[10px] border border-[#E5E7EB] shadow-xl w-full max-w-lg p-6 flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-[#E5E7EB] pb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-[4px] bg-[#EBF5FF] flex items-center justify-center text-[#007AFF]">
-                  <Cpu size={16} />
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-[#FFFFFF] dark:bg-[#1C1C1E] rounded-[14px] border border-[#E5E7EB] dark:border-[#2C2C2E] shadow-2xl w-full max-w-xl my-auto max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="px-5 py-4 border-b border-[#E5E7EB] dark:border-[#2C2C2E] flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-[8px] bg-blue-50 dark:bg-blue-950/40 text-[#007AFF] flex items-center justify-center shrink-0">
+                  <Cpu size={18} />
                 </div>
                 <div>
-                  <h3 className="text-[15px] font-bold text-[#000000]">Add LLM Provider</h3>
-                  <p className="text-[11px] text-[#8A8A85]">OpenAI-compatible endpoint with model discovery</p>
+                  <h3 className="text-[15px] font-bold text-[#000000] dark:text-white font-sans">
+                    {modalMode === 'edit' ? `Edit Provider: ${pName}` : 'Add LLM Provider'}
+                  </h3>
+                  <p className="text-[11px] text-[#8A8A85] font-sans">
+                    Configure endpoint credentials and choose which models appear in chat
+                  </p>
                 </div>
               </div>
               <button
                 onClick={() => setShowProviderModal(false)}
-                className="text-[#8A8A85] hover:text-[#000000] p-1 rounded transition-colors"
+                className="text-[#8A8A85] hover:text-[#000000] dark:hover:text-white p-1 rounded-md transition-colors cursor-pointer"
               >
-                <X size={16} />
+                <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleSaveProvider} className="flex flex-col gap-3.5">
+            {/* Modal Scrollable Form */}
+            <form onSubmit={handleSaveProvider} className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
+              {/* Provider Name */}
               <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-bold text-[#000000]">Provider Name</label>
+                <label className="text-[11px] font-bold text-[#000000] dark:text-white font-sans">
+                  Provider Name <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Groq, Together, Local VLLM"
+                  placeholder="e.g. OpenAI, DeepSeek, Ollama Local"
                   value={pName}
                   onChange={(e) => setPName(e.target.value)}
-                  className="border border-[#E5E7EB] rounded-[6px] px-3 py-1.5 text-[12px] focus:outline-none focus:border-[#0F0F0F]"
+                  className="w-full border border-[#E5E7EB] dark:border-[#2C2C2E] bg-white dark:bg-[#141414] rounded-[8px] px-3 py-2 text-xs text-[#000000] dark:text-white outline-none focus:border-[#007AFF] transition-colors"
                 />
               </div>
 
+              {/* Provider Type Selection */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-bold text-[#000000] dark:text-white font-sans">
+                  Provider Protocol / Type
+                </label>
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+                  {['openai', 'anthropic', 'deepseek', 'ollama', 'openrouter', 'custom'].map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => handleTypeChange(t)}
+                      className={`py-1.5 px-2 rounded-[6px] text-[11px] font-mono font-medium capitalize border transition-all cursor-pointer truncate ${
+                        pType === t
+                          ? 'bg-[#007AFF] text-white border-[#007AFF]'
+                          : 'bg-white dark:bg-[#141414] border-[#E5E7EB] dark:border-[#2C2C2E] text-[#8A8A85] hover:text-[#000000] dark:hover:text-white'
+                      }`}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Base Endpoint URL */}
               <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-bold text-[#000000]">Base Endpoint / URL</label>
+                <label className="text-[11px] font-bold text-[#000000] dark:text-white font-sans">
+                  Base Endpoint URL <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="text"
                   required
-                  placeholder="https://api.together.xyz/v1 or http://localhost:8000/v1"
+                  placeholder="https://api.openai.com/v1 or http://localhost:11434"
                   value={pEndpoint}
                   onChange={(e) => setPEndpoint(e.target.value)}
-                  className="border border-[#E5E7EB] rounded-[6px] px-3 py-1.5 text-[12px] font-mono focus:outline-none focus:border-[#0F0F0F]"
+                  className="w-full border border-[#E5E7EB] dark:border-[#2C2C2E] bg-white dark:bg-[#141414] rounded-[8px] px-3 py-2 text-xs font-mono text-[#000000] dark:text-white outline-none focus:border-[#007AFF] transition-colors"
                 />
               </div>
 
+              {/* API Key */}
               <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-bold text-[#000000]">API Key (optional for local)</label>
+                <label className="text-[11px] font-bold text-[#000000] dark:text-white font-sans">
+                  API Key {pType === 'ollama' && <span className="text-[#8A8A85] font-normal">(Optional for Ollama)</span>}
+                </label>
                 <div className="relative">
                   <input
                     type={showKey ? 'text' : 'password'}
-                    placeholder="sk-..."
+                    placeholder={pType === 'ollama' ? 'None (local network)' : 'sk-...'}
                     value={pApiKey}
                     onChange={(e) => setPApiKey(e.target.value)}
-                    className="w-full border border-[#E5E7EB] rounded-[6px] pl-3 pr-9 py-1.5 text-[12px] font-mono focus:outline-none focus:border-[#0F0F0F]"
+                    className="w-full border border-[#E5E7EB] dark:border-[#2C2C2E] bg-white dark:bg-[#141414] rounded-[8px] pl-3 pr-9 py-2 text-xs font-mono text-[#000000] dark:text-white outline-none focus:border-[#007AFF] transition-colors"
                   />
                   <button
                     type="button"
                     onClick={() => setShowKey(!showKey)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8A8A85] hover:text-[#000000]"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8A8A85] hover:text-[#000000] dark:hover:text-white cursor-pointer"
                   >
                     {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
                   </button>
                 </div>
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-bold text-[#000000]">Models (comma separated)</label>
-                <input
-                  type="text"
-                  placeholder="e.g. meta-llama/Llama-3-70b-chat, deepseek-v3"
-                  value={pModels}
-                  onChange={(e) => setPModels(e.target.value)}
-                  className="border border-[#E5E7EB] rounded-[6px] px-3 py-1.5 text-[12px] font-mono focus:outline-none focus:border-[#0F0F0F]"
-                />
+              {/* Checkbox Options: Enabled & Default */}
+              <div className="flex items-center gap-5 py-1">
+                <label className="flex items-center gap-2 text-xs font-sans text-[#333333] dark:text-[#E5E7EB] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={pEnabled}
+                    onChange={(e) => setPEnabled(e.target.checked)}
+                    className="w-4 h-4 rounded text-[#007AFF] focus:ring-[#007AFF] cursor-pointer"
+                  />
+                  <span>Enable Provider</span>
+                </label>
+
+                <label className="flex items-center gap-2 text-xs font-sans text-[#333333] dark:text-[#E5E7EB] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={pIsDefault}
+                    onChange={(e) => setPIsDefault(e.target.checked)}
+                    className="w-4 h-4 rounded text-[#007AFF] focus:ring-[#007AFF] cursor-pointer"
+                  />
+                  <span>Set as Default Provider</span>
+                </label>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E5E7EB]">
+              {/* --------------------------------------------------------- */}
+              {/* MODEL SELECTION & PROBE SECTION                           */}
+              {/* --------------------------------------------------------- */}
+              <div className="bg-[#F7F7F5] dark:bg-[#141414] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[10px] p-3.5 space-y-3">
+                {/* Section Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-[#000000] dark:text-white font-sans">
+                        Model Selection
+                      </span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-blue-100 dark:bg-blue-950/40 text-[#007AFF]">
+                        {selectedModelsCount} of {modelsList.length} enabled
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-[#8A8A85]">
+                      Only checked models will appear in Chat &amp; Agent dropdowns
+                    </span>
+                  </div>
+
+                  {/* Probe / Fetch Models Button */}
+                  <button
+                    type="button"
+                    onClick={handleFetchModels}
+                    disabled={isFetchingModels || !pEndpoint.trim()}
+                    className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-[#007AFF] hover:bg-[#0066D6] disabled:opacity-50 text-white text-[11px] font-bold rounded-[6px] transition-colors cursor-pointer shadow-2xs shrink-0"
+                    title="Fetch and discover live models from this provider endpoint"
+                  >
+                    <RefreshCw size={12} className={isFetchingModels ? 'animate-spin' : ''} />
+                    <span>{isFetchingModels ? 'Fetching Models…' : 'Fetch Models'}</span>
+                  </button>
+                </div>
+
+                {/* Probe Notification Banner */}
+                {probeNotice && (
+                  <div
+                    className={`p-2.5 rounded-[6px] text-xs flex items-start justify-between gap-2 ${
+                      probeNotice.type === 'success'
+                        ? 'bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
+                        : 'bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300'
+                    }`}
+                  >
+                    <div className="flex items-start gap-1.5 min-w-0">
+                      {probeNotice.type === 'success' ? (
+                        <CheckCircle2 size={14} className="shrink-0 text-emerald-600 mt-0.5" />
+                      ) : (
+                        <AlertCircle size={14} className="shrink-0 text-red-500 mt-0.5" />
+                      )}
+                      <span className="text-[11px] leading-tight break-words">{probeNotice.text}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setProbeNotice(null)}
+                      className="text-[#8A8A85] hover:text-[#000000] dark:hover:text-white shrink-0 cursor-pointer"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                )}
+
+                {/* Search & Bulk Select Controls */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="relative flex-1">
+                    <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#8A8A85]" />
+                    <input
+                      type="text"
+                      placeholder="Filter models..."
+                      value={modelSearch}
+                      onChange={(e) => setModelSearch(e.target.value)}
+                      className="w-full pl-7 pr-2.5 py-1 bg-white dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[6px] text-xs text-[#000000] dark:text-white outline-none focus:border-[#007AFF]"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleSelectAllModels(true)}
+                      className="text-[10px] font-bold text-[#007AFF] hover:underline cursor-pointer"
+                    >
+                      Select All
+                    </button>
+                    <span className="text-[#8A8A85] text-[10px]">·</span>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectAllModels(false)}
+                      className="text-[10px] font-bold text-[#8A8A85] hover:text-[#000000] dark:hover:text-white hover:underline cursor-pointer"
+                    >
+                      Deselect All
+                    </button>
+                  </div>
+                </div>
+
+                {/* Models Checkbox Scroll Area */}
+                <div className="max-h-48 overflow-y-auto border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[8px] bg-white dark:bg-[#1C1C1E] divide-y divide-gray-100 dark:divide-gray-800 custom-scrollbar">
+                  {filteredModalModels.length === 0 ? (
+                    <div className="p-4 text-center text-xs text-[#8A8A85]">
+                      No models found. Click "Fetch Models" above or add a custom model below.
+                    </div>
+                  ) : (
+                    filteredModalModels.map((m) => (
+                      <label
+                        key={m.id}
+                        className="flex items-center justify-between p-2 sm:p-2.5 hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer transition-colors select-none"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          <input
+                            type="checkbox"
+                            checked={m.enabled}
+                            onChange={() => handleToggleModelCheckbox(m.id)}
+                            className="w-4 h-4 rounded text-[#007AFF] focus:ring-[#007AFF] cursor-pointer shrink-0"
+                          />
+                          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                            <span
+                              className={`font-mono text-xs font-semibold truncate ${
+                                m.enabled ? 'text-[#000000] dark:text-white' : 'text-[#8A8A85] line-through'
+                              }`}
+                            >
+                              {m.id}
+                            </span>
+                            {m.name && m.name !== m.id && (
+                              <span className="text-[11px] text-[#8A8A85] truncate hidden sm:inline">
+                                ({m.name})
+                              </span>
+                            )}
+                            {isReasoningModel(m.id) && (
+                              <span className="text-[8px] px-1.5 py-0.2 rounded font-bold uppercase bg-purple-100 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 shrink-0">
+                                Reasoning
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleRemoveModel(m.id);
+                          }}
+                          className="text-[#8A8A85] hover:text-red-500 p-1 transition-colors cursor-pointer shrink-0 ml-2"
+                          title="Remove model from list"
+                        >
+                          <X size={13} />
+                        </button>
+                      </label>
+                    ))
+                  )}
+                </div>
+
+                {/* Add Custom Model Row */}
+                <div className="flex items-center gap-1.5 pt-1">
+                  <input
+                    type="text"
+                    placeholder="Add custom model ID (e.g. mistral-large, qwen2.5:32b)..."
+                    value={customModelInput}
+                    onChange={(e) => setCustomModelInput(e.target.value)}
+                    className="flex-1 px-2.5 py-1.5 bg-white dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[6px] text-xs font-mono text-[#000000] dark:text-white outline-none focus:border-[#007AFF]"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddCustomModel}
+                    className="px-3 py-1.5 bg-[#0F0F0F] dark:bg-white text-white dark:text-black font-bold text-xs rounded-[6px] hover:opacity-90 transition-opacity cursor-pointer shrink-0"
+                  >
+                    + Add
+                  </button>
+                </div>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E5E7EB] dark:border-[#2C2C2E]">
                 <button
                   type="button"
                   onClick={() => setShowProviderModal(false)}
-                  className="px-3.5 py-1.5 text-[12px] font-medium text-[#8A8A85] hover:text-[#000000]"
+                  className="px-4 py-2 text-xs font-medium text-[#8A8A85] hover:text-[#000000] dark:hover:text-white cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-[#0F0F0F] text-[#FFFFFF] text-[12px] font-bold rounded-[6px] hover:bg-black/90"
+                  className="px-5 py-2 bg-[#007AFF] hover:bg-[#0066D6] text-white text-xs font-bold rounded-[8px] transition-all shadow-sm cursor-pointer active:scale-95"
                 >
                   Save Provider
                 </button>
@@ -676,23 +1303,29 @@ export const ProvidersPane: React.FC = () => {
         </div>
       )}
 
-      {/* Connect MCP Modal */}
+      {/* ------------------------------------------------------------- */}
+      {/* CONNECT MCP MODAL                                             */}
+      {/* ------------------------------------------------------------- */}
       {showMcpModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-[#FFFFFF] rounded-[10px] border border-[#E5E7EB] shadow-xl w-full max-w-lg p-6 flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-[#E5E7EB] pb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-[4px] bg-[#0F0F0F] flex items-center justify-center text-[#FFFFFF]">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-[#FFFFFF] dark:bg-[#1C1C1E] rounded-[14px] border border-[#E5E7EB] dark:border-[#2C2C2E] shadow-xl w-full max-w-lg p-5 sm:p-6 flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-[#E5E7EB] dark:border-[#2C2C2E] pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-[6px] bg-[#0F0F0F] dark:bg-white text-white dark:text-black flex items-center justify-center">
                   <Puzzle size={16} />
                 </div>
                 <div>
-                  <h3 className="text-[15px] font-bold text-[#000000]">Connect MCP Server</h3>
-                  <p className="text-[11px] text-[#8A8A85]">Model Context Protocol standard integration</p>
+                  <h3 className="text-[15px] font-bold text-[#000000] dark:text-white font-sans">
+                    Connect MCP Server
+                  </h3>
+                  <p className="text-[11px] text-[#8A8A85] font-sans">
+                    Standard Model Context Protocol client connection
+                  </p>
                 </div>
               </div>
               <button
                 onClick={() => setShowMcpModal(false)}
-                className="text-[#8A8A85] hover:text-[#000000] p-1 rounded transition-colors"
+                className="text-[#8A8A85] hover:text-[#000000] dark:hover:text-white p-1 rounded transition-colors cursor-pointer"
               >
                 <X size={16} />
               </button>
@@ -700,27 +1333,27 @@ export const ProvidersPane: React.FC = () => {
 
             <form onSubmit={handleSaveMCP} className="flex flex-col gap-3.5">
               <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-bold text-[#000000]">Server Name</label>
+                <label className="text-[11px] font-bold text-[#000000] dark:text-white">Server Name</label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. filesystem, fetch, slack"
+                  placeholder="e.g. filesystem, github, postgres"
                   value={mName}
                   onChange={(e) => setMName(e.target.value)}
-                  className="border border-[#E5E7EB] rounded-[6px] px-3 py-1.5 text-[12px] focus:outline-none focus:border-[#0F0F0F]"
+                  className="border border-[#E5E7EB] dark:border-[#2C2C2E] bg-white dark:bg-[#141414] rounded-[6px] px-3 py-1.5 text-xs text-[#000000] dark:text-white focus:outline-none focus:border-[#007AFF]"
                 />
               </div>
 
               <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-bold text-[#000000]">Transport Type</label>
+                <label className="text-[11px] font-bold text-[#000000] dark:text-white">Transport Type</label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => setMTransport('stdio')}
-                    className={`py-1.5 px-3 rounded-[6px] text-[12px] font-bold border transition-colors ${
+                    className={`py-1.5 px-3 rounded-[6px] text-xs font-bold border transition-colors cursor-pointer ${
                       mTransport === 'stdio'
-                        ? 'bg-[#0F0F0F] text-[#FFFFFF] border-[#0F0F0F]'
-                        : 'bg-[#FFFFFF] text-[#8A8A85] border-[#E5E7EB]'
+                        ? 'bg-[#007AFF] text-white border-[#007AFF]'
+                        : 'bg-white dark:bg-[#141414] text-[#8A8A85] border-[#E5E7EB] dark:border-[#2C2C2E]'
                     }`}
                   >
                     stdio (local process)
@@ -728,10 +1361,10 @@ export const ProvidersPane: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setMTransport('sse')}
-                    className={`py-1.5 px-3 rounded-[6px] text-[12px] font-bold border transition-colors ${
+                    className={`py-1.5 px-3 rounded-[6px] text-xs font-bold border transition-colors cursor-pointer ${
                       mTransport === 'sse'
-                        ? 'bg-[#0F0F0F] text-[#FFFFFF] border-[#0F0F0F]'
-                        : 'bg-[#FFFFFF] text-[#8A8A85] border-[#E5E7EB]'
+                        ? 'bg-[#007AFF] text-white border-[#007AFF]'
+                        : 'bg-white dark:bg-[#141414] text-[#8A8A85] border-[#E5E7EB] dark:border-[#2C2C2E]'
                     }`}
                   >
                     SSE (remote stream)
@@ -740,54 +1373,52 @@ export const ProvidersPane: React.FC = () => {
               </div>
 
               {mTransport === 'stdio' ? (
-                <>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[11px] font-bold text-[#000000]">Command</label>
-                      <input
-                        type="text"
-                        value={mCommand}
-                        onChange={(e) => setMCommand(e.target.value)}
-                        placeholder="npx or python"
-                        className="border border-[#E5E7EB] rounded-[6px] px-3 py-1.5 text-[12px] font-mono focus:outline-none"
-                      />
-                    </div>
-                    <div className="col-span-2 flex flex-col gap-1">
-                      <label className="text-[11px] font-bold text-[#000000]">Arguments</label>
-                      <input
-                        type="text"
-                        value={mArgs}
-                        onChange={(e) => setMArgs(e.target.value)}
-                        placeholder="-y @modelcontextprotocol/server-..."
-                        className="border border-[#E5E7EB] rounded-[6px] px-3 py-1.5 text-[12px] font-mono focus:outline-none"
-                      />
-                    </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] font-bold text-[#000000] dark:text-white">Command</label>
+                    <input
+                      type="text"
+                      value={mCommand}
+                      onChange={(e) => setMCommand(e.target.value)}
+                      placeholder="npx or python"
+                      className="border border-[#E5E7EB] dark:border-[#2C2C2E] bg-white dark:bg-[#141414] rounded-[6px] px-3 py-1.5 text-xs font-mono text-[#000000] dark:text-white focus:outline-none focus:border-[#007AFF]"
+                    />
                   </div>
-                </>
+                  <div className="col-span-2 flex flex-col gap-1">
+                    <label className="text-[11px] font-bold text-[#000000] dark:text-white">Arguments</label>
+                    <input
+                      type="text"
+                      value={mArgs}
+                      onChange={(e) => setMArgs(e.target.value)}
+                      placeholder="-y @modelcontextprotocol/server-..."
+                      className="border border-[#E5E7EB] dark:border-[#2C2C2E] bg-white dark:bg-[#141414] rounded-[6px] px-3 py-1.5 text-xs font-mono text-[#000000] dark:text-white focus:outline-none focus:border-[#007AFF]"
+                    />
+                  </div>
+                </div>
               ) : (
                 <div className="flex flex-col gap-1">
-                  <label className="text-[11px] font-bold text-[#000000]">SSE Endpoint URL</label>
+                  <label className="text-[11px] font-bold text-[#000000] dark:text-white">SSE Endpoint URL</label>
                   <input
                     type="text"
                     value={mUrl}
                     onChange={(e) => setMUrl(e.target.value)}
                     placeholder="https://mcp.domain.com/sse"
-                    className="border border-[#E5E7EB] rounded-[6px] px-3 py-1.5 text-[12px] font-mono focus:outline-none"
+                    className="border border-[#E5E7EB] dark:border-[#2C2C2E] bg-white dark:bg-[#141414] rounded-[6px] px-3 py-1.5 text-xs font-mono text-[#000000] dark:text-white focus:outline-none focus:border-[#007AFF]"
                   />
                 </div>
               )}
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E5E7EB]">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E5E7EB] dark:border-[#2C2C2E]">
                 <button
                   type="button"
                   onClick={() => setShowMcpModal(false)}
-                  className="px-3.5 py-1.5 text-[12px] font-medium text-[#8A8A85] hover:text-[#000000]"
+                  className="px-3.5 py-1.5 text-xs font-medium text-[#8A8A85] hover:text-[#000000] dark:hover:text-white cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-[#0F0F0F] text-[#FFFFFF] text-[12px] font-bold rounded-[6px] hover:bg-black/90"
+                  className="px-4 py-1.5 bg-[#007AFF] hover:bg-[#0066D6] text-white text-xs font-bold rounded-[6px] transition-colors cursor-pointer"
                 >
                   Connect Server
                 </button>
