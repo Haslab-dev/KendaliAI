@@ -856,11 +856,22 @@ func (a *TelegramAdapter) handleRawTelegramMessage(runner *BotRunner, msg *RawTe
 	} else {
 		sess.ChannelID = "telegram"
 		sess.Metadata = string(metaJSON)
+		sess.UpdatedAt = time.Now().Unix()
 		if targetAgent != runner.Config.AgentID && sess.AgentID != targetAgent {
 			sess.AgentID = targetAgent
 		}
 		_ = a.store.SaveSession(*sess)
 		targetAgent = sess.AgentID
+
+		a.bus.Publish(messaging.Event{
+			ID:        uuid.New().String(),
+			Type:      messaging.EventSessionUpdated,
+			SessionID: sessionID,
+			AgentID:   targetAgent,
+			Channel:   "telegram",
+			Payload:   sess,
+			Timestamp: time.Now(),
+		})
 	}
 
 	// 7. Send initial status message into topic

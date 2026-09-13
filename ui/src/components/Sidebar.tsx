@@ -175,22 +175,36 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
       });
     }
 
-    // Sort groups so the agent worker with the most recent active session is on top!
+    // Sort groups so the agent worker with the most recent active session / new telegram message is on top!
     const getGroupScore = (g: (typeof groups)[0]) => {
-      // If group has the currently active session, pin to top
-      if (activeSessionId && g.sessions.some((s) => s.id === activeSessionId)) {
-        return Infinity;
-      }
-      // If group matches the active agent worker, pin near top
-      if (activeAgent && g.agent.id === activeAgent.id) {
-        return Infinity - 1;
-      }
-      // Highest timestamp among sessions
       let maxTime = 0;
+      let latestTgTime = 0;
+
       for (const s of g.sessions) {
         const t = s.updatedAt || s.createdAt || 0;
         if (t > maxTime) maxTime = t;
+
+        const isTg = s.id.startsWith('tg-') || (s as any).channelId === 'telegram' || (s as any).channel === 'telegram';
+        if (isTg && t > latestTgTime) {
+          latestTgTime = t;
+        }
       }
+
+      // 1. If this agent worker has incoming Telegram messages, boost heavily so it jumps to top!
+      if (latestTgTime > 0) {
+        return 2000000000 + latestTgTime;
+      }
+
+      // 2. If group has the currently active session being viewed by user
+      if (activeSessionId && g.sessions.some((s) => s.id === activeSessionId)) {
+        return 1000000000 + maxTime;
+      }
+
+      // 3. If group matches the active agent worker
+      if (activeAgent && g.agent.id === activeAgent.id) {
+        return 500000000 + maxTime;
+      }
+
       return maxTime;
     };
 
@@ -209,10 +223,28 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
     return groups;
   }, [officeStaffList, filteredSessions, activeSessionId, activeAgent]);
 
-  // Sorted staff list for mobile carousel (recent active agent worker first)
+  // Sorted staff list for mobile carousel (recent active agent worker / new telegram message first)
   const sortedStaffList = useMemo(() => {
     const list = [...officeStaffList];
     list.sort((a, b) => {
+      const aSessions = sessions.filter((s) => s.agentId === a.id);
+      const bSessions = sessions.filter((s) => s.agentId === b.id);
+
+      const aTgTime = aSessions.reduce((max, s) => {
+        const isTg = s.id.startsWith('tg-') || (s as any).channelId === 'telegram' || (s as any).channel === 'telegram';
+        return isTg ? Math.max(max, s.updatedAt || s.createdAt || 0) : max;
+      }, 0);
+
+      const bTgTime = bSessions.reduce((max, s) => {
+        const isTg = s.id.startsWith('tg-') || (s as any).channelId === 'telegram' || (s as any).channel === 'telegram';
+        return isTg ? Math.max(max, s.updatedAt || s.createdAt || 0) : max;
+      }, 0);
+
+      // If either has telegram activity, prioritize latest telegram message time
+      if (aTgTime > 0 || bTgTime > 0) {
+        if (aTgTime !== bTgTime) return bTgTime - aTgTime;
+      }
+
       if (activeSessionId) {
         const aHasActive = sessions.some((s) => s.id === activeSessionId && s.agentId === a.id);
         const bHasActive = sessions.some((s) => s.id === activeSessionId && s.agentId === b.id);
@@ -222,8 +254,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
       if (activeAgent && a.id === activeAgent.id) return -1;
       if (activeAgent && b.id === activeAgent.id) return 1;
 
-      const aSessions = sessions.filter((s) => s.agentId === a.id);
-      const bSessions = sessions.filter((s) => s.agentId === b.id);
       const aTime = aSessions.reduce((max, s) => Math.max(max, s.updatedAt || s.createdAt || 0), 0);
       const bTime = bSessions.reduce((max, s) => Math.max(max, s.updatedAt || s.createdAt || 0), 0);
       return bTime - aTime;
@@ -421,6 +451,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
           const connectedBot = connectedBotsMap.get(agent.id);
           const hasRunningBot = connectedBot && connectedBot.status === 'running';
 
+          const hasTelegramSessions = agentSessions.some(
+            (s) => s.id.startsWith('tg-') || (s as any).channelId === 'telegram' || (s as any).channel === 'telegram'
+          );
+
           return (
             <div key={agent.id} className="flex flex-col gap-1">
               {/* [Icon] Staff Agent Header Row */}
@@ -441,9 +475,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
                   </div>
 
                   <div className="flex flex-col min-w-0">
-                    <span className="text-[13px] font-bold text-[#000000] dark:text-white font-sans truncate leading-tight">
-                      {agent.name}
-                    </span>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-[13px] font-bold text-[#000000] dark:text-white font-sans truncate leading-tight">
+                        {agent.name}
+                      </span>
+                      {hasTelegramSessions && (
+                        <span
+                          className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded text-[8px] font-bold bg-[#E1F2FB] dark:bg-[#0E3550] text-[#0088cc] shrink-0 font-mono"
+                          title="Connected with Telegram"
+                        >
+                          <Send size={7} /> TG
+                        </span>
+                      )}
+                    </div>
                     <span className="text-[11px] text-[#8A8A85] truncate font-sans">
                       {agent.role || 'Autonomous Staff'}
                     </span>
@@ -478,14 +522,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
                     <button
                       type="button"
                       onClick={() => handleCreateChatForAgent(agent)}
-                      className="w-full text-left py-1 text-[11px] text-[#8A8A85] hover:text-[#007AFF] font-mono transition-colors"
+                      className="w-full text-left py-1 text-[11px] text-[#8A8A85] hover:text-[#007AFF] transition-colors flex items-center gap-1.5"
                     >
-                      -- No sessions yet. Click + to chat
+                      <Plus size={11} className="text-[#8A8A85]" />
+                      <span>No sessions yet. Click to chat</span>
                     </button>
                   ) : (
                     agentSessions.map((s, idx) => {
                       const isActive = s.id === activeSessionId;
                       const sessionLabel = s.title || `Session Chat ${idx + 1}`;
+                      const isTelegram =
+                        s.id.startsWith('tg-') ||
+                        (s as any).channelId === 'telegram' ||
+                        (s as any).channel === 'telegram';
+                      const isRecent = s.updatedAt && Date.now() / 1000 - s.updatedAt < 600;
 
                       return (
                         <div
@@ -498,7 +548,25 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
                           }`}
                         >
                           <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                            <span className="text-[10px] text-[#8A8A85] font-mono shrink-0">--</span>
+                            {isTelegram ? (
+                              <span
+                                className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded text-[8px] font-bold bg-[#E1F2FB] dark:bg-[#0E3550] text-[#0088cc] shrink-0 font-mono tracking-tight"
+                                title="Telegram Synced Chat"
+                              >
+                                <Send size={7} className="text-[#0088cc]" />
+                                <span>TG</span>
+                              </span>
+                            ) : (
+                              <MessageSquare size={10} className="text-[#8A8A85] shrink-0 opacity-60" />
+                            )}
+
+                            {isTelegram && isRecent && (
+                              <span
+                                className="w-1.5 h-1.5 rounded-full bg-[#0088cc] animate-pulse shrink-0"
+                                title="Recent Telegram activity"
+                              />
+                            )}
+
                             <span className="text-[11px] truncate font-sans">
                               {sessionLabel}
                             </span>
