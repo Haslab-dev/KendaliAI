@@ -1373,21 +1373,36 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 				if rawTools, ok := args["tools"].([]interface{}); ok {
 					for _, rt := range rawTools {
 						if m, ok := rt.(map[string]interface{}); ok {
+							var hTypeStr string
+							if rawHT, exists := m["handler_type"]; exists && rawHT != nil {
+								hTypeStr = strings.ToLower(strings.TrimSpace(fmt.Sprint(rawHT)))
+							}
+							if hTypeStr == "<nil>" || hTypeStr == "null" {
+								hTypeStr = ""
+							}
+
+							cmdStr := ""
+							if c, exists := m["command"]; exists && c != nil && fmt.Sprint(c) != "<nil>" {
+								cmdStr = fmt.Sprint(c)
+							}
+							scriptStr := ""
+							if s, exists := m["script"]; exists && s != nil && fmt.Sprint(s) != "<nil>" {
+								scriptStr = fmt.Sprint(s)
+							}
+
 							tDef := plugins.PluginToolDef{
 								Name:        fmt.Sprint(m["name"]),
 								Description: fmt.Sprint(m["description"]),
-								HandlerType: plugins.HandlerType(fmt.Sprint(m["handler_type"])),
-								Command:     fmt.Sprint(m["command"]),
-								Script:      fmt.Sprint(m["script"]),
+								Command:     cmdStr,
+								Script:      scriptStr,
 							}
 							if rawParams, ok := m["parameters"].(map[string]interface{}); ok {
 								tDef.Parameters = rawParams
 							}
-							hType := strings.ToLower(string(tDef.HandlerType))
-							if hType == "" || hType == "command" || hType == "bash" || hType == "shell" || hType == "sh" || hType == "cmd" {
-								tDef.HandlerType = plugins.HandlerCommand
-							} else if hType == "script" || hType == "file" {
+							if hTypeStr == "script" || hTypeStr == "file" || (hTypeStr == "" && scriptStr != "" && cmdStr == "") {
 								tDef.HandlerType = plugins.HandlerScript
+							} else {
+								tDef.HandlerType = plugins.HandlerCommand
 							}
 							toolsList = append(toolsList, tDef)
 						}

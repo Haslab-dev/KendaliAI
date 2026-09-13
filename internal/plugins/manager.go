@@ -90,6 +90,17 @@ func (m *Manager) scanDirLocked(dir string, source PluginSource) {
 			if p.Version == "" {
 				p.Version = "1.0.0"
 			}
+			// Auto-repair any corrupt or missing HandlerType from disk
+			for i := range p.Tools {
+				ht := strings.ToLower(strings.TrimSpace(string(p.Tools[i].HandlerType)))
+				if ht == "<nil>" || ht == "null" || ht == "" {
+					if p.Tools[i].Script != "" {
+						p.Tools[i].HandlerType = HandlerScript
+					} else {
+						p.Tools[i].HandlerType = HandlerCommand
+					}
+				}
+			}
 			m.plugins[p.ID] = &p
 		}
 	}
@@ -170,6 +181,17 @@ func (m *Manager) Create(req CreatePluginRequest) (*Plugin, error) {
 		Skills:       req.Skills,
 		CreatedAt:    now,
 		UpdatedAt:    now,
+	}
+
+	for i := range p.Tools {
+		ht := strings.ToLower(strings.TrimSpace(string(p.Tools[i].HandlerType)))
+		if ht == "<nil>" || ht == "null" || ht == "" {
+			if p.Tools[i].Script != "" {
+				p.Tools[i].HandlerType = HandlerScript
+			} else {
+				p.Tools[i].HandlerType = HandlerCommand
+			}
+		}
 	}
 
 	manifestBytes, err := json.MarshalIndent(p, "", "  ")
@@ -259,9 +281,9 @@ func (m *Manager) ExecuteTool(ctx context.Context, pluginID, toolName string, ar
 	}
 
 	var targetTool *PluginToolDef
-	for _, t := range p.Tools {
-		if t.Name == toolName {
-			targetTool = &t
+	for i := range p.Tools {
+		if p.Tools[i].Name == toolName {
+			targetTool = &p.Tools[i]
 			break
 		}
 	}
@@ -279,9 +301,9 @@ func (m *Manager) ExecuteTool(ctx context.Context, pluginID, toolName string, ar
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	hType := strings.ToLower(string(targetTool.HandlerType))
+	hType := strings.ToLower(strings.TrimSpace(string(targetTool.HandlerType)))
 	switch {
-	case hType == string(HandlerCommand) || hType == "bash" || hType == "shell" || hType == "sh" || hType == "cmd" || (hType == "" && targetTool.Command != ""):
+	case hType == string(HandlerCommand) || hType == "bash" || hType == "shell" || hType == "sh" || hType == "cmd" || hType == "<nil>" || hType == "null" || hType == "" || targetTool.Command != "":
 		cmdStr := targetTool.Command
 		for k, v := range args {
 			cmdStr = strings.ReplaceAll(cmdStr, fmt.Sprintf("{{%s}}", k), fmt.Sprint(v))
@@ -305,7 +327,7 @@ func (m *Manager) ExecuteTool(ctx context.Context, pluginID, toolName string, ar
 			Error:    fmt.Sprint(err),
 		}, nil
 
-	case hType == string(HandlerScript) || hType == "script" || hType == "file" || (hType == "" && targetTool.Script != ""):
+	case hType == string(HandlerScript) || hType == "script" || hType == "file" || targetTool.Script != "":
 		scriptPath := filepath.Join(p.Dir, targetTool.Script)
 		argsJSON, _ := json.Marshal(args)
 		cmd := exec.CommandContext(runCtx, scriptPath, string(argsJSON))
