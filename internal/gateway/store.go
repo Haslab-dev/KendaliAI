@@ -434,23 +434,10 @@ func (s *Store) SeedInitialData(cfg *config.Config) {
 		})
 	}
 
-	// 4. Default Telegram Bot (from config if provided or pre-configured testing bot)
-	existingTestingBot, _ := s.GetTelegramBot("haslabai_bots")
-	if existingTestingBot == nil {
-		_ = s.SaveTelegramBot(TelegramBotConfig{
-			ID:        "haslabai_bots",
-			Name:      "haslabai_bots",
-			Token:     "YOUR_TELEGRAM_BOT_TOKEN_HERE",
-			AgentID:   "personal-assistant",
-			Enabled:   true,
-			Status:    "running",
-			CreatedAt: time.Now().Unix(),
-		})
-	}
-
+	// 4. Default Telegram Bot from config if provided
 	if cfg != nil {
 		for _, ch := range cfg.Channels {
-			if ch.ChannelType == "telegram" && ch.Token != "" {
+			if ch.ChannelType == "telegram" && ch.Token != "" && ch.Token != "your-telegram-token-here" {
 				existing, _ := s.GetTelegramBot(ch.ID)
 				if existing == nil {
 					_ = s.SaveTelegramBot(TelegramBotConfig{

@@ -146,6 +146,7 @@ func (s *Server) routes() {
 	s.router.HandleFunc("/api/logs", s.handleLogs())
 	s.router.HandleFunc("/api/telegram/bots", s.handleTelegramBots())
 	s.router.HandleFunc("/api/telegram/bots/", s.handleTelegramBotAction())
+	s.router.HandleFunc("/api/telegram/test-token", s.handleTelegramTestToken())
 	s.router.HandleFunc("/api/telegram/auth", s.handleTelegramAuth())
 	s.router.HandleFunc("/api/telegram/auth/", s.handleTelegramAuthAction())
 
@@ -1141,7 +1142,7 @@ func (s *Server) handleTelegramBots() http.HandlerFunc {
 			for i := range bots {
 				if s.tg.IsRunning(bots[i].ID) {
 					bots[i].Status = "running"
-				} else {
+				} else if bots[i].Status != "error" {
 					bots[i].Status = "stopped"
 				}
 			}
@@ -1160,11 +1161,27 @@ func (s *Server) handleTelegramBots() http.HandlerFunc {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			// If enabled, trigger start
-			if b.Enabled && b.Token != "" {
-				_ = s.tg.StartBot(b.ID)
+			// If bot was already running and is updated, restart
+			if s.tg.IsRunning(b.ID) {
+				_ = s.tg.StopBot(b.ID)
 			}
-			json.NewEncoder(w).Encode(b)
+			var startErr string
+			if b.Enabled && b.Token != "" {
+				if err := s.tg.StartBot(b.ID); err != nil {
+					startErr = err.Error()
+				}
+			}
+			if s.tg.IsRunning(b.ID) {
+				b.Status = "running"
+			} else if startErr != "" {
+				b.Status = "error"
+			} else {
+				b.Status = "stopped"
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"bot":   b,
+				"error": startErr,
+			})
 
 		case "DELETE":
 			id := r.URL.Query().Get("id")
@@ -1209,9 +1226,57 @@ func (s *Server) handleTelegramBotAction() http.HandlerFunc {
 			_ = s.tg.StopBot(botID)
 			json.NewEncoder(w).Encode(map[string]string{"status": "stopped"})
 
+		case "test":
+			botCfg, err := s.store.GetTelegramBot(botID)
+			if err != nil || botCfg == nil {
+				http.Error(w, "bot not found", http.StatusNotFound)
+				return
+			}
+			valid, username, err := s.tg.TestToken(botCfg.Token)
+			if err != nil {
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"valid": false,
+					"error": err.Error(),
+				})
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"valid":    valid,
+				"username": username,
+			})
+
 		default:
 			http.Error(w, "unknown action", http.StatusBadRequest)
 		}
+	}
+}
+
+func (s *Server) handleTelegramTestToken() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != "POST" {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var body struct {
+			Token string `json:"token"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Token == "" {
+			http.Error(w, "missing or invalid token", http.StatusBadRequest)
+			return
+		}
+		valid, username, err := s.tg.TestToken(body.Token)
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"valid": false,
+				"error": err.Error(),
+			})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"valid":    valid,
+			"username": username,
+		})
 	}
 }
 

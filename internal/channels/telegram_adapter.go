@@ -164,6 +164,14 @@ func (a *TelegramAdapter) IsRunning(botID string) bool {
 	return running
 }
 
+func (a *TelegramAdapter) TestToken(token string) (bool, string, error) {
+	bot, err := tgbotapi.NewBotAPI(token)
+	if err != nil {
+		return false, "", err
+	}
+	return true, bot.Self.UserName, nil
+}
+
 func (a *TelegramAdapter) resolveChatTarget(sessionID string) *ChatTarget {
 	a.mu.RLock()
 	target, exists := a.sessionTarget[sessionID]
