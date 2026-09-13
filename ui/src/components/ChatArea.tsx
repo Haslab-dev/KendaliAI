@@ -4,7 +4,7 @@ import {
   ChevronDown, ChevronUp, Search, Brain, Zap, Settings, Command, AlertCircle,
   CornerDownLeft, Terminal, Sparkles, Smartphone, Database, RefreshCw, FileText, X,
   ShieldCheck, GitFork, Code2, Clock, Bell, ExternalLink, Activity, BookOpen,
-  Folder, Upload, Menu, Bot, Feather, Cpu
+  Folder, Upload, Menu, Bot, Feather, Cpu, Send
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { navigate } from '../router';
@@ -12,6 +12,7 @@ import { useAgentSocket } from '../hooks/useAgentSocket';
 import { ToolExecutionCard } from './ToolExecutionCard';
 import { InstallPromptModal } from './InstallPromptModal';
 import { GrokAvatar } from './GrokAvatar';
+import { Sidebar } from './Sidebar';
 import { isReasoningModel } from '../types';
 
 interface SlashCommand {
@@ -58,6 +59,8 @@ export const ChatArea: React.FC = () => {
   const [isSlashDismissed, setIsSlashDismissed] = useState(false);
 
   const [isAgentDropdownOpen, setIsAgentDropdownOpen] = useState(false);
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+  const [isAgentPickerOpen, setIsAgentPickerOpen] = useState(false);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [modelSearch, setModelSearch] = useState('');
   const [customModelInput, setCustomModelInput] = useState('');
@@ -101,7 +104,7 @@ export const ChatArea: React.FC = () => {
     return () => window.removeEventListener('kendali:reminder', reminderHandler);
   }, []);
 
-  const companionList = useMemo(() => {
+  const staffWorkersList = useMemo(() => {
     try {
       const saved = localStorage.getItem('kendali_office_workers');
       if (saved) {
@@ -110,49 +113,64 @@ export const ChatArea: React.FC = () => {
           return parsed.map((w: any) => ({
             id: w.id,
             name: w.role || w.name,
+            fullName: w.name,
+            role: w.role,
+            department: w.department,
             avatar: w.avatar || w.id,
+            model: w.model,
             description: w.description,
+            systemPrompt: w.systemPrompt,
+            skills: w.skills || [],
+            tools: w.tools || [],
+            telegramBot: w.telegramBot,
           }));
         }
       }
     } catch {}
     return [
-      { id: 'lead-frontend', name: 'Senior Dev', avatar: 'blue-drop', description: 'Lead Frontend Dev' },
-      { id: 'lead-architecture', name: 'Architect Lead', avatar: 'cyan-bubble', description: 'Lead Architecture' },
-      { id: 'lead-backend', name: 'Lead Backend Dev', avatar: 'green-cloud', description: 'Lead Backend Dev' },
-      { id: 'legal-counsel', name: 'Legal Counsel', avatar: 'bronze-shield', description: 'Legal & Compliance' },
-      { id: 'chief-security', name: 'Chief Security', avatar: 'ruby-capsule', description: 'Chief Security & QA' },
+      { id: 'lead-frontend', name: 'Lead Frontend Dev', fullName: 'Alex Rivera', role: 'Lead Frontend Dev', department: 'Engineering', avatar: 'blue-drop', model: 'gpt-4o', description: 'React, TypeScript, and responsive UI' },
+      { id: 'lead-architecture', name: 'Lead Architecture', fullName: 'Elena Rostova', role: 'Lead Solution Architecture', department: 'Architecture', avatar: 'cyan-bubble', model: 'claude-3-7-sonnet', description: 'System boundaries & RFC specs' },
+      { id: 'lead-backend', name: 'Lead Backend Dev', fullName: 'Marcus Chen', role: 'Lead Backend Dev', department: 'Engineering', avatar: 'green-cloud', model: 'qwen2.5-coder:latest', description: 'Go server & SQLite runtime' },
+      { id: 'legal-counsel', name: 'Legal Counsel', fullName: 'Sarah Vance', role: 'Legal Counsel & Compliance', department: 'Legal', avatar: 'bronze-shield', model: 'gpt-4o', description: 'Licenses & privacy compliance' },
+      { id: 'chief-security', name: 'Chief Security', fullName: 'Kavita Patel', role: 'Chief Security & QA Officer', department: 'Security', avatar: 'ruby-capsule', model: 'gpt-4o', description: 'Secrets scanning & OWASP audits' },
+      { id: 'devops-lead', name: 'DevOps Lead', fullName: 'Darius Thorne', role: 'DevOps & Infrastructure Lead', department: 'Operations', avatar: 'orange-leaf', model: 'deepseek-chat', description: 'Docker, CI/CD, and mesh networks' },
     ];
   }, []);
 
-  const handleSwitchCompanion = async (companion: { id: string; name: string; avatar: string; description?: string }) => {
-    const matched = agents.find((a) => a.id === companion.id);
+  const handleSwitchWorker = async (worker: any) => {
+    if (worker.model) {
+      setActiveModel(worker.model);
+    }
+    const matched = agents.find((a) => a.id === worker.id);
     if (matched) {
       setActiveAgent(matched);
+      if (matched.model) setActiveModel(matched.model);
     } else {
       setActiveAgent({
-        id: companion.id,
-        name: companion.name,
-        description: companion.description || 'Autonomous Companion Agent',
+        id: worker.id,
+        name: worker.role || worker.name,
+        description: worker.description || `Specialist Staff: ${worker.name}`,
         providerId: '',
-        model: '',
-        systemPrompt: `You are ${companion.name}. Execute instructions thoroughly and report back clearly.`,
-        skills: [],
-        tools: ['bash', 'file.write', 'file.read', 'git_worktree', 'web.fetch', 'telegram.send'],
+        model: worker.model || '',
+        systemPrompt: worker.systemPrompt || `You are ${worker.name}. Execute instructions thoroughly and report back clearly.`,
+        skills: worker.skills || [],
+        tools: worker.tools || ['bash', 'file.write', 'file.read', 'git_worktree', 'web.fetch', 'telegram.send'],
         mcp: [],
         memoryScopes: ['user', 'workspace'],
         policy: {},
-        avatar: companion.avatar,
+        avatar: worker.avatar,
         isDefault: false,
       });
     }
-    const existing = sessions.find((s) => s.agentId === companion.id);
+    const existing = sessions.find((s) => s.agentId === worker.id);
     if (existing) {
       await selectSession(existing.id);
     } else {
-      const newId = await createSession(companion.id);
+      const newId = await createSession(worker.id);
       await selectSession(newId);
     }
+    setIsAgentPickerOpen(false);
+    setIsMobileDrawerOpen(false);
   };
 
   useEffect(() => {
@@ -504,40 +522,47 @@ export const ChatArea: React.FC = () => {
       )}
 
       {/* Chat Header matching Grok Bot style */}
-      <div className="w-full min-h-[64px] shrink-0 flex flex-row gap-3.5 px-4 sm:px-6 items-center bg-[#FFFFFF] border-b border-[#E5E7EB] z-20 select-none py-2">
-        {/* Mobile menu trigger */}
+      <div className="w-full min-h-[64px] shrink-0 flex flex-row gap-3 px-3 sm:px-6 items-center bg-[#FFFFFF] border-b border-[#E5E7EB] z-20 select-none py-2">
+        {/* Mobile menu trigger for Agents & Session History Drawer */}
         <button
-          onClick={() => {
-            const drawer = document.getElementById('kendali-mobile-drawer');
-            if (drawer) drawer.classList.toggle('hidden');
-          }}
-          className="p-2 text-[#333333] hover:text-[#000000] md:hidden rounded-lg hover:bg-[#F7F7F5] cursor-pointer"
+          onClick={() => setIsMobileDrawerOpen(true)}
+          className="p-2 text-[#333333] hover:text-[#000000] md:hidden rounded-lg hover:bg-[#F7F7F5] cursor-pointer shrink-0"
+          title="Open Agents & Session History Drawer"
         >
-          <Menu size={19} />
+          <Menu size={20} />
         </button>
 
-        {/* Big Grok Agent Avatar */}
-        <div className="relative shrink-0 flex items-center justify-center cursor-pointer group">
+        {/* Grok Specialist Agent Avatar + Switcher Trigger */}
+        <div
+          onClick={() => setIsAgentPickerOpen(true)}
+          className="relative shrink-0 flex items-center justify-center cursor-pointer group"
+          title="Click to switch specialist agent worker"
+        >
           <GrokAvatar
             id={activeAgent?.avatar || activeAgent?.id || 'purple-pebble'}
-            size={46}
+            size={44}
             className="drop-shadow-xs transition-transform group-hover:scale-105"
           />
           <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-[#16A34A] border-2 border-white ring-1 ring-emerald-500/20" title="Online" />
         </div>
 
-        {/* Header Title */}
-        <div className="flex flex-col gap-[2px] justify-start items-start min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[16px] leading-tight text-[#000000] font-sans font-bold tracking-tight truncate">
+        {/* Header Title & Role (Click to switch agent worker) */}
+        <div
+          onClick={() => setIsAgentPickerOpen(true)}
+          className="flex flex-col gap-[2px] justify-start items-start min-w-0 cursor-pointer group/agent-title"
+          title="Click to switch specialist agent worker"
+        >
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[15px] sm:text-[16px] leading-tight text-[#000000] font-sans font-bold tracking-tight truncate group-hover/agent-title:text-[#007AFF] transition-colors">
               {activeAgent?.name || 'Chief of Staff'}
             </span>
-            <span className="hidden sm:inline-block text-[10px] px-2 py-0.5 rounded-full font-bold font-sans uppercase tracking-wider bg-[#DCFCE7] text-[#16A34A]">
-              Companion Active
+            <ChevronDown size={14} className="text-[#8A8A85] group-hover/agent-title:text-[#007AFF] transition-colors shrink-0" />
+            <span className="text-[9px] sm:text-[10px] px-2 py-0.5 rounded-full font-bold font-sans uppercase tracking-wider bg-blue-50 text-[#007AFF] border border-blue-100 truncate">
+              {activeAgent?.role || activeAgent?.department || 'Specialist'}
             </span>
           </div>
-          <div className="text-[11px] leading-tight text-[#8A8A85] font-sans truncate max-w-sm sm:max-w-md">
-            {activeAgent?.description || 'Autonomous companion agent'} · {effectiveModel}
+          <div className="text-[11px] leading-tight text-[#8A8A85] font-sans truncate max-w-[170px] sm:max-w-md">
+            {activeAgent?.description || 'Autonomous specialist agent'} · <span className="font-mono text-[#4B5563]">{effectiveModel}</span>
           </div>
         </div>
 
@@ -745,43 +770,6 @@ export const ChatArea: React.FC = () => {
         </div>
       </div>
 
-      {/* Grok Companion Quick Switcher Bar (matching mobile & desktop Grok companion bots) */}
-      <div className="w-full bg-[#FAFAFA] border-b border-[#E5E7EB] px-4 sm:px-6 py-2 flex items-center gap-3 overflow-x-auto select-none shrink-0 custom-scrollbar">
-        <div className="flex items-center gap-1.5 shrink-0 text-[#8A8A85]">
-          <Sparkles size={13} className="text-[#7C3AED]" />
-          <span className="text-[11px] font-bold uppercase tracking-wider font-sans">
-            Companions:
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
-          {companionList.map((comp) => {
-            const isSelected = activeAgent?.id === comp.id || (activeAgent?.name && activeAgent.name.includes(comp.name));
-            return (
-              <button
-                key={comp.id}
-                type="button"
-                onClick={() => handleSwitchCompanion(comp)}
-                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl border transition-all cursor-pointer shrink-0 ${
-                  isSelected
-                    ? 'bg-[#FFFFFF] border-[#007AFF] shadow-xs ring-2 ring-[#007AFF]/20 scale-102'
-                    : 'bg-white/70 hover:bg-[#FFFFFF] border-[#E5E7EB] hover:border-gray-300 opacity-80 hover:opacity-100'
-                }`}
-                title={comp.description || comp.name}
-              >
-                <GrokAvatar id={comp.avatar || comp.id} size={28} className="shrink-0" />
-                <span className={`text-[12px] font-sans whitespace-nowrap ${isSelected ? 'font-bold text-[#000000]' : 'font-medium text-[#4B5563]'}`}>
-                  {comp.name}
-                </span>
-                {isSelected && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] shrink-0" />
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
       {/* Messages Scroll Area */}
       <div className="flex-1 overflow-y-auto px-4 sm:px-14 py-6 flex flex-col gap-5">
         {/* Parallel Running Background Tasks Banner */}
@@ -809,7 +797,7 @@ export const ChatArea: React.FC = () => {
         {/* Zero State View with Big Grok Bot Avatar */}
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center text-center my-auto py-10 animate-fade-in">
-            <div className="relative mb-5 group cursor-pointer">
+            <div className="relative mb-5 group cursor-pointer" onClick={() => setIsAgentPickerOpen(true)} title="Switch Specialist Agent Worker">
               <GrokAvatar
                 id={activeAgent?.avatar || activeAgent?.id || 'purple-pebble'}
                 size={96}
@@ -817,11 +805,18 @@ export const ChatArea: React.FC = () => {
               />
               <span className="absolute bottom-1 right-1 w-5 h-5 rounded-full bg-[#16A34A] border-3 border-white ring-2 ring-emerald-500/20" title="Online" />
             </div>
-            <h1 className="text-2xl font-bold font-sans text-[#000000] mb-1.5 tracking-tight">
-              {activeAgent?.name || 'Chief of Staff'}
+            <h1 className="text-2xl font-bold font-sans text-[#000000] mb-1.5 tracking-tight flex items-center justify-center gap-2">
+              <span>{activeAgent?.name || 'Chief of Staff'}</span>
+              <button
+                onClick={() => setIsAgentPickerOpen(true)}
+                className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-[#007AFF] border border-blue-100 hover:bg-blue-100 cursor-pointer"
+                title="Switch agent"
+              >
+                Change Agent
+              </button>
             </h1>
             <p className="text-xs text-[#8A8A85] font-sans mb-7 max-w-md leading-relaxed">
-              {activeAgent?.description || 'Autonomous digital companion paired with tools, skills, and Telegram routing.'}
+              {activeAgent?.description || 'Autonomous specialist agent equipped with dedicated skills, tools, and Telegram gateway routing.'}
             </p>
 
             {/* Quick Starters */}
@@ -1132,6 +1127,147 @@ export const ChatArea: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* ------------------------------------------------------------- */}
+      {/* MOBILE SLIDE-OVER DRAWER (Agent Workers & Session History)     */}
+      {/* ------------------------------------------------------------- */}
+      {isMobileDrawerOpen && (
+        <div className="fixed inset-0 z-50 md:hidden flex animate-fade-in">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
+            onClick={() => setIsMobileDrawerOpen(false)}
+          />
+
+          {/* Drawer Container */}
+          <div className="relative w-[85vw] max-w-[320px] h-full bg-[#FFFFFF] dark:bg-[#141414] shadow-2xl z-10 flex flex-col transform transition-transform duration-200">
+            <Sidebar isMobile onClose={() => setIsMobileDrawerOpen(false)} />
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* MOBILE / DESKTOP SPECIALIST AGENT WORKER PICKER SHEET         */}
+      {/* ------------------------------------------------------------- */}
+      {isAgentPickerOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
+            onClick={() => setIsAgentPickerOpen(false)}
+          />
+
+          {/* Sheet Modal */}
+          <div className="relative w-full sm:max-w-lg bg-[#FFFFFF] dark:bg-[#1C1C1E] rounded-t-[18px] sm:rounded-[14px] shadow-2xl border border-[#E5E7EB] dark:border-[#2C2C2E] max-h-[85vh] flex flex-col z-10 overflow-hidden">
+            {/* Sheet Header */}
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#E5E7EB] dark:border-[#2C2C2E]">
+              <div>
+                <h3 className="text-sm font-bold text-[#000000] dark:text-white font-sans">
+                  Switch Specialist Agent Worker
+                </h3>
+                <p className="text-[11px] text-[#8A8A85]">
+                  Each worker operates with dedicated specialty skills, model &amp; Telegram bot
+                </p>
+              </div>
+              <button
+                onClick={() => setIsAgentPickerOpen(false)}
+                className="p-1.5 text-[#8A8A85] hover:text-[#000000] dark:hover:text-white rounded-md hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Workers List */}
+            <div className="overflow-y-auto custom-scrollbar p-3 space-y-2 max-h-[60vh]">
+              {staffWorkersList.map((worker: any) => {
+                const isCurrent = activeAgent?.id === worker.id;
+                const botUsername = worker.telegramBot?.username;
+                const isBotConnected = worker.telegramBot?.status === 'connected';
+
+                return (
+                  <div
+                    key={worker.id}
+                    onClick={() => handleSwitchWorker(worker)}
+                    className={`flex items-center justify-between p-3 rounded-[10px] border cursor-pointer transition-all ${
+                      isCurrent
+                        ? 'border-[#007AFF] bg-blue-50/70 dark:bg-blue-950/30 shadow-xs ring-1 ring-[#007AFF]/30'
+                        : 'border-[#E5E7EB] dark:border-[#2C2C2E] bg-[#FFFFFF] dark:bg-[#18181B] hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="relative shrink-0">
+                        <GrokAvatar id={worker.avatar || worker.id} size={40} />
+                        <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white dark:border-black" />
+                      </div>
+
+                      <div className="flex flex-col min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-[#000000] dark:text-white font-sans truncate">
+                            {worker.role || worker.name}
+                          </span>
+                          <span className="text-[9px] px-1.5 py-0.2 rounded font-semibold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
+                            {worker.department}
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-[#8A8A85] truncate font-sans">
+                          {worker.fullName ? `${worker.fullName} · ` : ''}{worker.description}
+                        </span>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-blue-50 dark:bg-blue-900/30 text-[#007AFF] font-bold">
+                            ⚡ {worker.model || defaultModel || 'gpt-4o'}
+                          </span>
+                          {isBotConnected && (
+                            <span className="text-[9px] font-mono text-[#16A34A] flex items-center gap-0.5">
+                              <Send size={9} />
+                              {botUsername || 'Bot Linked'}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 pl-2">
+                      {isCurrent ? (
+                        <div className="w-6 h-6 rounded-full bg-[#007AFF] text-white flex items-center justify-center">
+                          <Check size={14} strokeWidth={2.5} />
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="px-2.5 py-1 text-[11px] font-bold rounded-[6px] border border-[#E5E7EB] dark:border-[#2C2C2E] text-[#333333] dark:text-white hover:bg-black/5 dark:hover:bg-white/5"
+                        >
+                          Chat
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Bottom Actions */}
+            <div className="p-3 bg-[#F9FAFB] dark:bg-[#141414] border-t border-[#E5E7EB] dark:border-[#2C2C2E] flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAgentPickerOpen(false);
+                  navigate('agency');
+                }}
+                className="text-xs font-bold text-[#007AFF] hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <span>Manage Staff in Agency HQ →</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsAgentPickerOpen(false)}
+                className="px-4 py-1.5 text-xs font-semibold rounded-[6px] border border-[#E5E7EB] dark:border-[#2C2C2E] bg-white dark:bg-[#18181B] text-[#333333] dark:text-white hover:bg-gray-100"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 };

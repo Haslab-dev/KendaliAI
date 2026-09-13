@@ -42,6 +42,8 @@ export interface ProviderConfig {
 export interface AgentConfig {
   id: string;
   name: string;
+  role?: string;
+  department?: string;
   description: string;
   providerId: string;
   model: string;

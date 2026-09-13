@@ -830,7 +830,7 @@ export const AgencyHQPane: React.FC = () => {
             </span>
           </div>
           <p className="text-[12px] text-[#8A8A85] font-['Funnel_Sans',sans-serif]">
-            Autonomous digital office · Grok-style companion bots with specialty personas &amp; Telegram routing
+            Autonomous digital office · Specialist agent workers with dedicated personas &amp; Telegram routing
           </p>
         </div>
 
@@ -1176,7 +1176,7 @@ export const AgencyHQPane: React.FC = () => {
                     {editingWorkerId ? 'Edit Staff Worker' : 'Hire New Staff Worker'}
                   </h2>
                   <p className="text-[11px] text-[#8A8A85]">
-                    Grok-style companion worker persona with Telegram connectivity
+                    Autonomous specialist agent worker persona with Telegram connectivity
                   </p>
                 </div>
               </div>

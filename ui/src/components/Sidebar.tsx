@@ -25,9 +25,15 @@ interface AgentGroupMeta {
   avatar: string;
   role?: string;
   department?: string;
+  model?: string;
 }
 
-export const Sidebar: React.FC = () => {
+export interface SidebarProps {
+  onClose?: () => void;
+  isMobile?: boolean;
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) => {
   const {
     sessions,
     activeSessionId,
@@ -35,7 +41,9 @@ export const Sidebar: React.FC = () => {
     createSession,
     deleteSession,
     agents,
+    activeAgent,
     setActiveAgent,
+    setActiveModel,
   } = useAppStore();
 
   const [sessionSearch, setSessionSearch] = useState('');
@@ -78,9 +86,10 @@ export const Sidebar: React.FC = () => {
               list.push({
                 id: w.id,
                 name: w.role || w.name,
-                avatar: w.avatar || '💻',
+                avatar: w.avatar || 'blue-drop',
                 role: w.role,
                 department: w.department,
+                model: w.model,
               });
             }
           });
@@ -91,11 +100,12 @@ export const Sidebar: React.FC = () => {
     // Fallback default staff if empty
     if (list.length === 0) {
       const defaults: AgentGroupMeta[] = [
-        { id: 'lead-frontend', name: 'Senior Dev', avatar: 'blue-drop', role: 'Lead Frontend Dev', department: 'Engineering' },
-        { id: 'lead-architecture', name: 'Architect Lead', avatar: 'cyan-bubble', role: 'Lead Architecture', department: 'Architecture' },
-        { id: 'lead-backend', name: 'Lead Backend Dev', avatar: 'green-cloud', role: 'Lead Backend Dev', department: 'Engineering' },
-        { id: 'legal-counsel', name: 'Legal Counsel', avatar: 'bronze-shield', role: 'Legal & Compliance', department: 'Legal' },
-        { id: 'chief-security', name: 'Security Lead', avatar: 'ruby-capsule', role: 'Chief Security Officer', department: 'Security' },
+        { id: 'lead-frontend', name: 'Senior Dev', avatar: 'blue-drop', role: 'Lead Frontend Dev', department: 'Engineering', model: 'gpt-4o' },
+        { id: 'lead-architecture', name: 'Architect Lead', avatar: 'cyan-bubble', role: 'Lead Architecture', department: 'Architecture', model: 'claude-3-7-sonnet' },
+        { id: 'lead-backend', name: 'Lead Backend Dev', avatar: 'green-cloud', role: 'Lead Backend Dev', department: 'Engineering', model: 'qwen2.5-coder:latest' },
+        { id: 'legal-counsel', name: 'Legal Counsel', avatar: 'bronze-shield', role: 'Legal & Compliance', department: 'Legal', model: 'gpt-4o' },
+        { id: 'chief-security', name: 'Security Lead', avatar: 'ruby-capsule', role: 'Chief Security Officer', department: 'Security', model: 'gpt-4o' },
+        { id: 'devops-lead', name: 'DevOps Lead', avatar: 'orange-leaf', role: 'DevOps & Infra', department: 'Operations', model: 'deepseek-chat' },
       ];
       defaults.forEach((d) => {
         seenIds.add(d.id);
@@ -111,6 +121,7 @@ export const Sidebar: React.FC = () => {
           id: a.id,
           name: a.name.replace(/^[^\w\s]+/, '').trim() || a.id,
           avatar: a.avatar || a.id,
+          model: a.model,
         });
       }
     });
@@ -173,23 +184,51 @@ export const Sidebar: React.FC = () => {
   const handleSelectSession = async (sessionId: string, agentId?: string) => {
     if (agentId) {
       const matched = agents.find((a) => a.id === agentId);
-      if (matched) setActiveAgent(matched);
+      if (matched) {
+        setActiveAgent(matched);
+        if (matched.model) setActiveModel(matched.model);
+      } else {
+        const staff = officeStaffList.find((s) => s.id === agentId);
+        if (staff) {
+          if (staff.model) setActiveModel(staff.model);
+          setActiveAgent({
+            id: staff.id,
+            name: staff.role || staff.name,
+            description: `Staff Worker: ${staff.role || staff.name}`,
+            providerId: '',
+            model: staff.model || '',
+            systemPrompt: `You are ${staff.name}. Execute instructions thoroughly and report back clearly.`,
+            skills: [],
+            tools: ['bash', 'file.write', 'file.read', 'git_worktree', 'web.fetch', 'telegram.send'],
+            mcp: [],
+            memoryScopes: ['user', 'workspace'],
+            policy: {},
+            avatar: staff.avatar,
+            isDefault: false,
+          });
+        }
+      }
     }
     await selectSession(sessionId);
+    onClose?.();
     navigate('chat');
   };
 
   const handleCreateChatForAgent = async (agent: AgentGroupMeta) => {
+    if (agent.model) {
+      setActiveModel(agent.model);
+    }
     const matched = agents.find((a) => a.id === agent.id);
     if (matched) {
       setActiveAgent(matched);
+      if (matched.model) setActiveModel(matched.model);
     } else {
       setActiveAgent({
         id: agent.id,
-        name: agent.name,
-        description: `Staff Worker: ${agent.name}`,
+        name: agent.role || agent.name,
+        description: `Staff Worker: ${agent.role || agent.name}`,
         providerId: '',
-        model: '',
+        model: agent.model || '',
         systemPrompt: `You are ${agent.name}. Execute instructions thoroughly and report back clearly.`,
         skills: [],
         tools: ['bash', 'file.write', 'file.read', 'git_worktree', 'web.fetch', 'telegram.send'],
@@ -202,36 +241,103 @@ export const Sidebar: React.FC = () => {
     }
     const newSessionId = await createSession(agent.id);
     await selectSession(newSessionId);
+    onClose?.();
     navigate('chat');
   };
 
   return (
     <aside
       data-pencil-name="Sidebar"
-      className="box-border w-[280px] shrink-0 h-full flex flex-col justify-between bg-[#FFFFFF] border-r border-[#E5E7EB] dark:bg-[#141414] dark:border-[#27272A] select-none"
+      className={`box-border ${isMobile ? 'w-full' : 'w-[280px]'} shrink-0 h-full flex flex-col justify-between bg-[#FFFFFF] border-r border-[#E5E7EB] dark:bg-[#141414] dark:border-[#27272A] select-none`}
     >
-      {/* Top Header matching Grok screenshot */}
+      {/* Top Header */}
       <div className="p-3.5 pb-2 flex flex-col gap-3 border-b border-[#E5E7EB] dark:border-[#27272A]">
-        {/* macOS Traffic Lights + New Chat Trigger */}
+        {/* macOS Traffic Lights + New Chat Trigger + Mobile Close */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-full bg-[#FF5F56] border border-[#E0443E]" />
             <span className="w-3 h-3 rounded-full bg-[#FFBD2E] border border-[#DEA123]" />
             <span className="w-3 h-3 rounded-full bg-[#27C93F] border border-[#1AAB29]" />
+            {isMobile && (
+              <span className="ml-2 text-xs font-bold text-[#000000] dark:text-white font-sans">
+                Agents &amp; Sessions
+              </span>
+            )}
           </div>
 
-          <button
-            onClick={async () => {
-              const sid = await createSession();
-              await selectSession(sid);
-              navigate('chat');
-            }}
-            className="p-1 rounded-[6px] text-[#8A8A85] hover:text-[#000000] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
-            title="Create New Chat"
-          >
-            <Plus size={16} strokeWidth={2.2} />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={async () => {
+                const sid = await createSession();
+                await selectSession(sid);
+                onClose?.();
+                navigate('chat');
+              }}
+              className="p-1 rounded-[6px] text-[#8A8A85] hover:text-[#000000] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer flex items-center gap-1"
+              title="Create New Chat"
+            >
+              <Plus size={16} strokeWidth={2.2} />
+              {isMobile && <span className="text-[11px] font-bold">New Chat</span>}
+            </button>
+
+            {isMobile && onClose && (
+              <button
+                onClick={onClose}
+                className="p-1 rounded-[6px] text-[#8A8A85] hover:text-[#000000] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer ml-1"
+                title="Close Drawer"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Mobile Specialist Staff Agent Quick Switcher Carousel */}
+        {isMobile && (
+          <div className="flex flex-col gap-1.5 pb-2 border-b border-[#E5E7EB] dark:border-[#27272A]">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85]">
+                Specialist Staff Agents
+              </span>
+              <button
+                onClick={() => {
+                  onClose?.();
+                  navigate('agency');
+                }}
+                className="text-[10px] font-semibold text-[#007AFF] hover:underline"
+              >
+                Agency HQ →
+              </button>
+            </div>
+            <div className="flex items-center gap-2 overflow-x-auto py-1 no-scrollbar px-1">
+              {officeStaffList.map((staff) => {
+                const isCurrentActive = activeAgent?.id === staff.id;
+                return (
+                  <button
+                    key={staff.id}
+                    type="button"
+                    onClick={() => handleCreateChatForAgent(staff)}
+                    className={`flex flex-col items-center p-2 rounded-[8px] border shrink-0 transition-all cursor-pointer ${
+                      isCurrentActive
+                        ? 'border-[#007AFF] bg-blue-50/70 dark:bg-blue-950/30 shadow-xs'
+                        : 'border-[#E5E7EB] dark:border-[#2C2C2E] bg-[#FAFAFA] dark:bg-[#1C1C1E] hover:border-gray-300'
+                    }`}
+                    style={{ minWidth: '76px' }}
+                    title={`${staff.name} (${staff.role || ''})`}
+                  >
+                    <GrokAvatar id={staff.avatar || staff.id} size={30} className="mb-1" />
+                    <span className="text-[10px] font-bold text-[#000000] dark:text-white truncate max-w-[70px] leading-tight">
+                      {staff.name}
+                    </span>
+                    <span className="text-[9px] text-[#8A8A85] truncate max-w-[70px] leading-tight mt-0.5">
+                      {staff.role?.split(' ')[0] || staff.department || 'Staff'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Search Filter Input */}
         <div className="w-full h-[32px] flex items-center gap-2 px-2.5 bg-[#F7F7F5] dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[6px]">
@@ -240,7 +346,7 @@ export const Sidebar: React.FC = () => {
             type="text"
             value={sessionSearch}
             onChange={(e) => setSessionSearch(e.target.value)}
-            placeholder="Search..."
+            placeholder="Search sessions..."
             className="text-[12px] bg-transparent text-[#000000] dark:text-white placeholder:text-[#8A8A85] outline-none w-full font-sans"
           />
           {sessionSearch && (
@@ -341,14 +447,14 @@ export const Sidebar: React.FC = () => {
                             </span>
                           </div>
 
-                          {/* Quick delete on hover */}
+                          {/* Quick delete button (touch-friendly on mobile, hover on desktop) */}
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               deleteSession(s.id);
                             }}
-                            className="opacity-0 group-hover/session:opacity-100 p-0.5 text-[#8A8A85] hover:text-red-500 transition-opacity shrink-0"
+                            className="opacity-70 md:opacity-0 md:group-hover/session:opacity-100 p-1 text-[#8A8A85] hover:text-red-500 transition-opacity shrink-0 cursor-pointer"
                             title="Delete session"
                           >
                             <Trash2 size={11} />
@@ -364,12 +470,15 @@ export const Sidebar: React.FC = () => {
         })}
       </div>
 
-      {/* Bottom User & Utility Links (matching Grok screenshot) */}
+      {/* Bottom User & Utility Links */}
       <div className="p-3 border-t border-[#E5E7EB] dark:border-[#27272A] flex flex-col gap-2">
         {/* Plugins Link */}
         <button
-          onClick={() => navigate('plugins')}
-          className="flex items-center gap-2 px-2 py-1.5 text-xs text-[#4B5563] dark:text-[#A1A1AA] hover:text-black dark:hover:text-white rounded-[6px] hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+          onClick={() => {
+            onClose?.();
+            navigate('plugins');
+          }}
+          className="flex items-center gap-2 px-2 py-1.5 text-xs text-[#4B5563] dark:text-[#A1A1AA] hover:text-black dark:hover:text-white rounded-[6px] hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
         >
           <Puzzle size={14} className="text-[#8A8A85]" />
           <span>Plugins &amp; Skills</span>
@@ -377,8 +486,11 @@ export const Sidebar: React.FC = () => {
 
         {/* Agency HQ shortcut */}
         <button
-          onClick={() => navigate('agency')}
-          className="flex items-center gap-2 px-2 py-1.5 text-xs text-[#4B5563] dark:text-[#A1A1AA] hover:text-black dark:hover:text-white rounded-[6px] hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+          onClick={() => {
+            onClose?.();
+            navigate('agency');
+          }}
+          className="flex items-center gap-2 px-2 py-1.5 text-xs text-[#4B5563] dark:text-[#A1A1AA] hover:text-black dark:hover:text-white rounded-[6px] hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
         >
           <Bot size={14} className="text-[#007AFF]" />
           <span>Agency HQ (Staff)</span>
@@ -386,7 +498,10 @@ export const Sidebar: React.FC = () => {
 
         {/* User Card */}
         <div
-          onClick={() => navigate('settings')}
+          onClick={() => {
+            onClose?.();
+            navigate('settings');
+          }}
           className="flex items-center justify-between p-2 rounded-[6px] hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer transition-colors"
         >
           <div className="flex items-center gap-2 min-w-0">
