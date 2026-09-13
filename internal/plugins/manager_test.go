@@ -54,7 +54,7 @@ func TestDiscover_AutoRepairCorruptHandlerType(t *testing.T) {
 	pluginDir := filepath.Join(tmpDir, "corrupt-plugin")
 	_ = os.MkdirAll(pluginDir, 0755)
 
-	// Corrupt manifest on disk with "handler_type": "<nil>"
+	// Corrupt manifest on disk with "handler_type": "\u003cnil\u003e" and "script": "\u003cnil\u003e"
 	rawManifest := `{
   "id": "corrupt-plugin",
   "name": "Corrupt Plugin",
@@ -62,8 +62,9 @@ func TestDiscover_AutoRepairCorruptHandlerType(t *testing.T) {
   "tools": [
     {
       "name": "echo_tool",
-      "handler_type": "<nil>",
-      "command": "echo 'repaired'"
+      "handler_type": "\u003cnil\u003e",
+      "command": "echo 'repaired'",
+      "script": "\u003cnil\u003e"
     }
   ]
 }`

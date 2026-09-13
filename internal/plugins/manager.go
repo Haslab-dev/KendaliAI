@@ -90,15 +90,38 @@ func (m *Manager) scanDirLocked(dir string, source PluginSource) {
 			if p.Version == "" {
 				p.Version = "1.0.0"
 			}
-			// Auto-repair any corrupt or missing HandlerType from disk
+			// Auto-repair any corrupt or missing HandlerType / Script / Command from disk
+			repaired := false
 			for i := range p.Tools {
 				ht := strings.ToLower(strings.TrimSpace(string(p.Tools[i].HandlerType)))
-				if ht == "<nil>" || ht == "null" || ht == "" {
-					if p.Tools[i].Script != "" {
+				cmd := strings.TrimSpace(p.Tools[i].Command)
+				script := strings.TrimSpace(p.Tools[i].Script)
+
+				if cmd == "<nil>" || cmd == "null" {
+					p.Tools[i].Command = ""
+					cmd = ""
+					repaired = true
+				}
+				if script == "<nil>" || script == "null" {
+					p.Tools[i].Script = ""
+					script = ""
+					repaired = true
+				}
+
+				if ht == "<nil>" || ht == "null" || ht == "" || ht == "bash" || ht == "shell" || ht == "sh" || ht == "cmd" {
+					if cmd != "" {
+						p.Tools[i].HandlerType = HandlerCommand
+					} else if script != "" {
 						p.Tools[i].HandlerType = HandlerScript
 					} else {
 						p.Tools[i].HandlerType = HandlerCommand
 					}
+					repaired = true
+				}
+			}
+			if repaired && manifestPath != "" {
+				if manifestBytes, err := json.MarshalIndent(&p, "", "  "); err == nil {
+					_ = os.WriteFile(manifestPath, manifestBytes, 0644)
 				}
 			}
 			m.plugins[p.ID] = &p
@@ -301,10 +324,25 @@ func (m *Manager) ExecuteTool(ctx context.Context, pluginID, toolName string, ar
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
+	cleanCmd := strings.TrimSpace(targetTool.Command)
+	if cleanCmd == "<nil>" || cleanCmd == "null" {
+		cleanCmd = ""
+	}
+	cleanScript := strings.TrimSpace(targetTool.Script)
+	if cleanScript == "<nil>" || cleanScript == "null" {
+		cleanScript = ""
+	}
 	hType := strings.ToLower(strings.TrimSpace(string(targetTool.HandlerType)))
+	if hType == "<nil>" || hType == "null" {
+		hType = ""
+	}
+
 	switch {
-	case hType == string(HandlerCommand) || hType == "bash" || hType == "shell" || hType == "sh" || hType == "cmd" || hType == "<nil>" || hType == "null" || hType == "" || targetTool.Command != "":
-		cmdStr := targetTool.Command
+	case cleanCmd != "" || hType == string(HandlerCommand) || hType == "bash" || hType == "shell" || hType == "sh" || hType == "cmd":
+		cmdStr := cleanCmd
+		if cmdStr == "" {
+			cmdStr = cleanScript
+		}
 		for k, v := range args {
 			cmdStr = strings.ReplaceAll(cmdStr, fmt.Sprintf("{{%s}}", k), fmt.Sprint(v))
 			cmdStr = strings.ReplaceAll(cmdStr, fmt.Sprintf("${%s}", k), fmt.Sprint(v))
@@ -327,8 +365,8 @@ func (m *Manager) ExecuteTool(ctx context.Context, pluginID, toolName string, ar
 			Error:    fmt.Sprint(err),
 		}, nil
 
-	case hType == string(HandlerScript) || hType == "script" || hType == "file" || targetTool.Script != "":
-		scriptPath := filepath.Join(p.Dir, targetTool.Script)
+	case cleanScript != "" || hType == string(HandlerScript) || hType == "script" || hType == "file":
+		scriptPath := filepath.Join(p.Dir, cleanScript)
 		argsJSON, _ := json.Marshal(args)
 		cmd := exec.CommandContext(runCtx, scriptPath, string(argsJSON))
 		cmd.Dir = p.Dir
