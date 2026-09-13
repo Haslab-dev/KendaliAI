@@ -4,7 +4,7 @@ import {
   ChevronDown, ChevronUp, Search, Brain, Zap, Settings, Command, AlertCircle,
   CornerDownLeft, Terminal, Sparkles, Smartphone, Database, RefreshCw, FileText, X,
   ShieldCheck, GitFork, Code2, Clock, Bell, ExternalLink, Activity, BookOpen,
-  Folder, Upload, Menu, Bot, Feather
+  Folder, Upload, Menu, Bot, Feather, Cpu
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { navigate } from '../router';
@@ -39,6 +39,11 @@ export const ChatArea: React.FC = () => {
     activeSessionId,
     activeModel,
     setActiveModel,
+    availableModels,
+    defaultModel,
+    loadModels,
+    setDefaultModel,
+    isLoadingModels,
     providers,
     mcps,
     sessions,
@@ -54,9 +59,15 @@ export const ChatArea: React.FC = () => {
 
   const [isAgentDropdownOpen, setIsAgentDropdownOpen] = useState(false);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
+  const [modelSearch, setModelSearch] = useState('');
+  const [customModelInput, setCustomModelInput] = useState('');
   const [isWorktreeDropdownOpen, setIsWorktreeDropdownOpen] = useState(false);
   const [activeWorktree, setActiveWorktree] = useState('Home');
   const [worktreesList, setWorktreesList] = useState<{ branch: string; path?: string }[]>([]);
+
+  useEffect(() => {
+    loadModels(false);
+  }, [loadModels]);
 
   useEffect(() => {
     fetch('/api/worktrees')
@@ -436,7 +447,29 @@ export const ChatArea: React.FC = () => {
     }
   };
 
-  const effectiveModel = activeModel || activeAgent?.model || 'Claude Sonnet 4.6';
+  const effectiveModel = activeModel || activeAgent?.model || defaultModel || 'gpt-4o';
+
+  const filteredModels = useMemo(() => {
+    let list = availableModels;
+    if (list.length === 0) {
+      list = [
+        { id: 'gpt-4o', name: 'GPT-4o', providerId: 'openai', providerName: 'OpenAI Compatible', isDefault: true },
+        { id: 'gpt-4o-mini', name: 'GPT-4o Mini', providerId: 'openai', providerName: 'OpenAI Compatible' },
+        { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet', providerId: 'anthropic', providerName: 'Anthropic' },
+        { id: 'deepseek-chat', name: 'DeepSeek V3', providerId: 'deepseek', providerName: 'DeepSeek' },
+        { id: 'qwen2.5-coder:latest', name: 'Qwen 2.5 Coder (Ollama)', providerId: 'ollama', providerName: 'Ollama Local' },
+      ];
+    }
+    if (!modelSearch.trim()) return list;
+    const q = modelSearch.toLowerCase().trim();
+    return list.filter(
+      (m) =>
+        m.id.toLowerCase().includes(q) ||
+        m.name.toLowerCase().includes(q) ||
+        (m.providerName || '').toLowerCase().includes(q)
+    );
+  }, [availableModels, modelSearch]);
+
   const currentSession = sessions.find((s) => s.id === activeSessionId);
   const isTelegramSession = currentSession?.channelId === 'telegram';
   const botLabel = isTelegramSession ? '@kendaliai_bot' : 'Telegram Bot';
@@ -546,49 +579,155 @@ export const ChatArea: React.FC = () => {
           <div className="relative" ref={modelDropdownRef}>
             <button
               onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FFFFFF] border border-[#E5E7EB] hover:border-[#333333] rounded-[4px] text-[11px] font-funnel text-[#333333] transition-colors shadow-2xs"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FFFFFF] border border-[#E5E7EB] hover:border-[#333333] rounded-[6px] text-[11px] font-sans text-[#333333] transition-all shadow-2xs cursor-pointer"
               title="Select LLM model"
             >
-              <ChevronDown size={13} className={`text-[#333333] transition-transform ${isModelDropdownOpen ? 'rotate-180' : ''}`} />
-              <span className="font-medium max-w-[120px] truncate">Model: {effectiveModel}</span>
+              <Cpu size={13} className="text-[#007AFF]" />
+              <span className="font-semibold max-w-[130px] truncate">{effectiveModel}</span>
+              {defaultModel === effectiveModel && (
+                <span className="text-[9px] px-1 py-0.2 rounded bg-amber-100 text-amber-800 font-bold uppercase">
+                  Default
+                </span>
+              )}
+              <ChevronDown size={12} className={`text-[#8A8A85] transition-transform ${isModelDropdownOpen ? 'rotate-180' : ''}`} />
             </button>
 
             {isModelDropdownOpen && (
-              <div className="absolute right-0 mt-1 w-64 bg-[#FFFFFF] border border-[#E5E7EB] rounded-[8px] shadow-xl p-1.5 z-50 animate-in fade-in duration-100">
-                <div className="px-2.5 py-1 text-[10px] font-bold text-[#8A8A85] uppercase tracking-wider font-funnel border-b border-[#E5E7EB] mb-1">
-                  Active Model Routing
+              <div className="absolute right-0 mt-1 w-80 bg-[#FFFFFF] border border-[#E5E7EB] rounded-[10px] shadow-2xl p-2.5 z-50 animate-in fade-in duration-100 flex flex-col gap-2">
+                {/* Header with Refresh */}
+                <div className="flex items-center justify-between px-1 pb-1.5 border-b border-[#E5E7EB]">
+                  <div className="flex items-center gap-1.5">
+                    <Cpu size={14} className="text-[#007AFF]" />
+                    <span className="text-xs font-bold text-[#000000] font-sans">
+                      Select LLM Model
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      loadModels(true);
+                    }}
+                    disabled={isLoadingModels}
+                    className="flex items-center gap-1 text-[10px] font-bold text-[#007AFF] hover:underline cursor-pointer p-1 rounded hover:bg-blue-50 transition-colors"
+                    title="Probe connected providers for latest models"
+                  >
+                    <RefreshCw size={11} className={isLoadingModels ? 'animate-spin' : ''} />
+                    <span>{isLoadingModels ? 'Fetching...' : 'Fetch Models'}</span>
+                  </button>
                 </div>
-                <div className="max-h-56 overflow-y-auto custom-scrollbar">
-                  {[
-                    'Claude Sonnet 4.6',
-                    'GPT-4o',
-                    'DeepSeek V3',
-                    'DeepSeek R1',
-                    'Ollama (Local Qwen 2.5)',
-                  ].map((m) => (
-                    <button
-                      key={m}
-                      onClick={() => {
-                        setActiveModel(m);
-                        setIsModelDropdownOpen(false);
-                      }}
-                      className={`w-full flex items-center justify-between px-2.5 py-1.5 text-left text-xs rounded hover:bg-[#F7F7F5] transition-colors ${
-                        effectiveModel === m ? 'font-bold text-[#007AFF] bg-[#EBF5FF]' : 'text-[#333333]'
-                      }`}
-                    >
-                      <span className="font-mono text-[11px] truncate">{m}</span>
-                      {effectiveModel === m && <Check size={12} className="text-[#007AFF]" />}
-                    </button>
-                  ))}
+
+                {/* Model Search */}
+                <div className="relative">
+                  <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#8A8A85]" />
+                  <input
+                    type="text"
+                    placeholder="Search model (e.g. gpt-4o, qwen, claude)..."
+                    value={modelSearch}
+                    onChange={(e) => setModelSearch(e.target.value)}
+                    className="w-full pl-7 pr-2.5 py-1 bg-[#F7F7F5] border border-[#E5E7EB] rounded-[6px] text-xs text-[#000000] outline-none focus:border-[#0F0F0F]"
+                  />
                 </div>
+
+                {/* Models List Grouped by Provider */}
+                <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-1 pr-1">
+                  {filteredModels.length === 0 ? (
+                    <div className="p-4 text-center text-xs text-[#8A8A85]">
+                      No matching models found. Try fetching or enter custom ID below.
+                    </div>
+                  ) : (
+                    filteredModels.map((m) => {
+                      const isSelected = effectiveModel === m.id || effectiveModel === m.name;
+                      const isDefault = defaultModel === m.id;
+
+                      return (
+                        <div
+                          key={`${m.providerId}-${m.id}`}
+                          onClick={() => {
+                            setActiveModel(m.id);
+                            setIsModelDropdownOpen(false);
+                          }}
+                          className={`group/item w-full flex items-center justify-between p-2 rounded-[6px] text-left transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-blue-50/70 border border-[#007AFF]/30'
+                              : 'hover:bg-[#F7F7F5] border border-transparent'
+                          }`}
+                        >
+                          <div className="flex flex-col min-w-0 flex-1 pr-2">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`font-mono text-xs truncate ${isSelected ? 'font-bold text-[#007AFF]' : 'text-[#000000]'}`}>
+                                {m.name || m.id}
+                              </span>
+                              {isDefault && (
+                                <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 font-bold uppercase shrink-0">
+                                  Default
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-[#8A8A85] truncate">
+                              {m.providerName || m.providerId} · {m.id}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1 shrink-0">
+                            {!isDefault && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDefaultModel(m.id, m.providerId);
+                                }}
+                                className="opacity-0 group-hover/item:opacity-100 text-[10px] px-1.5 py-0.5 rounded border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold transition-all"
+                                title="Set as default model for all purposes"
+                              >
+                                Set Default
+                              </button>
+                            )}
+                            {isSelected && (
+                              <Check size={14} className="text-[#007AFF]" />
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* Custom Model Quick Enter */}
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!customModelInput.trim()) return;
+                    setActiveModel(customModelInput.trim());
+                    setCustomModelInput('');
+                    setIsModelDropdownOpen(false);
+                  }}
+                  className="pt-2 border-t border-[#E5E7EB] flex items-center gap-1.5"
+                >
+                  <input
+                    type="text"
+                    placeholder="Enter custom model ID..."
+                    value={customModelInput}
+                    onChange={(e) => setCustomModelInput(e.target.value)}
+                    className="flex-1 px-2.5 py-1 bg-[#F7F7F5] border border-[#E5E7EB] rounded-[6px] text-xs font-mono text-[#000000] outline-none focus:border-[#0F0F0F]"
+                  />
+                  <button
+                    type="submit"
+                    className="px-2.5 py-1 bg-[#0F0F0F] text-white text-xs font-bold rounded-[6px] hover:bg-black/90 cursor-pointer"
+                  >
+                    Apply
+                  </button>
+                </form>
+
+                {/* Configure Providers Link */}
                 <div
                   onClick={() => {
                     setIsModelDropdownOpen(false);
                     navigate('providers');
                   }}
-                  className="border-t border-[#E5E7EB] mt-1 pt-1.5 px-2.5 py-1 text-[11px] text-[#007AFF] hover:underline cursor-pointer flex items-center justify-between font-funnel"
+                  className="border-t border-[#E5E7EB] pt-1.5 px-1 text-[11px] text-[#007AFF] hover:underline cursor-pointer flex items-center justify-between font-sans"
                 >
-                  <span>Configure Providers...</span>
+                  <span>Manage Providers &amp; API Keys...</span>
                   <ExternalLink size={11} />
                 </div>
               </div>

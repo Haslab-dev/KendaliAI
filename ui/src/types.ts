@@ -4,6 +4,15 @@ export interface ModelItem {
   enabled: boolean;
 }
 
+export interface GlobalModelOption {
+  id: string;
+  name: string;
+  providerId: string;
+  providerName: string;
+  providerType?: string;
+  isDefault?: boolean;
+}
+
 export const isReasoningModel = (modelId?: string): boolean => {
   if (!modelId) return false;
   const id = modelId.toLowerCase();

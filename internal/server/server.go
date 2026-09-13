@@ -133,6 +133,8 @@ func (s *Server) routes() {
 	s.router.HandleFunc("/api/providers/test", s.handleProviderTest())
 	s.router.HandleFunc("/api/providers/models", s.handleProviderModels())
 	s.router.HandleFunc("/api/providers/fetch-models", s.handleProviderModels())
+	s.router.HandleFunc("/api/models", s.handleModels())
+	s.router.HandleFunc("/api/models/default", s.handleDefaultModel())
 	s.router.HandleFunc("/api/agents", s.handleAgents())
 	s.router.HandleFunc("/api/sessions", s.handleSessions())
 	s.router.HandleFunc("/api/sessions/", s.handleSessionDetail())
@@ -409,6 +411,178 @@ func (s *Server) handleProviderModels() http.HandlerFunc {
 		}
 
 		json.NewEncoder(w).Encode(models)
+	}
+}
+
+// --- Models API ---
+
+type GlobalModelItem struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	ProviderID   string `json:"providerId"`
+	ProviderName string `json:"providerName"`
+	ProviderType string `json:"providerType"`
+	IsDefault    bool   `json:"isDefault"`
+}
+
+type ModelsResponse struct {
+	DefaultModel    string            `json:"defaultModel"`
+	DefaultProvider string            `json:"defaultProviderId"`
+	Models          []GlobalModelItem `json:"models"`
+}
+
+func (s *Server) handleModels() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != "GET" && r.Method != "POST" {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		refresh := r.URL.Query().Get("refresh") == "true" || r.URL.Query().Get("fetch") == "true"
+		providers, err := s.store.ListProviders()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// If refresh requested, query remote endpoints for enabled providers and persist
+		if refresh {
+			for i := range providers {
+				p := &providers[i]
+				if !p.Enabled {
+					continue
+				}
+				fetched, fetchErr := gateway.FetchRemoteModels(r.Context(), p.Type, p.Endpoint, p.APIKey)
+				if fetchErr == nil && len(fetched) > 0 {
+					p.Models = fetched
+					_ = s.store.SaveProvider(*p)
+				}
+			}
+		}
+
+		defaultModel, defaultProv := s.runtime.ResolveDefaultModel()
+		defaultProvID := ""
+		if defaultProv != nil {
+			defaultProvID = defaultProv.ID
+		}
+
+		var items []GlobalModelItem
+		seen := make(map[string]bool)
+
+		// 1. Gather all models from enabled providers
+		for _, p := range providers {
+			if !p.Enabled {
+				continue
+			}
+			for _, m := range p.Models {
+				if !m.Enabled {
+					continue
+				}
+				key := p.ID + ":" + m.ID
+				if seen[key] {
+					continue
+				}
+				seen[key] = true
+				isDef := (m.ID == defaultModel && (p.IsDefault || defaultProvID == p.ID))
+				name := m.Name
+				if name == "" {
+					name = m.ID
+				}
+				items = append(items, GlobalModelItem{
+					ID:           m.ID,
+					Name:         name,
+					ProviderID:   p.ID,
+					ProviderName: p.Name,
+					ProviderType: p.Type,
+					IsDefault:    isDef,
+				})
+			}
+		}
+
+		// Fallback curated models if providers list is empty
+		if len(items) == 0 {
+			items = []GlobalModelItem{
+				{ID: "gpt-4o", Name: "GPT-4o", ProviderID: "openai", ProviderName: "OpenAI Compatible", ProviderType: "openai", IsDefault: true},
+				{ID: "gpt-4o-mini", Name: "GPT-4o Mini", ProviderID: "openai", ProviderName: "OpenAI Compatible", ProviderType: "openai", IsDefault: false},
+				{ID: "claude-3-7-sonnet", Name: "Claude 3.7 Sonnet", ProviderID: "anthropic", ProviderName: "Anthropic", ProviderType: "anthropic", IsDefault: false},
+				{ID: "deepseek-chat", Name: "DeepSeek V3", ProviderID: "deepseek", ProviderName: "DeepSeek", ProviderType: "deepseek", IsDefault: false},
+				{ID: "qwen2.5-coder:latest", Name: "Qwen 2.5 Coder (Ollama)", ProviderID: "ollama", ProviderName: "Ollama Local", ProviderType: "ollama", IsDefault: false},
+			}
+			if defaultModel == "" {
+				defaultModel = "gpt-4o"
+			}
+		}
+
+		json.NewEncoder(w).Encode(ModelsResponse{
+			DefaultModel:    defaultModel,
+			DefaultProvider: defaultProvID,
+			Models:          items,
+		})
+	}
+}
+
+func (s *Server) handleDefaultModel() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != "POST" && r.Method != "PUT" {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var payload struct {
+			Model      string `json:"model"`
+			ProviderID string `json:"providerId"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil || payload.Model == "" {
+			http.Error(w, "invalid request: model is required", http.StatusBadRequest)
+			return
+		}
+
+		providers, _ := s.store.ListProviders()
+		updated := false
+
+		// If providerId supplied, mark that provider as default
+		for _, p := range providers {
+			if payload.ProviderID != "" && p.ID == payload.ProviderID {
+				p.IsDefault = true
+				// Ensure model is in provider's model list and enabled
+				hasModel := false
+				for i, m := range p.Models {
+					if m.ID == payload.Model {
+						p.Models[i].Enabled = true
+						hasModel = true
+						break
+					}
+				}
+				if !hasModel {
+					p.Models = append([]gateway.ModelItem{{ID: payload.Model, Name: payload.Model, Enabled: true}}, p.Models...)
+				}
+				_ = s.store.SaveProvider(p)
+				updated = true
+			} else if payload.ProviderID != "" {
+				if p.IsDefault {
+					p.IsDefault = false
+					_ = s.store.SaveProvider(p)
+				}
+			} else {
+				// Search provider that has this model
+				for _, m := range p.Models {
+					if m.ID == payload.Model {
+						p.IsDefault = true
+						_ = s.store.SaveProvider(p)
+						updated = true
+						break
+					}
+				}
+			}
+		}
+
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success":      true,
+			"defaultModel": payload.Model,
+			"updated":      updated,
+		})
 	}
 }
 

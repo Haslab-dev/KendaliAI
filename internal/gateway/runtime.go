@@ -42,6 +42,44 @@ func (r *Runtime) GetTaskManager() *TaskManager {
 	return r.taskMgr
 }
 
+// ResolveDefaultModel returns the system-wide default model ID and its provider
+func (r *Runtime) ResolveDefaultModel() (string, *ProviderConfig) {
+	providersList, err := r.store.ListProviders()
+	if err != nil || len(providersList) == 0 {
+		return "gpt-4o", nil
+	}
+
+	// 1. Look for default provider that is enabled
+	for _, p := range providersList {
+		if p.IsDefault && p.Enabled {
+			for _, m := range p.Models {
+				if m.Enabled {
+					return m.ID, &p
+				}
+			}
+			if len(p.Models) > 0 {
+				return p.Models[0].ID, &p
+			}
+		}
+	}
+
+	// 2. Look for any enabled provider
+	for _, p := range providersList {
+		if p.Enabled {
+			for _, m := range p.Models {
+				if m.Enabled {
+					return m.ID, &p
+				}
+			}
+			if len(p.Models) > 0 {
+				return p.Models[0].ID, &p
+			}
+		}
+	}
+
+	return "gpt-4o", nil
+}
+
 func (r *Runtime) ExecuteTurn(ctx context.Context, sessionID, agentID, userPrompt, channel string) (*SessionMessage, error) {
 	return r.ExecuteTurnWithModel(ctx, sessionID, agentID, userPrompt, channel, "")
 }
@@ -269,58 +307,52 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		agentConfig = &cloned
 	}
 
-	// 4. Resolve Provider
+	// 4. Resolve Provider and Model
+	defaultModel, defaultProv := r.ResolveDefaultModel()
+
 	var provCfg *ProviderConfig
 	if agentConfig.ProviderID != "" {
 		provCfg, _ = r.store.GetProvider(agentConfig.ProviderID)
 	}
-	if provCfg == nil {
-		providersList, _ := r.store.ListProviders()
-		for _, p := range providersList {
-			if p.IsDefault && p.Enabled {
-				provCfg = &p
-				break
-			}
-		}
-		if provCfg == nil && len(providersList) > 0 {
-			provCfg = &providersList[0]
+
+	modelToUse := strings.TrimSpace(modelOverride)
+	if modelToUse == "" || strings.EqualFold(modelToUse, "default") {
+		modelToUse = strings.TrimSpace(agentConfig.Model)
+	}
+	if modelToUse == "" || strings.EqualFold(modelToUse, "default") {
+		modelToUse = defaultModel
+		if provCfg == nil {
+			provCfg = defaultProv
 		}
 	}
 
-	modelToUse := agentConfig.Model
-	if modelOverride != "" {
-		modelToUse = modelOverride
-		// If another enabled provider supports this model, switch provCfg
-		providersList, _ := r.store.ListProviders()
-		for _, p := range providersList {
-			if !p.Enabled {
-				continue
-			}
-			for _, m := range p.Models {
-				if m.ID == modelOverride {
-					provCfg = &p
-					break
-				}
-			}
+	// Match provider supporting modelToUse
+	providersList, _ := r.store.ListProviders()
+	var matchedProv *ProviderConfig
+
+	// 1. Direct or fuzzy match across all enabled providers
+	for _, p := range providersList {
+		if !p.Enabled {
+			continue
 		}
-	} else if provCfg != nil && len(provCfg.Models) > 0 {
-		supported := false
-		for _, m := range provCfg.Models {
-			if m.ID == modelToUse && m.Enabled {
-				supported = true
+		for _, m := range p.Models {
+			if m.ID == modelToUse || strings.EqualFold(m.ID, modelToUse) || strings.EqualFold(m.Name, modelToUse) || strings.Contains(strings.ToLower(m.ID), strings.ToLower(modelToUse)) {
+				matchedProv = &p
+				modelToUse = m.ID // use canonical model ID
 				break
 			}
 		}
-		if !supported {
-			for _, m := range provCfg.Models {
-				if m.Enabled {
-					modelToUse = m.ID
-					break
-				}
-			}
-			if modelToUse == "" && len(provCfg.Models) > 0 {
-				modelToUse = provCfg.Models[0].ID
-			}
+		if matchedProv != nil {
+			break
+		}
+	}
+
+	if matchedProv != nil {
+		provCfg = matchedProv
+	} else if provCfg == nil {
+		provCfg = defaultProv
+		if modelToUse == "" {
+			modelToUse = defaultModel
 		}
 	}
 

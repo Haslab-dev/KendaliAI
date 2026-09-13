@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { AgentConfig, ProviderConfig, Session, SessionMessage, ToolCallRecord, MCPServerConfig, GatewayLogEvent, BackgroundTask } from '../types';
+import { AgentConfig, ProviderConfig, Session, SessionMessage, ToolCallRecord, MCPServerConfig, GatewayLogEvent, BackgroundTask, GlobalModelOption } from '../types';
 
 interface AppState {
   theme: 'dark' | 'light';
@@ -22,6 +22,12 @@ interface AppState {
   providers: ProviderConfig[];
   loadProviders: () => Promise<void>;
 
+  availableModels: GlobalModelOption[];
+  defaultModel: string | null;
+  isLoadingModels: boolean;
+  loadModels: (refresh?: boolean) => Promise<void>;
+  setDefaultModel: (modelId: string, providerId?: string) => Promise<void>;
+
   mcps: MCPServerConfig[];
   loadMcps: () => Promise<void>;
 
@@ -30,7 +36,7 @@ interface AppState {
   cancelTask: (id: string) => Promise<void>;
 
   messages: SessionMessage[];
-  setMessages: (msgs: SessionMessage[]) => void;
+  loadSessionMessages: (sessionId: string) => Promise<void>;
   appendMessage: (msg: SessionMessage) => void;
   appendToolCall: (tc: ToolCallRecord) => void;
   updateToolCall: (tc: ToolCallRecord) => void;
@@ -101,6 +107,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (e) {
       console.error('Failed to load session messages:', e);
     }
+  },
+
+  loadSessionMessages: async (sessionId: string) => {
+    await get().selectSession(sessionId);
   },
 
   sessions: [],
@@ -195,6 +205,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const res = await fetch('/api/providers');
       const providers = await res.json();
       set({ providers: providers || [] });
+      await get().loadModels(false);
     } catch (e) {
       console.error('Failed to load providers:', e);
     }
@@ -417,8 +428,68 @@ export const useAppStore = create<AppState>((set, get) => ({
   thinkingStatus: 'Thinking...',
   setThinkingStatus: (thinkingStatus) => set({ thinkingStatus }),
 
-  activeModel: null,
-  setActiveModel: (activeModel) => set({ activeModel }),
+  availableModels: [],
+  defaultModel: null,
+  isLoadingModels: false,
+  activeModel: localStorage.getItem('kendali_active_model') || null,
+  setActiveModel: (activeModel) => {
+    if (activeModel) {
+      localStorage.setItem('kendali_active_model', activeModel);
+    } else {
+      localStorage.removeItem('kendali_active_model');
+    }
+    set({ activeModel });
+    const sessId = get().activeSessionId;
+    if (sessId && activeModel) {
+      fetch('/api/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: sessId, model: activeModel }),
+      }).catch(() => {});
+    }
+  },
+
+  loadModels: async (refresh = false) => {
+    set({ isLoadingModels: true });
+    try {
+      const url = refresh ? '/api/models?refresh=true' : '/api/models';
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        const models: GlobalModelOption[] = data.models || [];
+        const defMdl = data.defaultModel || (models.length > 0 ? models[0].id : 'gpt-4o');
+
+        let curActive = get().activeModel;
+        if (!curActive) {
+          curActive = localStorage.getItem('kendali_active_model') || defMdl;
+        }
+
+        set({
+          availableModels: models,
+          defaultModel: defMdl,
+          activeModel: curActive,
+        });
+      }
+    } catch (e) {
+      console.warn('Failed to load models:', e);
+    } finally {
+      set({ isLoadingModels: false });
+    }
+  },
+
+  setDefaultModel: async (modelId: string, providerId?: string) => {
+    try {
+      await fetch('/api/models/default', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: modelId, providerId }),
+      });
+      set({ defaultModel: modelId });
+      await get().loadModels(false);
+    } catch (e) {
+      console.warn('Failed to set default model:', e);
+    }
+  },
 
   logs: [],
   loadLogs: async () => {

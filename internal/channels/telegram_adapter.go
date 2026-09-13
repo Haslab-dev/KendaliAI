@@ -755,11 +755,17 @@ func (a *TelegramAdapter) handleRawTelegramMessage(runner *BotRunner, msg *RawTe
 		}
 	}()
 
-	// 9. Execute turn
+	// 9. Execute turn (auto-fallback to default model if runner model is not configured)
+	modelToUse := strings.TrimSpace(runner.Config.Model)
+	if modelToUse == "" || strings.EqualFold(modelToUse, "default") {
+		defaultMdl, _ := a.runtime.ResolveDefaultModel()
+		modelToUse = defaultMdl
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
-	_, err := a.runtime.ExecuteTurnWithModel(ctx, sessionID, targetAgent, cleanText, "telegram", runner.Config.Model)
+	_, err := a.runtime.ExecuteTurnWithModel(ctx, sessionID, targetAgent, cleanText, "telegram", modelToUse)
 	if err != nil {
 		log.Printf("❌ Telegram turn error: %v", err)
 	}

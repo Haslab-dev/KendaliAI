@@ -43,6 +43,7 @@ export interface OfficeWorker {
   role: string;
   department: string;
   avatar: string;
+  model?: string;
   description: string;
   systemPrompt: string;
   skills: string[];
@@ -69,6 +70,7 @@ const DEFAULT_OFFICE_WORKERS: OfficeWorker[] = [
     role: 'Lead Frontend Dev',
     department: 'Engineering',
     avatar: 'blue-drop',
+    model: 'gpt-4o',
     description: 'Lead web developer specialized in React, TypeScript, Tailwind CSS, and mobile-responsive architectures.',
     systemPrompt:
       'You are the Lead Frontend Developer of KendaliAI. You architect modern, responsive user interfaces with React, TypeScript, and Tailwind CSS. You write clean, decoupled components, handle state management gracefully, and ensure 60fps animations.',
@@ -90,6 +92,7 @@ const DEFAULT_OFFICE_WORKERS: OfficeWorker[] = [
     role: 'Lead Solution Architecture',
     department: 'Architecture',
     avatar: 'cyan-bubble',
+    model: 'claude-3-7-sonnet',
     description: 'System architect designing modular component boundaries, git worktree branching, and RFC specifications.',
     systemPrompt:
       'You are the Lead Solution Architect of KendaliAI. You define architectural blueprints, evaluate trade-offs between speed and modularity, specify API protocols, and govern worktree branching policies.',
@@ -113,6 +116,7 @@ const DEFAULT_OFFICE_WORKERS: OfficeWorker[] = [
     role: 'Lead Backend Dev',
     department: 'Engineering',
     avatar: 'green-cloud',
+    model: 'qwen2.5-coder:latest',
     description: 'Distributed systems engineer handling Go microservices, SQLite persistence, and WebSocket streaming.',
     systemPrompt:
       'You are the Lead Backend Developer of KendaliAI. You design high-throughput Go HTTP/WebSocket servers, database persistence layers, background task workers, and external API gateways with zero runtime overhead.',
@@ -134,6 +138,7 @@ const DEFAULT_OFFICE_WORKERS: OfficeWorker[] = [
     role: 'Legal Counsel & Compliance',
     department: 'Legal',
     avatar: 'bronze-shield',
+    model: 'gpt-4o',
     description: 'Corporate law, software licenses (Apache/MIT/GPL), GDPR privacy, and regulatory risk audits.',
     systemPrompt:
       'You are the Chief Legal Counsel & Compliance Officer of KendaliAI. You review licensing terms, analyze intellectual property implications, check terms of service, and highlight regulatory risks with structured legal opinions.',
@@ -155,6 +160,7 @@ const DEFAULT_OFFICE_WORKERS: OfficeWorker[] = [
     role: 'DevOps & Infrastructure Lead',
     department: 'Operations',
     avatar: 'orange-leaf',
+    model: 'deepseek-chat',
     description: 'Automates CI/CD pipelines, Docker virtualization, server daemon supervisors, and Tailscale mesh networks.',
     systemPrompt:
       'You are the DevOps & Infrastructure Lead of KendaliAI. You automate build pipelines, manage process supervision, maintain remote access network tunnels, and ensure 99.99% uptime for background worker agents.',
@@ -173,6 +179,7 @@ const DEFAULT_OFFICE_WORKERS: OfficeWorker[] = [
     role: 'Chief Security & QA Officer',
     department: 'Security',
     avatar: 'ruby-capsule',
+    model: 'gpt-4o',
     description: 'Audits git diffs for leaked secrets, enforces OWASP top 10 rules, and executes vulnerability test suites.',
     systemPrompt:
       'You are the Chief Security & QA Officer of KendaliAI. You inspect every pull request and git worktree for exposed API keys, memory leaks, SQL/command injection vectors, and unauthorized network egress.',
@@ -243,7 +250,15 @@ const FALLBACK_REGISTERED_BOTS: TelegramBotConfig[] = [
 const DEPARTMENTS = ['All', 'Engineering', 'Architecture', 'Legal', 'Security', 'Operations'];
 
 export const AgencyHQPane: React.FC = () => {
-  const { createSession, setActiveAgent, agents } = useAppStore();
+  const {
+    createSession,
+    setActiveAgent,
+    agents,
+    availableModels,
+    defaultModel,
+    loadModels,
+    setActiveModel,
+  } = useAppStore();
 
   // State
   const [workers, setWorkers] = useState<OfficeWorker[]>(() => {
@@ -279,6 +294,7 @@ export const AgencyHQPane: React.FC = () => {
   const [formRole, setFormRole] = useState('');
   const [formDepartment, setFormDepartment] = useState('Engineering');
   const [formAvatar, setFormAvatar] = useState('blue-drop');
+  const [formModel, setFormModel] = useState('');
   const [formDescription, setFormDescription] = useState('');
   const [formSystemPrompt, setFormSystemPrompt] = useState('');
   const [formSkillsInput, setFormSkillsInput] = useState('react, typescript, ui');
@@ -313,6 +329,11 @@ export const AgencyHQPane: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('kendali_office_workers', JSON.stringify(workers));
   }, [workers]);
+
+  // Load models on mount
+  useEffect(() => {
+    loadModels();
+  }, [loadModels]);
 
   // Load telegram bots from backend
   const loadTelegramBots = useCallback(async () => {
@@ -356,6 +377,7 @@ export const AgencyHQPane: React.FC = () => {
     // Randomize initial avatar from 10 presets for delight
     const randomPreset = GROK_AVATARS[Math.floor(Math.random() * GROK_AVATARS.length)];
     setFormAvatar(randomPreset.id);
+    setFormModel('');
     setFormDescription('');
     setFormSystemPrompt(
       'You are an expert specialist worker agent. You report to the user and execute tasks autonomously.'
@@ -372,6 +394,7 @@ export const AgencyHQPane: React.FC = () => {
     setFormRole(worker.role);
     setFormDepartment(worker.department);
     setFormAvatar(worker.avatar);
+    setFormModel(worker.model || '');
     setFormDescription(worker.description);
     setFormSystemPrompt(worker.systemPrompt);
     setFormSkillsInput(worker.skills.join(', '));
@@ -400,6 +423,7 @@ export const AgencyHQPane: React.FC = () => {
               role: formRole.trim(),
               department: formDepartment,
               avatar: formAvatar,
+              model: formModel.trim() || undefined,
               description: formDescription.trim(),
               systemPrompt: formSystemPrompt.trim(),
               skills,
@@ -425,6 +449,7 @@ export const AgencyHQPane: React.FC = () => {
         role: formRole.trim(),
         department: formDepartment,
         avatar: formAvatar,
+        model: formModel.trim() || undefined,
         description: formDescription.trim() || `Specialized subordinate agent handling ${formRole}.`,
         systemPrompt:
           formSystemPrompt.trim() ||
@@ -454,6 +479,7 @@ export const AgencyHQPane: React.FC = () => {
             id: newWorker.id,
             name: `${newWorker.role} (${newWorker.name})`,
             description: newWorker.description,
+            model: newWorker.model || '',
             systemPrompt: newWorker.systemPrompt,
             skills: newWorker.skills,
             tools: newWorker.tools,
@@ -485,6 +511,9 @@ export const AgencyHQPane: React.FC = () => {
 
   // Start direct chat session with this specific agent worker
   const handleChatWithWorker = async (worker: OfficeWorker) => {
+    if (worker.model) {
+      setActiveModel(worker.model);
+    }
     const sessionId = await createSession(worker.id);
     const matched = agents.find((a) => a.id === worker.id);
     if (matched) {
@@ -495,7 +524,7 @@ export const AgencyHQPane: React.FC = () => {
         name: worker.role,
         description: worker.description,
         providerId: '',
-        model: '',
+        model: worker.model || '',
         systemPrompt: worker.systemPrompt,
         skills: worker.skills,
         tools: worker.tools,
@@ -970,6 +999,42 @@ export const AgencyHQPane: React.FC = () => {
                 )}
               </div>
 
+              {/* Model Assignment Pill */}
+              <div className="flex items-center justify-between p-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-[8px] gap-2">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-blue-50 text-[#007AFF]">
+                    <Cpu size={13} />
+                  </div>
+                  <div className="flex flex-col min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85]">
+                        Model Persona
+                      </span>
+                      {worker.model ? (
+                        <span className="text-[9px] px-1.5 py-0.2 rounded font-bold uppercase bg-blue-100 text-blue-700">
+                          Custom
+                        </span>
+                      ) : (
+                        <span className="text-[9px] px-1.5 py-0.2 rounded font-bold uppercase bg-gray-100 text-gray-500">
+                          Default
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-xs font-mono font-semibold text-[#000000] truncate">
+                      {worker.model || defaultModel || 'gpt-4o'}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => handleOpenEditModal(worker)}
+                  className="shrink-0 px-2 py-1 text-[11px] font-semibold rounded-[6px] border border-[#E5E7EB] bg-[#FFFFFF] text-[#333333] hover:bg-gray-100 cursor-pointer flex items-center gap-1"
+                >
+                  <Edit3 size={11} />
+                  <span>Edit</span>
+                </button>
+              </div>
+
               {/* Telegram Connection Pill */}
               <div className="flex items-center justify-between p-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-[8px] gap-2">
                 <div className="flex items-center gap-2.5 min-w-0">
@@ -1225,6 +1290,33 @@ export const AgencyHQPane: React.FC = () => {
                     className="w-full mt-1 px-3 py-2 bg-[#F7F7F5] border border-[#E5E7EB] rounded-[6px] text-xs text-[#000000] outline-none focus:border-[#0F0F0F]"
                   />
                 </div>
+              </div>
+
+              {/* Model Persona Selection */}
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold uppercase tracking-wider text-[#333333]">
+                    Assigned Model Persona
+                  </label>
+                  <span className="text-[10px] text-[#8A8A85]">
+                    System Default: <span className="font-mono font-bold text-[#000000]">{defaultModel || 'gpt-4o'}</span>
+                  </span>
+                </div>
+                <select
+                  value={formModel}
+                  onChange={(e) => setFormModel(e.target.value)}
+                  className="w-full mt-1 px-3 py-2 bg-[#F7F7F5] border border-[#E5E7EB] rounded-[6px] text-xs text-[#000000] font-mono outline-none focus:border-[#0F0F0F]"
+                >
+                  <option value="">(Inherit System Default: {defaultModel || 'gpt-4o'})</option>
+                  {availableModels.map((m) => (
+                    <option key={`${m.providerId}-${m.id}`} value={m.id}>
+                      {m.name} ({m.providerName || m.providerType}) {m.isDefault ? '★ SYSTEM DEFAULT' : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-[#8A8A85] mt-1">
+                  Worker uses this model when chatting in web UI and when answering Telegram bot messages.
+                </p>
               </div>
 
               {/* Description */}
