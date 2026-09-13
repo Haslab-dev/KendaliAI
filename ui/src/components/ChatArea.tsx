@@ -90,6 +90,60 @@ export const ChatArea: React.FC = () => {
     return () => window.removeEventListener('kendali:reminder', reminderHandler);
   }, []);
 
+  const companionList = useMemo(() => {
+    try {
+      const saved = localStorage.getItem('kendali_office_workers');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((w: any) => ({
+            id: w.id,
+            name: w.role || w.name,
+            avatar: w.avatar || w.id,
+            description: w.description,
+          }));
+        }
+      }
+    } catch {}
+    return [
+      { id: 'lead-frontend', name: 'Senior Dev', avatar: 'blue-drop', description: 'Lead Frontend Dev' },
+      { id: 'lead-architecture', name: 'Architect Lead', avatar: 'cyan-bubble', description: 'Lead Architecture' },
+      { id: 'lead-backend', name: 'Lead Backend Dev', avatar: 'green-cloud', description: 'Lead Backend Dev' },
+      { id: 'legal-counsel', name: 'Legal Counsel', avatar: 'bronze-shield', description: 'Legal & Compliance' },
+      { id: 'chief-security', name: 'Chief Security', avatar: 'ruby-capsule', description: 'Chief Security & QA' },
+    ];
+  }, []);
+
+  const handleSwitchCompanion = async (companion: { id: string; name: string; avatar: string; description?: string }) => {
+    const matched = agents.find((a) => a.id === companion.id);
+    if (matched) {
+      setActiveAgent(matched);
+    } else {
+      setActiveAgent({
+        id: companion.id,
+        name: companion.name,
+        description: companion.description || 'Autonomous Companion Agent',
+        providerId: '',
+        model: '',
+        systemPrompt: `You are ${companion.name}. Execute instructions thoroughly and report back clearly.`,
+        skills: [],
+        tools: ['bash', 'file.write', 'file.read', 'git_worktree', 'web.fetch', 'telegram.send'],
+        mcp: [],
+        memoryScopes: ['user', 'workspace'],
+        policy: {},
+        avatar: companion.avatar,
+        isDefault: false,
+      });
+    }
+    const existing = sessions.find((s) => s.agentId === companion.id);
+    if (existing) {
+      await selectSession(existing.id);
+    } else {
+      const newId = await createSession(companion.id);
+      await selectSession(newId);
+    }
+  };
+
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (agentDropdownRef.current && !agentDropdownRef.current.contains(e.target as Node)) {
@@ -416,29 +470,41 @@ export const ChatArea: React.FC = () => {
         </div>
       )}
 
-      {/* Chat Header matching refs/desktop/chat.html */}
-      <div className="w-full h-[60px] shrink-0 flex flex-row gap-3 px-4 sm:px-6 items-center bg-[#FFFFFF] border-b border-[#E5E7EB] z-20 select-none">
+      {/* Chat Header matching Grok Bot style */}
+      <div className="w-full min-h-[64px] shrink-0 flex flex-row gap-3.5 px-4 sm:px-6 items-center bg-[#FFFFFF] border-b border-[#E5E7EB] z-20 select-none py-2">
         {/* Mobile menu trigger */}
         <button
           onClick={() => {
             const drawer = document.getElementById('kendali-mobile-drawer');
             if (drawer) drawer.classList.toggle('hidden');
           }}
-          className="p-1.5 text-[#333333] hover:text-[#000000] md:hidden rounded hover:bg-[#F7F7F5]"
+          className="p-2 text-[#333333] hover:text-[#000000] md:hidden rounded-lg hover:bg-[#F7F7F5] cursor-pointer"
         >
-          <Menu size={18} />
+          <Menu size={19} />
         </button>
 
-        {/* Agent Avatar */}
-        <GrokAvatar id={activeAgent?.avatar || activeAgent?.id || 'purple-pebble'} size={32} />
+        {/* Big Grok Agent Avatar */}
+        <div className="relative shrink-0 flex items-center justify-center cursor-pointer group">
+          <GrokAvatar
+            id={activeAgent?.avatar || activeAgent?.id || 'purple-pebble'}
+            size={46}
+            className="drop-shadow-xs transition-transform group-hover:scale-105"
+          />
+          <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-[#16A34A] border-2 border-white ring-1 ring-emerald-500/20" title="Online" />
+        </div>
 
         {/* Header Title */}
-        <div className="flex flex-col gap-[1px] justify-start items-start">
-          <div className="text-[14px] leading-tight text-[#000000] font-inter font-bold">
-            {activeAgent?.name || 'Hermes Agent'}
+        <div className="flex flex-col gap-[2px] justify-start items-start min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[16px] leading-tight text-[#000000] font-sans font-bold tracking-tight truncate">
+              {activeAgent?.name || 'Chief of Staff'}
+            </span>
+            <span className="hidden sm:inline-block text-[10px] px-2 py-0.5 rounded-full font-bold font-sans uppercase tracking-wider bg-[#DCFCE7] text-[#16A34A]">
+              Companion Active
+            </span>
           </div>
-          <div className="text-[10px] leading-tight text-[#8A8A85] font-funnel font-normal">
-            {activeAgent?.description || 'Autonomous staff agent'} · {effectiveModel} · {messages.length} messages
+          <div className="text-[11px] leading-tight text-[#8A8A85] font-sans truncate max-w-sm sm:max-w-md">
+            {activeAgent?.description || 'Autonomous companion agent'} · {effectiveModel}
           </div>
         </div>
 
@@ -540,6 +606,43 @@ export const ChatArea: React.FC = () => {
         </div>
       </div>
 
+      {/* Grok Companion Quick Switcher Bar (matching mobile & desktop Grok companion bots) */}
+      <div className="w-full bg-[#FAFAFA] border-b border-[#E5E7EB] px-4 sm:px-6 py-2 flex items-center gap-3 overflow-x-auto select-none shrink-0 custom-scrollbar">
+        <div className="flex items-center gap-1.5 shrink-0 text-[#8A8A85]">
+          <Sparkles size={13} className="text-[#7C3AED]" />
+          <span className="text-[11px] font-bold uppercase tracking-wider font-sans">
+            Companions:
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
+          {companionList.map((comp) => {
+            const isSelected = activeAgent?.id === comp.id || (activeAgent?.name && activeAgent.name.includes(comp.name));
+            return (
+              <button
+                key={comp.id}
+                type="button"
+                onClick={() => handleSwitchCompanion(comp)}
+                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl border transition-all cursor-pointer shrink-0 ${
+                  isSelected
+                    ? 'bg-[#FFFFFF] border-[#007AFF] shadow-xs ring-2 ring-[#007AFF]/20 scale-102'
+                    : 'bg-white/70 hover:bg-[#FFFFFF] border-[#E5E7EB] hover:border-gray-300 opacity-80 hover:opacity-100'
+                }`}
+                title={comp.description || comp.name}
+              >
+                <GrokAvatar id={comp.avatar || comp.id} size={28} className="shrink-0" />
+                <span className={`text-[12px] font-sans whitespace-nowrap ${isSelected ? 'font-bold text-[#000000]' : 'font-medium text-[#4B5563]'}`}>
+                  {comp.name}
+                </span>
+                {isSelected && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] shrink-0" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Messages Scroll Area */}
       <div className="flex-1 overflow-y-auto px-4 sm:px-14 py-6 flex flex-col gap-5">
         {/* Parallel Running Background Tasks Banner */}
@@ -564,18 +667,22 @@ export const ChatArea: React.FC = () => {
           </div>
         )}
 
-        {/* Zero State View */}
+        {/* Zero State View with Big Grok Bot Avatar */}
         {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center text-center my-auto py-8">
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-[#0F0F0F] text-white mb-3 shadow-md">
-              <Bot size={28} />
+          <div className="flex flex-col items-center justify-center text-center my-auto py-10 animate-fade-in">
+            <div className="relative mb-5 group cursor-pointer">
+              <GrokAvatar
+                id={activeAgent?.avatar || activeAgent?.id || 'purple-pebble'}
+                size={96}
+                className="drop-shadow-xl transition-all duration-300 group-hover:scale-108"
+              />
+              <span className="absolute bottom-1 right-1 w-5 h-5 rounded-full bg-[#16A34A] border-3 border-white ring-2 ring-emerald-500/20" title="Online" />
             </div>
-            <h1 className="text-xl font-bold font-inter text-[#000000] mb-1">
-              Hermes Agent Gateway
+            <h1 className="text-2xl font-bold font-sans text-[#000000] mb-1.5 tracking-tight">
+              {activeAgent?.name || 'Chief of Staff'}
             </h1>
-            <p className="text-xs text-[#8A8A85] font-funnel mb-6 max-w-sm">
-              Local AI pairing & autonomous workflows connected to{' '}
-              <span className="text-[#000000] font-semibold">{activeAgent?.name || 'Coder Persona'}</span>
+            <p className="text-xs text-[#8A8A85] font-sans mb-7 max-w-md leading-relaxed">
+              {activeAgent?.description || 'Autonomous digital companion paired with tools, skills, and Telegram routing.'}
             </p>
 
             {/* Quick Starters */}
@@ -640,10 +747,14 @@ export const ChatArea: React.FC = () => {
           }
 
           return (
-            <div key={msg.id} className="w-full flex flex-row gap-2.5 justify-start items-start">
-              {/* Avatar */}
-              <div className="w-[28px] h-[28px] shrink-0 bg-[#0F0F0F] rounded-full flex items-center justify-center text-white mt-0.5">
-                <Bot size={14} />
+            <div key={msg.id} className="w-full flex flex-row gap-3.5 justify-start items-start">
+              {/* Big Grok Avatar */}
+              <div className="shrink-0 mt-0.5 relative group">
+                <GrokAvatar
+                  id={activeAgent?.avatar || activeAgent?.id || 'purple-pebble'}
+                  size={38}
+                  className="drop-shadow-xs transition-transform group-hover:scale-105"
+                />
               </div>
 
               {/* Agent Bubble Container */}
@@ -748,7 +859,7 @@ export const ChatArea: React.FC = () => {
             value={inputText}
             onChange={handleTextareaInput}
             onKeyDown={handleKeyDown}
-            placeholder="Message Hermes Agent… try /review, /scheduler, /skill:planner, /doc:api-spec"
+            placeholder={`Message ${activeAgent?.name || 'Chief of Staff'}… try /review, /scheduler, /skill:planner`}
             className="w-full bg-transparent text-[13px] text-[#000000] placeholder:text-[#8A8A85] font-geist resize-none outline-none min-h-[36px] max-h-40 leading-relaxed"
           />
 

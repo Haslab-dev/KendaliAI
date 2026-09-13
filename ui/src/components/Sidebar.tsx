@@ -208,7 +208,7 @@ export const Sidebar: React.FC = () => {
   return (
     <aside
       data-pencil-name="Sidebar"
-      className="box-border w-[260px] shrink-0 h-full flex flex-col justify-between bg-[#FFFFFF] border-r border-[#E5E7EB] dark:bg-[#141414] dark:border-[#27272A] select-none"
+      className="box-border w-[280px] shrink-0 h-full flex flex-col justify-between bg-[#FFFFFF] border-r border-[#E5E7EB] dark:bg-[#141414] dark:border-[#27272A] select-none"
     >
       {/* Top Header matching Grok screenshot */}
       <div className="p-3.5 pb-2 flex flex-col gap-3 border-b border-[#E5E7EB] dark:border-[#27272A]">
@@ -262,25 +262,28 @@ export const Sidebar: React.FC = () => {
             <div key={agent.id} className="flex flex-col gap-1">
               {/* [Icon] Staff Agent Header Row */}
               <div
-                className="group flex items-center justify-between px-2 py-1.5 rounded-[6px] hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer transition-colors"
+                className="group flex items-center justify-between px-2 py-1.5 rounded-[8px] hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer transition-colors"
                 onClick={() => toggleGroupCollapse(agent.id)}
               >
-                <div className="flex items-center gap-2 min-w-0">
-                  {/* Grok geometric SVG Icon */}
-                  <GrokAvatar id={agent.avatar || agent.id} size={22} className="shrink-0" />
+                <div className="flex items-center gap-2.5 min-w-0">
+                  {/* Big Grok geometric SVG Icon matching screenshot */}
+                  <div className="relative shrink-0 flex items-center justify-center">
+                    <GrokAvatar id={agent.avatar || agent.id} size={38} className="shrink-0 drop-shadow-xs" />
+                    {hasRunningBot && (
+                      <span
+                        className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white dark:border-black animate-pulse"
+                        title={`Connected Bot: ${connectedBot.name} (Online)`}
+                      />
+                    )}
+                  </div>
 
                   <div className="flex flex-col min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[12px] font-bold text-[#000000] dark:text-white font-sans truncate">
-                        {agent.name}
-                      </span>
-                      {hasRunningBot && (
-                        <span
-                          className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0"
-                          title={`Connected Bot: ${connectedBot.name} (Online)`}
-                        />
-                      )}
-                    </div>
+                    <span className="text-[13px] font-bold text-[#000000] dark:text-white font-sans truncate leading-tight">
+                      {agent.name}
+                    </span>
+                    <span className="text-[11px] text-[#8A8A85] truncate font-sans">
+                      {agent.role || 'Autonomous Staff'}
+                    </span>
                   </div>
                 </div>
 
