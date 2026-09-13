@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { AgentConfig, ProviderConfig, Session, SessionMessage, ToolCallRecord, MCPServerConfig, GatewayLogEvent } from '../types';
+import { AgentConfig, ProviderConfig, Session, SessionMessage, ToolCallRecord, MCPServerConfig, GatewayLogEvent, BackgroundTask } from '../types';
 
 interface AppState {
   theme: 'dark' | 'light';
@@ -24,6 +24,10 @@ interface AppState {
 
   mcps: MCPServerConfig[];
   loadMcps: () => Promise<void>;
+
+  tasks: BackgroundTask[];
+  loadTasks: () => Promise<void>;
+  cancelTask: (id: string) => Promise<void>;
 
   messages: SessionMessage[];
   setMessages: (msgs: SessionMessage[]) => void;
@@ -204,6 +208,27 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ mcps: mcps || [] });
     } catch (e) {
       console.error('Failed to load mcps:', e);
+    }
+  },
+
+  tasks: [],
+  loadTasks: async () => {
+    try {
+      const res = await fetch('/api/tasks');
+      if (res.ok) {
+        const tasks = await res.json();
+        set({ tasks: tasks || [] });
+      }
+    } catch (e) {
+      console.error('Failed to load tasks:', e);
+    }
+  },
+  cancelTask: async (id: string) => {
+    try {
+      await fetch(`/api/tasks/${id}/cancel`, { method: 'POST' });
+      await get().loadTasks();
+    } catch (e) {
+      console.error('Failed to cancel task:', e);
     }
   },
 

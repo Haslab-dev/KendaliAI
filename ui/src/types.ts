@@ -172,4 +172,24 @@ export interface DocumentItem {
   createdAt: number;
 }
 
+export interface BackgroundTask {
+  id: string;
+  sessionId: string;
+  agentId: string;
+  title: string;
+  status: 'running' | 'completed' | 'failed' | 'cancelled';
+  startedAt: number;
+  finishedAt?: number;
+  error?: string;
+  result?: string;
+}
+
+export interface ReminderNotification {
+  id?: string;
+  title: string;
+  time?: string;
+  triggeredAt: number;
+}
+
+
 

@@ -2,9 +2,10 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Plus, Trash2, Moon, Sun, Paperclip, Mic, ArrowUp, Copy, Check,
   ChevronDown, ChevronUp, Search, Brain, Zap, Settings, Command, AlertCircle,
-  CornerDownLeft, Terminal, Sparkles, Smartphone, Database, RefreshCw, FileText, X
+  CornerDownLeft, Terminal, Sparkles, Smartphone, Database, RefreshCw, FileText, X,
+  ShieldCheck, GitFork, Code2, Clock, Bell, ExternalLink, Activity, BookOpen,
+  Folder, Upload, Menu, Bot, Feather
 } from 'lucide-react';
-import { Bot, Feather } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { navigate } from '../router';
 import { useAgentSocket } from '../hooks/useAgentSocket';
@@ -36,14 +37,85 @@ export const ChatArea: React.FC = () => {
     clearSessionMessages,
     activeSessionId,
     activeModel,
+    setActiveModel,
+    providers,
     mcps,
     sessions,
+    tasks,
+    cancelTask,
+    selectSession,
   } = useAppStore();
 
   const { sendMessage } = useAgentSocket();
   const [inputText, setInputText] = useState('');
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
   const [isSlashDismissed, setIsSlashDismissed] = useState(false);
+
+  const [isAgentDropdownOpen, setIsAgentDropdownOpen] = useState(false);
+  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
+  const [isWorktreeDropdownOpen, setIsWorktreeDropdownOpen] = useState(false);
+  const [activeWorktree, setActiveWorktree] = useState('Home');
+  const [worktreesList, setWorktreesList] = useState<{ branch: string; path?: string }[]>([]);
+
+  useEffect(() => {
+    fetch('/api/worktrees')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setWorktreesList(data.map((w: any) => ({ branch: w.branch || w.name || 'feature' })));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const agentDropdownRef = useRef<HTMLDivElement>(null);
+  const modelDropdownRef = useRef<HTMLDivElement>(null);
+  const worktreeDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [activeReminder, setActiveReminder] = useState<{ title: string; time?: string; id?: string } | null>(null);
+
+  useEffect(() => {
+    const reminderHandler = (e: any) => {
+      const payload = e.detail;
+      if (payload) {
+        setActiveReminder({
+          title: payload.title || 'Scheduled Reminder',
+          time: payload.time,
+          id: payload.id,
+        });
+      }
+    };
+    window.addEventListener('kendali:reminder', reminderHandler);
+    return () => window.removeEventListener('kendali:reminder', reminderHandler);
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (agentDropdownRef.current && !agentDropdownRef.current.contains(e.target as Node)) {
+        setIsAgentDropdownOpen(false);
+      }
+      if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target as Node)) {
+        setIsModelDropdownOpen(false);
+      }
+      if (worktreeDropdownRef.current && !worktreeDropdownRef.current.contains(e.target as Node)) {
+        setIsWorktreeDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const runningTasks = useMemo(() => {
+    return (tasks || []).filter((t) => t.status === 'running');
+  }, [tasks]);
+
+  const handleQuickReview = () => {
+    const reviewer = agents.find((a) => a.id === 'reviewer') || activeAgent;
+    if (reviewer && reviewer.id !== activeAgent?.id) {
+      setActiveAgent(reviewer);
+    }
+    sendMessage("Please perform a thorough code and security review on the current workspace and git diff using review_code and git_worktree tools. Report any vulnerabilities, hardcoded secrets, code quality issues, or bugs.");
+  };
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -69,9 +141,6 @@ export const ChatArea: React.FC = () => {
     refreshDocs();
   }, [refreshDocs]);
 
-  // Docs uploaded elsewhere (Doc Store pane, other sessions) must still show
-  // up in /doc: autocomplete — refresh when the user starts typing /doc if
-  // the list is older than 10 seconds.
   useEffect(() => {
     if (inputText.startsWith('/doc') && Date.now() - docsFetchedAtRef.current > 10_000) {
       refreshDocs();
@@ -131,10 +200,12 @@ export const ChatArea: React.FC = () => {
 
     // 1. Agent Personas as Invocable Skills
     const agentList = agents.length > 0 ? agents : [
-      { id: 'personal-assistant', name: 'Personal Assistant', description: 'Proactive daily coordinator & executive tasks', avatar: '', skills: ['planning', 'coordination'] },
-      { id: 'research-agent', name: 'Research Agent', description: 'In-depth research, web investigation & fact-checking', avatar: '', skills: ['deep-research', 'synthesis'] },
-      { id: 'knowledge-agent', name: 'Knowledge Agent', description: 'Second brain, documentation & concept retrieval', avatar: '', skills: ['knowledge-graph', 'notes'] },
-      { id: 'coding-agent', name: 'Coding Agent', description: 'Senior software engineer, architecture & code authoring', avatar: '', skills: ['coding', 'debugging'] },
+      { id: 'coder', name: 'Coder Agent', description: 'Senior software engineer, architecture & code authoring', avatar: '🛠️', skills: ['coding', 'debugging'] },
+      { id: 'planner', name: 'Planner Agent', description: 'Decomposition, milestones & autonomous workflows', avatar: '🧠', skills: ['planning', 'coordination'] },
+      { id: 'reviewer', name: 'Reviewer Agent', description: 'Security audit, secret leaks & vulnerability reviews', avatar: '🛡️', skills: ['review', 'security'] },
+      { id: 'assistant', name: 'Personal Assistant', description: 'Proactive daily coordinator & executive tasks', avatar: '⚡', skills: ['planning', 'coordination'] },
+      { id: 'research', name: 'Research Agent', description: 'In-depth research, web investigation & fact-checking', avatar: '🔍', skills: ['deep-research', 'synthesis'] },
+      { id: 'knowledge', name: 'Knowledge Agent', description: 'Second brain, documentation & concept retrieval', avatar: '📚', skills: ['knowledge-graph', 'notes'] },
     ];
 
     agentList.forEach((ag) => {
@@ -144,14 +215,14 @@ export const ChatArea: React.FC = () => {
         label: ag.name,
         desc: ag.description || `Specialized skill: ${(ag.skills || []).join(', ')}`,
         category: 'SKILL',
-        icon: ag.avatar || '',
+        icon: ag.avatar || '🤖',
       });
     });
 
     // 2. MCP Server integrations
     const mcpServers = (mcps && mcps.length > 0) ? mcps : [
       { id: 'github', name: 'github', status: 'ready', toolsCached: [{ name: 'get_issue' }] },
-      { id: 'exa', name: 'exa', status: 'ready', toolsCached: [{ name: 'search' }] },
+      { id: 'filesystem', name: 'filesystem', status: 'ready', toolsCached: [{ name: 'read_file' }] },
     ];
 
     mcpServers.forEach((m) => {
@@ -162,19 +233,28 @@ export const ChatArea: React.FC = () => {
         label: `MCP: ${m.name || m.id}`,
         desc: toolNames ? `Tools: ${toolNames}...` : 'External Model Context Protocol server',
         category: 'MCP',
-        icon: '',
+        icon: '🔌',
       });
     });
 
     // 3. Gateway Commands & Shortcuts
     list.push(
       {
+        key: 'cmd-review',
+        prefix: '/review',
+        label: 'Security & Diff Review',
+        desc: 'Run security scanner and git diff audit',
+        category: 'COMMAND',
+        icon: '🛡️',
+        executeDirect: handleQuickReview,
+      },
+      {
         key: 'cmd-new',
         prefix: '/new',
         label: 'New Chat Session',
         desc: 'Start a fresh conversation thread',
         category: 'COMMAND',
-        icon: '',
+        icon: '💬',
         executeDirect: () => createSession(),
       },
       {
@@ -183,89 +263,70 @@ export const ChatArea: React.FC = () => {
         label: 'Clear Messages',
         desc: 'Clear message history of current session',
         category: 'COMMAND',
-        icon: '',
+        icon: '🧹',
         executeDirect: () => activeSessionId && clearSessionMessages(activeSessionId),
       },
       {
-        key: 'cmd-agent',
-        prefix: '/agent',
-        label: 'Switch Agent Persona',
-        desc: 'Open Agent Personas pane',
+        key: 'cmd-scheduler',
+        prefix: '/scheduler',
+        label: 'Scheduler & Crons',
+        desc: 'Open background autonomous agent scheduler',
         category: 'COMMAND',
-        icon: '',
-        executeDirect: () => navigate('agents'),
+        icon: '⏱️',
+        executeDirect: () => navigate('scheduler'),
       },
       {
-        key: 'cmd-providers',
-        prefix: '/providers',
-        label: 'OpenAI Providers & Models',
-        desc: 'Configure custom OpenAI endpoints and probe /models',
+        key: 'cmd-worktrees',
+        prefix: '/worktrees',
+        label: 'Git Worktrees',
+        desc: 'Manage isolated parallel branch checkouts',
         category: 'COMMAND',
-        icon: '',
-        executeDirect: () => navigate('providers'),
+        icon: '🌿',
+        executeDirect: () => navigate('worktrees'),
       }
     );
 
-    // 4. Uploaded Documents — /doc:<title> RAG context recall
-    allDocs.forEach((doc) => {
+    // 4. Documents in RAG
+    allDocs.forEach((d) => {
       list.push({
-        key: `doc-${doc.id}`,
-        prefix: `/doc:${doc.title}`,
-        label: doc.title,
-        desc: `Inject RAG context from this document (${doc.chunkCount} chunks)`,
+        key: `doc-${d.id}`,
+        prefix: `/doc:${d.title}`,
+        label: d.title,
+        desc: `Inject ${d.chunkCount} vector chunks into context`,
         category: 'DOC',
-        icon: '',
+        icon: '📄',
       });
     });
 
     return list;
-  }, [agents, mcps, activeSessionId, allDocs, createSession, clearSessionMessages]);
+  }, [agents, mcps, allDocs, createSession, activeSessionId, clearSessionMessages]);
 
-  // Determine if slash popup should be visible and filter suggestions
-  const isTypingSlash = inputText.startsWith('/') && !inputText.includes(' ') && !isSlashDismissed;
+  const isTypingSlash = inputText.startsWith('/') && !isSlashDismissed;
+  const slashQuery = isTypingSlash ? inputText.slice(1).toLowerCase() : '';
+
   const filteredSuggestions = useMemo(() => {
     if (!isTypingSlash) return [];
-    const query = inputText.toLowerCase().slice(1);
-    if (!query) return slashSuggestions;
+    if (!slashQuery) return slashSuggestions;
     return slashSuggestions.filter(
       (s) =>
-        s.prefix.toLowerCase().includes(query) ||
-        s.label.toLowerCase().includes(query) ||
-        s.desc.toLowerCase().includes(query)
+        s.prefix.toLowerCase().includes(slashQuery) ||
+        s.label.toLowerCase().includes(slashQuery) ||
+        s.desc.toLowerCase().includes(slashQuery)
     );
-  }, [isTypingSlash, inputText, slashSuggestions]);
+  }, [isTypingSlash, slashQuery, slashSuggestions]);
 
-  // Reset selected index when query changes
-  useEffect(() => {
-    setSelectedSuggestionIndex(0);
-  }, [inputText]);
-
-  const handleSelectSuggestion = (item: SlashCommand) => {
-    if (item.executeDirect && inputText.trim() === item.prefix) {
-      item.executeDirect();
+  const handleSelectSuggestion = (suggestion: SlashCommand) => {
+    if (suggestion.executeDirect) {
+      suggestion.executeDirect();
       setInputText('');
-      setIsSlashDismissed(false);
-      return;
+    } else {
+      setInputText(`${suggestion.prefix} `);
+      textareaRef.current?.focus();
     }
-    setInputText(item.prefix + ' ');
-    setIsSlashDismissed(false);
-    if (textareaRef.current) {
-      textareaRef.current.focus();
-    }
-  };
-
-  const handleSend = () => {
-    if (!inputText.trim() || isGenerating) return;
-    sendMessage(inputText.trim());
-    setInputText('');
-    setIsSlashDismissed(false);
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-    }
+    setIsSlashDismissed(true);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Autocomplete Keyboard Navigation
     if (isTypingSlash && filteredSuggestions.length > 0) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
@@ -277,9 +338,10 @@ export const ChatArea: React.FC = () => {
         setSelectedSuggestionIndex((prev) => (prev - 1 + filteredSuggestions.length) % filteredSuggestions.length);
         return;
       }
-      if (e.key === 'Tab' || e.key === 'Enter') {
+      if (e.key === 'Enter' || e.key === 'Tab') {
         e.preventDefault();
-        handleSelectSuggestion(filteredSuggestions[selectedSuggestionIndex]);
+        const selected = filteredSuggestions[selectedSuggestionIndex] || filteredSuggestions[0];
+        if (selected) handleSelectSuggestion(selected);
         return;
       }
       if (e.key === 'Escape') {
@@ -289,7 +351,6 @@ export const ChatArea: React.FC = () => {
       }
     }
 
-    // Normal Send
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -299,242 +360,357 @@ export const ChatArea: React.FC = () => {
   const handleTextareaInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setInputText(val);
-    if (isSlashDismissed && !val.startsWith('/')) {
+    if (!val.startsWith('/')) {
       setIsSlashDismissed(false);
     }
+    setSelectedSuggestionIndex(0);
+
+    // Auto-expand height
     e.target.style.height = 'auto';
-    e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`;
+    e.target.style.height = `${Math.min(e.target.scrollHeight, 180)}px`;
   };
 
-  const activeSession = sessions.find((s) => s.id === activeSessionId);
-  const isTelegramSession = activeSession?.channelId === 'telegram' || activeSessionId?.startsWith('tg-');
-  let botLabel = 'Telegram Bot';
-  if (activeSession?.metadata) {
-    try {
-      const meta = JSON.parse(activeSession.metadata);
-      if (meta.botName) botLabel = `@${meta.botName}`;
-    } catch {}
-  } else if (activeSessionId?.startsWith('tg-')) {
-    const parts = activeSessionId.replace('tg-', '').split('-');
-    if (parts[0]) botLabel = `@${parts[0]}`;
-  }
+  const handleSend = () => {
+    const trimmed = inputText.trim();
+    if (!trimmed || isGenerating) return;
+
+    sendMessage(trimmed);
+    setInputText('');
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
+  };
+
+  const effectiveModel = activeModel || activeAgent?.model || 'Claude Sonnet 4.6';
+  const currentSession = sessions.find((s) => s.id === activeSessionId);
+  const isTelegramSession = currentSession?.channelId === 'telegram';
+  const botLabel = isTelegramSession ? '@kendaliai_bot' : 'Telegram Bot';
 
   return (
-    <main className="flex-1 flex flex-col bg-app relative overflow-hidden">
-      {/* Topbar */}
-      <header className="h-[52px] border-b border-line flex items-center justify-between px-4 bg-app z-20 select-none">
-        <div className="flex items-center gap-2">
-          {/* Active Agent Selector */}
-          <div
-            onClick={() => navigate('agents')}
-            className="flex items-center gap-2 px-3 py-1.5 bg-inputbg hover:bg-hoverbg border border-line rounded-xl cursor-pointer text-xs font-medium text-hi transition-colors"
-            title="Switch Agent Persona"
+    <main className="flex-1 h-full flex flex-col bg-[#F7F7F5] overflow-hidden relative">
+      {/* Reminder high-priority banner */}
+      {activeReminder && (
+        <div className="bg-[#FFF5EB] border-b border-[#F5E3CF] px-4 py-2 z-30 select-none">
+          <div className="max-w-5xl mx-auto flex items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2">
+              <Bell size={14} className="text-[#D97706] animate-bounce" />
+              <div className="flex items-center gap-1.5 font-funnel">
+                <span className="font-bold text-[#D97706]">Reminder Alert:</span>
+                <span className="text-[#333333] font-medium">{activeReminder.title}</span>
+                {activeReminder.time && (
+                  <span className="text-[10px] bg-[#FFFFFF] border border-[#E5E7EB] px-1.5 py-0.5 rounded text-[#8A8A85] font-mono">
+                    {activeReminder.time}
+                  </span>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={() => setActiveReminder(null)}
+              className="text-[#8A8A85] hover:text-[#000000] p-1 rounded hover:bg-[#FFFFFF] transition-colors"
+              title="Dismiss reminder"
+            >
+              <X size={13} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Chat Header matching refs/desktop/chat.html */}
+      <div className="w-full h-[60px] shrink-0 flex flex-row gap-3 px-4 sm:px-6 items-center bg-[#FFFFFF] border-b border-[#E5E7EB] z-20 select-none">
+        {/* Mobile menu trigger */}
+        <button
+          onClick={() => {
+            const drawer = document.getElementById('kendali-mobile-drawer');
+            if (drawer) drawer.classList.toggle('hidden');
+          }}
+          className="p-1.5 text-[#333333] hover:text-[#000000] md:hidden rounded hover:bg-[#F7F7F5]"
+        >
+          <Menu size={18} />
+        </button>
+
+        {/* Agent Avatar */}
+        <div className="w-[30px] h-[30px] shrink-0 bg-[#0F0F0F] rounded-full flex items-center justify-center text-white">
+          <Bot size={15} />
+        </div>
+
+        {/* Header Title */}
+        <div className="flex flex-col gap-[1px] justify-start items-start">
+          <div className="text-[14px] leading-tight text-[#000000] font-inter font-bold">
+            {activeAgent?.name || 'Hermes Agent'}
+          </div>
+          <div className="text-[10px] leading-tight text-[#8A8A85] font-funnel font-normal">
+            🛠️ {activeAgent?.id || 'Coder'} persona · {effectiveModel} · {messages.length} messages
+          </div>
+        </div>
+
+        <div className="flex-1" />
+
+        {/* Action Chips */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Review Diff Chip */}
+          <button
+            onClick={handleQuickReview}
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-[#FFF5EB] border border-[#E5E7EB] hover:border-[#D97706] rounded-[4px] text-[11px] font-funnel text-[#333333] transition-colors shadow-2xs"
+            title="Run code & security review on workspace diff"
           >
-            <span className="text-mid"><Bot size={14} /></span>
-            <span className="font-semibold">{activeAgent?.name || 'Personal Assistant'}</span>
+            <ShieldCheck size={13} className="text-[#333333]" />
+            <span>Review Diff</span>
+          </button>
+
+          {/* Worktrees Chip */}
+          <button
+            onClick={() => navigate('worktrees')}
+            className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-[#FFFFFF] border border-[#E5E7EB] hover:border-[#333333] rounded-[4px] text-[11px] font-funnel text-[#333333] transition-colors shadow-2xs"
+            title="Git Worktrees & Branch Isolation"
+          >
+            <GitFork size={13} className="text-[#333333]" />
+            <span>Worktrees</span>
+          </button>
+
+          {/* Files Chip */}
+          <button
+            onClick={() => navigate('editor')}
+            className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-[#FFFFFF] border border-[#E5E7EB] hover:border-[#333333] rounded-[4px] text-[11px] font-funnel text-[#333333] transition-colors shadow-2xs"
+            title="File Explorer & Code Editor"
+          >
+            <Folder size={13} className="text-[#333333]" />
+            <span>Files</span>
+          </button>
+
+          {/* Model Chip & Dropdown */}
+          <div className="relative" ref={modelDropdownRef}>
+            <button
+              onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FFFFFF] border border-[#E5E7EB] hover:border-[#333333] rounded-[4px] text-[11px] font-funnel text-[#333333] transition-colors shadow-2xs"
+              title="Select LLM model"
+            >
+              <ChevronDown size={13} className={`text-[#333333] transition-transform ${isModelDropdownOpen ? 'rotate-180' : ''}`} />
+              <span className="font-medium max-w-[120px] truncate">Model: {effectiveModel}</span>
+            </button>
+
+            {isModelDropdownOpen && (
+              <div className="absolute right-0 mt-1 w-64 bg-[#FFFFFF] border border-[#E5E7EB] rounded-[8px] shadow-xl p-1.5 z-50 animate-in fade-in duration-100">
+                <div className="px-2.5 py-1 text-[10px] font-bold text-[#8A8A85] uppercase tracking-wider font-funnel border-b border-[#E5E7EB] mb-1">
+                  Active Model Routing
+                </div>
+                <div className="max-h-56 overflow-y-auto custom-scrollbar">
+                  {[
+                    'Claude Sonnet 4.6',
+                    'GPT-4o',
+                    'DeepSeek V3',
+                    'DeepSeek R1',
+                    'Ollama (Local Qwen 2.5)',
+                  ].map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => {
+                        setActiveModel(m);
+                        setIsModelDropdownOpen(false);
+                      }}
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 text-left text-xs rounded hover:bg-[#F7F7F5] transition-colors ${
+                        effectiveModel === m ? 'font-bold text-[#007AFF] bg-[#EBF5FF]' : 'text-[#333333]'
+                      }`}
+                    >
+                      <span className="font-mono text-[11px] truncate">{m}</span>
+                      {effectiveModel === m && <Check size={12} className="text-[#007AFF]" />}
+                    </button>
+                  ))}
+                </div>
+                <div
+                  onClick={() => {
+                    setIsModelDropdownOpen(false);
+                    navigate('providers');
+                  }}
+                  className="border-t border-[#E5E7EB] mt-1 pt-1.5 px-2.5 py-1 text-[11px] text-[#007AFF] hover:underline cursor-pointer flex items-center justify-between font-funnel"
+                >
+                  <span>Configure Providers...</span>
+                  <ExternalLink size={11} />
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Model Selector & Filter Dropdown */}
-          <ModelSelectorDropdown />
-
-          {/* Telegram Sync Indicator */}
-          {isTelegramSession && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-raised border bg-raised text-hi rounded-xl text-xs font-mono">
-              <Smartphone size={12} className="text-hi animate-pulse" />
-              <span>Synced with {botLabel}</span>
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          <InstallPromptModal />
+          {/* New Chat Button */}
           <button
             onClick={() => createSession()}
-            className="w-8 h-8 rounded-lg border border-line hover:bg-raised text-mid hover:text-hi flex items-center justify-center transition-colors"
-            title="New Chat (/new)"
+            className="w-8 h-8 rounded-[4px] border border-[#E5E7EB] bg-[#FFFFFF] hover:bg-[#F7F7F5] text-[#333333] flex items-center justify-center transition-colors shadow-2xs"
+            title="New Chat Session"
           >
-            <Plus size={15} />
-          </button>
-          <button
-            onClick={() => activeSessionId && clearSessionMessages(activeSessionId)}
-            className="w-8 h-8 rounded-lg border border-line hover:bg-raised text-mid hover:text-hi flex items-center justify-center transition-colors hidden sm:flex"
-            title="Clear Messages (/clear)"
-          >
-            <Trash2 size={15} />
-          </button>
-          <button
-            onClick={toggleTheme}
-            className="w-8 h-8 rounded-lg border border-line hover:bg-raised text-mid hover:text-hi flex items-center justify-center transition-colors"
-            title="Toggle Theme"
-          >
-            {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
+            <Plus size={14} />
           </button>
         </div>
-      </header>
+      </div>
 
       {/* Messages Scroll Area */}
-      <div className="flex-1 overflow-y-auto px-4 py-6">
-        <div className="max-w-3xl mx-auto space-y-6">
-          {/* Zero State View */}
-          {messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center text-center mt-12 mb-8">
-              <div className="w-16 h-16 rounded-2xl flex items-center justify-center bg-raised border border-line text-hi mb-4">
-                <Feather size={26} strokeWidth={1.5} />
-              </div>
-              <h1 className="text-2xl font-bold text-hi mb-1">KendaliAI</h1>
-              <p className="text-sm text-mid mb-8 max-w-md">
-                Personal AI Agent Gateway • Connected to{' '}
-                <span className="text-hi font-semibold">{activeAgent?.name || 'Personal Assistant'}</span>
-              </p>
-
-              {/* Bootstrap Agents as Skills Shortcuts */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-xl">
-                {[
-                  {
-                    title: 'Coding Agent',
-                    avatar: '',
-                    desc: 'Senior software engineer & architecture',
-                    command: '/skill:coding-agent refactor my component to use a clean state machine',
-                  },
-                  {
-                    title: 'Research Agent',
-                    avatar: '',
-                    desc: 'In-depth investigation & web synthesis',
-                    command: '/skill:research-agent compare local LLM runtimes Ollama vs vLLM',
-                  },
-                  {
-                    title: 'Knowledge Agent',
-                    avatar: '',
-                    desc: 'Second brain, memory recall & notes',
-                    command: '/skill:knowledge-agent summarize key ideas from my knowledge notes',
-                  },
-                  {
-                    title: 'Personal Assistant',
-                    avatar: '',
-                    desc: 'Daily coordinator & task workflows',
-                    command: '/skill:personal-assistant organize my priority tasks for today',
-                  },
-                ].map((item) => (
-                  <div
-                    key={item.title}
-                    onClick={() => sendMessage(item.command)}
-                    className="p-3.5 bg-panel hover:bg-raised border border-line hover:border-mid rounded-xl text-left cursor-pointer transition-all shadow-sm group"
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-mid"><Bot size={14} /></span>
-                      <span className="text-xs font-semibold text-hi group-hover:text-hi transition-colors">
-                        {item.title}
-                      </span>
-                    </div>
-                    <div className="text-[11px] text-mid">{item.desc}</div>
-                  </div>
-                ))}
-              </div>
+      <div className="flex-1 overflow-y-auto px-4 sm:px-14 py-6 flex flex-col gap-5">
+        {/* Parallel Running Background Tasks Banner */}
+        {runningTasks.length > 0 && (
+          <div className="w-full shrink-0 flex flex-row gap-2.5 p-[10px_14px] items-center bg-[#EBF5FF] border border-[#BFDBFE] rounded-[8px] shadow-2xs">
+            <RefreshCw size={14} className="animate-spin text-[#007AFF] shrink-0" />
+            <div className="text-[12px] text-[#333333] font-geist flex-1 truncate">
+              {runningTasks[0].title} — running {Math.max(1, Math.round((Date.now() - runningTasks[0].startedAt) / 1000))}s
             </div>
-          )}
+            <button
+              onClick={() => selectSession(runningTasks[0].sessionId)}
+              className="px-2.5 py-1 bg-[#007AFF] text-white text-[11px] font-funnel font-bold rounded-[4px] transition-colors"
+            >
+              View
+            </button>
+            <button
+              onClick={() => cancelTask(runningTasks[0].id)}
+              className="px-2.5 py-1 bg-[#FFFFFF] border border-[#E5E7EB] text-[#333333] text-[11px] font-funnel rounded-[4px] hover:bg-[#F7F7F5] transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
 
-          {/* Messages Feed */}
-          {messages.map((msg, index) => {
-            const isLastMessage = index === messages.length - 1;
-            const isCurrentStreaming = isGenerating && isLastMessage && msg.role === 'assistant';
+        {/* Zero State View */}
+        {messages.length === 0 && (
+          <div className="flex flex-col items-center justify-center text-center my-auto py-8">
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-[#0F0F0F] text-white mb-3 shadow-md">
+              <Bot size={28} />
+            </div>
+            <h1 className="text-xl font-bold font-inter text-[#000000] mb-1">
+              Hermes Agent Gateway
+            </h1>
+            <p className="text-xs text-[#8A8A85] font-funnel mb-6 max-w-sm">
+              Local AI pairing & autonomous workflows connected to{' '}
+              <span className="text-[#000000] font-semibold">{activeAgent?.name || 'Coder Persona'}</span>
+            </p>
 
-            return (
-              <div key={msg.id} className="flex gap-3.5 text-sm">
-                {/* Avatar */}
+            {/* Quick Starters */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full max-w-xl">
+              {[
+                {
+                  title: 'Review Workspace Security',
+                  desc: 'Run security scan and check for secrets in diff',
+                  prompt: 'Please review the workspace and git diff for security vulnerabilities and code quality using review_code.',
+                  icon: <ShieldCheck size={14} className="text-[#16A34A]" />,
+                },
+                {
+                  title: 'Build Landing Page',
+                  desc: 'Scaffold responsive layout with clean CSS',
+                  prompt: 'Let\'s build a responsive modern landing page component with clean design tokens.',
+                  icon: <Code2 size={14} className="text-[#007AFF]" />,
+                },
+                {
+                  title: 'Create Background Agent Task',
+                  desc: 'Run autonomous task in isolated worker pool',
+                  prompt: 'Please create a background agent task to monitor our endpoint health every 5 minutes.',
+                  icon: <Clock size={14} className="text-[#D97706]" />,
+                },
+                {
+                  title: 'Git Worktree Branch',
+                  desc: 'Create isolated worktree for parallel development',
+                  prompt: 'Create a new git worktree for feature refactoring and report its status.',
+                  icon: <GitFork size={14} className="text-[#8A8A85]" />,
+                },
+              ].map((item) => (
                 <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0 ${
-                    msg.role === 'user' ? 'bg-hi text-app' : 'bg-raised text-mid border border-line'
-                  }`}
+                  key={item.title}
+                  onClick={() => sendMessage(item.prompt)}
+                  className="p-3 bg-[#FFFFFF] hover:bg-[#FFF5EB] border border-[#E5E7EB] hover:border-[#D97706] rounded-[8px] text-left cursor-pointer transition-all shadow-2xs group"
                 >
-                  {msg.role === 'user' ? 'LI' : <Bot size={14} />}
-                </div>
-
-                {/* Message Content */}
-                <div className="flex-1 space-y-1 overflow-hidden">
-                  <div className="flex items-center justify-between text-xs font-medium text-mid">
-                    <div className="flex items-center gap-2">
-                      <span>{msg.role === 'user' ? 'You' : activeAgent?.name || 'KendaliAI'}</span>
-                      {msg.channel === 'telegram' && (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-raised text-hi border bg-raised font-mono">
-                          <Smartphone size={10} /> Telegram
-                        </span>
-                      )}
-                      {msg.channel === 'web' && isTelegramSession && (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-raised text-hi border bg-raised font-mono">
-                          Web UI
-                        </span>
-                      )}
-                    </div>
-                    {msg.model && (
-                      <span className="text-[10px] text-lo font-mono">
-                        {msg.model}
-                      </span>
-                    )}
+                  <div className="flex items-center gap-2 mb-1">
+                    <span>{item.icon}</span>
+                    <span className="text-xs font-bold font-funnel text-[#000000]">{item.title}</span>
                   </div>
+                  <div className="text-[11px] text-[#8A8A85] font-geist">{item.desc}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
-                  {/* Streaming / Persisted Thought Process Accordion */}
-                  {msg.thought && (
-                    <ThoughtProcessAccordion
-                      thought={msg.thought}
-                      isStreaming={isCurrentStreaming && !msg.content}
-                    />
-                  )}
+        {/* Message Stream */}
+        {messages.map((msg, index) => {
+          const isLastMessage = index === messages.length - 1;
+          const isCurrentStreaming = isGenerating && isLastMessage && msg.role === 'assistant';
 
-                  {/* Streaming / Completed Tool Execution Cards */}
-                  {msg.toolCalls && msg.toolCalls.length > 0 && (
-                    <div className="space-y-1.5 my-2">
-                      {msg.toolCalls.map((tc) => (
-                        <ToolExecutionCard key={tc.id} toolCall={tc} />
-                      ))}
-                    </div>
-                  )}
-
-                  {/* RAG grounding badges — which documents grounded this answer */}
-                  {msg.role === 'assistant' && msg.ragSources && msg.ragSources.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-1 mb-1.5">
-                      <span className="text-[10px] font-semibold text-lo uppercase tracking-wider">RAG</span>
-                      {msg.ragSources.map((rs, idx) => (
-                        <span
-                          key={`${rs.title}-${idx}`}
-                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-raised text-mid border border-line"
-                          title={rs.score > 0 ? `retrieval score ${rs.score.toFixed(2)}` : 'full document injected'}
-                        >
-                          <FileText size={9} />
-                          <span className="truncate max-w-[180px]">{rs.title}</span>
-                          {rs.score > 0 && <span className="text-lo font-mono">{Math.round(rs.score * 100)}%</span>}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Message Text with Streaming Cursor */}
-                  <div className="text-hi leading-relaxed break-words">
-                    <MarkdownRenderer text={msg.content} />
-                    {isCurrentStreaming && msg.content && (
-                      <span className="inline-block w-2 h-4 bg-hi animate-pulse ml-1 align-middle rounded-[1px]" />
-                    )}
-                    {isCurrentStreaming && !msg.content && !msg.thought && (!msg.toolCalls || msg.toolCalls.length === 0) && (
-                      <div className="flex items-center gap-2 text-xs text-mid py-1 font-mono">
-                        <div className="flex gap-1">
-                          <span className="w-1.5 h-1.5 bg-hi rounded-full animate-bounce" />
-                          <span className="w-1.5 h-1.5 bg-hi rounded-full animate-bounce [animation-delay:0.2s]" />
-                          <span className="w-1.5 h-1.5 bg-hi rounded-full animate-bounce [animation-delay:0.4s]" />
-                        </div>
-                        <span>{thinkingStatus || 'Initializing agent...'}</span>
-                      </div>
-                    )}
+          if (msg.role === 'user') {
+            return (
+              <div key={msg.id} className="w-full flex flex-row justify-end items-start">
+                <div className="w-full max-w-[520px] p-[12px_16px] bg-[#0F0F0F] text-[#FFFFFF] rounded-[8px] shadow-sm">
+                  <div className="text-[13px]/[20px] font-geist whitespace-pre-wrap break-words">
+                    {msg.content}
                   </div>
                 </div>
               </div>
             );
-          })}
+          }
 
-          <div ref={messagesEndRef} />
-        </div>
+          return (
+            <div key={msg.id} className="w-full flex flex-row gap-2.5 justify-start items-start">
+              {/* Avatar */}
+              <div className="w-[28px] h-[28px] shrink-0 bg-[#0F0F0F] rounded-full flex items-center justify-center text-white mt-0.5">
+                <Bot size={14} />
+              </div>
+
+              {/* Agent Bubble Container */}
+              <div className="flex-1 flex flex-col gap-2.5 min-w-0">
+                {/* Collapsible Thought Process */}
+                {msg.thought && (
+                  <ThoughtProcessAccordion
+                    thought={msg.thought}
+                    isStreaming={isCurrentStreaming && !msg.content}
+                  />
+                )}
+
+                {/* Tool Execution Cards */}
+                {msg.toolCalls && msg.toolCalls.length > 0 && (
+                  <div className="space-y-1.5 my-1">
+                    {msg.toolCalls.map((tc) => (
+                      <ToolExecutionCard key={tc.id} toolCall={tc} />
+                    ))}
+                  </div>
+                )}
+
+                {/* Message Content with Markdown */}
+                <div className="text-[13px]/[21px] text-[#000000] font-geist leading-relaxed break-words">
+                  <MarkdownRenderer text={msg.content} />
+                  {isCurrentStreaming && msg.content && (
+                    <span className="inline-block w-1.5 h-3.5 bg-[#007AFF] animate-pulse ml-1 align-middle rounded-[1px]" />
+                  )}
+                  {isCurrentStreaming && !msg.content && !msg.thought && (!msg.toolCalls || msg.toolCalls.length === 0) && (
+                    <div className="flex items-center gap-2 text-xs text-[#8A8A85] py-1 font-mono">
+                      <RefreshCw size={12} className="animate-spin text-[#007AFF]" />
+                      <span>{thinkingStatus || 'Agent thinking...'}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Grounding RAG Chips */}
+                {msg.ragSources && msg.ragSources.length > 0 && (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {msg.ragSources.map((rs, idx) => (
+                      <div
+                        key={`${rs.title}-${idx}`}
+                        className="flex items-center gap-1 px-2 py-0.5 bg-[#FFF5EB] rounded-[4px] text-[10px] text-[#F97316] font-funnel"
+                        title={`RAG grounded: ${rs.title} (score: ${rs.score.toFixed(2)})`}
+                      >
+                        <BookOpen size={10} className="text-[#F97316]" />
+                        <span>doc:{rs.title}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Token Count & Time Footer */}
+                <div className="text-[10px] text-[#8A8A85] font-funnel">
+                  {msg.tokens ? `${msg.tokens} tokens` : 'local execution'} ·{' '}
+                  {new Date(msg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+
+        <div ref={messagesEndRef} />
       </div>
 
-      {/* Floating Bottom Prompt Bar */}
-      <div className="p-4 pt-1 max-w-3xl w-full mx-auto relative">
+      {/* Floating Prompt Bar matching refs/desktop/chat.html */}
+      <div className="w-full shrink-0 p-[12px_16px_20px_16px] sm:p-[12px_56px_20px_56px] bg-[#F7F7F5] relative">
         {/* Slash Command Autocomplete Popover Modal */}
         {isTypingSlash && filteredSuggestions.length > 0 && (
           <SlashAutocompleteModal
@@ -544,74 +720,21 @@ export const ChatArea: React.FC = () => {
           />
         )}
 
-        {/* RAG Document Ingestion Notification Banner */}
+        {/* Ingest Notification */}
         {ragNotice && (
-          <div
-            className={`mb-2 rounded-xl border text-xs shadow-lg transition-all ${
-              ragNotice.type === 'error'
-                ? 'bg-red-500/15 border-red-500/60 text-red-100'
-                : 'bg-raised border-line text-hi'
-            }`}
-          >
-            <div className="flex items-start justify-between gap-2 px-3.5 py-2.5">
-              <div className="flex items-start gap-2 min-w-0">
-                {isUploadingDoc ? (
-                  <RefreshCw size={13} className="animate-spin text-hi flex-shrink-0 mt-0.5" />
-                ) : ragNotice.type === 'error' ? (
-                  <AlertCircle size={13} className="text-red-300 flex-shrink-0 mt-0.5" />
-                ) : (
-                  <Database size={13} className="text-hi flex-shrink-0 mt-0.5" />
-                )}
-                <div className="min-w-0">
-                  {ragNotice.type === 'error' && (
-                    <div className="font-bold text-red-200 uppercase tracking-wider text-[10px] mb-0.5">
-                      Error — action failed
-                    </div>
-                  )}
-                  <div className={`whitespace-pre-wrap break-words ${ragNotice.type === 'error' ? 'max-h-40 overflow-y-auto custom-scrollbar font-mono text-[11px] leading-relaxed' : ''}`}>
-                    {ragNotice.text}
-                  </div>
-                </div>
-              </div>
-              <button
-                onClick={() => setRagNotice(null)}
-                className="text-mid hover:text-hi p-0.5 flex-shrink-0"
-                title="Dismiss"
-              >
-                <X size={13} />
-              </button>
+          <div className="mb-2 p-2.5 bg-[#FFFFFF] border border-[#E5E7EB] rounded-[8px] text-xs flex items-center justify-between shadow-sm">
+            <div className="flex items-center gap-2 text-[#333333] font-geist">
+              {isUploadingDoc ? <RefreshCw size={13} className="animate-spin text-[#007AFF]" /> : <Database size={13} className="text-[#007AFF]" />}
+              <span>{ragNotice.text}</span>
             </div>
+            <button onClick={() => setRagNotice(null)} className="text-[#8A8A85] hover:text-[#000000]">
+              <X size={12} />
+            </button>
           </div>
         )}
 
-        {/* RAG context chips — documents available to this conversation */}
-        {!isTypingSlash && allDocs.length > 0 && (
-          <div className="flex items-center gap-1.5 mb-2 flex-wrap">
-            <span className="text-[10px] font-semibold text-lo uppercase tracking-wider flex items-center gap-1">
-              <Database size={10} /> RAG
-            </span>
-            {allDocs.slice(0, 5).map((doc) => (
-              <button
-                key={doc.id}
-                onClick={() => {
-                  setInputText(`/doc:${doc.title} `);
-                  textareaRef.current?.focus();
-                }}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium bg-raised text-mid border border-line hover:text-hi hover:border-mid transition-colors max-w-[200px]"
-                title={`Inject ${doc.title} into the conversation (${doc.chunkCount} chunks)`}
-              >
-                <FileText size={9} />
-                <span className="truncate">{doc.title}</span>
-                <span className="text-lo font-mono">{doc.chunkCount}</span>
-              </button>
-            ))}
-            {allDocs.length > 5 && (
-              <span className="text-[10px] text-lo font-mono">+{allDocs.length - 5}</span>
-            )}
-          </div>
-        )}
-
-        <div className="flex items-end bg-inputbg border border-line rounded-2xl p-2 gap-2 shadow-xl focus-within:border-mid transition-colors">
+        {/* Input Box Card */}
+        <div className="w-full bg-[#FFFFFF] border border-[#E5E7EB] rounded-[8px] p-3.5 shadow-sm flex flex-col gap-2.5 focus-within:border-[#007AFF] transition-colors">
           <input
             type="file"
             ref={fileInputRef}
@@ -620,46 +743,144 @@ export const ChatArea: React.FC = () => {
             accept=".txt,.md,.pdf,.json,.csv,.js,.ts,.py,.go,.html,.yaml,.yml"
           />
 
-          <button
-            type="button"
-            disabled={isUploadingDoc}
-            className="w-9 h-9 rounded-full flex items-center justify-center border border-mid/50 bg-raised text-hi hover:bg-hoverbg transition-colors disabled:opacity-50"
-            title="Upload document or code into Vector RAG memory"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            {isUploadingDoc ? <RefreshCw size={15} className="animate-spin text-hi" /> : <Paperclip size={16} />}
-          </button>
-
           <textarea
             ref={textareaRef}
             rows={1}
             value={inputText}
             onChange={handleTextareaInput}
             onKeyDown={handleKeyDown}
-            placeholder={`Message ${activeAgent?.name || 'KendaliAI'}... (Type '/' for skills & MCPs)`}
-            className="flex-1 bg-transparent text-sm text-hi placeholder:text-lo outline-none resize-none max-h-40 min-h-[24px] py-1 leading-relaxed"
+            placeholder="Message Hermes Agent… try /review, /scheduler, /skill:planner, /doc:api-spec"
+            className="w-full bg-transparent text-[13px] text-[#000000] placeholder:text-[#8A8A85] font-geist resize-none outline-none min-h-[36px] max-h-40 leading-relaxed"
           />
 
-          <button
-            className="w-9 h-9 rounded-full flex items-center justify-center border border-mid/50 bg-raised text-hi hover:bg-hoverbg transition-colors"
-            title="Voice input"
-            onClick={() => alert('Voice input coming soon')}
-          >
-            <Mic size={16} />
-          </button>
+          {/* Toolbar */}
+          <div className="w-full flex items-center gap-2.5 flex-wrap pt-1 border-t border-[#F0F0EE]">
+            {/* Attachment */}
+            <button
+              type="button"
+              disabled={isUploadingDoc}
+              onClick={() => fileInputRef.current?.click()}
+              className="p-1 text-[#333333] hover:text-[#000000] rounded hover:bg-[#F7F7F5] transition-colors"
+              title="Upload document to Vector RAG"
+            >
+              <Paperclip size={15} />
+            </button>
 
-          <button
-            onClick={handleSend}
-            disabled={!inputText.trim() || isGenerating}
-            className="w-8 h-8 rounded-full bg-hi text-app flex items-center justify-center font-bold disabled:bg-hoverbg disabled:text-lo transition-colors"
-            title="Send Message"
-          >
-            <ArrowUp size={16} />
-          </button>
-        </div>
+            {/* Mic */}
+            <button
+              type="button"
+              onClick={() => alert('Audio voice mode coming soon')}
+              className="p-1 text-[#333333] hover:text-[#000000] rounded hover:bg-[#F7F7F5] transition-colors"
+              title="Voice input"
+            >
+              <Mic size={15} />
+            </button>
 
-        <div className="text-center text-[11px] text-lo mt-2">
-          KendaliAI v0.5.0 — Personal AI Agent Gateway. Supports slash skills, MCP tools & bi-directional Telegram sync.
+            {/* Upload code */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="p-1 text-[#333333] hover:text-[#000000] rounded hover:bg-[#F7F7F5] transition-colors"
+              title="Upload file or manifest"
+            >
+              <Upload size={15} />
+            </button>
+
+            {/* Divider */}
+            <div className="w-[1px] h-[16px] bg-[#E5E7EB]" />
+
+            {/* Persona Selector Dropdown */}
+            <div className="relative" ref={agentDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setIsAgentDropdownOpen(!isAgentDropdownOpen)}
+                className="flex items-center gap-1 text-[11px] text-[#333333] font-funnel hover:text-[#000000] px-1 py-0.5 rounded hover:bg-[#F7F7F5]"
+              >
+                <span>{activeAgent?.name || 'default'}</span>
+                <ChevronDown size={11} className="text-[#8A8A85]" />
+              </button>
+
+              {isAgentDropdownOpen && (
+                <div className="absolute bottom-full left-0 mb-1 w-52 bg-[#FFFFFF] border border-[#E5E7EB] rounded-[8px] shadow-xl p-1 z-50 animate-in fade-in duration-100">
+                  <div className="px-2 py-1 text-[9px] font-bold text-[#8A8A85] uppercase tracking-wider font-funnel border-b border-[#E5E7EB] mb-1">
+                    Select Agent Persona
+                  </div>
+                  {agents.map((ag) => (
+                    <button
+                      key={ag.id}
+                      onClick={() => {
+                        setActiveAgent(ag);
+                        setIsAgentDropdownOpen(false);
+                      }}
+                      className={`w-full flex items-center justify-between px-2 py-1 text-left text-xs rounded hover:bg-[#F7F7F5] ${
+                        activeAgent?.id === ag.id ? 'font-bold text-[#007AFF]' : 'text-[#333333]'
+                      }`}
+                    >
+                      <span className="truncate">{ag.name}</span>
+                      {activeAgent?.id === ag.id && <Check size={12} className="text-[#007AFF]" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Worktree / Workspace Selector */}
+            <div className="relative" ref={worktreeDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setIsWorktreeDropdownOpen(!isWorktreeDropdownOpen)}
+                className="flex items-center gap-1 text-[11px] text-[#333333] font-funnel hover:text-[#000000] px-1 py-0.5 rounded hover:bg-[#F7F7F5]"
+              >
+                <span>{activeWorktree}</span>
+                <ChevronDown size={11} className="text-[#8A8A85]" />
+              </button>
+
+              {isWorktreeDropdownOpen && (
+                <div className="absolute bottom-full left-0 mb-1 w-48 bg-[#FFFFFF] border border-[#E5E7EB] rounded-[8px] shadow-xl p-1 z-50">
+                  <div className="px-2 py-1 text-[9px] font-bold text-[#8A8A85] uppercase tracking-wider font-funnel border-b border-[#E5E7EB] mb-1">
+                    Active Git Worktree
+                  </div>
+                  {['Home', ...worktreesList.map((w) => w.branch)].map((wt) => (
+                    <button
+                      key={wt}
+                      onClick={() => {
+                        setActiveWorktree(wt);
+                        setIsWorktreeDropdownOpen(false);
+                      }}
+                      className={`w-full flex items-center justify-between px-2 py-1 text-left text-xs rounded hover:bg-[#F7F7F5] ${
+                        activeWorktree === wt ? 'font-bold text-[#007AFF]' : 'text-[#333333]'
+                      }`}
+                    >
+                      <span className="truncate font-mono text-[11px]">{wt}</span>
+                      {activeWorktree === wt && <Check size={12} className="text-[#007AFF]" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Model Selector Tag */}
+            <div className="flex items-center gap-1 text-[11px] text-[#333333] font-funnel">
+              <span className="truncate max-w-[130px]">{effectiveModel}</span>
+            </div>
+
+            <div className="flex-1" />
+
+            {/* Keyboard shortcut hint */}
+            <div className="hidden sm:block text-[10px] text-[#8A8A85] font-funnel">
+              Enter ↵ send · ⇧Enter newline
+            </div>
+
+            {/* Send Button */}
+            <button
+              onClick={handleSend}
+              disabled={!inputText.trim() || isGenerating}
+              className="w-[32px] h-[32px] shrink-0 bg-[#007AFF] hover:bg-[#0066D6] disabled:opacity-40 text-white rounded-[4px] flex items-center justify-center transition-colors"
+              title="Send Message"
+            >
+              <ArrowUp size={15} />
+            </button>
+          </div>
         </div>
       </div>
     </main>
@@ -675,13 +896,13 @@ const SlashAutocompleteModal: React.FC<{
   if (suggestions.length === 0) return null;
 
   return (
-    <div className="absolute bottom-full left-4 right-4 mb-2 bg-inputbg/95 backdrop-blur-md border border-line rounded-2xl shadow-2xl overflow-hidden z-40 animate-in fade-in slide-in-from-bottom-2 duration-150">
-      <div className="p-2 border-b border-line flex items-center justify-between text-[11px] text-mid font-medium px-3 bg-rail">
-        <div className="flex items-center gap-1.5 font-mono">
-          <Command size={12} className="text-hi" />
+    <div className="absolute bottom-full left-4 right-4 sm:left-14 sm:right-14 mb-2 bg-[#FFFFFF] border border-[#E5E7EB] rounded-[8px] shadow-2xl overflow-hidden z-40 animate-in fade-in duration-100">
+      <div className="p-2 border-b border-[#E5E7EB] flex items-center justify-between text-[11px] text-[#8A8A85] font-funnel px-3 bg-[#F7F7F5]">
+        <div className="flex items-center gap-1.5 font-funnel font-bold text-[#000000]">
+          <Command size={12} className="text-[#007AFF]" />
           <span>Slash Commands & Agent Skills</span>
         </div>
-        <div className="flex items-center gap-2 text-[10px] text-lo font-mono">
+        <div className="flex items-center gap-2 text-[10px] text-[#8A8A85] font-funnel">
           <span>↑↓ Navigate</span>
           <span>•</span>
           <span>Tab / Enter Select</span>
@@ -690,47 +911,38 @@ const SlashAutocompleteModal: React.FC<{
         </div>
       </div>
 
-      <div className="max-h-64 overflow-y-auto custom-scrollbar p-1.5 space-y-0.5">
+      <div className="max-h-60 overflow-y-auto custom-scrollbar p-1 space-y-0.5">
         {suggestions.map((item, idx) => {
           const isSelected = idx === selectedIndex;
-          const badgeColor =
-            item.category === 'SKILL'
-              ? 'bg-raised text-hi bg-raised'
-              : item.category === 'MCP'
-              ? 'bg-raised text-hi bg-raised'
-              : item.category === 'DOC'
-              ? 'bg-raised text-hi bg-raised'
-              : 'bg-raised text-hi bg-raised';
-
           return (
             <div
               key={item.key}
               onClick={() => onSelect(item)}
-              className={`flex items-center justify-between px-3 py-2 rounded-xl cursor-pointer transition-colors select-none ${
+              className={`flex items-center justify-between px-3 py-2 rounded-[6px] cursor-pointer transition-colors select-none ${
                 isSelected
-                  ? 'hover:bg-raised text-hi border bg-raised'
-                  : 'text-mid hover:bg-raised border border-transparent'
+                  ? 'bg-[#FFF5EB] border border-[#F5E3CF]'
+                  : 'hover:bg-[#F7F7F5] border border-transparent'
               }`}
             >
               <div className="flex items-center gap-2.5 truncate">
-                <span className="text-base flex-shrink-0">{item.icon}</span>
+                <span className="text-sm flex-shrink-0">{item.icon}</span>
                 <div className="truncate">
-                  <div className="flex items-center gap-2 font-mono text-xs">
-                    <span className="font-semibold text-hi">{item.prefix}</span>
-                    <span className="text-mid font-sans font-medium">— {item.label}</span>
+                  <div className="flex items-center gap-1.5 font-mono text-xs">
+                    <span className="font-bold text-[#000000]">{item.prefix}</span>
+                    <span className="text-[#8A8A85] font-sans font-normal">— {item.label}</span>
                   </div>
-                  <div className="text-[11px] text-mid truncate mt-0.5">
+                  <div className="text-[11px] text-[#8A8A85] font-geist truncate mt-0.5">
                     {item.desc}
                   </div>
                 </div>
               </div>
 
               <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider border ${badgeColor}`}>
+                <span className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider font-funnel bg-[#F7F7F5] text-[#8A8A85] border border-[#E5E7EB]">
                   {item.category}
                 </span>
                 {isSelected && (
-                  <CornerDownLeft size={13} className="text-mid" />
+                  <CornerDownLeft size={13} className="text-[#D97706]" />
                 )}
               </div>
             </div>
@@ -741,14 +953,13 @@ const SlashAutocompleteModal: React.FC<{
   );
 };
 
-// Collapsible Thought / Reasoning Process Accordion
+// Collapsible Thought / Reasoning Process Accordion matching refs/desktop/chat.html
 const ThoughtProcessAccordion: React.FC<{ thought: string; isStreaming?: boolean }> = ({
   thought,
   isStreaming = false,
 }) => {
   const [isOpen, setIsOpen] = useState(isStreaming);
 
-  // Auto-expand when reasoning tokens are streaming
   useEffect(() => {
     if (isStreaming) {
       setIsOpen(true);
@@ -761,38 +972,34 @@ const ThoughtProcessAccordion: React.FC<{ thought: string; isStreaming?: boolean
   );
 
   return (
-    <div className="my-2 rounded-xl border bg-raised bg-raised   overflow-hidden text-xs transition-all shadow-md">
-      <button
-        type="button"
+    <div className="w-full bg-[#FFFFFF] border border-[#E5E7EB] rounded-[8px] overflow-hidden my-1 shadow-2xs">
+      <div
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between px-3.5 py-2 text-hi hover:text-hi bg-raised hover:bg-raised transition-colors select-none text-left"
+        className="w-full flex flex-row gap-2 p-[10px_14px] items-center cursor-pointer select-none"
       >
-        <div className="flex items-center gap-2 font-medium">
-          <Brain size={14} className={`text-hi ${isStreaming ? 'animate-pulse' : ''}`} />
-          <span className="font-semibold text-hi">
-            {isStreaming ? 'Reasoning in progress...' : 'Reasoning Process'}
-          </span>
-          <span className="text-[10px] bg-raised text-hi border bg-raised px-1.5 py-0.5 rounded-full font-mono">
-            {wordCount} words
-          </span>
-          {isStreaming && (
-            <span className="text-[9px] bg-raised text-hi px-1.5 py-0.5 rounded uppercase font-bold tracking-wider animate-pulse">
-              LIVE
-            </span>
-          )}
+        <Brain size={14} className={`text-[#007AFF] ${isStreaming ? 'animate-pulse' : ''}`} />
+        <div className="text-[12px] text-[#333333] font-funnel font-bold">
+          Thought process
         </div>
-        <div className="flex items-center gap-1 text-[11px] text-hi">
-          <span>{isOpen ? 'Hide reasoning' : 'Show reasoning'}</span>
-          {isOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+        <div className="text-[11px] text-[#007AFF] font-funnel">
+          {isStreaming ? 'streaming · ' : ''}{wordCount} words
         </div>
-      </button>
+        <div className="flex-1" />
+        {isOpen ? (
+          <ChevronUp size={14} className="text-[#8A8A85]" />
+        ) : (
+          <ChevronDown size={14} className="text-[#8A8A85]" />
+        )}
+      </div>
 
       {isOpen && (
-        <div className="px-4 py-3 border-t bg-raised text-mid font-mono text-[11px] leading-relaxed whitespace-pre-wrap select-text max-h-80 overflow-y-auto custom-scrollbar italic bg-black/25">
-          {thought}
-          {isStreaming && (
-            <span className="inline-block w-2 h-3.5 bg-hi animate-pulse ml-1 align-middle" />
-          )}
+        <div className="w-full p-[0px_14px_12px_14px]">
+          <div className="text-[12px]/[19px] text-[#8A8A85] font-geist whitespace-pre-wrap">
+            {thought}
+            {isStreaming && (
+              <span className="inline-block w-1.5 h-3 bg-[#007AFF] animate-pulse ml-1 align-middle" />
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -803,7 +1010,6 @@ const ThoughtProcessAccordion: React.FC<{ thought: string; isStreaming?: boolean
 const MarkdownRenderer: React.FC<{ text: string }> = ({ text }) => {
   if (!text) return null;
 
-  // Split by code blocks
   const parts = text.split(/(```[\s\S]*?```)/g);
 
   return (
@@ -817,7 +1023,6 @@ const MarkdownRenderer: React.FC<{ text: string }> = ({ text }) => {
           return <CodeBlock key={index} code={code} language={lang} />;
         }
 
-        // Inline formatting
         return (
           <p key={index} className="whitespace-pre-wrap">
             {renderInlineMarkdown(part)}
@@ -838,18 +1043,18 @@ const CodeBlock: React.FC<{ code: string; language: string }> = ({ code, languag
   };
 
   return (
-    <div className="rounded-xl border border-line bg-panel overflow-hidden my-3 text-xs">
-      <div className="flex items-center justify-between px-3.5 py-1.5 bg-inputbg border-b border-line text-mid font-mono text-[11px]">
+    <div className="rounded-[8px] border border-[#E5E7EB] bg-[#0F0F0F] text-[#FFFFFF] overflow-hidden my-3 text-xs">
+      <div className="flex items-center justify-between px-3.5 py-1.5 bg-[#1F1F1F] border-b border-[#2E2E2E] text-[#8A8A85] font-mono text-[11px]">
         <span>{language || 'code'}</span>
         <button
           onClick={handleCopy}
-          className="flex items-center gap-1 hover:text-hi transition-colors"
+          className="flex items-center gap-1 hover:text-[#FFFFFF] transition-colors"
         >
-          {copied ? <Check size={12} className="text-hi" /> : <Copy size={12} />}
+          {copied ? <Check size={12} className="text-[#16A34A]" /> : <Copy size={12} />}
           <span>{copied ? 'Copied' : 'Copy'}</span>
         </button>
       </div>
-      <pre className="p-3 font-mono text-mid overflow-x-auto">
+      <pre className="p-3 font-mono text-[#F7F7F5] overflow-x-auto text-[12px] leading-relaxed">
         <code>{code}</code>
       </pre>
     </div>
@@ -861,14 +1066,14 @@ function renderInlineMarkdown(text: string): React.ReactNode {
   return chunks.map((chunk, i) => {
     if (chunk.startsWith('`') && chunk.endsWith('`')) {
       return (
-        <code key={i} className="bg-raised px-1.5 py-0.5 rounded text-xs font-mono text-hi">
+        <code key={i} className="bg-[#E5E7EB] text-[#0F0F0F] px-1.5 py-0.5 rounded text-xs font-mono">
           {chunk.slice(1, -1)}
         </code>
       );
     }
     if (chunk.startsWith('**') && chunk.endsWith('**')) {
       return (
-        <strong key={i} className="font-semibold text-hi">
+        <strong key={i} className="font-bold text-[#000000]">
           {chunk.slice(2, -2)}
         </strong>
       );
@@ -876,202 +1081,3 @@ function renderInlineMarkdown(text: string): React.ReactNode {
     return chunk;
   });
 }
-
-// Interactive Model Selector & Search Filter Dropdown
-const ModelSelectorDropdown: React.FC = () => {
-  const { providers, activeAgent, activeModel, setActiveModel } = useAppStore();
-  const [isOpen, setIsOpen] = useState(false);
-  const [searchFilter, setSearchFilter] = useState('');
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  const effectiveModel = activeModel || activeAgent?.model || 'default';
-  const isReasoning = isReasoningModel(effectiveModel);
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isOpen]);
-
-  // Filtered providers and enabled models
-  const filteredProviders = useMemo(() => {
-    const query = searchFilter.toLowerCase().trim();
-    return providers
-      .map((p) => {
-        const enabledModels = (p.models || []).filter((m) => m.enabled !== false);
-        const matchedModels = query
-          ? enabledModels.filter(
-              (m) =>
-                m.id.toLowerCase().includes(query) ||
-                (m.name && m.name.toLowerCase().includes(query)) ||
-                p.name.toLowerCase().includes(query)
-            )
-          : enabledModels;
-        return { ...p, matchedModels };
-      })
-      .filter((p) => p.matchedModels.length > 0);
-  }, [providers, searchFilter]);
-
-  const totalMatchedModels = useMemo(
-    () => filteredProviders.reduce((acc, p) => acc + p.matchedModels.length, 0),
-    [filteredProviders]
-  );
-
-  return (
-    <div ref={dropdownRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-all select-none ${
-          activeModel
-            ? 'hover:bg-raised hover:bg-raised bg-raised text-hi shadow-sm'
-            : 'bg-inputbg hover:bg-hoverbg border-line text-mid'
-        }`}
-        title="Select active model or filter catalog"
-      >
-        {isReasoning ? (
-          <Brain size={14} className="text-hi animate-pulse" />
-        ) : (
-          <Zap size={14} className="text-mid" />
-        )}
-        <span className="font-mono max-w-[140px] truncate">{effectiveModel}</span>
-        {isReasoning && (
-          <span className="text-[9px] bg-raised text-hi px-1 rounded uppercase tracking-wider font-semibold">
-            THINK
-          </span>
-        )}
-        <ChevronDown size={12} className={`text-mid transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-      </button>
-
-      {isOpen && (
-        <div className="absolute left-0 mt-1.5 w-72 bg-panel border border-line rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-1 duration-150">
-          {/* Search Filter Input */}
-          <div className="p-2 border-b border-line">
-            <div className="flex items-center gap-2 px-2.5 py-1.5 bg-rail border border-line rounded-lg">
-              <Search size={13} className="text-lo flex-shrink-0" />
-              <input
-                type="text"
-                autoFocus
-                value={searchFilter}
-                onChange={(e) => setSearchFilter(e.target.value)}
-                placeholder="Filter models..."
-                className="bg-transparent text-xs text-hi placeholder:text-lo outline-none w-full"
-              />
-              {searchFilter && (
-                <button
-                  onClick={() => setSearchFilter('')}
-                  className="text-lo hover:text-mid text-[10px]"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Models List */}
-          <div className="max-h-64 overflow-y-auto custom-scrollbar p-1 text-xs">
-            {/* Default Agent Option */}
-            <button
-              type="button"
-              onClick={() => {
-                setActiveModel(null);
-                setIsOpen(false);
-              }}
-              className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-left transition-colors ${
-                !activeModel ? 'hover:bg-raised text-hi font-semibold' : 'text-mid hover:bg-raised'
-              }`}
-            >
-              <div className="flex items-center gap-2 truncate">
-                <span className="text-mid"><Bot size={12} /></span>
-                <div className="truncate">
-                  <div className="text-xs">Agent Default</div>
-                  <div className="text-[10px] text-lo font-mono truncate">
-                    {activeAgent?.model || 'default'}
-                  </div>
-                </div>
-              </div>
-              {!activeModel && <Check size={14} className="text-hi flex-shrink-0" />}
-            </button>
-
-            {/* Grouped by Provider */}
-            {filteredProviders.map((p) => (
-              <div key={p.id} className="mt-2">
-                <div className="px-2.5 py-1 text-[10px] font-bold text-lo uppercase tracking-wider bg-panel rounded">
-                  {p.name} ({p.type})
-                </div>
-                <div className="space-y-0.5 mt-0.5">
-                  {p.matchedModels.map((m) => {
-                    const isSelected = activeModel === m.id;
-                    const reasoning = isReasoningModel(m.id);
-                    return (
-                      <button
-                        key={m.id}
-                        type="button"
-                        onClick={() => {
-                          setActiveModel(m.id);
-                          setIsOpen(false);
-                        }}
-                        className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left transition-colors ${
-                          isSelected
-                            ? 'hover:bg-raised text-hi font-semibold'
-                            : 'text-mid hover:bg-raised'
-                        }`}
-                      >
-                        <div className="flex items-center gap-1.5 truncate">
-                          {reasoning ? (
-                            <span title="Reasoning Model" className="text-mid"><Brain size={12} /></span>
-                          ) : (
-                            <Zap size={12} className="text-lo" />
-                          )}
-                          <span className="font-mono text-xs truncate">{m.id}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          {reasoning && (
-                            <span className="text-[9px] bg-raised text-hi border bg-raised px-1 rounded">
-                              THINK
-                            </span>
-                          )}
-                          {isSelected && <Check size={13} className="text-hi" />}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-
-            {totalMatchedModels === 0 && (
-              <div className="py-6 text-center text-xs text-lo">
-                No enabled models match "{searchFilter}"
-              </div>
-            )}
-          </div>
-
-          {/* Footer: Manage Providers link */}
-          <div className="p-1.5 border-t border-line bg-panel">
-            <button
-              type="button"
-              onClick={() => {
-                setIsOpen(false);
-                navigate('providers');
-              }}
-              className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs text-mid hover:text-hi hover:bg-hoverbg rounded-lg transition-colors"
-            >
-              <Settings size={12} />
-              <span>Configure Providers & Models</span>
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};

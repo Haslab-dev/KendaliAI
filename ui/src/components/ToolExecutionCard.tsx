@@ -27,28 +27,28 @@ export const ToolExecutionCard: React.FC<ToolExecutionCardProps> = ({ toolCall }
 
   const statusConfig = {
     running: {
-      color: 'bg-raised text-hi bg-raised animate-pulse',
+      pillBg: 'bg-[#EBF5FF]',
+      pillText: 'text-[#007AFF]',
       label: 'RUNNING',
-      icon: <Loader2 size={13} className="animate-spin text-hi" />,
-      borderColor: 'bg-raised shadow-sm',
+      icon: <Loader2 size={12} className="animate-spin text-[#007AFF]" />,
     },
     success: {
-      color: 'bg-raised text-hi bg-raised',
+      pillBg: 'bg-[#E8F8EE]',
+      pillText: 'text-[#16A34A]',
       label: 'SUCCESS',
-      icon: <CheckCircle2 size={13} className="text-hi" />,
-      borderColor: 'border-line',
+      icon: <CheckCircle2 size={12} className="text-[#16A34A]" />,
     },
     error: {
-      color: 'bg-red-500/20 text-red-400 border-red-500/30',
+      pillBg: 'bg-[#FEE2E2]',
+      pillText: 'text-[#DC2626]',
       label: 'ERROR',
-      icon: <AlertCircle size={13} className="text-red-400" />,
-      borderColor: 'border-red-500/30',
+      icon: <AlertCircle size={12} className="text-[#DC2626]" />,
     },
     denied: {
-      color: 'bg-raised text-mid bg-raised',
+      pillBg: 'bg-[#FFF5EB]',
+      pillText: 'text-[#D97706]',
       label: 'POLICY DENIED',
-      icon: <ShieldAlert size={13} className="text-mid" />,
-      borderColor: 'bg-raised',
+      icon: <ShieldAlert size={12} className="text-[#D97706]" />,
     },
   };
 
@@ -56,24 +56,22 @@ export const ToolExecutionCard: React.FC<ToolExecutionCardProps> = ({ toolCall }
   const currentConfig = statusConfig[currentStatus] || statusConfig.success;
 
   return (
-    <div
-      className={`border rounded-xl my-2 overflow-hidden bg-inputbg  transition-all ${currentConfig.borderColor}`}
-    >
+    <div className="border border-[#E5E7EB] rounded-[8px] my-2 overflow-hidden bg-[#FFFFFF] shadow-sm transition-all">
       {/* Header */}
       <div
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center justify-between px-3.5 py-2.5 bg-inputbg hover:bg-raised cursor-pointer text-xs select-none transition-colors"
+        className="flex items-center justify-between px-3.5 py-2.5 bg-[#FFFFFF] hover:bg-[#F7F7F5] cursor-pointer text-xs select-none transition-colors"
       >
-        <div className="flex items-center gap-2.5 font-medium text-hi">
-          <div className="p-1 rounded bg-raised text-mid">
-            <Terminal size={13} />
+        <div className="flex items-center gap-2.5 font-medium text-[#0F0F0F]">
+          <div className="p-1 rounded bg-[#F7F7F5] border border-[#E5E7EB] text-[#8A8A85]">
+            <Terminal size={12} />
           </div>
-          <span className="font-mono text-hi font-semibold">{toolCall.tool}</span>
+          <span className="font-mono text-[#0F0F0F] font-semibold text-[12px]">{toolCall.tool}</span>
           {toolCall.durationMs !== undefined && (
-            <span className="text-[11px] text-lo font-mono">({toolCall.durationMs}ms)</span>
+            <span className="text-[11px] text-[#8A8A85] font-mono">({toolCall.durationMs}ms)</span>
           )}
           {isRunning && (
-            <span className="text-[11px] text-hi italic font-sans flex items-center gap-1">
+            <span className="text-[11px] text-[#007AFF] italic font-sans flex items-center gap-1">
               Executing in workspace...
             </span>
           )}
@@ -81,45 +79,45 @@ export const ToolExecutionCard: React.FC<ToolExecutionCardProps> = ({ toolCall }
 
         <div className="flex items-center gap-2.5">
           <span
-            className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold flex items-center gap-1.5 ${currentConfig.color}`}
+            className={`text-[10px] px-2 py-0.5 rounded-[4px] font-funnel font-bold flex items-center gap-1.5 ${currentConfig.pillBg} ${currentConfig.pillText}`}
           >
             {currentConfig.icon}
             <span>{currentConfig.label}</span>
           </span>
           {isOpen ? (
-            <ChevronDown size={14} className="text-mid" />
+            <ChevronDown size={14} className="text-[#8A8A85]" />
           ) : (
-            <ChevronRight size={14} className="text-mid" />
+            <ChevronRight size={14} className="text-[#8A8A85]" />
           )}
         </div>
       </div>
 
       {/* Expandable Body */}
       {isOpen && (
-        <div className="px-3.5 py-3 border-t border-line bg-rail font-mono text-[11px] space-y-2.5 text-mid">
+        <div className="px-3.5 py-3 border-t border-[#E5E7EB] bg-[#F7F7F5] font-mono text-[11px] space-y-2.5 text-[#333333]">
           {toolCall.arguments && Object.keys(toolCall.arguments).length > 0 && (
             <div>
-              <div className="text-lo text-[10px] uppercase tracking-wider mb-1 font-sans font-semibold">
+              <div className="text-[#8A8A85] text-[10px] uppercase tracking-wider mb-1 font-funnel font-bold">
                 Arguments
               </div>
-              <pre className="bg-hoverbg p-2.5 rounded-lg border border-line overflow-x-auto text-hi custom-scrollbar">
+              <pre className="bg-[#FFFFFF] p-2.5 rounded-[6px] border border-[#E5E7EB] overflow-x-auto text-[#0F0F0F] custom-scrollbar text-[11px]">
                 {JSON.stringify(toolCall.arguments, null, 2)}
               </pre>
             </div>
           )}
 
           <div>
-            <div className="text-lo text-[10px] uppercase tracking-wider mb-1 font-sans font-semibold flex items-center justify-between">
+            <div className="text-[#8A8A85] text-[10px] uppercase tracking-wider mb-1 font-funnel font-bold flex items-center justify-between">
               <span>Output</span>
               {isRunning && (
-                <span className="text-[10px] text-hi font-normal animate-pulse font-mono">
+                <span className="text-[10px] text-[#007AFF] font-normal animate-pulse font-mono">
                   streaming output...
                 </span>
               )}
             </div>
             <pre
-              className={`bg-hoverbg p-2.5 rounded-lg border border-line overflow-x-auto whitespace-pre-wrap max-h-64 overflow-y-auto custom-scrollbar text-mid ${
-                currentStatus === 'error' ? 'text-red-400' : ''
+              className={`bg-[#FFFFFF] p-2.5 rounded-[6px] border border-[#E5E7EB] overflow-x-auto whitespace-pre-wrap max-h-64 overflow-y-auto custom-scrollbar text-[11px] text-[#333333] ${
+                currentStatus === 'error' ? 'text-red-500' : ''
               }`}
             >
               {toolCall.output || (isRunning ? 'Running capability...' : 'No output returned.')}

@@ -20,7 +20,22 @@ export function useAgentSocket() {
     setThinkingStatus,
     loadSessions,
     appendLogEvent,
+    loadTasks,
   } = useAppStore();
+
+  const activeSessionIdRef = useRef(activeSessionId);
+  useEffect(() => {
+    activeSessionIdRef.current = activeSessionId;
+  }, [activeSessionId]);
+
+  useEffect(() => {
+    loadTasks();
+    const taskInterval = setInterval(() => {
+      loadTasks();
+    }, 4000);
+
+    return () => clearInterval(taskInterval);
+  }, [loadTasks]);
 
   useEffect(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -44,8 +59,18 @@ export function useAgentSocket() {
         // 1. Always record in global streaming logs
         appendLogEvent(ev);
 
-        // 2. Handle active session chat updates if matching active session
-        const isCurrentSession = !activeSessionId || ev.sessionId === activeSessionId;
+        // 2. Dispatch reminder notifications and task events globally
+        if (ev.type === 'reminder.triggered') {
+          window.dispatchEvent(new CustomEvent('kendali:reminder', { detail: ev.payload }));
+        }
+        if (ev.type.startsWith('task.')) {
+          loadTasks();
+          window.dispatchEvent(new CustomEvent('kendali:tasks_updated', { detail: ev }));
+        }
+
+        // 3. Handle active session chat updates if matching active session
+        const currentSid = activeSessionIdRef.current;
+        const isCurrentSession = !currentSid || ev.sessionId === currentSid;
 
         switch (ev.type) {
           case 'session.created':
@@ -183,7 +208,7 @@ export function useAgentSocket() {
     return () => {
       ws.close();
     };
-  }, [activeSessionId]);
+  }, []);
 
   const sendMessage = async (content: string) => {
     if (!content.trim()) return;
