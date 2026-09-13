@@ -1009,6 +1009,9 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 			Category:    "Skill",
 			Execute: func(ctx context.Context, args map[string]interface{}) string {
 				if skills.DefaultManager == nil {
+					skills.Init()
+				}
+				if skills.DefaultManager == nil {
 					return "error: skill manager not initialized"
 				}
 				name, _ := args["name"].(string)
@@ -1048,7 +1051,7 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 				if err != nil {
 					return fmt.Sprintf("error creating skill: %v", err)
 				}
-				registerSkillJSON(pkg.Spec.ID, pkg.Spec.Name, pkg.Spec.Description)
+				RegisterSkillJSON(pkg.Spec.ID, pkg.Spec.Name, pkg.Spec.Description)
 				return fmt.Sprintf("✅ Skill '%s' created [%s v%s]. Keywords: %v",
 					pkg.Spec.Name, pkg.Spec.ID, pkg.Spec.Version, pkg.Spec.Routing.Keywords[:min(5, len(pkg.Spec.Routing.Keywords))])
 			},
@@ -1059,6 +1062,9 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 			Signature:   `{"url": "string", "skill_id": "string"}`,
 			Category:    "Skill",
 			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				if skills.DefaultManager == nil {
+					skills.Init()
+				}
 				if skills.DefaultManager == nil {
 					return "error: skill manager not initialized"
 				}
@@ -1082,7 +1088,7 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 				if err != nil {
 					return fmt.Sprintf("error installing skill: %v", err)
 				}
-				registerSkillJSON(pkg.Spec.ID, pkg.Spec.Name, pkg.Spec.Description)
+				RegisterSkillJSON(pkg.Spec.ID, pkg.Spec.Name, pkg.Spec.Description)
 				return fmt.Sprintf("✅ Skill '%s' installed [%s v%s] from %s. Keywords: %v",
 					pkg.Spec.Name, pkg.Spec.ID, pkg.Spec.Version, url, pkg.Spec.Routing.Keywords[:min(5, len(pkg.Spec.Routing.Keywords))])
 			},
@@ -1126,6 +1132,7 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 				if err := skills.DefaultManager.Delete(id); err != nil {
 					return fmt.Sprintf("error deleting skill: %v", err)
 				}
+				UnregisterSkillJSON(id)
 				return fmt.Sprintf("✅ Deleted skill '%s'", id)
 			},
 		},
@@ -1357,6 +1364,13 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 				name, _ := args["name"].(string)
 				desc, _ := args["description"].(string)
 				scope, _ := args["scope"].(string)
+				if scope == "" {
+					if sc, ok := args["source"].(string); ok && sc != "" {
+						scope = sc
+					} else {
+						scope = "global"
+					}
+				}
 				sysPrompt, _ := args["system_prompt"].(string)
 
 				if id == "" && name != "" {
@@ -1369,64 +1383,80 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 					name = id
 				}
 
+				var rawTools []interface{}
+				if rt, ok := args["tools"].([]interface{}); ok {
+					rawTools = rt
+				} else if str, ok := args["tools"].(string); ok && str != "" {
+					_ = json.Unmarshal([]byte(str), &rawTools)
+				}
+
 				var toolsList []plugins.PluginToolDef
-				if rawTools, ok := args["tools"].([]interface{}); ok {
-					for _, rt := range rawTools {
-						if m, ok := rt.(map[string]interface{}); ok {
-							var hTypeStr string
-							if rawHT, exists := m["handler_type"]; exists && rawHT != nil {
-								hTypeStr = strings.ToLower(strings.TrimSpace(fmt.Sprint(rawHT)))
-							}
-							if hTypeStr == "<nil>" || hTypeStr == "null" {
-								hTypeStr = ""
-							}
-
-							cmdStr := ""
-							if c, exists := m["command"]; exists && c != nil && fmt.Sprint(c) != "<nil>" {
-								cmdStr = fmt.Sprint(c)
-							}
-							scriptStr := ""
-							if s, exists := m["script"]; exists && s != nil && fmt.Sprint(s) != "<nil>" {
-								scriptStr = fmt.Sprint(s)
-							}
-
-							tDef := plugins.PluginToolDef{
-								Name:        fmt.Sprint(m["name"]),
-								Description: fmt.Sprint(m["description"]),
-								Command:     cmdStr,
-								Script:      scriptStr,
-							}
-							if rawParams, ok := m["parameters"].(map[string]interface{}); ok {
-								tDef.Parameters = rawParams
-							}
-							if hTypeStr == "script" || hTypeStr == "file" || (hTypeStr == "" && scriptStr != "" && cmdStr == "") {
-								tDef.HandlerType = plugins.HandlerScript
-							} else {
-								tDef.HandlerType = plugins.HandlerCommand
-							}
-							toolsList = append(toolsList, tDef)
+				for _, rt := range rawTools {
+					if m, ok := rt.(map[string]interface{}); ok {
+						var hTypeStr string
+						if rawHT, exists := m["handler_type"]; exists && rawHT != nil {
+							hTypeStr = strings.ToLower(strings.TrimSpace(fmt.Sprint(rawHT)))
 						}
+						if hTypeStr == "<nil>" || hTypeStr == "null" {
+							hTypeStr = ""
+						}
+
+						cmdStr := ""
+						if c, exists := m["command"]; exists && c != nil && fmt.Sprint(c) != "<nil>" && fmt.Sprint(c) != "null" {
+							cmdStr = fmt.Sprint(c)
+						}
+						scriptStr := ""
+						if s, exists := m["script"]; exists && s != nil && fmt.Sprint(s) != "<nil>" && fmt.Sprint(s) != "null" {
+							scriptStr = fmt.Sprint(s)
+						}
+
+						tDef := plugins.PluginToolDef{
+							Name:        fmt.Sprint(m["name"]),
+							Description: fmt.Sprint(m["description"]),
+							Command:     cmdStr,
+							Script:      scriptStr,
+							Parameters:  make(map[string]interface{}),
+						}
+						if rawParams, ok := m["parameters"].(map[string]interface{}); ok && rawParams != nil {
+							tDef.Parameters = rawParams
+						}
+						if hTypeStr == "script" || hTypeStr == "file" || (hTypeStr == "" && scriptStr != "" && cmdStr == "") {
+							tDef.HandlerType = plugins.HandlerScript
+						} else {
+							tDef.HandlerType = plugins.HandlerCommand
+						}
+						toolsList = append(toolsList, tDef)
 					}
+				}
+
+				var rawSkills []interface{}
+				if rs, ok := args["skills"].([]interface{}); ok {
+					rawSkills = rs
+				} else if str, ok := args["skills"].(string); ok && str != "" {
+					_ = json.Unmarshal([]byte(str), &rawSkills)
 				}
 
 				var skillsList []plugins.PluginSkillDef
-				if rawSkills, ok := args["skills"].([]interface{}); ok {
-					for _, rs := range rawSkills {
-						if m, ok := rs.(map[string]interface{}); ok {
-							skillsList = append(skillsList, plugins.PluginSkillDef{
-								Name:        fmt.Sprint(m["name"]),
-								Description: fmt.Sprint(m["description"]),
-								Body:        fmt.Sprint(m["body"]),
-							})
-						}
+				for _, rs := range rawSkills {
+					if m, ok := rs.(map[string]interface{}); ok {
+						skillsList = append(skillsList, plugins.PluginSkillDef{
+							Name:        fmt.Sprint(m["name"]),
+							Description: fmt.Sprint(m["description"]),
+							Body:        fmt.Sprint(m["body"]),
+						})
 					}
 				}
 
+				var rawFiles map[string]interface{}
+				if rf, ok := args["files"].(map[string]interface{}); ok {
+					rawFiles = rf
+				} else if str, ok := args["files"].(string); ok && str != "" {
+					_ = json.Unmarshal([]byte(str), &rawFiles)
+				}
+
 				filesMap := make(map[string]string)
-				if rawFiles, ok := args["files"].(map[string]interface{}); ok {
-					for k, v := range rawFiles {
-						filesMap[k] = fmt.Sprint(v)
-					}
+				for k, v := range rawFiles {
+					filesMap[k] = fmt.Sprint(v)
 				}
 
 				p, err := plugins.DefaultManager.Create(plugins.CreatePluginRequest{
@@ -1459,6 +1489,25 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 				list := plugins.DefaultManager.List()
 				data, _ := json.MarshalIndent(list, "", "  ")
 				return string(data)
+			},
+		},
+		"delete_plugin": {
+			Name:        "delete_plugin",
+			Description: "Deletes an installed agent plugin by ID.",
+			Signature:   `{"id": "string"}`,
+			Category:    "Plugin",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				if plugins.DefaultManager == nil {
+					plugins.NewManager(workspaceRoot, nil)
+				}
+				id, _ := args["id"].(string)
+				if id == "" {
+					return "error: 'id' is required"
+				}
+				if err := plugins.DefaultManager.Delete(id); err != nil {
+					return fmt.Sprintf("error deleting plugin: %v", err)
+				}
+				return fmt.Sprintf("✅ Deleted plugin '%s'", id)
 			},
 		},
 		"toggle_plugin": {
@@ -1770,7 +1819,7 @@ type skillRegistry struct {
 	Skills []skillRegistryEntry `json:"skills"`
 }
 
-func registerSkillJSON(id, name, description string) {
+func RegisterSkillJSON(id, name, description string) {
 	homeDir, _ := os.UserHomeDir()
 	path := filepath.Join(homeDir, ".kendaliai", "skills", "skills.json")
 
@@ -1795,6 +1844,30 @@ func registerSkillJSON(id, name, description string) {
 		Description: description,
 		Installed:   true,
 	})
+	b, _ := json.MarshalIndent(registry, "", "  ")
+	os.WriteFile(path, b, 0644)
+}
+
+func UnregisterSkillJSON(id string) {
+	homeDir, _ := os.UserHomeDir()
+	path := filepath.Join(homeDir, ".kendaliai", "skills", "skills.json")
+
+	var registry skillRegistry
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	if err := json.Unmarshal(data, &registry); err != nil {
+		return
+	}
+
+	var updated []skillRegistryEntry
+	for _, s := range registry.Skills {
+		if s.ID != id {
+			updated = append(updated, s)
+		}
+	}
+	registry.Skills = updated
 	b, _ := json.MarshalIndent(registry, "", "  ")
 	os.WriteFile(path, b, 0644)
 }

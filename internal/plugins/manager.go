@@ -58,8 +58,14 @@ func (m *Manager) Discover() {
 	// 1. Scan global dir (~/.kendaliai/plugins)
 	m.scanDirLocked(m.globalDir, SourceGlobal)
 
-	// 2. Scan workspace dir (.kendaliai/plugins or plugins)
-	if m.workspaceDir != "" {
+	// 2. Scan ~/workspaces/plugins dir
+	home, _ := os.UserHomeDir()
+	if home != "" {
+		m.scanDirLocked(filepath.Join(home, "workspaces", "plugins"), SourceWorkspace)
+	}
+
+	// 3. Scan workspace dir (.kendaliai/plugins or plugins)
+	if m.workspaceDir != "" && m.workspaceDir != filepath.Join(home, "workspaces") {
 		m.scanDirLocked(filepath.Join(m.workspaceDir, ".kendaliai", "plugins"), SourceWorkspace)
 		m.scanDirLocked(filepath.Join(m.workspaceDir, "plugins"), SourceWorkspace)
 	}
@@ -169,8 +175,15 @@ func (m *Manager) Create(req CreatePluginRequest) (*Plugin, error) {
 
 	targetBase := m.globalDir
 	source := SourceGlobal
-	if req.Scope == "workspace" && m.workspaceDir != "" {
-		targetBase = filepath.Join(m.workspaceDir, ".kendaliai", "plugins")
+	scope := strings.ToLower(strings.TrimSpace(req.Scope))
+	if scope == "" {
+		scope = strings.ToLower(strings.TrimSpace(req.Source))
+	}
+	if scope == "workspace" {
+		home, _ := os.UserHomeDir()
+		wsPlugins := filepath.Join(home, "workspaces", "plugins")
+		_ = os.MkdirAll(wsPlugins, 0755)
+		targetBase = wsPlugins
 		source = SourceWorkspace
 	}
 
@@ -207,13 +220,26 @@ func (m *Manager) Create(req CreatePluginRequest) (*Plugin, error) {
 	}
 
 	for i := range p.Tools {
+		cmd := strings.TrimSpace(p.Tools[i].Command)
+		if cmd == "<nil>" || cmd == "null" {
+			p.Tools[i].Command = ""
+			cmd = ""
+		}
+		script := strings.TrimSpace(p.Tools[i].Script)
+		if script == "<nil>" || script == "null" {
+			p.Tools[i].Script = ""
+			script = ""
+		}
 		ht := strings.ToLower(strings.TrimSpace(string(p.Tools[i].HandlerType)))
-		if ht == "<nil>" || ht == "null" || ht == "" {
-			if p.Tools[i].Script != "" {
+		if ht == "<nil>" || ht == "null" || ht == "" || ht == "bash" || ht == "shell" || ht == "sh" || ht == "cmd" {
+			if script != "" && cmd == "" {
 				p.Tools[i].HandlerType = HandlerScript
 			} else {
 				p.Tools[i].HandlerType = HandlerCommand
 			}
+		}
+		if p.Tools[i].Parameters == nil {
+			p.Tools[i].Parameters = make(map[string]interface{})
 		}
 	}
 

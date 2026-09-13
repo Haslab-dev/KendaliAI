@@ -65,7 +65,8 @@ type CreatePluginRequest struct {
 	Description  string            `json:"description"`
 	Version      string            `json:"version,omitempty"`
 	Author       string            `json:"author,omitempty"`
-	Scope        string            `json:"scope,omitempty"` // "workspace" or "global"
+	Scope        string            `json:"scope,omitempty"`  // "workspace" or "global"
+	Source       string            `json:"source,omitempty"` // alias for scope
 	SystemPrompt string            `json:"system_prompt,omitempty"`
 	Tools        []PluginToolDef   `json:"tools,omitempty"`
 	Skills       []PluginSkillDef  `json:"skills,omitempty"`

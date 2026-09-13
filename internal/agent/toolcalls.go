@@ -65,7 +65,10 @@ func signatureJSONType(typeName string) map[string]interface{} {
 	case "bool", "boolean":
 		return map[string]interface{}{"type": "boolean"}
 	case "array", "list":
-		return map[string]interface{}{"type": "array"}
+		return map[string]interface{}{
+			"type":  "array",
+			"items": map[string]interface{}{"type": "string"},
+		}
 	case "object", "map":
 		return map[string]interface{}{"type": "object"}
 	default:
