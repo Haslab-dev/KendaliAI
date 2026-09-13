@@ -88,16 +88,16 @@ export const App: React.FC = () => {
       <IconRail />
 
       {/* Main content area: routed pane or chat workspace */}
-      {route === 'chat' ? (
+      {route === 'chat' || route === 'dashboard' ? (
         <>
-          {/* Session sidebar — desktop only; sessions pane covers mobile */}
+          {/* Session sidebar — desktop only */}
           <div className="hidden md:flex h-full">
             <Sidebar />
           </div>
 
-          {/* Central Chat & Interaction Canvas */}
+          {/* Central Workspace Canvas */}
           <div className="flex-1 flex flex-col h-full min-w-0 relative overflow-hidden bg-app pb-[60px] md:pb-0">
-            <ChatArea />
+            {route === 'chat' ? <ChatArea /> : <PaneHost route="dashboard" />}
           </div>
         </>
       ) : (

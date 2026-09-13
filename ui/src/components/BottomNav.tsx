@@ -1,16 +1,16 @@
 import React, { useState } from 'react';
 import {
-  Bot,
-  Brain,
-  FileText,
+  Layers,
   MessageSquare,
-  History,
+  FolderGit2,
+  CalendarClock,
   Settings as SettingsIcon,
-  Zap,
+  Bot,
   Plug,
-  Wrench,
-  Smartphone,
-  Terminal,
+  BookOpen,
+  Code2,
+  Send,
+  Zap,
   MoreHorizontal,
   X,
   Sun,
@@ -20,27 +20,28 @@ import {
 import { navigate, RouteName, useRoute } from '../router';
 import { useAppStore } from '../store/useAppStore';
 
-// Primary 4 items always shown on bottom navigation bar
-const PRIMARY_ITEMS: { id: RouteName; label: string; icon: LucideIcon }[] = [
+// Matches mobile design references (refs/mobile/dashboard.html):
+// Bottom Nav: Chat/Dashboard, Branches (worktrees), Planner (scheduler), Settings + More Drawer
+const PRIMARY_MOBILE_ITEMS: { id: RouteName; label: string; icon: LucideIcon }[] = [
+  { id: 'dashboard', label: 'Overview', icon: Layers },
   { id: 'chat', label: 'Chat', icon: MessageSquare },
-  { id: 'sessions', label: 'Sessions', icon: History },
-  { id: 'agents', label: 'Agents', icon: Bot },
+  { id: 'worktrees', label: 'Branches', icon: FolderGit2 },
+  { id: 'scheduler', label: 'Planner', icon: CalendarClock },
   { id: 'settings', label: 'Settings', icon: SettingsIcon },
 ];
 
-// All menu items available in the "More" drawer on mobile
-const ALL_MENU_ITEMS: { id: RouteName; label: string; desc: string; icon: LucideIcon }[] = [
-  { id: 'chat', label: 'Chat View', desc: 'Main agent chat & reasoning canvas', icon: MessageSquare },
-  { id: 'sessions', label: 'Session Registry', desc: 'Active & archived conversation threads', icon: History },
-  { id: 'agents', label: 'Agent Personas', desc: 'Autonomous personas, system prompts & tools', icon: Bot },
-  { id: 'providers', label: 'Providers & Models', desc: 'OpenAI, Ollama, DeepSeek & model probes', icon: Zap },
-  { id: 'docs', label: 'Document Store (RAG)', desc: 'Vector embeddings & semantic search chunks', icon: FileText },
-  { id: 'skills', label: 'Skills Library', desc: 'Modular domain instructions (SKILL.md)', icon: Brain },
-  { id: 'mcps', label: 'MCP Servers', desc: 'Model Context Protocol tool extensions', icon: Plug },
-  { id: 'tools', label: 'Tools & Policies', desc: 'Tool approval rules & capability permissions', icon: Wrench },
-  { id: 'telegram', label: 'Telegram Bots', desc: 'Bi-directional bots & topic syncing', icon: Smartphone },
-  { id: 'logs', label: 'Streaming Logs', desc: 'Real-time WebSocket event telemetry', icon: Terminal },
-  { id: 'settings', label: 'Settings', desc: 'Security password, appearance & PWA install', icon: SettingsIcon },
+const ALL_MOBILE_FEATURES: { id: RouteName; label: string; desc: string; icon: LucideIcon }[] = [
+  { id: 'dashboard', label: 'Dashboard', desc: 'System overview & executive metrics', icon: Layers },
+  { id: 'chat', label: 'Hermes Chat', desc: 'Coding agent & reasoning canvas', icon: MessageSquare },
+  { id: 'editor', label: 'Workspace Editor', desc: 'File explorer & in-browser editor', icon: Code2 },
+  { id: 'agents', label: 'Agent Personas', desc: 'Autonomous personas, prompts & tools', icon: Bot },
+  { id: 'scheduler', label: 'Scheduler & Reminders', desc: 'Natural language & cron automation', icon: CalendarClock },
+  { id: 'worktrees', label: 'Git Worktrees', desc: 'Isolated branches & safe checkouts', icon: FolderGit2 },
+  { id: 'plugins', label: 'Plugins & Skills', desc: 'Hot-register tools & agent plugins', icon: Plug },
+  { id: 'docs', label: 'Knowledge Base', desc: 'Vector embeddings RAG & chunk search', icon: BookOpen },
+  { id: 'providers', label: 'Providers & MCP', desc: 'OpenAI, Ollama, DeepSeek & MCP tools', icon: Zap },
+  { id: 'telegram', label: 'Telegram Gateway', desc: 'Bi-directional bot & topic streaming', icon: Send },
+  { id: 'settings', label: 'Policy Guardrails', desc: 'Tool approval permissions & security', icon: SettingsIcon },
 ];
 
 export const BottomNav: React.FC = () => {
@@ -50,12 +51,12 @@ export const BottomNav: React.FC = () => {
 
   return (
     <>
-      {/* Mobile Bottom Navigation Bar */}
+      {/* Mobile Bottom Navigation Bar matching refs/mobile */}
       <nav
-        className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-rail border-t border-line flex items-stretch justify-around px-1 pt-1"
-        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0.25rem)' }}
+        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#FFFFFF] dark:bg-[#141414] border-t border-[#E5E7EB] dark:border-[#27272A] flex items-stretch justify-around px-2 py-1 shadow-lg"
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0.35rem)' }}
       >
-        {PRIMARY_ITEMS.map((item) => {
+        {PRIMARY_MOBILE_ITEMS.map((item) => {
           const Icon = item.icon;
           const isActive = route === item.id;
           return (
@@ -65,68 +66,69 @@ export const BottomNav: React.FC = () => {
                 setIsMoreOpen(false);
                 navigate(item.id);
               }}
-              className={`flex flex-col items-center justify-center gap-0.5 min-h-[48px] min-w-[48px] flex-1 py-1 rounded-xl transition-colors ${
-                isActive ? 'text-hi font-semibold' : 'text-mid active:text-hi'
+              className={`flex flex-col items-center justify-center gap-1 min-h-[48px] flex-1 py-1 rounded-[6px] transition-colors ${
+                isActive
+                  ? 'text-[#0F0F0F] dark:text-white font-bold'
+                  : 'text-[#8A8A85] hover:text-[#333333]'
               }`}
             >
-              <Icon size={19} />
-              <span className="text-[10px]">{item.label}</span>
+              <Icon size={19} strokeWidth={isActive ? 2.2 : 1.8} />
+              <span className="text-[9px] font-funnel">{item.label}</span>
             </button>
           );
         })}
 
-        {/* More / All Menus Button */}
+        {/* More Drawer Button */}
         <button
           onClick={() => setIsMoreOpen(!isMoreOpen)}
-          className={`flex flex-col items-center justify-center gap-0.5 min-h-[48px] min-w-[48px] flex-1 py-1 rounded-xl transition-colors ${
-            isMoreOpen || !PRIMARY_ITEMS.some((p) => p.id === route)
-              ? 'text-hi font-semibold'
-              : 'text-mid active:text-hi'
+          className={`flex flex-col items-center justify-center gap-1 min-h-[48px] flex-1 py-1 rounded-[6px] transition-colors ${
+            isMoreOpen || !PRIMARY_MOBILE_ITEMS.some((p) => p.id === route)
+              ? 'text-[#007AFF] font-bold'
+              : 'text-[#8A8A85] hover:text-[#333333]'
           }`}
-          title="All Menus & Settings"
+          title="All Features"
         >
           <MoreHorizontal size={19} />
-          <span className="text-[10px]">More</span>
+          <span className="text-[9px] font-funnel">More</span>
         </button>
       </nav>
 
-      {/* Full "All Menus & Settings" Mobile Drawer */}
+      {/* Drawer Overlay */}
       {isMoreOpen && (
-        <div className="md:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex flex-col justify-end animate-in fade-in duration-150">
+        <div
+          className="md:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 animate-in fade-in duration-150 flex flex-col justify-end"
+          onClick={() => setIsMoreOpen(false)}
+        >
           <div
-            className="bg-panel border-t border-line rounded-t-3xl max-h-[82vh] flex flex-col shadow-2xl overflow-hidden pb-16 animate-in slide-in-from-bottom duration-200"
+            className="bg-[#FFFFFF] dark:bg-[#181818] rounded-t-[16px] border-t border-[#E5E7EB] dark:border-[#2E2E30] max-h-[85vh] flex flex-col overflow-hidden shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
           >
             {/* Drawer Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-line">
-              <div className="flex items-center gap-2">
-                <span className="text-base">🪶</span>
-                <div>
-                  <h3 className="text-sm font-bold text-hi">All Menus & Settings</h3>
-                  <p className="text-[10px] text-mid">Full KendaliAI workspace navigation</p>
-                </div>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#E5E7EB] dark:border-[#2E2E30]">
+              <div>
+                <h2 className="text-base font-bold font-sans text-black dark:text-white">All Features</h2>
+                <p className="text-[11px] text-[#8A8A85] font-funnel">Hermes Agent Local Gateway</p>
               </div>
-
               <div className="flex items-center gap-2">
                 <button
                   onClick={toggleTheme}
-                  className="p-2 rounded-xl bg-raised border border-line text-mid hover:text-hi"
-                  title="Toggle theme"
+                  className="p-2 text-[#8A8A85] hover:text-black dark:hover:text-white rounded-lg hover:bg-black/5 dark:hover:bg-white/5"
+                  title="Toggle Theme"
                 >
-                  {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
+                  {theme === 'dark' ? <Moon size={16} /> : <Sun size={16} />}
                 </button>
                 <button
                   onClick={() => setIsMoreOpen(false)}
-                  className="p-2 rounded-xl bg-raised border border-line text-mid hover:text-hi"
-                  title="Close"
+                  className="p-2 text-[#8A8A85] hover:text-black dark:hover:text-white rounded-lg hover:bg-black/5 dark:hover:bg-white/5"
                 >
-                  <X size={15} />
+                  <X size={18} />
                 </button>
               </div>
             </div>
 
-            {/* Menu Items Grid */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {ALL_MENU_ITEMS.map((item) => {
+            {/* Menu Grid / List */}
+            <div className="overflow-y-auto p-3 space-y-1 custom-scrollbar">
+              {ALL_MOBILE_FEATURES.map((item) => {
                 const Icon = item.icon;
                 const isActive = route === item.id;
                 return (
@@ -136,22 +138,24 @@ export const BottomNav: React.FC = () => {
                       setIsMoreOpen(false);
                       navigate(item.id);
                     }}
-                    className={`flex items-center gap-3 p-3 rounded-2xl border text-left transition-all ${
+                    className={`w-full flex items-center gap-3 p-3 rounded-[8px] text-left transition-colors ${
                       isActive
-                        ? 'bg-raised border-line text-hi shadow-sm'
-                        : 'bg-inputbg border-line/60 text-mid hover:text-hi hover:bg-raised'
+                        ? 'bg-[#FFF5EB] dark:bg-[#2A1F16] border border-[#F5E3CF] dark:border-[#422F1F] text-black dark:text-white'
+                        : 'hover:bg-[#F7F7F5] dark:hover:bg-[#202022] text-[#333333] dark:text-[#D4D4D8]'
                     }`}
                   >
                     <div
-                      className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                        isActive ? 'bg-hi text-app' : 'bg-raised text-mid border border-line'
+                      className={`w-9 h-9 rounded-[6px] flex items-center justify-center shrink-0 ${
+                        isActive
+                          ? 'bg-[#0F0F0F] text-white dark:bg-white dark:text-black'
+                          : 'bg-[#F7F7F5] dark:bg-[#252528] text-[#333333] dark:text-white'
                       }`}
                     >
                       <Icon size={18} />
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xs font-semibold text-hi truncate">{item.label}</div>
-                      <div className="text-[10px] text-mid truncate">{item.desc}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-bold font-sans truncate">{item.label}</div>
+                      <div className="text-[10px] text-[#8A8A85] font-funnel truncate">{item.desc}</div>
                     </div>
                   </button>
                 );

@@ -1,5 +1,22 @@
 import React from 'react';
-import { ArrowLeft, Bot, Brain, FileText, MessageSquare, Plug, Settings, Smartphone, Terminal, Wrench, Zap, type LucideIcon } from 'lucide-react';
+import {
+  ArrowLeft,
+  Bot,
+  Brain,
+  FileText,
+  MessageSquare,
+  Plug,
+  Settings,
+  Smartphone,
+  Terminal,
+  Wrench,
+  Zap,
+  Code2,
+  GitFork,
+  Clock,
+  Puzzle,
+  type LucideIcon,
+} from 'lucide-react';
 import { navigate, RouteName } from '../router';
 import { useAppStore } from '../store/useAppStore';
 import { ProvidersPane } from '../panes/providers';
@@ -11,12 +28,23 @@ import { SkillsPane } from '../panes/skills';
 import { ToolsPane } from '../panes/tools';
 import { TelegramPane } from '../panes/telegram';
 import { SettingsPane } from '../panes/settings';
+import { EditorPane } from '../panes/editor';
+import { WorktreesPane } from '../panes/worktrees';
+import { SchedulerPane } from '../panes/scheduler';
+import { PluginsPane } from '../panes/plugins';
+import { DashboardPane } from '../panes/dashboard';
 import { LogsStreamingView } from './LogsStreamingView';
+import { Layers } from 'lucide-react';
 
 const PANES: Record<
   Exclude<RouteName, 'chat'>,
   { label: string; icon: LucideIcon }
 > = {
+  dashboard: { label: 'Dashboard', icon: Layers },
+  editor: { label: 'Files & Code Editor', icon: Code2 },
+  worktrees: { label: 'Git Worktrees', icon: GitFork },
+  scheduler: { label: 'Scheduler & Cron', icon: Clock },
+  plugins: { label: 'Plugins & Extensions', icon: Puzzle },
   logs: { label: 'Streaming Logs', icon: Terminal },
   providers: { label: 'Providers & Models', icon: Zap },
   agents: { label: 'Agent Personas', icon: Bot },
@@ -42,7 +70,7 @@ export const PaneHost: React.FC<{ route: Exclude<RouteName, 'chat'> }> = ({ rout
 
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 relative overflow-hidden bg-app">
-      {route !== 'logs' && (
+      {route !== 'logs' && route !== 'editor' && route !== 'dashboard' && (
         <div className="flex items-center gap-3 px-4 md:px-6 py-3 border-b border-line bg-rail flex-shrink-0">
           <button
             onClick={() => navigate('chat')}
@@ -58,8 +86,13 @@ export const PaneHost: React.FC<{ route: Exclude<RouteName, 'chat'> }> = ({ rout
         </div>
       )}
       <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col">
-        {/* Inner padding for all panes except full-bleed logs */}
-        <div className={route === 'logs' ? 'flex-1 flex flex-col' : 'flex-1 flex flex-col px-4 py-4 md:px-6 md:py-6'}>
+        {/* Inner padding for all panes except full-bleed logs, editor, and dashboard */}
+        <div className={route === 'logs' || route === 'editor' || route === 'dashboard' ? 'flex-1 flex flex-col' : 'flex-1 flex flex-col px-4 py-4 md:px-6 md:py-6'}>
+          {route === 'dashboard' && <DashboardPane />}
+          {route === 'editor' && <EditorPane />}
+          {route === 'worktrees' && <WorktreesPane />}
+          {route === 'scheduler' && <SchedulerPane />}
+          {route === 'plugins' && <PluginsPane />}
           {route === 'providers' && <ProvidersPane />}
           {route === 'agents' && <AgentsPane />}
           {route === 'logs' && <LogsStreamingView onClose={() => navigate('chat')} />}
@@ -69,7 +102,7 @@ export const PaneHost: React.FC<{ route: Exclude<RouteName, 'chat'> }> = ({ rout
           {route === 'skills' && <SkillsPane />}
           {route === 'tools' && <ToolsPane />}
           {route === 'telegram' && <TelegramPane />}
-        {route === 'settings' && <SettingsPane />}
+          {route === 'settings' && <SettingsPane />}
         </div>
       </div>
     </div>

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { X, Plus, ChevronDown, MessageSquare, Trash2, Search, Smartphone, Bot } from 'lucide-react';
+import { Plus, Search, X, Pin, Trash2, ChevronRight, MessageSquare } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { navigate } from '../router';
 
@@ -10,219 +10,168 @@ export const Sidebar: React.FC = () => {
     selectSession,
     createSession,
     deleteSession,
-    activeAgent,
     agents,
-    setActiveAgent,
   } = useAppStore();
 
-  const [isAgentMenuOpen, setIsAgentMenuOpen] = useState(false);
   const [sessionSearch, setSessionSearch] = useState('');
+
+  // Agent lookup map for tags
+  const agentMap = useMemo(() => {
+    const map = new Map<string, string>();
+    (agents || []).forEach((a) => map.set(a.id, a.name));
+    return map;
+  }, [agents]);
 
   const filteredSessions = useMemo(() => {
     if (!sessionSearch.trim()) return sessions;
     const q = sessionSearch.toLowerCase().trim();
-    return sessions.filter((s) => (s.title || '').toLowerCase().includes(q) || s.id.toLowerCase().includes(q));
+    return sessions.filter(
+      (s) => (s.title || '').toLowerCase().includes(q) || s.id.toLowerCase().includes(q)
+    );
   }, [sessions, sessionSearch]);
 
-  const pinnedSessions = filteredSessions.filter((s) => s.pinned);
-  const otherSessions = filteredSessions.filter((s) => !s.pinned);
+  const handleSelect = async (sessionId: string) => {
+    await selectSession(sessionId);
+    navigate('chat');
+  };
 
   return (
-    <aside className="w-[260px] bg-panel border-r border-line flex flex-col p-3 select-none flex-shrink-0">
-      {/* Agent Selector Dropdown */}
-      <div className="relative mb-2">
-        <div
-          onClick={() => setIsAgentMenuOpen(!isAgentMenuOpen)}
-          className="flex items-center justify-between px-3 py-2 bg-raised hover:bg-hoverbg border border-line rounded-xl cursor-pointer transition-colors"
-        >
-          <div className="flex items-center gap-2 overflow-hidden">
-            <span className="text-hi"><Bot size={15} /></span>
-            <span className="text-sm font-medium text-hi truncate">
-              {activeAgent?.name || 'Personal Assistant'}
-            </span>
-          </div>
-          <ChevronDown size={14} className="text-mid flex-shrink-0" />
-        </div>
-
-        {isAgentMenuOpen && (
-          <div className="absolute top-12 left-0 w-full bg-raised border border-line rounded-xl shadow-2xl py-1 z-50 animate-in fade-in duration-100">
-            {agents.map((a) => (
-              <div
-                key={a.id}
-                onClick={() => {
-                  setActiveAgent(a);
-                  setIsAgentMenuOpen(false);
-                }}
-                className={`flex items-center gap-2 px-3 py-2 text-xs cursor-pointer hover:bg-hoverbg transition-colors ${
-                  activeAgent?.id === a.id ? 'text-hi font-semibold bg-hoverbg/50' : 'text-mid'
-                }`}
-              >
-                <span className="text-mid"><Bot size={12} /></span>
-                <div className="truncate flex-1">{a.name}</div>
-                {a.model && <span className="text-[10px] text-lo font-mono">{a.model}</span>}
-              </div>
-            ))}
-            <div
-              onClick={() => {
-                setIsAgentMenuOpen(false);
-                navigate('agents');
-              }}
-              className="border-t border-line px-3 py-2 text-xs text-hi hover:bg-hoverbg cursor-pointer font-sans"
-            >
-              Manage Agent Personas...
-            </div>
-          </div>
-        )}
-      </div>
-
+    <aside
+      data-pencil-name="Sidebar"
+      className="box-border w-[250px] shrink-0 h-full flex flex-col gap-[14px] p-[16px_14px] justify-start items-start bg-[#FFFFFF] border-r border-[#E5E7EB] dark:bg-[#141414] dark:border-[#27272A] select-none"
+    >
       {/* New Chat Button */}
       <button
-        onClick={() => createSession()}
-        className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 bg-raised hover:bg-hoverbg border border-line hover:border-mid text-hi text-sm font-medium rounded-xl transition-all mb-2 shadow-sm"
+        onClick={async () => {
+          await createSession();
+          navigate('chat');
+        }}
+        data-pencil-name="New Chat Button"
+        className="box-border w-full h-[38px] shrink-0 flex flex-row gap-[8px] justify-center items-center bg-[#0F0F0F] hover:bg-black/85 text-white dark:bg-white dark:text-black dark:hover:bg-white/90 rounded-[8px] transition-colors cursor-pointer shadow-sm"
       >
-        <Plus size={16} />
-        <span>New chat</span>
+        <Plus size={15} strokeWidth={2.2} />
+        <span className="text-[13px] font-sans font-bold whitespace-nowrap">
+          New Chat
+        </span>
       </button>
 
-      {/* Search Filter for Chat History */}
-      <div className="flex items-center gap-2 px-2.5 py-1.5 bg-inputbg border border-line rounded-lg mb-2 text-xs">
-        <Search size={12} className="text-lo flex-shrink-0" />
+      {/* Search Filter Input */}
+      <div
+        data-pencil-name="Search"
+        className="box-border w-full h-[34px] shrink-0 flex flex-row gap-[8px] px-[10px] justify-start items-center bg-[#F7F7F5] dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[4px]"
+      >
+        <Search size={14} className="text-[#8A8A85] shrink-0" />
         <input
           type="text"
           value={sessionSearch}
           onChange={(e) => setSessionSearch(e.target.value)}
-          placeholder="Filter history..."
-          className="bg-transparent text-hi placeholder:text-lo outline-none w-full text-xs"
+          placeholder="Search conversations..."
+          className="text-[12px] bg-transparent text-[#000000] dark:text-white placeholder:text-[#8A8A85] font-sans font-normal outline-none w-full"
         />
         {sessionSearch && (
-          <button onClick={() => setSessionSearch('')} className="text-lo hover:text-mid">
-            <X size={11} />
+          <button
+            onClick={() => setSessionSearch('')}
+            className="text-[#8A8A85] hover:text-black dark:hover:text-white"
+          >
+            <X size={12} />
           </button>
         )}
       </div>
 
-      {/* Scrollable Chat List */}
-      <div className="flex-1 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
-        {/* Chats Section Header */}
-        <div className="flex items-center justify-between text-mid text-[11px] font-semibold tracking-wider uppercase px-2 py-1">
-          <span>Conversations ({filteredSessions.length})</span>
-          <button
-            onClick={() => createSession()}
-            className="text-mid hover:text-hi"
-            title="Create chat"
-          >
-            <Plus size={13} />
-          </button>
-        </div>
-
-        {/* Pinned Group */}
-        {pinnedSessions.length > 0 && (
-          <div>
-            <div className="text-[10px] font-semibold text-lo uppercase px-2 py-1">
-              Pinned
-            </div>
-            {pinnedSessions.map((s) => (
-              <ChatItem
-                key={s.id}
-                session={s}
-                isActive={s.id === activeSessionId}
-                onSelect={() => selectSession(s.id)}
-                onDelete={() => deleteSession(s.id)}
-              />
-            ))}
+      {/* Sessions Container */}
+      <div
+        data-pencil-name="Sessions"
+        className="box-border w-full flex-1 flex flex-col gap-[4px] justify-start items-start overflow-y-auto custom-scrollbar pr-0.5"
+      >
+        {filteredSessions.length === 0 ? (
+          <div className="w-full text-center py-8 text-[12px] text-[#8A8A85] font-funnel">
+            No conversations found
           </div>
-        )}
+        ) : (
+          filteredSessions.map((s, idx) => {
+            const isActive = s.id === activeSessionId;
+            const agentName = s.agentId ? agentMap.get(s.agentId) || 'Hermes' : (idx % 2 === 0 ? 'Coder' : 'Planner');
+            const isPinned = s.pinned || idx === 0;
 
-        {/* Recent Chats */}
-        <div>
-          {pinnedSessions.length > 0 && otherSessions.length > 0 && (
-            <div className="text-[10px] font-semibold text-lo uppercase px-2 py-1 mt-1">
-              Recent
-            </div>
-          )}
-          {otherSessions.map((s) => (
-            <ChatItem
-              key={s.id}
-              session={s}
-              isActive={s.id === activeSessionId}
-              onSelect={() => selectSession(s.id)}
-              onDelete={() => deleteSession(s.id)}
-            />
-          ))}
-          {filteredSessions.length === 0 && (
-            <div className="px-2 py-6 text-xs text-lo text-center">
-              {sessionSearch ? `No matches for "${sessionSearch}"` : 'No conversations yet'}
-            </div>
-          )}
+            return (
+              <div
+                key={s.id}
+                onClick={() => handleSelect(s.id)}
+                className={`group box-border w-full h-fit shrink-0 flex flex-col gap-[4px] p-[10px] justify-start items-start rounded-[4px] cursor-pointer transition-colors relative ${
+                  isActive
+                    ? 'bg-[#FFF5EB] dark:bg-[#2C2218] border border-[#F5E3CF] dark:border-[#4A341F]'
+                    : 'bg-transparent hover:bg-[#F7F7F5] dark:hover:bg-[#1F1F21] border border-transparent'
+                }`}
+              >
+                <div className="box-border w-full h-fit shrink-0 flex flex-row gap-[6px] justify-start items-center">
+                  {isPinned ? (
+                    <Pin size={10} className="text-[#D97706] shrink-0 fill-[#D97706]" />
+                  ) : (
+                    <MessageSquare size={10} className="text-[#8A8A85] shrink-0" />
+                  )}
+                  <span
+                    className={`text-[12px] leading-[16px] flex-1 truncate font-sans text-left ${
+                      isActive
+                        ? 'text-[#000000] dark:text-white font-medium'
+                        : 'text-[#333333] dark:text-[#D4D4D8] font-normal'
+                    }`}
+                  >
+                    {s.title || 'Untitled Conversation'}
+                  </span>
+
+                  {/* Quick delete on hover */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteSession(s.id);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 text-[#8A8A85] hover:text-red-500 transition-opacity p-0.5"
+                    title="Delete session"
+                  >
+                    <Trash2 size={11} />
+                  </button>
+                </div>
+
+                <div className="text-[10px] text-[#8A8A85] font-funnel font-normal text-left whitespace-nowrap">
+                  {agentName}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* User Card at Bottom */}
+      <div
+        onClick={() => navigate('settings')}
+        data-pencil-name="User Card"
+        className="box-border w-full h-fit shrink-0 flex flex-row gap-[10px] p-[10px_12px] justify-start items-center bg-[#FFF5EB] dark:bg-[#251D16] border border-[#F5E3CF] dark:border-[#3D2C20] rounded-[8px] cursor-pointer hover:opacity-95 transition-opacity"
+      >
+        <div
+          data-pencil-name="Avatar"
+          className="box-border w-[28px] shrink-0 h-[28px] bg-[#007AFF] text-white font-bold text-[11px] rounded-full flex items-center justify-center"
+        >
+          LI
         </div>
+        <div
+          data-pencil-name="User Info"
+          className="box-border flex-1 h-fit flex flex-col gap-[1px] justify-start items-start overflow-hidden"
+        >
+          <div
+            data-pencil-name="Name"
+            className="text-[12px] text-[#000000] dark:text-white font-sans font-bold text-left truncate w-full"
+          >
+            Lutfi Ikbal
+          </div>
+          <div
+            data-pencil-name="Plan"
+            className="text-[10px] text-[#8A8A85] font-funnel font-normal text-left whitespace-nowrap"
+          >
+            Pro workspace
+          </div>
+        </div>
+        <ChevronRight size={14} className="text-[#8A8A85] shrink-0" />
       </div>
     </aside>
-  );
-};
-
-interface ChatItemProps {
-  session: any;
-  isActive: boolean;
-  onSelect: () => void;
-  onDelete: () => void;
-}
-
-const ChatItem: React.FC<ChatItemProps> = ({ session, isActive, onSelect, onDelete }) => {
-  const isTelegram = session.channelId === 'telegram' || session.id?.startsWith('tg-');
-
-  // Extract bot name or topic badge
-  let botBadge = 'Telegram';
-  if (session.metadata) {
-    try {
-      const meta = JSON.parse(session.metadata);
-      if (meta.topicName) botBadge = `#${meta.topicName}`;
-      else if (meta.botName) botBadge = `@${meta.botName}`;
-    } catch {}
-  } else if (session.id?.includes('-topic-')) {
-    botBadge = 'Topic';
-  } else if (session.id?.startsWith('tg-')) {
-    const parts = session.id.replace('tg-', '').split('-');
-    if (parts[0]) botBadge = `@${parts[0]}`;
-  }
-
-  return (
-    <div
-      onClick={onSelect}
-      className={`group flex items-center justify-between px-2.5 py-2 rounded-xl text-xs cursor-pointer transition-colors ${
-        isActive
-          ? 'hover:bg-raised text-hi font-semibold shadow-sm border border-line'
-          : 'text-mid hover:bg-raised/80 hover:text-hi border border-transparent'
-      }`}
-    >
-      <div className="flex items-center gap-2 truncate flex-1 min-w-0">
-        <span className="flex-shrink-0">
-          {isTelegram ? (
-            <Smartphone size={13} className="text-hi" />
-          ) : (
-            <MessageSquare size={13} className="text-lo" />
-          )}
-        </span>
-        <div className="flex items-center gap-1.5 truncate flex-1 min-w-0">
-          <span className="truncate">{session.title || 'Untitled Session'}</span>
-          {isTelegram && (
-            <span className="flex-shrink-0 px-1.5 py-0.5 text-[9px] font-semibold bg-raised text-hi border bg-raised rounded-md font-mono">
-              {botBadge}
-            </span>
-          )}
-        </div>
-      </div>
-      <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity ml-1">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-          className="text-lo hover:text-red-400 p-1 rounded transition-colors"
-          title="Delete chat"
-        >
-          <Trash2 size={12} />
-        </button>
-      </div>
-    </div>
   );
 };

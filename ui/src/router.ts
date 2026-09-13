@@ -3,24 +3,29 @@ import { useEffect, useState } from 'react';
 // Tiny hash router (GOALS.md F1). Hash-based so the existing SPA fallback in
 // internal/server/server.go keeps working without server changes.
 export const ROUTES = [
+  'dashboard',
   'chat',
-  'logs',
-  'providers',
+  'editor',
   'agents',
-  'sessions',
   'docs',
+  'plugins',
+  'providers',
+  'scheduler',
+  'telegram',
+  'worktrees',
+  'settings',
+  'sessions',
   'mcps',
   'skills',
   'tools',
-  'telegram',
-  'settings',
+  'logs',
 ] as const;
 
 export type RouteName = (typeof ROUTES)[number];
 
 export function parseHash(): RouteName {
   const h = window.location.hash.replace(/^#\/?/, '').split('?')[0];
-  return (ROUTES as readonly string[]).includes(h) ? (h as RouteName) : 'chat';
+  return (ROUTES as readonly string[]).includes(h) ? (h as RouteName) : 'dashboard';
 }
 
 export function navigate(route: RouteName) {
