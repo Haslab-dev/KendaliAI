@@ -810,7 +810,8 @@ func (s *Server) handleSessions() http.HandlerFunc {
 			if sess.ID != "" {
 				existing, _ := s.store.GetSession(sess.ID)
 				if existing != nil {
-					if sess.AgentID != "" {
+					// Preserve existing AgentID to prevent session owner hijacking
+					if existing.AgentID == "" && sess.AgentID != "" {
 						existing.AgentID = sess.AgentID
 					}
 					if sess.Title != "" {

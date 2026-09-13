@@ -175,7 +175,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
       });
     }
 
-    // Sort groups so the agent worker with the most recent active session / new telegram message is on top!
+    // Sort groups calmly: prioritize agent workers with genuine recent incoming Telegram messages (< 15 mins),
+    // otherwise sort by actual recent activity timestamp without aggressive jumping on click
     const getGroupScore = (g: (typeof groups)[0]) => {
       let maxTime = 0;
       let latestTgTime = 0;
@@ -190,19 +191,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
         }
       }
 
-      // 1. If this agent worker has incoming Telegram messages, boost heavily so it jumps to top!
-      if (latestTgTime > 0) {
-        return 2000000000 + latestTgTime;
-      }
-
-      // 2. If group has the currently active session being viewed by user
-      if (activeSessionId && g.sessions.some((s) => s.id === activeSessionId)) {
-        return 1000000000 + maxTime;
-      }
-
-      // 3. If group matches the active agent worker
-      if (activeAgent && g.agent.id === activeAgent.id) {
-        return 500000000 + maxTime;
+      // Prioritize only if there is genuine recent incoming Telegram activity (< 15 mins)
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (latestTgTime > 0 && nowSec - latestTgTime < 900) {
+        return 1000000000 + latestTgTime;
       }
 
       return maxTime;
@@ -221,11 +213,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
     });
 
     return groups;
-  }, [officeStaffList, filteredSessions, activeSessionId, activeAgent]);
+  }, [officeStaffList, filteredSessions]);
 
   // Sorted staff list for mobile carousel (recent active agent worker / new telegram message first)
   const sortedStaffList = useMemo(() => {
     const list = [...officeStaffList];
+    const nowSec = Math.floor(Date.now() / 1000);
+
     list.sort((a, b) => {
       const aSessions = sessions.filter((s) => s.agentId === a.id);
       const bSessions = sessions.filter((s) => s.agentId === b.id);
@@ -240,26 +234,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
         return isTg ? Math.max(max, s.updatedAt || s.createdAt || 0) : max;
       }, 0);
 
-      // If either has telegram activity, prioritize latest telegram message time
-      if (aTgTime > 0 || bTgTime > 0) {
+      // Prioritize recent Telegram activity (< 15 mins)
+      const aRecentTg = aTgTime > 0 && nowSec - aTgTime < 900;
+      const bRecentTg = bTgTime > 0 && nowSec - bTgTime < 900;
+      if (aRecentTg || bRecentTg) {
+        if (aRecentTg && !bRecentTg) return -1;
+        if (!aRecentTg && bRecentTg) return 1;
         if (aTgTime !== bTgTime) return bTgTime - aTgTime;
       }
-
-      if (activeSessionId) {
-        const aHasActive = sessions.some((s) => s.id === activeSessionId && s.agentId === a.id);
-        const bHasActive = sessions.some((s) => s.id === activeSessionId && s.agentId === b.id);
-        if (aHasActive && !bHasActive) return -1;
-        if (!aHasActive && bHasActive) return 1;
-      }
-      if (activeAgent && a.id === activeAgent.id) return -1;
-      if (activeAgent && b.id === activeAgent.id) return 1;
 
       const aTime = aSessions.reduce((max, s) => Math.max(max, s.updatedAt || s.createdAt || 0), 0);
       const bTime = bSessions.reduce((max, s) => Math.max(max, s.updatedAt || s.createdAt || 0), 0);
       return bTime - aTime;
     });
     return list;
-  }, [officeStaffList, sessions, activeSessionId, activeAgent]);
+  }, [officeStaffList, sessions]);
 
   const toggleGroupCollapse = (agentId: string) => {
     setCollapsedGroups((prev) => ({

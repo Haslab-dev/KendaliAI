@@ -226,7 +226,9 @@ export function useAgentSocket() {
     setIsGenerating(true);
     setThinkingStatus('Thinking...');
 
-    const agentId = activeAgent ? activeAgent.id : 'personal-assistant';
+    // Ensure agentId respects the current session's actual owner
+    const existingSession = useAppStore.getState().sessions.find((s) => s.id === currentSession);
+    const agentId = existingSession?.agentId || (activeAgent ? activeAgent.id : 'personal-assistant');
     const modelToUse = activeModel || activeAgent?.model;
 
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {

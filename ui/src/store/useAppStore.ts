@@ -95,12 +95,52 @@ export const useAppStore = create<AppState>((set, get) => ({
         const data = await res.json();
         set({ messages: data.messages || [] });
         if (data.session && data.session.agentId) {
-          const matchedAgent = get().agents.find((a) => a.id === data.session.agentId);
+          const targetId = data.session.agentId;
+          const matchedAgent = get().agents.find((a) => a.id === targetId);
           if (matchedAgent) {
             set({ activeAgent: matchedAgent });
-          } else if (get().agents.length > 0) {
-            const defAgent = get().agents.find((a) => a.isDefault) || get().agents[0];
-            set({ activeAgent: defAgent });
+          } else {
+            // Check office staff from local storage or defaults
+            let staffInfo: any = null;
+            try {
+              const saved = localStorage.getItem('kendali_office_workers');
+              if (saved) {
+                const parsed = JSON.parse(saved);
+                if (Array.isArray(parsed)) {
+                  staffInfo = parsed.find((w: any) => w.id === targetId);
+                }
+              }
+            } catch {}
+
+            const defStaff: Record<string, { name: string; role: string; avatar: string; model?: string }> = {
+              'lead-frontend': { name: 'Senior Dev', role: 'Lead Frontend Dev', avatar: 'blue-drop', model: 'gpt-4o' },
+              'lead-architecture': { name: 'Architect Lead', role: 'Lead Architecture', avatar: 'cyan-bubble', model: 'claude-3-7-sonnet' },
+              'lead-backend': { name: 'Lead Backend Dev', role: 'Lead Backend Dev', avatar: 'green-cloud', model: 'qwen2.5-coder:latest' },
+              'legal-counsel': { name: 'Legal Counsel', role: 'Legal & Compliance', avatar: 'bronze-shield', model: 'gpt-4o' },
+              'chief-security': { name: 'Security Lead', role: 'Chief Security Officer', avatar: 'ruby-capsule', model: 'gpt-4o' },
+              'devops-lead': { name: 'DevOps Lead', role: 'DevOps & Infra', avatar: 'orange-leaf', model: 'deepseek-chat' },
+              'personal-assistant': { name: 'Personal Assistant', role: 'Personal Assistant', avatar: 'blue-drop', model: 'gpt-4o' },
+            };
+
+            const staff = staffInfo || defStaff[targetId];
+            set({
+              activeAgent: {
+                id: targetId,
+                name: staff?.role || staff?.name || targetId,
+                role: staff?.role,
+                description: staff?.description || `Staff Worker: ${staff?.role || targetId}`,
+                providerId: '',
+                model: staff?.model || '',
+                systemPrompt: staff?.systemPrompt || `You are ${staff?.name || targetId}. Execute instructions thoroughly and report back clearly.`,
+                skills: staff?.skills || [],
+                tools: staff?.tools || ['bash', 'file.write', 'file.read', 'git_worktree', 'web.fetch', 'telegram.send'],
+                mcp: [],
+                memoryScopes: ['user', 'workspace'],
+                policy: {},
+                avatar: staff?.avatar || 'blue-drop',
+                isDefault: false,
+              },
+            });
           }
         }
       }
@@ -176,14 +216,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   activeAgent: null,
   setActiveAgent: (agent) => {
     set({ activeAgent: agent });
-    const sessId = get().activeSessionId;
-    if (sessId) {
-      fetch('/api/sessions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: sessId, agentId: agent.id }),
-      });
-    }
   },
   agents: [],
   loadAgents: async () => {

@@ -107,11 +107,13 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 			Status:    "active",
 		}
 		_ = r.store.SaveSession(*sess)
-	} else if agentID != "" && sess.AgentID != agentID {
-		sess.AgentID = agentID
-		_ = r.store.SaveSession(*sess)
 	} else {
-		agentID = sess.AgentID
+		if sess.AgentID != "" {
+			agentID = sess.AgentID
+		} else if agentID != "" {
+			sess.AgentID = agentID
+			_ = r.store.SaveSession(*sess)
+		}
 	}
 
 	// 1. Process slash directives in userPrompt: /skill:<agentID>, /agent:<agentID>, /mcp:<serverName>
