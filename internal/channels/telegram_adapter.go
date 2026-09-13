@@ -355,6 +355,16 @@ func (a *TelegramAdapter) deleteTelegramMessage(bot *tgbotapi.BotAPI, chatID int
 	return err
 }
 
+func escapeMarkdown(s string) string {
+	replacer := strings.NewReplacer(
+		"_", "\\_",
+		"*", "\\*",
+		"[", "\\[",
+		"`", "\\`",
+	)
+	return replacer.Replace(s)
+}
+
 func (a *TelegramAdapter) sendTelegramChunks(bot *tgbotapi.BotAPI, chatID int64, threadID int, text string) {
 	const maxLen = 4000
 	for len(text) > 0 {
@@ -548,21 +558,31 @@ func (a *TelegramAdapter) handleRawTelegramMessage(runner *BotRunner, msg *RawTe
 	// Handle /whoami or /id for all users
 	if cleanText == "/whoami" || cleanText == "/id" {
 		status := "🔒 *Unauthorized (Pending Approval)*"
+		extraHint := "\n\n👉 *Please run `/auth <code>` to authorize this bot.*"
 		if isAuth {
 			status = "✅ *Authorized User*"
+			extraHint = ""
 		}
-		idInfo := fmt.Sprintf("👤 *Telegram Identity*\n\n• User ID: `%d`\n• Username: @%s\n• Name: %s %s\n• Status: %s\n\n_KendaliAI Agent Gateway_",
-			senderID, userName, firstName, lastName, status)
+		idInfo := fmt.Sprintf("👤 *Telegram Identity*\n\n• User ID: `%d`\n• Username: @%s\n• Name: %s %s\n• Status: %s%s\n\n_KendaliAI Agent Gateway_",
+			senderID, escapeMarkdown(userName), escapeMarkdown(firstName), escapeMarkdown(lastName), status, extraHint)
 		_, _ = a.sendTelegramMessage(runner.Bot, chatID, threadID, idInfo, "Markdown")
 		return
 	}
 
 	// If not authorized: verify /auth or /verify OTP code, or deny and record pending request
 	if authRequired && !isAuth {
-		if strings.HasPrefix(cleanText, "/auth") || strings.HasPrefix(cleanText, "/verify") {
+		// Accept /auth <code>, /verify <code>, or /start <code>
+		isAuthCmd := strings.HasPrefix(cleanText, "/auth") || strings.HasPrefix(cleanText, "/verify")
+		if strings.HasPrefix(cleanText, "/start ") {
+			isAuthCmd = true
+		}
+
+		if isAuthCmd {
 			parts := strings.Fields(cleanText)
 			if len(parts) >= 2 {
 				code := strings.TrimSpace(parts[1])
+				code = strings.TrimPrefix(code, "auth_")
+				code = strings.TrimPrefix(code, "code_")
 				valid, _ := a.store.VerifyTelegramPairingCode(code)
 				if valid {
 					_ = a.store.AuthorizeTelegramUser(gateway.TelegramAuthorizedUser{
@@ -576,22 +596,26 @@ func (a *TelegramAdapter) handleRawTelegramMessage(runner *BotRunner, msg *RawTe
 					})
 					_ = a.store.DeleteTelegramPendingRequest(senderID)
 
-					welcome := fmt.Sprintf("🎉 *Pairing Successful!*\n\nWelcome, *%s*! Your Telegram account has been authorized for KendaliAI.\n\nYou can now send any message to chat with your agents, or use `/help` for commands.", firstName)
+					displayName := firstName
+					if displayName == "" {
+						displayName = userName
+					}
+					welcome := fmt.Sprintf("🎉 *Pairing Successful!*\n\nWelcome, *%s*! Your Telegram account has been authorized for KendaliAI.\n\nYou can now send any message to chat with your agents, or use `/help` for commands.", escapeMarkdown(displayName))
 					_, _ = a.sendTelegramMessage(runner.Bot, chatID, threadID, welcome, "Markdown")
 					return
 				} else {
-					invalid := "❌ *Invalid or Expired Pairing Code*\n\nPlease generate a new 6-digit pairing code in your KendaliAI Web UI (under **Telegram Gateways** -> **Access Control**) and try again:\n`/auth <code>`"
+					invalid := "❌ *Invalid or Expired Pairing Code*\n\nThe pairing code is invalid or has expired (codes expire after 10 minutes).\n\nPlease generate a new 6-digit code in the KendaliAI Web UI (**Channels** ➔ **Telegram** ➔ **Access Control**) and run:\n`/auth <6-digit-code>`"
 					_, _ = a.sendTelegramMessage(runner.Bot, chatID, threadID, invalid, "Markdown")
 					return
 				}
 			} else {
-				needCode := "🔑 *Pairing Code Required*\n\nPlease enter the 6-digit pairing code generated from your KendaliAI Web UI:\n\n`/auth <6-digit-code>`\n\nExample: `/auth 849201`"
+				needCode := "🔑 *Pairing Code Required*\n\nPlease run `/auth <code>` followed by the 6-digit pairing code generated from your KendaliAI Web UI.\n\n*Example:*\n`/auth 849201`\n\n*How to get your code:*\n1. Open KendaliAI Web UI (`http://localhost:5173`)\n2. Navigate to **Channels** ➔ **Telegram** ➔ **Access Control & Pairing (OTP)**\n3. Click **\"Generate New Code\"** and send the command here."
 				_, _ = a.sendTelegramMessage(runner.Bot, chatID, threadID, needCode, "Markdown")
 				return
 			}
 		}
 
-		// Any other message: record pending request and send restricted prompt
+		// Any other message: record pending request and send friendly authorization prompt
 		_ = a.store.SaveTelegramPendingRequest(gateway.TelegramPendingRequest{
 			UserID:      senderID,
 			ChatID:      chatID,
@@ -603,14 +627,18 @@ func (a *TelegramAdapter) handleRawTelegramMessage(runner *BotRunner, msg *RawTe
 			CreatedAt:   time.Now().Unix(),
 		})
 
-		denied := fmt.Sprintf("🔒 *KendaliAI Access Restricted*\n\nThis bot is private and requires authorization.\nAn access request has been sent to the KendaliAI administrator.\n\n• Your Telegram ID: `%d` (@%s)\n\n*To authorize immediately:*\n1. Open your KendaliAI Web UI\n2. Go to **Telegram Gateways** -> **Access Control**\n3. Click **Generate Pairing Code** and send:\n   `/auth <code>`\n\n_Or wait for administrator approval in the Web UI._", senderID, userName)
+		userTag := ""
+		if userName != "" {
+			userTag = fmt.Sprintf(" (@%s)", escapeMarkdown(userName))
+		}
+		denied := fmt.Sprintf("🔒 *KendaliAI Authorization Required*\n\nHi! Access to this bot is restricted to authorized users.\n\n👉 *Please run `/auth <code>` to authorize your account.*\n\n*How to get your pairing code:*\n1. Open your KendaliAI Web UI (`http://localhost:5173`)\n2. Navigate to **Channels** ➔ **Telegram** ➔ **Access Control & Pairing (OTP)**\n3. Click **\"Generate New Code\"**\n4. Copy and send the command here:\n   `/auth <6-digit-code>` (e.g. `/auth 849201`)\n\n📋 *Your Telegram Info:*\n• User ID: `%d`%s\n\n_Alternatively, your access request has been sent to the KendaliAI admin dashboard. You will be notified automatically once approved!_", senderID, userTag)
 		_, _ = a.sendTelegramMessage(runner.Bot, chatID, threadID, denied, "Markdown")
 		return
 	}
 
 	// If authorized and user sends /auth or /verify again
 	if strings.HasPrefix(cleanText, "/auth") || strings.HasPrefix(cleanText, "/verify") {
-		already := fmt.Sprintf("✅ *Already Authorized!*\n\nYour account (@%s, ID: `%d`) is already authorized to use KendaliAI.", userName, senderID)
+		already := fmt.Sprintf("✅ *Already Authorized!*\n\nYour account (@%s, ID: `%d`) is already authorized to use KendaliAI. You can send any message to chat!", escapeMarkdown(userName), senderID)
 		_, _ = a.sendTelegramMessage(runner.Bot, chatID, threadID, already, "Markdown")
 		return
 	}
