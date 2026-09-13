@@ -96,6 +96,18 @@ func TestStreamOpenAICompatibleNativeMessageSerialization(t *testing.T) {
 	if _, ok := captured["tools"]; !ok {
 		t.Fatal("request missing tools array")
 	}
+	toolsRaw := captured["tools"].([]interface{})
+	if len(toolsRaw) != 1 {
+		t.Fatalf("len(tools) = %d, want 1", len(toolsRaw))
+	}
+	tool0 := toolsRaw[0].(map[string]interface{})
+	if tool0["type"] != "function" {
+		t.Errorf("tool0[type] = %v, want 'function'", tool0["type"])
+	}
+	fn0, ok := tool0["function"].(map[string]interface{})
+	if !ok || fn0["name"] != "t" {
+		t.Errorf("tool0[function] invalid: %v", tool0["function"])
+	}
 
 	assistant := msgs[1].(map[string]interface{})
 	calls := assistant["tool_calls"].([]interface{})

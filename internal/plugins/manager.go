@@ -279,8 +279,9 @@ func (m *Manager) ExecuteTool(ctx context.Context, pluginID, toolName string, ar
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	switch targetTool.HandlerType {
-	case HandlerCommand:
+	hType := strings.ToLower(string(targetTool.HandlerType))
+	switch {
+	case hType == string(HandlerCommand) || hType == "bash" || hType == "shell" || hType == "sh" || hType == "cmd" || (hType == "" && targetTool.Command != ""):
 		cmdStr := targetTool.Command
 		for k, v := range args {
 			cmdStr = strings.ReplaceAll(cmdStr, fmt.Sprintf("{{%s}}", k), fmt.Sprint(v))
@@ -304,7 +305,7 @@ func (m *Manager) ExecuteTool(ctx context.Context, pluginID, toolName string, ar
 			Error:    fmt.Sprint(err),
 		}, nil
 
-	case HandlerScript:
+	case hType == string(HandlerScript) || hType == "script" || hType == "file" || (hType == "" && targetTool.Script != ""):
 		scriptPath := filepath.Join(p.Dir, targetTool.Script)
 		argsJSON, _ := json.Marshal(args)
 		cmd := exec.CommandContext(runCtx, scriptPath, string(argsJSON))

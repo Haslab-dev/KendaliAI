@@ -1380,8 +1380,14 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 								Command:     fmt.Sprint(m["command"]),
 								Script:      fmt.Sprint(m["script"]),
 							}
-							if tDef.HandlerType == "" {
+							if rawParams, ok := m["parameters"].(map[string]interface{}); ok {
+								tDef.Parameters = rawParams
+							}
+							hType := strings.ToLower(string(tDef.HandlerType))
+							if hType == "" || hType == "command" || hType == "bash" || hType == "shell" || hType == "sh" || hType == "cmd" {
 								tDef.HandlerType = plugins.HandlerCommand
+							} else if hType == "script" || hType == "file" {
+								tDef.HandlerType = plugins.HandlerScript
 							}
 							toolsList = append(toolsList, tDef)
 						}

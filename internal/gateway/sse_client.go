@@ -45,6 +45,43 @@ type openAIMsg struct {
 	ToolCalls  []openaiToolCallPayload `json:"tool_calls,omitempty"`
 }
 
+type openaiFunctionDef struct {
+	Name        string                 `json:"name"`
+	Description string                 `json:"description,omitempty"`
+	Parameters  map[string]interface{} `json:"parameters,omitempty"`
+}
+
+type openaiToolDef struct {
+	Type     string            `json:"type"`
+	Function openaiFunctionDef `json:"function"`
+}
+
+// serializeTools converts agent.ToolDefinition into the OpenAI-compatible wire schema:
+// [{"type": "function", "function": {"name": ..., "description": ..., "parameters": ...}}]
+func serializeTools(tools []agent.ToolDefinition) []openaiToolDef {
+	if len(tools) == 0 {
+		return nil
+	}
+	out := make([]openaiToolDef, 0, len(tools))
+	for _, t := range tools {
+		params := t.Parameters
+		if params == nil {
+			params = map[string]interface{}{
+				"type": "object",
+			}
+		}
+		out = append(out, openaiToolDef{
+			Type: "function",
+			Function: openaiFunctionDef{
+				Name:        t.Name,
+				Description: t.Description,
+				Parameters:  params,
+			},
+		})
+	}
+	return out
+}
+
 // serializeMessages converts agent messages into the OpenAI-compatible wire
 // format. When native is true, assistant tool_calls and role "tool" results
 // are serialized natively; when false (text-protocol fallback), those shapes
@@ -82,8 +119,18 @@ func serializeMessages(msgs []agent.Message, native bool) []openAIMsg {
 				})
 			}
 			apiMsgs = append(apiMsgs, msg)
+		case m.Role == "assistant" && !native && len(m.ToolCalls) > 0 && m.Content == "":
+			var lines []string
+			for _, tc := range m.ToolCalls {
+				lines = append(lines, fmt.Sprintf("tool: %s(%s)", tc.Name, tc.Arguments()))
+			}
+			apiMsgs = append(apiMsgs, openAIMsg{Role: "assistant", Content: strings.Join(lines, "\n")})
 		default:
-			apiMsgs = append(apiMsgs, openAIMsg{Role: m.Role, Content: m.Content})
+			content := m.Content
+			if content == "" && m.Role == "assistant" && len(m.ToolCalls) == 0 {
+				content = "..."
+			}
+			apiMsgs = append(apiMsgs, openAIMsg{Role: m.Role, Content: content})
 		}
 	}
 	return apiMsgs
@@ -109,7 +156,7 @@ func StreamOpenAICompatible(
 		"stream":   true,
 	}
 	if len(tools) > 0 {
-		reqPayload["tools"] = tools
+		reqPayload["tools"] = serializeTools(tools)
 	}
 
 	bodyBytes, err := json.Marshal(reqPayload)

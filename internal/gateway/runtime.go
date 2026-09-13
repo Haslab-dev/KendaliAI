@@ -16,7 +16,6 @@ import (
 	"github.com/kendaliai/app/internal/messaging"
 	"github.com/kendaliai/app/internal/plugins"
 	"github.com/kendaliai/app/internal/providers"
-	openai "github.com/sashabaranov/go-openai"
 )
 
 type Runtime struct {
@@ -1074,47 +1073,8 @@ func (r *Runtime) createProviderClient(p *ProviderConfig, model string) agent.Pr
 		return providers.NewAnthropicProvider(apiKey, model, p.Endpoint)
 	default:
 		// OpenAI compatible (DeepSeek, OpenAI, Groq, Ollama)
-		cfg := openai.DefaultConfig(apiKey)
-		if p.Endpoint != "" {
-			cfg.BaseURL = p.Endpoint
-		}
-		return &openAIWrapper{
-			client: openai.NewClientWithConfig(cfg),
-			model:  model,
-		}
+		return providers.NewProvider(apiKey, model, p.Endpoint)
 	}
-}
-
-type openAIWrapper struct {
-	client *openai.Client
-	model  string
-}
-
-func (w *openAIWrapper) ChatCompletion(ctx context.Context, msgs []agent.Message) (*agent.Response, error) {
-	openAiMsgs := make([]openai.ChatCompletionMessage, len(msgs))
-	for i, m := range msgs {
-		openAiMsgs[i] = openai.ChatCompletionMessage{
-			Role:    m.Role,
-			Content: m.Content,
-		}
-	}
-
-	resp, err := w.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
-		Model:    w.model,
-		Messages: openAiMsgs,
-	})
-	if err != nil {
-		return nil, err
-	}
-	if len(resp.Choices) == 0 {
-		return nil, fmt.Errorf("no response choices")
-	}
-
-	return &agent.Response{
-		Content:      resp.Choices[0].Message.Content,
-		InputTokens:  resp.Usage.PromptTokens,
-		OutputTokens: resp.Usage.CompletionTokens,
-	}, nil
 }
 
 // CleanSessionTitle cleans, formats, and strictly caps session titles at 20 characters.
