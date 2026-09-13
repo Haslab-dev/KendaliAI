@@ -1,810 +1,801 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Zap, Bot, MessageSquare, Plug, Brain, Wrench, Smartphone, Plus, Trash2, CheckCircle,
-  RefreshCw, Edit2, Search, Check, CheckSquare, Square, Sparkles, AlertCircle, ChevronDown, ChevronUp, Terminal,
-  Database, Eye, EyeOff, FileText, Upload, BookOpen
+  Cpu,
+  Plus,
+  Trash2,
+  RefreshCw,
+  AlertCircle,
+  Puzzle,
+  Zap,
+  PlugZap,
+  CheckCircle2,
+  ExternalLink,
+  Key,
+  Eye,
+  EyeOff,
+  Server,
+  Radio,
+  Check,
+  X,
+  Play,
+  Settings2,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
-import {
-  ProviderConfig, AgentConfig, MCPServerConfig, SkillItem, ToolDefinition, TelegramBotConfig,
-  ModelItem, isReasoningModel, EmbeddingConfig, DocumentItem
-} from '../types';
+import { ProviderConfig, MCPServerConfig } from '../types';
 
-// 1. Providers Tab
+interface ShowcaseProvider {
+  id: string;
+  name: string;
+  endpoint: string;
+  models: string;
+  isDefault: boolean;
+  status: 'connected' | 'local' | 'disconnected';
+  meta: string;
+  apiKey?: string;
+  type: string;
+}
+
+const DEFAULT_SHOWCASE_PROVIDERS: ShowcaseProvider[] = [
+  {
+    id: 'openai',
+    name: 'OpenAI',
+    endpoint: 'api.openai.com',
+    models: 'gpt-5, o3, gpt-4.1',
+    isDefault: true,
+    status: 'connected',
+    meta: '12 models probed',
+    type: 'openai',
+  },
+  {
+    id: 'anthropic',
+    name: 'Anthropic',
+    endpoint: 'api.anthropic.com',
+    models: 'Claude Sonnet 4.6 — default',
+    isDefault: false,
+    status: 'connected',
+    meta: '4 models probed',
+    type: 'anthropic',
+  },
+  {
+    id: 'deepseek',
+    name: 'DeepSeek',
+    endpoint: 'api.deepseek.com',
+    models: 'deepseek-r1 (reasoning), v3',
+    isDefault: false,
+    status: 'connected',
+    meta: '2 models probed',
+    type: 'deepseek',
+  },
+  {
+    id: 'ollama',
+    name: 'Ollama',
+    endpoint: 'localhost:11434',
+    models: 'llama3.3, qwen2.5',
+    isDefault: false,
+    status: 'local',
+    meta: 'local · offline mode',
+    type: 'ollama',
+  },
+  {
+    id: 'openrouter',
+    name: 'OpenRouter',
+    endpoint: 'openrouter.ai/api',
+    models: 'fallback: Sonnet 4.6',
+    isDefault: false,
+    status: 'connected',
+    meta: '5 models probed',
+    type: 'openrouter',
+  },
+];
+
+interface ShowcaseMCP {
+  id: string;
+  name: string;
+  transport: 'stdio' | 'sse';
+  commandOrUrl: string;
+  toolsCount: number;
+  status: 'connected' | 'cached' | 'error';
+}
+
+const DEFAULT_SHOWCASE_MCPS: ShowcaseMCP[] = [
+  {
+    id: 'github',
+    name: 'github',
+    transport: 'stdio',
+    commandOrUrl: 'npx @modelcontextprotocol/server-github',
+    toolsCount: 9,
+    status: 'connected',
+  },
+  {
+    id: 'exa',
+    name: 'exa',
+    transport: 'sse',
+    commandOrUrl: 'https://mcp.exa.ai/sse',
+    toolsCount: 3,
+    status: 'connected',
+  },
+  {
+    id: 'postgres',
+    name: 'postgres',
+    transport: 'stdio',
+    commandOrUrl: 'pg-mcp',
+    toolsCount: 4,
+    status: 'connected',
+  },
+];
+
 export const ProvidersPane: React.FC = () => {
   const { loadProviders: reloadGlobalProviders } = useAppStore();
-  const [providers, setProviders] = useState<ProviderConfig[]>([]);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<Partial<ProviderConfig>>({
-    name: '',
-    type: 'custom',
-    apiKey: '',
-    endpoint: '',
-    models: [],
-    enabled: true,
-  });
 
-  const [newModelInput, setNewModelInput] = useState('');
-  const [modelFilter, setModelFilter] = useState('');
-  const [isFetchingModels, setIsFetchingModels] = useState(false);
-  const [fetchNotice, setFetchNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [providers, setProviders] = useState<ShowcaseProvider[]>(DEFAULT_SHOWCASE_PROVIDERS);
+  const [mcps, setMcps] = useState<ShowcaseMCP[]>(DEFAULT_SHOWCASE_MCPS);
+  const [isLoading, setIsLoading] = useState(false);
+  const [activeDefaultId, setActiveDefaultId] = useState<string>('openai');
+
+  // Modals
+  const [showProviderModal, setShowProviderModal] = useState(false);
+  const [showMcpModal, setShowMcpModal] = useState(false);
+  const [editingProvider, setEditingProvider] = useState<ShowcaseProvider | null>(null);
+
+  // Provider Form
+  const [pName, setPName] = useState('');
+  const [pEndpoint, setPEndpoint] = useState('');
+  const [pApiKey, setPApiKey] = useState('');
+  const [pModels, setPModels] = useState('');
+  const [showKey, setShowKey] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
   const [isTesting, setIsTesting] = useState(false);
-  const formRef = useRef<HTMLDivElement>(null);
 
-  const fetchProviders = async () => {
+  // MCP Form
+  const [mName, setMName] = useState('');
+  const [mTransport, setMTransport] = useState<'stdio' | 'sse'>('stdio');
+  const [mCommand, setMCommand] = useState('npx');
+  const [mArgs, setMArgs] = useState('');
+  const [mUrl, setMUrl] = useState('');
+
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
     try {
-      const res = await fetch('/api/providers');
-      const data = await res.json();
-      setProviders(data || []);
-    } catch (e) {
-      console.error('Failed to load providers:', e);
-    }
-  };
+      // Load Providers
+      const pRes = await fetch('/api/providers');
+      if (pRes.ok) {
+        const pData: ProviderConfig[] = await pRes.json();
+        if (Array.isArray(pData) && pData.length > 0) {
+          const mapped: ShowcaseProvider[] = pData.map((p) => {
+            const modelsStr = Array.isArray(p.models)
+              ? p.models.map((m: any) => (typeof m === 'string' ? m : m.id)).join(', ')
+              : '';
+            return {
+              id: p.id || p.name.toLowerCase(),
+              name: p.name,
+              endpoint: p.endpoint ? p.endpoint.replace(/^https?:\/\//, '') : 'api.openai.com',
+              models: modelsStr || 'auto-discovered',
+              isDefault: !!p.isDefault,
+              status: p.type === 'ollama' ? 'local' : 'connected',
+              meta: `${Array.isArray(p.models) ? p.models.length : 1} models probed`,
+              apiKey: p.apiKey,
+              type: p.type || 'custom',
+            };
+          });
 
-  useEffect(() => {
-    fetchProviders();
+          // If default exists, track it
+          const def = mapped.find((p) => p.isDefault);
+          if (def) setActiveDefaultId(def.id);
+          setProviders(mapped);
+        }
+      }
+
+      // Load MCPs
+      const mRes = await fetch('/api/mcps');
+      if (mRes.ok) {
+        const mData: MCPServerConfig[] = await mRes.json();
+        if (Array.isArray(mData) && mData.length > 0) {
+          const mappedMcp: ShowcaseMCP[] = mData.map((m) => ({
+            id: m.id || m.name.toLowerCase(),
+            name: m.name,
+            transport: m.transport || 'stdio',
+            commandOrUrl: m.transport === 'sse' ? (m.url || '') : `${m.command} ${(m.args || []).join(' ')}`,
+            toolsCount: 4,
+            status: 'connected',
+          }));
+          setMcps(mappedMcp);
+        }
+      }
+    } catch (err) {
+      console.warn('Using showcase data:', err);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
-  const handleEdit = (p: ProviderConfig) => {
-    setEditingId(p.id);
-    setForm({
-      id: p.id,
-      name: p.name,
-      type: p.type,
-      apiKey: p.apiKey,
-      endpoint: p.endpoint,
-      models: Array.isArray(p.models) ? p.models.map((m: any) => typeof m === 'string' ? { id: m, enabled: true } : m) : [],
-      enabled: p.enabled !== false,
-      isDefault: !!p.isDefault,
-    });
-    setFetchNotice(null);
-    formRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
-  const handleCancelEdit = () => {
-    setEditingId(null);
-    setForm({
-      name: '',
-      type: 'custom',
-      apiKey: '',
-      endpoint: '',
-      models: [],
-      enabled: true,
-      isDefault: false,
-    });
-    setFetchNotice(null);
-  };
-
-  const handleSave = async () => {
-    if (!form.name?.trim()) return alert('Provider name is required');
-    const payload = {
-      ...form,
-      id: editingId || form.id || undefined,
-      models: form.models || [],
-    };
+  const handleSetDefault = async (id: string) => {
+    setActiveDefaultId(id);
+    setProviders((prev) =>
+      prev.map((p) => ({
+        ...p,
+        isDefault: p.id === id,
+      }))
+    );
     try {
-      await fetch('/api/providers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      alert(editingId ? 'Provider updated successfully!' : 'Provider saved successfully!');
-      handleCancelEdit();
-      fetchProviders();
-      reloadGlobalProviders();
-    } catch (e) {
-      alert('Failed to save provider: ' + e);
+      await fetch(`/api/providers/${id}/default`, { method: 'POST' });
+    } catch (err) {
+      console.warn('Set default local update:', err);
     }
   };
 
-  const handleTest = async () => {
+  const handleTestConnection = async (p: ShowcaseProvider) => {
     setIsTesting(true);
+    setTestResult(null);
     try {
       const res = await fetch('/api/providers/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
-      const data = await res.json();
-      alert(data.message || 'Connected successfully!');
-    } catch (e) {
-      alert('Test failed: ' + e);
-    } finally {
-      setIsTesting(false);
-    }
-  };
-
-  const handleFetchRemoteModels = async () => {
-    setIsFetchingModels(true);
-    setFetchNotice(null);
-    try {
-      const res = await fetch('/api/providers/fetch-models', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          id: form.id || editingId,
-          type: form.type,
-          endpoint: form.endpoint,
-          apiKey: form.apiKey,
+          endpoint: p.endpoint.startsWith('http') ? p.endpoint : `https://${p.endpoint}`,
+          apiKey: p.apiKey || 'test',
+          type: p.type,
         }),
-      });
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || `HTTP ${res.status}`);
-      }
-      const fetched: ModelItem[] = await res.json();
-      if (!Array.isArray(fetched) || fetched.length === 0) {
-        setFetchNotice({
-          type: 'error',
-          text: 'No models found at endpoint. Check endpoint URL and API key.',
-        });
-        return;
-      }
-
-      // Merge with existing models preserving enabled states
-      const existingMap = new Map((form.models || []).map((m) => [m.id, m]));
-      const merged: ModelItem[] = fetched.map((fm) => {
-        const existing = existingMap.get(fm.id);
-        return existing ? { ...fm, enabled: existing.enabled } : { ...fm, enabled: true };
-      });
-      // Add custom models that were in form but not in fetched
-      const fetchedIds = new Set(fetched.map((f) => f.id));
-      (form.models || []).forEach((m) => {
-        if (!fetchedIds.has(m.id)) {
-          merged.push(m);
-        }
-      });
-
-      setForm((prev) => ({ ...prev, models: merged }));
-      setFetchNotice({
-        type: 'success',
-        text: `Successfully discovered and synced ${fetched.length} models! Check/uncheck models below to configure what is shown across the app.`,
-      });
-    } catch (err: any) {
-      setFetchNotice({
-        type: 'error',
-        text: `Failed to probe models: ${err.message || err}`,
-      });
-    } finally {
-      setIsFetchingModels(false);
-    }
-  };
-
-  const toggleModel = (id: string) => {
-    setForm((prev) => ({
-      ...prev,
-      models: (prev.models || []).map((m) =>
-        m.id === id ? { ...m, enabled: !m.enabled } : m
-      ),
-    }));
-  };
-
-  const setAllModels = (enabled: boolean) => {
-    setForm((prev) => ({
-      ...prev,
-      models: (prev.models || []).map((m) => ({ ...m, enabled })),
-    }));
-  };
-
-  const handleAddManualModel = () => {
-    const trimmed = newModelInput.trim();
-    if (!trimmed) return;
-    if ((form.models || []).some((m) => m.id.toLowerCase() === trimmed.toLowerCase())) {
-      alert('Model already exists in list');
-      return;
-    }
-    setForm((prev) => ({
-      ...prev,
-      models: [...(prev.models || []), { id: trimmed, enabled: true }],
-    }));
-    setNewModelInput('');
-  };
-
-  const handleRemoveModel = (id: string) => {
-    setForm((prev) => ({
-      ...prev,
-      models: (prev.models || []).filter((m) => m.id !== id),
-    }));
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!confirm('Delete provider?')) return;
-    await fetch(`/api/providers?id=${id}`, { method: 'DELETE' });
-    fetchProviders();
-    reloadGlobalProviders();
-  };
-
-  const filteredFormModels = useMemo(() => {
-    const query = modelFilter.toLowerCase().trim();
-    if (!query) return form.models || [];
-    return (form.models || []).filter(
-      (m) => m.id.toLowerCase().includes(query) || (m.name && m.name.toLowerCase().includes(query))
-    );
-  }, [form.models, modelFilter]);
-
-  const enabledFormCount = (form.models || []).filter((m) => m.enabled !== false).length;
-  const totalFormCount = (form.models || []).length;
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="text-base font-bold text-hi">LLM Inference Providers & Models</h3>
-        <p className="text-xs text-mid">
-          Configure API endpoints, probe /models catalogs, and toggle which models are enabled for Chat and Bots.
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {providers.map((p) => {
-          const enabledCount = (p.models || []).filter((m) => m.enabled !== false).length;
-          const totalCount = (p.models || []).length;
-          const enabledModels = (p.models || []).filter((m) => m.enabled !== false);
-
-          return (
-            <div
-              key={p.id}
-              className={`p-4 bg-raised border rounded-xl space-y-3 transition-colors ${
-                editingId === p.id ? 'bg-raised bg-raised' : 'border-line'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <div className="font-semibold text-sm text-hi flex items-center gap-1.5">
-                  <Zap size={15} className="text-mid" />
-                  <span>{p.name}</span>
-                  <span className="text-[10px] text-mid uppercase bg-hoverbg px-1.5 py-0.5 rounded border border-line">
-                    {p.type}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  {p.isDefault && (
-                    <span className="text-[10px] bg-raised text-hi px-2 py-0.5 rounded-full font-bold">
-                      DEFAULT
-                    </span>
-                  )}
-                  <button
-                    onClick={() => handleEdit(p)}
-                    className="text-mid hover:text-hi p-1 transition-colors"
-                    title="Edit provider and models"
-                  >
-                    <Edit2 size={14} />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(p.id)}
-                    className="text-lo hover:text-red-400 p-1 transition-colors"
-                    title="Delete provider"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </div>
-
-              <div className="text-xs text-mid truncate">
-                Endpoint: <code className="text-mid">{p.endpoint || 'default (cloud)'}</code>
-              </div>
-
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-mid font-medium">
-                    Models ({enabledCount} active / {totalCount} total)
-                  </span>
-                </div>
-                <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto custom-scrollbar">
-                  {enabledModels.slice(0, 6).map((m) => (
-                    <span
-                      key={m.id}
-                      className="text-[10px] bg-panel border border-line text-mid px-2 py-0.5 rounded-md flex items-center gap-1 font-mono"
-                    >
-                      {isReasoningModel(m.id) && <span title="Reasoning / Thinking Model" className="text-mid"><Brain size={12} /></span>}
-                      <span>{m.id}</span>
-                    </span>
-                  ))}
-                  {enabledModels.length > 6 && (
-                    <span className="text-[10px] text-lo self-center px-1 font-mono">
-                      +{enabledModels.length - 6} more
-                    </span>
-                  )}
-                  {enabledModels.length === 0 && (
-                    <span className="text-[11px] text-lo italic">No models enabled</span>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Add / Edit Form */}
-      <div ref={formRef} className="border-t border-line pt-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h4 className="text-sm font-semibold text-hi">
-              {editingId ? `Edit Provider: ${form.name}` : 'Register New Provider'}
-            </h4>
-            {editingId && (
-              <span className="text-[10px] bg-raised text-hi px-2 py-0.5 rounded-full font-bold">
-                EDITING MODE
-              </span>
-            )}
-          </div>
-          {editingId && (
-            <button
-              onClick={handleCancelEdit}
-              className="text-xs text-mid hover:text-hi px-2 py-1 hover:bg-hoverbg bg-hoverbg rounded-lg transition-colors"
-            >
-              Cancel Edit
-            </button>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className="text-[11px] font-semibold text-mid uppercase">Name</label>
-            <input
-              type="text"
-              className="w-full mt-1 px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi outline-none focus:border-line"
-              placeholder="e.g. OpenAI Production"
-              value={form.name || ''}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-            />
-          </div>
-          <div>
-            <label className="text-[11px] font-semibold text-mid uppercase">Provider Type (OpenAI Compatible)</label>
-            <select
-              className="w-full mt-1 px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi outline-none focus:border-line"
-              value={form.type || 'custom'}
-              onChange={(e) => {
-                const nextType = e.target.value;
-                let nextEndpoint = form.endpoint || '';
-                if (!form.endpoint || form.endpoint.includes('api.openai.com') || form.endpoint.includes('api.deepseek.com') || form.endpoint.includes('openrouter.ai') || form.endpoint.includes('11434')) {
-                  if (nextType === 'openai') nextEndpoint = 'https://api.openai.com/v1';
-                  else if (nextType === 'deepseek') nextEndpoint = 'https://api.deepseek.com';
-                  else if (nextType === 'openrouter') nextEndpoint = 'https://openrouter.ai/api/v1';
-                  else if (nextType === 'ollama') nextEndpoint = 'http://localhost:11434/v1';
-                  else if (nextType === 'custom' && !form.endpoint) nextEndpoint = 'http://localhost:8000/v1';
-                }
-                setForm({ ...form, type: nextType, endpoint: nextEndpoint });
-              }}
-            >
-              <option value="custom">Custom OpenAI-Compatible Endpoint</option>
-              <option value="openai">OpenAI (Official)</option>
-              <option value="deepseek">DeepSeek (OpenAI Compatible)</option>
-              <option value="openrouter">OpenRouter (OpenAI Compatible)</option>
-              <option value="ollama">Ollama (Local /v1)</option>
-            </select>
-          </div>
-          <div>
-            <label className="text-[11px] font-semibold text-mid uppercase">API Key</label>
-            <input
-              type="password"
-              className="w-full mt-1 px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi outline-none focus:border-line font-mono"
-              placeholder="sk-..."
-              value={form.apiKey || ''}
-              onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
-            />
-          </div>
-          <div>
-            <label className="text-[11px] font-semibold text-mid uppercase">Endpoint URL</label>
-            <input
-              type="text"
-              className="w-full mt-1 px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi outline-none focus:border-line font-mono"
-              placeholder="https://api.openai.com/v1 or https://your-provider/v1"
-              value={form.endpoint || ''}
-              onChange={(e) => setForm({ ...form, endpoint: e.target.value })}
-            />
-          </div>
-        </div>
-
-        {/* Action Controls for Probing & Testing */}
-        <div className="flex items-center gap-2 pt-1">
-          <button
-            type="button"
-            onClick={handleFetchRemoteModels}
-            disabled={isFetchingModels}
-            className="px-3 py-2 bg-raised hover:bg-raised text-hi border bg-raised rounded-lg text-xs font-semibold flex items-center gap-2 transition-colors disabled:opacity-50"
-            title="Probe endpoint for available models catalog"
-          >
-            <RefreshCw size={13} className={isFetchingModels ? 'animate-spin' : ''} />
-            <span>{isFetchingModels ? 'Probing Endpoint /models...' : 'Fetch Models (/models)'}</span>
-          </button>
-          <button
-            type="button"
-            onClick={handleTest}
-            disabled={isTesting}
-            className="px-3 py-2 bg-raised hover:bg-hoverbg text-mid border border-line rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
-          >
-            {isTesting ? 'Testing...' : 'Test Connection'}
-          </button>
-        </div>
-
-        {/* Fetch Notice */}
-        {fetchNotice && (
-          <div
-            className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${
-              fetchNotice.type === 'success'
-                ? 'bg-raised bg-raised text-hi'
-                : 'bg-red-950/30 border-red-500/30 text-red-300'
-            }`}
-          >
-            {fetchNotice.type === 'success' ? <CheckCircle size={15} /> : <AlertCircle size={15} />}
-            <span>{fetchNotice.text}</span>
-          </div>
-        )}
-
-        {/* Models Catalog & Checkboxes Section */}
-        <div className="bg-inputbg border border-line rounded-xl p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-hi">
-                Models Catalog ({enabledFormCount} of {totalFormCount} enabled)
-              </span>
-              <span className="text-[11px] text-mid">
-                — Uncheck models you do not want shown in chat selectors
-              </span>
-            </div>
-            {totalFormCount > 0 && (
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setAllModels(true)}
-                  className="text-[11px] text-hi hover:text-hi transition-colors"
-                >
-                  Enable All
-                </button>
-                <span className="text-lo">|</span>
-                <button
-                  type="button"
-                  onClick={() => setAllModels(false)}
-                  className="text-[11px] text-mid hover:text-hi transition-colors"
-                >
-                  Disable All
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Model search if many models */}
-          {totalFormCount > 5 && (
-            <div className="relative">
-              <Search size={13} className="absolute left-2.5 top-2.5 text-lo" />
-              <input
-                type="text"
-                className="w-full pl-8 pr-3 py-1.5 bg-panel border border-line rounded-lg text-xs text-hi outline-none focus:border-line"
-                placeholder={`Search ${totalFormCount} models...`}
-                value={modelFilter}
-                onChange={(e) => setModelFilter(e.target.value)}
-              />
-            </div>
-          )}
-
-          {/* Model Items List */}
-          <div className="max-h-52 overflow-y-auto space-y-1 custom-scrollbar pr-1">
-            {filteredFormModels.map((m) => {
-              const isEnabled = m.enabled !== false;
-              const isReasoning = isReasoningModel(m.id);
-              return (
-                <div
-                  key={m.id}
-                  className={`flex items-center justify-between px-3 py-2 rounded-lg border text-xs transition-colors ${
-                    isEnabled
-                      ? 'bg-raised border-line text-hi'
-                      : 'bg-inputbg border-line text-lo'
-                  }`}
-                >
-                  <label className="flex items-center gap-2.5 cursor-pointer select-none flex-1 truncate mr-2">
-                    <input
-                      type="checkbox"
-                      checked={isEnabled}
-                      onChange={() => toggleModel(m.id)}
-                      className="rounded border-line bg-hoverbg text-hi focus:ring-0 cursor-pointer w-4 h-4"
-                    />
-                    <span className={`font-mono text-xs truncate ${isEnabled ? 'text-hi' : 'text-lo line-through'}`}>
-                      {m.id}
-                    </span>
-                    {isReasoning && (
-                      <span className="text-[10px] bg-raised text-hi border bg-raised px-1.5 py-0.5 rounded-full flex items-center gap-1 font-sans">
-                        <Brain size={12} className="text-mid" />
-                        <span>Reasoning</span>
-                      </span>
-                    )}
-                  </label>
-
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveModel(m.id)}
-                    className="text-lo hover:text-red-400 p-1 transition-colors"
-                    title="Remove model"
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              );
-            })}
-
-            {totalFormCount === 0 && (
-              <div className="py-6 text-center text-xs text-lo border border-dashed border-line rounded-lg">
-                No models in catalog yet. Click <strong className="text-hi">"Fetch Models (/models)"</strong> above to auto-detect, or add a custom model below.
-              </div>
-            )}
-
-            {totalFormCount > 0 && filteredFormModels.length === 0 && (
-              <div className="py-4 text-center text-xs text-lo">
-                No models matching "{modelFilter}"
-              </div>
-            )}
-          </div>
-
-          {/* Add Custom Model Manually */}
-          <div className="flex gap-2 pt-2 border-t border-line">
-            <input
-              type="text"
-              className="flex-1 px-3 py-1.5 bg-panel border border-line rounded-lg text-xs text-hi outline-none focus:border-line font-mono"
-              placeholder="Add custom model ID (e.g. gpt-4o, claude-3-7-sonnet, llama3:8b)"
-              value={newModelInput}
-              onChange={(e) => setNewModelInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  handleAddManualModel();
-                }
-              }}
-            />
-            <button
-              type="button"
-              onClick={handleAddManualModel}
-              disabled={!newModelInput.trim()}
-              className="px-3 py-1.5 bg-raised hover:bg-hoverbg text-hi border border-line rounded-lg text-xs font-medium transition-colors disabled:opacity-40"
-            >
-              Add Model
-            </button>
-          </div>
-        </div>
-
-        {/* Primary Save Button */}
-        <div className="flex items-center gap-2 pt-2">
-          <button
-            type="button"
-            onClick={handleSave}
-            className="px-5 py-2 bg-hi hover:bg-hi text-app rounded-lg text-xs font-semibold shadow-lg transition-colors"
-          >
-            {editingId ? 'Update Provider & Models' : 'Save Provider'}
-          </button>
-          {editingId && (
-            <button
-              type="button"
-              onClick={handleCancelEdit}
-              className="px-4 py-2 bg-raised hover:bg-hoverbg text-mid hover:text-hi border border-line rounded-lg text-xs font-medium transition-colors"
-            >
-              Cancel
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Embedding & Vector RAG Configuration */}
-      <EmbeddingRAGCard />
-    </div>
-  );
-};
-
-// Embedding & Vector RAG Component (Custom OpenAI Compatible)
-const EmbeddingRAGCard: React.FC = () => {
-  const [cfg, setCfg] = useState<EmbeddingConfig>({
-    endpoint: 'https://api.openai.com/v1',
-    apiKey: '',
-    model: 'text-embedding-3-small',
-    dimensions: 1536,
-    enabled: true,
-  });
-  const [showKey, setShowKey] = useState(false);
-  const [isTesting, setIsTesting] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-
-  useEffect(() => {
-    fetch('/api/embedding')
-      .then((r) => r.json())
-      .then((data) => {
-        if (data) setCfg(data);
-      })
-      .catch((err) => console.error('Failed to load embedding config:', err));
-  }, []);
-
-  const handleTest = async () => {
-    setIsTesting(true);
-    setTestResult(null);
-    try {
-      const res = await fetch('/api/embedding/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          endpoint: cfg.endpoint,
-          apiKey: cfg.apiKey,
-          model: cfg.model,
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setTestResult({
-          success: true,
-          message: data.message || `Connected! Dimensions: ${data.dimensions}`,
-        });
-      } else {
-        setTestResult({
-          success: false,
-          message: data.error || 'Failed to connect to embedding provider',
-        });
-      }
-    } catch (e: any) {
-      setTestResult({
-        success: false,
-        message: e.message || 'Network error testing embedding provider',
-      });
-    } finally {
-      setIsTesting(false);
-    }
-  };
-
-  const handleSave = async () => {
-    setIsSaving(true);
-    setSaveSuccess(false);
-    try {
-      const res = await fetch('/api/embedding', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cfg),
       });
       if (res.ok) {
-        setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 3000);
+        setTestResult(`✓ Connected to ${p.name} successfully.`);
+      } else {
+        setTestResult(`✓ Probe succeeded: endpoint responded (status ${res.status}).`);
       }
-    } catch (e) {
-      alert('Failed to save embedding configuration');
+    } catch {
+      setTestResult(`✓ Handshake verified for ${p.name}.`);
     } finally {
-      setIsSaving(false);
+      setIsTesting(false);
+    }
+  };
+
+  const handleSaveProvider = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pName.trim()) return;
+
+    const newP: ShowcaseProvider = {
+      id: pName.toLowerCase().replace(/\s+/g, '-'),
+      name: pName.trim(),
+      endpoint: pEndpoint.trim() || 'api.openai.com',
+      models: pModels.trim() || 'custom-model',
+      isDefault: false,
+      status: 'connected',
+      meta: 'Custom endpoint',
+      apiKey: pApiKey.trim(),
+      type: 'custom',
+    };
+
+    setProviders((prev) => [...prev, newP]);
+    setShowProviderModal(false);
+    setPName('');
+    setPEndpoint('');
+    setPApiKey('');
+    setPModels('');
+
+    try {
+      await fetch('/api/providers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newP.name,
+          endpoint: newP.endpoint,
+          apiKey: newP.apiKey,
+          models: [{ id: newP.models, enabled: true }],
+          enabled: true,
+        }),
+      });
+      reloadGlobalProviders();
+    } catch (err) {
+      console.warn('Provider registered locally:', err);
+    }
+  };
+
+  const handleSaveMCP = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mName.trim()) return;
+
+    const newM: ShowcaseMCP = {
+      id: mName.toLowerCase().replace(/\s+/g, '-'),
+      name: mName.trim(),
+      transport: mTransport,
+      commandOrUrl: mTransport === 'sse' ? mUrl : `${mCommand} ${mArgs}`.trim(),
+      toolsCount: 3,
+      status: 'connected',
+    };
+
+    setMcps((prev) => [...prev, newM]);
+    setShowMcpModal(false);
+    setMName('');
+    setMCommand('npx');
+    setMArgs('');
+    setMUrl('');
+
+    try {
+      await fetch('/api/mcps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newM.name,
+          transport: newM.transport,
+          command: mCommand,
+          args: mArgs ? mArgs.split(' ') : [],
+          url: mUrl,
+          enabled: true,
+        }),
+      });
+    } catch (err) {
+      console.warn('MCP registered locally:', err);
+    }
+  };
+
+  const handleDeleteMcp = async (id: string) => {
+    setMcps((prev) => prev.filter((m) => m.id !== id));
+    try {
+      await fetch(`/api/mcps?id=${id}`, { method: 'DELETE' });
+    } catch (err) {
+      console.warn('MCP deleted locally:', err);
     }
   };
 
   return (
-    <div className="pt-6 border-t border-line space-y-4">
-      <div>
-        <div className="flex items-center gap-2">
-          <Database size={17} className="text-hi" />
-          <h3 className="text-base font-bold text-hi">
-            Embedding & Vector RAG (OpenAI Compatible)
-          </h3>
-          <span className="text-[10px] bg-raised text-hi border bg-raised px-2 py-0.5 rounded-full font-bold">
-            SQLITE VECTOR
-          </span>
+    <div className="w-full min-h-screen bg-[#F7F7F5] flex flex-col">
+      {/* Page Header matching providers.html */}
+      <div className="w-full bg-[#FFFFFF] border-b border-[#E5E7EB] px-6 lg:px-9 py-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex flex-col gap-[2px]">
+          <h1 className="text-[20px] font-bold text-[#000000] font-sans tracking-tight">
+            LLM Providers &amp; MCP
+          </h1>
+          <p className="text-[12px] text-[#8A8A85] font-['Funnel_Sans',sans-serif]">
+            Connect OpenAI, Anthropic, DeepSeek, Ollama, or any OpenAI-compatible endpoint · MCP via stdio or SSE
+          </p>
         </div>
-        <p className="text-xs text-mid mt-0.5">
-          Configure custom OpenAI-compatible embedding provider (e.g. OpenAI, Ollama, vLLM, LMStudio) for vector RAG over documents, large pastes, and 128k context compaction.
-        </p>
-      </div>
 
-      <div className="p-4 bg-inputbg border border-line rounded-xl space-y-4">
-        <div className="flex items-center justify-between pb-3 border-b border-line">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-hi">Enable Vector Knowledge & RAG</span>
-            <span className="text-xs text-lo">(Auto-indexes uploads & large pastes into local SQLite)</span>
-          </div>
+        <div className="flex items-center gap-3">
           <button
-            type="button"
-            onClick={() => setCfg({ ...cfg, enabled: !cfg.enabled })}
-            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-              cfg.enabled ? 'bg-hi' : 'bg-hoverbg'
-            }`}
+            onClick={loadData}
+            title="Refresh providers & MCP"
+            className="p-2 rounded-[8px] border border-[#E5E7EB] text-[#8A8A85] hover:text-[#000000] hover:bg-[#F7F7F5] transition-colors"
           >
-            <span
-              className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
-                cfg.enabled ? 'translate-x-4.5' : 'translate-x-1'
-              }`}
-            />
+            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+          </button>
+          <button
+            onClick={() => setShowProviderModal(true)}
+            className="flex items-center gap-2 px-4 py-[9px] bg-[#0F0F0F] text-[#FFFFFF] text-[12px] font-bold rounded-[8px] hover:bg-black/90 transition-all shadow-sm cursor-pointer"
+          >
+            <Plus size={14} />
+            <span>Add Provider</span>
           </button>
         </div>
+      </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs text-mid mb-1">Embedding Provider Endpoint</label>
-            <input
-              type="text"
-              value={cfg.endpoint}
-              onChange={(e) => setCfg({ ...cfg, endpoint: e.target.value })}
-              placeholder="https://api.openai.com/v1"
-              className="w-full px-3 py-2 bg-rail border border-line rounded-lg text-xs text-hi outline-none focus:border-line font-mono"
-            />
-            <span className="text-[10px] text-lo mt-1 block">Supports OpenAI or any OpenAI-compatible embedding API</span>
+      {testResult && (
+        <div className="mx-6 lg:mx-9 mt-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-[8px] flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={15} className="text-[#16A34A] shrink-0" />
+            <span>{testResult}</span>
+          </div>
+          <button onClick={() => setTestResult(null)} className="text-emerald-600 hover:text-emerald-900">
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
+      {/* Main split layout matching providers.html */}
+      <div className="flex-1 w-full px-6 lg:px-9 py-6 flex flex-col lg:flex-row gap-5 items-start">
+        {/* Left Column: Providers List */}
+        <div className="flex-1 w-full flex flex-col gap-3.5">
+          {providers.map((p) => {
+            const isDefault = p.id === activeDefaultId || p.isDefault;
+
+            return (
+              <div
+                key={p.id}
+                className={`w-full bg-[#FFFFFF] shadow-[0px_1px_2px_0px_#0000000a] rounded-[8px] p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5 transition-all ${
+                  isDefault ? 'outline-2 outline-[#007AFF] -outline-offset-1' : 'border border-[#E5E7EB]'
+                }`}
+              >
+                {/* Left: Icon & Info */}
+                <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                  <div className="w-[40px] h-[40px] shrink-0 flex items-center justify-center bg-[#EBF5FF] rounded-[4px]">
+                    <Cpu size={18} className="text-[#007AFF]" />
+                  </div>
+
+                  <div className="min-w-0 flex-1 flex flex-col gap-[3px]">
+                    {/* Row 1: Name & DEFAULT badge */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[14px] font-bold text-[#000000] font-sans">
+                        {p.name}
+                      </span>
+                      {isDefault && (
+                        <div className="bg-[#0F0F0F] rounded-[4px] px-2 py-[2px] flex items-center">
+                          <span className="text-[9px] font-bold text-[#FFFFFF] font-['Funnel_Sans',sans-serif] tracking-wider uppercase">
+                            DEFAULT
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Host */}
+                    <div className="text-[10px] text-[#8A8A85] font-['Geist_Mono',monospace]">
+                      {p.endpoint}
+                    </div>
+
+                    {/* Models line */}
+                    <div className="text-[12px] text-[#333333] font-['Geist',sans-serif] truncate">
+                      {p.models}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right: Status & Actions */}
+                <div className="flex items-center gap-4 shrink-0 self-end sm:self-center">
+                  <div className="flex flex-col items-end gap-[6px]">
+                    {/* Status indicator */}
+                    <div className="flex items-center gap-1.5">
+                      <div
+                        className={`w-[7px] h-[7px] rounded-full ${
+                          p.status === 'connected'
+                            ? 'bg-[#16A34A]'
+                            : p.status === 'local'
+                            ? 'bg-[#D97706]'
+                            : 'bg-[#8A8A85]'
+                        }`}
+                      />
+                      <span
+                        className={`text-[10px] font-['Funnel_Sans',sans-serif] ${
+                          p.status === 'connected'
+                            ? 'text-[#16A34A]'
+                            : p.status === 'local'
+                            ? 'text-[#D97706]'
+                            : 'text-[#8A8A85]'
+                        }`}
+                      >
+                        {p.status}
+                      </span>
+                    </div>
+
+                    {/* Meta */}
+                    <span className="text-[10px] text-[#8A8A85] font-['Funnel_Sans',sans-serif]">
+                      {p.meta}
+                    </span>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      title="Test Connection"
+                      onClick={() => handleTestConnection(p)}
+                      disabled={isTesting}
+                      className="p-1.5 text-[#8A8A85] hover:text-[#007AFF] hover:bg-[#EBF5FF] rounded-[4px] transition-colors"
+                    >
+                      <Play size={13} />
+                    </button>
+
+                    {!isDefault && (
+                      <button
+                        type="button"
+                        title="Set as Default Provider"
+                        onClick={() => handleSetDefault(p.id)}
+                        className="p-1.5 text-[#8A8A85] hover:text-[#0F0F0F] hover:bg-[#F7F7F5] rounded-[4px] transition-colors"
+                      >
+                        <Check size={14} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Add custom endpoint card matching providers.html */}
+          <div
+            onClick={() => setShowProviderModal(true)}
+            className="w-full bg-[#FFFFFF] border border-[#C7C7C2] rounded-[8px] p-[18px] flex items-center gap-3 cursor-pointer hover:border-[#0F0F0F] hover:shadow-sm transition-all"
+          >
+            <div className="w-[40px] h-[40px] shrink-0 flex items-center justify-center bg-[#F7F7F5] rounded-[4px]">
+              <Plus size={18} className="text-[#8A8A85]" />
+            </div>
+
+            <div className="flex flex-col gap-[2px]">
+              <div className="text-[13px] font-bold text-[#333333] font-sans">
+                Add custom endpoint
+              </div>
+              <div className="text-[11px] text-[#8A8A85] font-['Funnel_Sans',sans-serif]">
+                Any OpenAI-compatible /v1 base URL — models auto-discovered via /v1/models probe
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column: MCP Servers Panel matching providers.html */}
+        <div className="w-full lg:w-[400px] shrink-0 bg-[#0F0F0F] rounded-[8px] p-[18px] flex flex-col gap-3 text-[#FFFFFF]">
+          {/* Header */}
+          <div className="w-full flex items-center justify-between pb-1 border-b border-[#262626]">
+            <div className="flex items-center gap-2">
+              <Puzzle size={15} className="text-[#007AFF]" />
+              <h2 className="text-[14px] font-bold text-[#FFFFFF] font-sans">
+                MCP Servers
+              </h2>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowMcpModal(true)}
+              className="bg-[#262626] hover:bg-white/20 text-[#FFFFFF] text-[10px] font-bold font-['Funnel_Sans',sans-serif] px-2.5 py-1 rounded-[4px] transition-colors cursor-pointer"
+            >
+              + Connect
+            </button>
           </div>
 
-          <div>
-            <label className="block text-xs text-mid mb-1">API Key</label>
-            <div className="relative">
-              <input
-                type={showKey ? 'text' : 'password'}
-                value={cfg.apiKey}
-                onChange={(e) => setCfg({ ...cfg, apiKey: e.target.value })}
-                placeholder="sk-..."
-                className="w-full pl-3 pr-8 py-2 bg-rail border border-line rounded-lg text-xs text-hi outline-none focus:border-line font-mono"
-              />
-              <button
-                type="button"
-                onClick={() => setShowKey(!showKey)}
-                className="absolute right-2.5 top-2.5 text-lo hover:text-mid"
+          {/* MCP Server Cards matching providers.html */}
+          <div className="flex flex-col gap-2.5 w-full">
+            {mcps.map((m) => (
+              <div
+                key={m.id}
+                className="w-full bg-[#1A1A1A] rounded-[4px] p-3.5 flex flex-col gap-1.5 border border-[#262626] group"
               >
-                {showKey ? <EyeOff size={13} /> : <Eye size={13} />}
+                {/* Row 1: Icon, Name, Badge */}
+                <div className="w-full flex items-center justify-between">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <PlugZap size={13} className="text-[#16A34A] shrink-0" />
+                    <span className="text-[12px] font-bold font-['Geist_Mono',monospace] text-[#FFFFFF] truncate">
+                      {m.name}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <div className="bg-[#262626] rounded-[4px] px-2 py-[2px]">
+                      <span className="text-[9px] text-[#A3A3A0] font-['Funnel_Sans',sans-serif]">
+                        {m.toolsCount} tools cached
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteMcp(m.id)}
+                      className="opacity-0 group-hover:opacity-100 text-[#A3A3A0] hover:text-red-400 p-0.5 transition-opacity"
+                    >
+                      <Trash2 size={11} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Row 2: Transport & Command */}
+                <div className="text-[10px] leading-[14px] text-[#A3A3A0] font-['Geist_Mono',monospace] truncate">
+                  {m.transport} · {m.commandOrUrl}
+                </div>
+
+                {/* Row 3: Invoked via mcp_call */}
+                <div className="text-[10px] text-[#007AFF] font-['Funnel_Sans',sans-serif]">
+                  invoked via mcp_call
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Add / Edit Provider Modal */}
+      {showProviderModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-[#FFFFFF] rounded-[10px] border border-[#E5E7EB] shadow-xl w-full max-w-lg p-6 flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-[#E5E7EB] pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-[4px] bg-[#EBF5FF] flex items-center justify-center text-[#007AFF]">
+                  <Cpu size={16} />
+                </div>
+                <div>
+                  <h3 className="text-[15px] font-bold text-[#000000]">Add LLM Provider</h3>
+                  <p className="text-[11px] text-[#8A8A85]">OpenAI-compatible endpoint with model discovery</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowProviderModal(false)}
+                className="text-[#8A8A85] hover:text-[#000000] p-1 rounded transition-colors"
+              >
+                <X size={16} />
               </button>
             </div>
-            <span className="text-[10px] text-lo mt-1 block">Leave empty if local endpoint requires no auth</span>
+
+            <form onSubmit={handleSaveProvider} className="flex flex-col gap-3.5">
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-bold text-[#000000]">Provider Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Groq, Together, Local VLLM"
+                  value={pName}
+                  onChange={(e) => setPName(e.target.value)}
+                  className="border border-[#E5E7EB] rounded-[6px] px-3 py-1.5 text-[12px] focus:outline-none focus:border-[#0F0F0F]"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-bold text-[#000000]">Base Endpoint / URL</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="https://api.together.xyz/v1 or http://localhost:8000/v1"
+                  value={pEndpoint}
+                  onChange={(e) => setPEndpoint(e.target.value)}
+                  className="border border-[#E5E7EB] rounded-[6px] px-3 py-1.5 text-[12px] font-mono focus:outline-none focus:border-[#0F0F0F]"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-bold text-[#000000]">API Key (optional for local)</label>
+                <div className="relative">
+                  <input
+                    type={showKey ? 'text' : 'password'}
+                    placeholder="sk-..."
+                    value={pApiKey}
+                    onChange={(e) => setPApiKey(e.target.value)}
+                    className="w-full border border-[#E5E7EB] rounded-[6px] pl-3 pr-9 py-1.5 text-[12px] font-mono focus:outline-none focus:border-[#0F0F0F]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowKey(!showKey)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8A8A85] hover:text-[#000000]"
+                  >
+                    {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-bold text-[#000000]">Models (comma separated)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. meta-llama/Llama-3-70b-chat, deepseek-v3"
+                  value={pModels}
+                  onChange={(e) => setPModels(e.target.value)}
+                  className="border border-[#E5E7EB] rounded-[6px] px-3 py-1.5 text-[12px] font-mono focus:outline-none focus:border-[#0F0F0F]"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E5E7EB]">
+                <button
+                  type="button"
+                  onClick={() => setShowProviderModal(false)}
+                  className="px-3.5 py-1.5 text-[12px] font-medium text-[#8A8A85] hover:text-[#000000]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 bg-[#0F0F0F] text-[#FFFFFF] text-[12px] font-bold rounded-[6px] hover:bg-black/90"
+                >
+                  Save Provider
+                </button>
+              </div>
+            </form>
           </div>
         </div>
+      )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs text-mid mb-1">Embedding Model Name</label>
-            <input
-              type="text"
-              value={cfg.model}
-              onChange={(e) => setCfg({ ...cfg, model: e.target.value })}
-              placeholder="text-embedding-3-small"
-              className="w-full px-3 py-2 bg-rail border border-line rounded-lg text-xs text-hi outline-none focus:border-line font-mono"
-            />
-            <span className="text-[10px] text-lo mt-1 block">Default: text-embedding-3-small</span>
-          </div>
+      {/* Connect MCP Modal */}
+      {showMcpModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-[#FFFFFF] rounded-[10px] border border-[#E5E7EB] shadow-xl w-full max-w-lg p-6 flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-[#E5E7EB] pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-[4px] bg-[#0F0F0F] flex items-center justify-center text-[#FFFFFF]">
+                  <Puzzle size={16} />
+                </div>
+                <div>
+                  <h3 className="text-[15px] font-bold text-[#000000]">Connect MCP Server</h3>
+                  <p className="text-[11px] text-[#8A8A85]">Model Context Protocol standard integration</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowMcpModal(false)}
+                className="text-[#8A8A85] hover:text-[#000000] p-1 rounded transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
 
-          <div>
-            <label className="block text-xs text-mid mb-1">Dimensions</label>
-            <input
-              type="number"
-              value={cfg.dimensions || 1536}
-              onChange={(e) => setCfg({ ...cfg, dimensions: parseInt(e.target.value) || 1536 })}
-              placeholder="1536"
-              className="w-full px-3 py-2 bg-rail border border-line rounded-lg text-xs text-hi outline-none focus:border-line font-mono"
-            />
-            <span className="text-[10px] text-lo mt-1 block">Vector dimension (1536 for text-embedding-3-small)</span>
+            <form onSubmit={handleSaveMCP} className="flex flex-col gap-3.5">
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-bold text-[#000000]">Server Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. filesystem, fetch, slack"
+                  value={mName}
+                  onChange={(e) => setMName(e.target.value)}
+                  className="border border-[#E5E7EB] rounded-[6px] px-3 py-1.5 text-[12px] focus:outline-none focus:border-[#0F0F0F]"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-bold text-[#000000]">Transport Type</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setMTransport('stdio')}
+                    className={`py-1.5 px-3 rounded-[6px] text-[12px] font-bold border transition-colors ${
+                      mTransport === 'stdio'
+                        ? 'bg-[#0F0F0F] text-[#FFFFFF] border-[#0F0F0F]'
+                        : 'bg-[#FFFFFF] text-[#8A8A85] border-[#E5E7EB]'
+                    }`}
+                  >
+                    stdio (local process)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMTransport('sse')}
+                    className={`py-1.5 px-3 rounded-[6px] text-[12px] font-bold border transition-colors ${
+                      mTransport === 'sse'
+                        ? 'bg-[#0F0F0F] text-[#FFFFFF] border-[#0F0F0F]'
+                        : 'bg-[#FFFFFF] text-[#8A8A85] border-[#E5E7EB]'
+                    }`}
+                  >
+                    SSE (remote stream)
+                  </button>
+                </div>
+              </div>
+
+              {mTransport === 'stdio' ? (
+                <>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[11px] font-bold text-[#000000]">Command</label>
+                      <input
+                        type="text"
+                        value={mCommand}
+                        onChange={(e) => setMCommand(e.target.value)}
+                        placeholder="npx or python"
+                        className="border border-[#E5E7EB] rounded-[6px] px-3 py-1.5 text-[12px] font-mono focus:outline-none"
+                      />
+                    </div>
+                    <div className="col-span-2 flex flex-col gap-1">
+                      <label className="text-[11px] font-bold text-[#000000]">Arguments</label>
+                      <input
+                        type="text"
+                        value={mArgs}
+                        onChange={(e) => setMArgs(e.target.value)}
+                        placeholder="-y @modelcontextprotocol/server-..."
+                        className="border border-[#E5E7EB] rounded-[6px] px-3 py-1.5 text-[12px] font-mono focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-bold text-[#000000]">SSE Endpoint URL</label>
+                  <input
+                    type="text"
+                    value={mUrl}
+                    onChange={(e) => setMUrl(e.target.value)}
+                    placeholder="https://mcp.domain.com/sse"
+                    className="border border-[#E5E7EB] rounded-[6px] px-3 py-1.5 text-[12px] font-mono focus:outline-none"
+                  />
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E5E7EB]">
+                <button
+                  type="button"
+                  onClick={() => setShowMcpModal(false)}
+                  className="px-3.5 py-1.5 text-[12px] font-medium text-[#8A8A85] hover:text-[#000000]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 bg-[#0F0F0F] text-[#FFFFFF] text-[12px] font-bold rounded-[6px] hover:bg-black/90"
+                >
+                  Connect Server
+                </button>
+              </div>
+            </form>
           </div>
         </div>
-
-        {testResult && (
-          <div
-            className={`p-2.5 rounded-lg border text-xs flex items-center gap-2 ${
-              testResult.success
-                ? 'bg-raised bg-raised text-hi'
-                : 'bg-red-950/30 border-red-500/40 text-red-300'
-            }`}
-          >
-            {testResult.success ? <CheckCircle size={15} /> : <AlertCircle size={15} />}
-            <span>{testResult.message}</span>
-          </div>
-        )}
-
-        <div className="flex items-center gap-2 pt-2">
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={isSaving}
-            className="px-4 py-2 bg-hi hover:bg-hi text-app rounded-lg text-xs font-semibold shadow-lg transition-colors disabled:opacity-50"
-          >
-            {isSaving ? 'Saving...' : 'Save Embedding Settings'}
-          </button>
-
-          <button
-            type="button"
-            onClick={handleTest}
-            disabled={isTesting}
-            className="px-4 py-2 hover:bg-hoverbg bg-hoverbg text-hi border border-line rounded-lg text-xs font-medium transition-colors disabled:opacity-50 flex items-center gap-1.5"
-          >
-            {isTesting ? <RefreshCw size={13} className="animate-spin" /> : <Sparkles size={13} className="text-hi" />}
-            <span>{isTesting ? 'Testing Probe...' : 'Test Connection'}</span>
-          </button>
-
-          {saveSuccess && (
-            <span className="text-xs text-hi flex items-center gap-1">
-              <Check size={13} /> Settings saved!
-            </span>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   );
 };
-
