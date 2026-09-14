@@ -15,7 +15,10 @@ import {
   Clock,
   Send,
   Calendar,
+  Users,
+  Bot,
 } from 'lucide-react';
+import { useAppStore } from '../store/useAppStore';
 
 interface ScheduleItem {
   id: string;
@@ -26,9 +29,15 @@ interface ScheduleItem {
   status: 'running' | 'paused';
   prompt: string;
   target?: string;
+  deliverTelegram?: boolean;
+  targetType?: string;
+  targetId?: string;
 }
 
 export const SchedulerPane: React.FC = () => {
+  const { agents, sessions, telegramAgents } = useAppStore();
+  const groupSessions = sessions.filter((s) => s.type === 'group');
+
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -45,24 +54,35 @@ export const SchedulerPane: React.FC = () => {
   const [formTitle, setFormTitle] = useState('');
   const [formSchedule, setFormSchedule] = useState('every weekday at 9am');
   const [formPrompt, setFormPrompt] = useState('');
-  const [formTarget, setFormTarget] = useState('web');
+  const [formTargetType, setFormTargetType] = useState<'agent' | 'group'>('agent');
+  const [formTargetId, setFormTargetId] = useState('');
+  const [formDeliverTelegram, setFormDeliverTelegram] = useState(false);
+
+  useEffect(() => {
+    if (agents.length > 0 && !formTargetId) {
+      setFormTargetId(agents[0].id);
+    }
+  }, [agents, formTargetId]);
 
   const loadSchedules = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/schedules');
+      const res = await fetch('/api/routines');
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {
           const mapped: ScheduleItem[] = data.map((d: any, idx: number) => ({
             id: d.id || `sch-${idx}`,
-            title: d.name || d.title || 'Scheduled Agent Task',
+            title: d.name || d.title || 'Scheduled Agent Routine',
             cron: d.schedule?.includes('*') ? d.schedule : '0 9 * * 1-5',
             humanSchedule: d.schedule || 'daily at 9:00 AM',
             nextRun: d.nextRun || 'in 1h',
             status: d.enabled === false ? 'paused' : 'running',
             prompt: d.prompt || '',
-            target: d.channel || 'web',
+            target: d.targetType ? `${d.targetType}: ${d.targetId}` : (d.channel || 'web'),
+            deliverTelegram: d.deliverTelegram,
+            targetType: d.targetType,
+            targetId: d.targetId,
           }));
           setSchedules(mapped);
         } else {
@@ -137,15 +157,23 @@ export const SchedulerPane: React.FC = () => {
     e.preventDefault();
     if (!formTitle.trim()) return;
 
+    const targetId =
+      formTargetId ||
+      (formTargetType === 'agent' ? agents[0]?.id : groupSessions[0]?.id) ||
+      'personal-assistant';
+
     const newItem: ScheduleItem = {
-      id: `sch-${Date.now()}`,
+      id: `routine-${Date.now()}`,
       title: formTitle.trim(),
       cron: parsedCron || '0 9 * * 1-5',
-      humanSchedule: formSchedule.trim() || 'Custom Schedule',
+      humanSchedule: formSchedule.trim() || 'Custom Routine',
       nextRun: 'in 45m',
       status: 'running',
       prompt: formPrompt.trim() || formTitle.trim(),
-      target: formTarget,
+      target: `${formTargetType}: ${targetId}`,
+      deliverTelegram: formDeliverTelegram,
+      targetType: formTargetType,
+      targetId,
     };
 
     setSchedules((prev) => [newItem, ...prev]);
@@ -154,18 +182,21 @@ export const SchedulerPane: React.FC = () => {
     setFormPrompt('');
 
     try {
-      await fetch('/api/schedules', {
+      await fetch('/api/routines', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: newItem.title,
           schedule: newItem.cron,
           prompt: newItem.prompt,
-          channel: newItem.target,
+          targetType: formTargetType,
+          targetId,
+          deliverTelegram: formDeliverTelegram,
         }),
       });
+      loadSchedules();
     } catch (err) {
-      console.warn('Schedule created locally:', err);
+      console.warn('Routine created locally:', err);
     }
   };
 
@@ -481,33 +512,92 @@ export const SchedulerPane: React.FC = () => {
                 />
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-bold text-[#000000]">Broadcast Target</label>
-                <div className="grid grid-cols-2 gap-2">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-bold text-[#000000]">Automation Target</label>
+                <div className="grid grid-cols-2 gap-2 mb-2">
                   <button
                     type="button"
-                    onClick={() => setFormTarget('web')}
-                    className={`py-1.5 px-3 rounded-[6px] text-[12px] font-bold border transition-colors ${
-                      formTarget === 'web'
+                    onClick={() => {
+                      setFormTargetType('agent');
+                      if (agents.length > 0) setFormTargetId(agents[0].id);
+                    }}
+                    className={`py-1.5 px-3 rounded-[6px] text-[12px] font-bold border transition-colors flex items-center justify-center gap-1.5 ${
+                      formTargetType === 'agent'
                         ? 'bg-[#0F0F0F] text-[#FFFFFF] border-[#0F0F0F]'
                         : 'bg-[#FFFFFF] text-[#8A8A85] border-[#E5E7EB]'
                     }`}
                   >
-                    Web Session UI
+                    <Bot size={13} />
+                    <span>Agent Person</span>
                   </button>
                   <button
                     type="button"
-                    onClick={() => setFormTarget('telegram')}
-                    className={`py-1.5 px-3 rounded-[6px] text-[12px] font-bold border transition-colors ${
-                      formTarget === 'telegram'
+                    onClick={() => {
+                      setFormTargetType('group');
+                      if (groupSessions.length > 0) setFormTargetId(groupSessions[0].id);
+                    }}
+                    className={`py-1.5 px-3 rounded-[6px] text-[12px] font-bold border transition-colors flex items-center justify-center gap-1.5 ${
+                      formTargetType === 'group'
                         ? 'bg-[#0F0F0F] text-[#FFFFFF] border-[#0F0F0F]'
                         : 'bg-[#FFFFFF] text-[#8A8A85] border-[#E5E7EB]'
                     }`}
                   >
-                    Telegram Bot
+                    <Users size={13} />
+                    <span>Group Chat</span>
                   </button>
                 </div>
+
+                {formTargetType === 'agent' ? (
+                  <select
+                    value={formTargetId}
+                    onChange={(e) => {
+                      setFormTargetId(e.target.value);
+                      const isTg = !!telegramAgents[e.target.value]?.connected;
+                      if (isTg) setFormDeliverTelegram(true);
+                    }}
+                    className="border border-[#E5E7EB] rounded-[6px] px-3 py-1.5 text-[12px] focus:outline-none focus:border-[#0F0F0F] bg-white"
+                  >
+                    {agents.map((a) => {
+                      const isTg = !!telegramAgents[a.id]?.connected || a.telegramConnected;
+                      return (
+                        <option key={a.id} value={a.id}>
+                          {a.name} ({a.role || 'Specialist'}) {isTg ? '⚡ [Telegram Linked]' : ''}
+                        </option>
+                      );
+                    })}
+                  </select>
+                ) : (
+                  <select
+                    value={formTargetId}
+                    onChange={(e) => setFormTargetId(e.target.value)}
+                    className="border border-[#E5E7EB] rounded-[6px] px-3 py-1.5 text-[12px] focus:outline-none focus:border-[#0F0F0F] bg-white"
+                  >
+                    {groupSessions.length === 0 ? (
+                      <option value="">No group chats created yet</option>
+                    ) : (
+                      groupSessions.map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.title} ({g.participants?.length || 0} agents)
+                        </option>
+                      ))
+                    )}
+                  </select>
+                )}
               </div>
+
+              {/* Deliver to Telegram Checkbox */}
+              <label className="flex items-center gap-2 cursor-pointer p-2 rounded bg-blue-50/60 border border-blue-100">
+                <input
+                  type="checkbox"
+                  checked={formDeliverTelegram}
+                  onChange={(e) => setFormDeliverTelegram(e.target.checked)}
+                  className="rounded text-[#007AFF] focus:ring-0"
+                />
+                <div className="flex items-center gap-1.5 text-xs text-[#007AFF] font-medium">
+                  <Send size={12} />
+                  <span>Deliver notification to Telegram when executed</span>
+                </div>
+              </label>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E5E7EB]">
                 <button
@@ -519,9 +609,9 @@ export const SchedulerPane: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-[#0F0F0F] text-[#FFFFFF] text-[12px] font-bold rounded-[6px] hover:bg-black/90"
+                  className="px-4 py-1.5 bg-[#0F0F0F] text-[#FFFFFF] text-[12px] font-bold rounded-[6px] hover:bg-black/90 cursor-pointer"
                 >
-                  Schedule Task
+                  Save Routine
                 </button>
               </div>
             </form>

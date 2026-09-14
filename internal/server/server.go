@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -56,6 +57,19 @@ func NewServer(db *sql.DB) *Server {
 	plugins.NewManager(cwd, bus)
 	if scheduler.DefaultDaemon == nil {
 		scheduler.NewDaemon(bus)
+	}
+	scheduler.TurnExecutor = func(ctx context.Context, sessionID, agentID, prompt, channel string, deliverTelegram bool) error {
+		respMsg, err := rt.ExecuteTurnWithModel(ctx, sessionID, agentID, prompt, channel, "")
+		if err != nil {
+			log.Printf("Routine turn execution error: %v", err)
+			return err
+		}
+		if deliverTelegram && respMsg != nil && respMsg.Content != "" {
+			if tg != nil {
+				_ = tg.SendAgentNotification(agentID, respMsg.Content)
+			}
+		}
+		return nil
 	}
 
 	s := &Server{
@@ -141,6 +155,8 @@ func (s *Server) routes() {
 	s.router.HandleFunc("/api/agents", s.handleAgents())
 	s.router.HandleFunc("/api/sessions", s.handleSessions())
 	s.router.HandleFunc("/api/sessions/", s.handleSessionDetail())
+	s.router.HandleFunc("/api/groups", s.handleGroups())
+	s.router.HandleFunc("/api/groups/", s.handleGroupDetail())
 	s.router.HandleFunc("/api/mcps", s.handleMCPs())
 	s.router.HandleFunc("/api/mcps/fetch-tools", s.handleMCPFetchTools())
 	s.router.HandleFunc("/api/skills", s.handleSkills())
@@ -152,6 +168,7 @@ func (s *Server) routes() {
 	s.router.HandleFunc("/api/telegram/test-token", s.handleTelegramTestToken())
 	s.router.HandleFunc("/api/telegram/auth", s.handleTelegramAuth())
 	s.router.HandleFunc("/api/telegram/auth/", s.handleTelegramAuthAction())
+	s.router.HandleFunc("/api/telegram/agents", s.handleTelegramAgents())
 
 	// Embedding & Vector RAG
 	s.router.HandleFunc("/api/embedding", s.handleEmbeddingConfig())
@@ -189,7 +206,9 @@ func (s *Server) routes() {
 	s.router.HandleFunc("/api/plugins", s.handlePlugins())
 	s.router.HandleFunc("/api/plugins/", s.handlePluginAction())
 
-	// Schedules & Cron
+	// Routines & Schedules (renamed from Scheduler)
+	s.router.HandleFunc("/api/routines", s.handleSchedules())
+	s.router.HandleFunc("/api/routines/", s.handleScheduleAction())
 	s.router.HandleFunc("/api/schedules", s.handleSchedules())
 	s.router.HandleFunc("/api/schedules/", s.handleScheduleAction())
 
@@ -215,6 +234,13 @@ func (s *Server) handleWebSocket() http.HandlerFunc {
 			return
 		}
 		defer conn.Close()
+
+		var writeMu sync.Mutex
+		safeWriteJSON := func(v interface{}) error {
+			writeMu.Lock()
+			defer writeMu.Unlock()
+			return conn.WriteJSON(v)
+		}
 
 		currentSession := ""
 		var sub *messaging.Subscription
@@ -245,13 +271,15 @@ func (s *Server) handleWebSocket() http.HandlerFunc {
 				sub = s.bus.Subscribe(currentSession)
 
 				// Pipe bus events to websocket client
-				go func(sSub *messaging.Subscription, sConn *websocket.Conn) {
+				go func(sSub *messaging.Subscription) {
 					for ev := range sSub.Ch {
-						_ = sConn.WriteJSON(ev)
+						if err := safeWriteJSON(ev); err != nil {
+							return
+						}
 					}
-				}(sub, conn)
+				}(sub)
 
-				_ = conn.WriteJSON(map[string]interface{}{
+				_ = safeWriteJSON(map[string]interface{}{
 					"type":      "subscribed",
 					"sessionId": currentSession,
 				})
@@ -265,11 +293,13 @@ func (s *Server) handleWebSocket() http.HandlerFunc {
 				if sub == nil {
 					currentSession = "*"
 					sub = s.bus.Subscribe(currentSession)
-					go func(sSub *messaging.Subscription, sConn *websocket.Conn) {
+					go func(sSub *messaging.Subscription) {
 						for ev := range sSub.Ch {
-							_ = sConn.WriteJSON(ev)
+							if err := safeWriteJSON(ev); err != nil {
+								return
+							}
 						}
-					}(sub, conn)
+					}(sub)
 				}
 
 				go func(sid, aid, txt, mdl string) {
@@ -282,7 +312,7 @@ func (s *Server) handleWebSocket() http.HandlerFunc {
 				}(msg.SessionID, msg.AgentID, msg.Content, msg.Model)
 
 			case "ping":
-				_ = conn.WriteJSON(map[string]string{"type": "pong"})
+				_ = safeWriteJSON(map[string]string{"type": "pong"})
 			}
 		}
 	}
@@ -643,14 +673,25 @@ func (s *Server) handleModels() http.HandlerFunc {
 		// Fallback curated models if providers list is empty
 		if len(items) == 0 {
 			items = []GlobalModelItem{
-				{ID: "gpt-4o", Name: "GPT-4o", ProviderID: "openai", ProviderName: "OpenAI Compatible", ProviderType: "openai", IsDefault: true},
-				{ID: "gpt-4o-mini", Name: "GPT-4o Mini", ProviderID: "openai", ProviderName: "OpenAI Compatible", ProviderType: "openai", IsDefault: false},
-				{ID: "claude-3-7-sonnet", Name: "Claude 3.7 Sonnet", ProviderID: "anthropic", ProviderName: "Anthropic", ProviderType: "anthropic", IsDefault: false},
-				{ID: "deepseek-chat", Name: "DeepSeek V3", ProviderID: "deepseek", ProviderName: "DeepSeek", ProviderType: "deepseek", IsDefault: false},
-				{ID: "qwen2.5-coder:latest", Name: "Qwen 2.5 Coder (Ollama)", ProviderID: "ollama", ProviderName: "Ollama Local", ProviderType: "ollama", IsDefault: false},
+				{ID: "gpt-6-astra", Name: "GPT-6 Astra (1.05M)", ProviderID: "openai", ProviderName: "OpenAI Compatible", ProviderType: "openai", IsDefault: true},
+				{ID: "gpt-5-6-luna", Name: "GPT-5.6 Luna (1.05M)", ProviderID: "openai", ProviderName: "OpenAI Compatible", ProviderType: "openai", IsDefault: false},
+				{ID: "deepseek-v4-flash", Name: "DeepSeek V4 Flash (1M)", ProviderID: "deepseek", ProviderName: "DeepSeek", ProviderType: "deepseek", IsDefault: false},
+				{ID: "deepseek-v4-1-flash", Name: "DeepSeek V4.1 Flash (1M)", ProviderID: "deepseek", ProviderName: "DeepSeek", ProviderType: "deepseek", IsDefault: false},
+				{ID: "glm-5-3-flash", Name: "GLM 5.3 Flash (1M)", ProviderID: "zhipu", ProviderName: "Zhipu AI", ProviderType: "openai", IsDefault: false},
+				{ID: "mimo-v2-5", Name: "MiMo-V2.5 (1M)", ProviderID: "mimo", ProviderName: "MiMo", ProviderType: "openai", IsDefault: false},
+				{ID: "nemotron-3-super-120b-a12b", Name: "Nemotron 3 Super 120B (1M)", ProviderID: "nvidia", ProviderName: "NVIDIA NIM", ProviderType: "openai", IsDefault: false},
+				{ID: "nemotron-3-ultra-550b-a55b", Name: "Nemotron 3 Ultra 550B (1M)", ProviderID: "nvidia", ProviderName: "NVIDIA NIM", ProviderType: "openai", IsDefault: false},
+				{ID: "gemma-4-31b", Name: "Gemma 4 31B (256K)", ProviderID: "google", ProviderName: "Google / Vertex", ProviderType: "openai", IsDefault: false},
+				{ID: "codestral-latest", Name: "Codestral Latest (256K)", ProviderID: "mistral", ProviderName: "Mistral AI", ProviderType: "openai", IsDefault: false},
+				{ID: "gpt-oss-120b", Name: "GPT-OSS 120B (128K)", ProviderID: "openai", ProviderName: "OpenAI Compatible", ProviderType: "openai", IsDefault: false},
+				{ID: "qwen-3.8-27b", Name: "Qwen 3.8 27B (128K)", ProviderID: "alibaba", ProviderName: "DashScope / Ollama", ProviderType: "openai", IsDefault: false},
+				{ID: "qwen3.7-flash-2026-07-15", Name: "Qwen 3.7 Flash (128K)", ProviderID: "alibaba", ProviderName: "DashScope", ProviderType: "openai", IsDefault: false},
+				{ID: "MiniMax-M2.7-highspeed", Name: "MiniMax M2.7 HighSpeed (128K)", ProviderID: "minimax", ProviderName: "MiniMax", ProviderType: "openai", IsDefault: false},
+				{ID: "claude-3-7-sonnet", Name: "Claude 3.7 Sonnet (200K)", ProviderID: "anthropic", ProviderName: "Anthropic", ProviderType: "anthropic", IsDefault: false},
+				{ID: "gpt-4o", Name: "GPT-4o (128K)", ProviderID: "openai", ProviderName: "OpenAI Compatible", ProviderType: "openai", IsDefault: false},
 			}
 			if defaultModel == "" {
-				defaultModel = "gpt-4o"
+				defaultModel = "gpt-6-astra"
 			}
 		}
 
@@ -825,6 +866,18 @@ func (s *Server) handleSessions() http.HandlerFunc {
 					if sess.Title != "" {
 						existing.Title = sess.Title
 					}
+					if sess.Type != "" {
+						existing.Type = sess.Type
+					}
+					if sess.Avatar != "" {
+						existing.Avatar = sess.Avatar
+					}
+					if sess.Summary != "" {
+						existing.Summary = sess.Summary
+					}
+					if len(sess.Participants) > 0 {
+						existing.Participants = sess.Participants
+					}
 					if sess.ChannelID != "" {
 						existing.ChannelID = sess.ChannelID
 					}
@@ -840,6 +893,9 @@ func (s *Server) handleSessions() http.HandlerFunc {
 			if sess.ID == "" {
 				sess.ID = "sess_" + uuid.New().String()[:8]
 				isNew = true
+			}
+			if sess.Type == "" {
+				sess.Type = "direct"
 			}
 			if sess.AgentID == "" {
 				sess.AgentID = "personal-assistant"
@@ -1289,6 +1345,14 @@ func (s *Server) handleTelegramBots() http.HandlerFunc {
 			for i := range bots {
 				if s.tg.IsRunning(bots[i].ID) {
 					bots[i].Status = "running"
+					if un := s.tg.GetBotUsername(bots[i].ID); un != "" {
+						if !strings.HasPrefix(un, "@") {
+							un = "@" + un
+						}
+						if bots[i].Name == "" || bots[i].Name == bots[i].ID {
+							bots[i].Name = un
+						}
+					}
 				} else if bots[i].Status != "error" {
 					bots[i].Status = "stopped"
 				}
@@ -1304,9 +1368,20 @@ func (s *Server) handleTelegramBots() http.HandlerFunc {
 			if b.ID == "" {
 				b.ID = "tg-" + strings.ToLower(strings.ReplaceAll(b.Name, " ", "-"))
 			}
+			if existing, _ := s.store.GetTelegramBot(b.ID); existing != nil {
+				if b.Token == "" {
+					b.Token = existing.Token
+				}
+				if b.Name == "" {
+					b.Name = existing.Name
+				}
+			}
 			if err := s.store.SaveTelegramBot(b); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
+			}
+			if b.AgentID != "" {
+				_ = s.store.UpdateTelegramSessionsAgent(b.ID, b.AgentID)
 			}
 			// If bot was already running and is updated, restart
 			if s.tg.IsRunning(b.ID) {
@@ -2736,18 +2811,12 @@ func (s *Server) handleSchedules() http.HandlerFunc {
 			json.NewEncoder(w).Encode(tasks)
 
 		case "POST":
-			var req struct {
-				Name      string `json:"name"`
-				Schedule  string `json:"schedule"`
-				Prompt    string `json:"prompt"`
-				SessionID string `json:"sessionId"`
-				Channel   string `json:"channel"`
-			}
+			var req scheduler.ScheduledTask
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				http.Error(w, "invalid JSON", http.StatusBadRequest)
 				return
 			}
-			task, err := scheduler.DefaultDaemon.AddTask(req.Name, req.Schedule, req.Prompt, req.SessionID, req.Channel)
+			task, err := scheduler.DefaultDaemon.AddRoutineTask(req)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
@@ -2768,9 +2837,10 @@ func (s *Server) handleScheduleAction() http.HandlerFunc {
 		}
 
 		path := strings.TrimPrefix(r.URL.Path, "/api/schedules/")
+		path = strings.TrimPrefix(path, "/api/routines/")
 		parts := strings.Split(strings.Trim(path, "/"), "/")
 		if len(parts) == 0 || parts[0] == "" {
-			http.Error(w, "schedule ID required", http.StatusBadRequest)
+			http.Error(w, "routine ID required", http.StatusBadRequest)
 			return
 		}
 		schedID := parts[0]
@@ -2808,5 +2878,198 @@ func (s *Server) handleScheduleAction() http.HandlerFunc {
 		}
 
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// --- Groups API ---
+
+func (s *Server) handleGroups() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case "GET":
+			all, err := s.store.ListSessions()
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			groups := make([]gateway.Session, 0)
+			for _, sess := range all {
+				if sess.Type == "group" {
+					groups = append(groups, sess)
+				}
+			}
+			json.NewEncoder(w).Encode(groups)
+
+		case "POST":
+			var req struct {
+				ID           string   `json:"id"`
+				Title        string   `json:"title"`
+				Avatar       string   `json:"avatar"`
+				Participants []string `json:"participants"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, "invalid JSON", http.StatusBadRequest)
+				return
+			}
+			if req.Title == "" {
+				req.Title = "Group Chat"
+			}
+			if req.ID == "" {
+				req.ID = "group_" + uuid.New().String()[:8]
+			}
+			if req.Avatar == "" {
+				req.Avatar = "users"
+			}
+
+			parts := make([]gateway.ChatParticipant, 0, len(req.Participants))
+			for _, pid := range req.Participants {
+				pType := "agent"
+				if pid == "user" || pid == "default" {
+					pType = "user"
+				}
+				parts = append(parts, gateway.ChatParticipant{
+					ID:              uuid.New().String(),
+					ChatID:          req.ID,
+					ParticipantType: pType,
+					ParticipantID:   pid,
+					Role:            "member",
+					JoinedAt:        time.Now().Unix(),
+				})
+			}
+
+			sess := gateway.Session{
+				ID:           req.ID,
+				Title:        req.Title,
+				Type:         "group",
+				Avatar:       req.Avatar,
+				AgentID:      "",
+				ChannelID:    "web",
+				UserID:       "user",
+				Status:       "active",
+				Participants: parts,
+			}
+			if err := s.store.SaveSession(sess); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			s.bus.Publish(messaging.Event{
+				ID:        uuid.New().String(),
+				Type:      messaging.EventSessionCreated,
+				SessionID: sess.ID,
+				Payload:   sess,
+				Timestamp: time.Now(),
+			})
+			json.NewEncoder(w).Encode(sess)
+
+		case "DELETE":
+			id := r.URL.Query().Get("id")
+			if id == "" {
+				http.Error(w, "missing group id", http.StatusBadRequest)
+				return
+			}
+			if err := s.store.DeleteSession(id); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	}
+}
+
+func (s *Server) handleGroupDetail() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		path := strings.TrimPrefix(r.URL.Path, "/api/groups/")
+		parts := strings.Split(strings.Trim(path, "/"), "/")
+		if len(parts) == 0 || parts[0] == "" {
+			http.Error(w, "group ID required", http.StatusBadRequest)
+			return
+		}
+		groupID := parts[0]
+
+		if len(parts) > 1 && parts[1] == "participants" {
+			switch r.Method {
+			case "GET":
+				list, err := s.store.ListChatParticipants(groupID)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				json.NewEncoder(w).Encode(list)
+
+			case "POST":
+				var req struct {
+					ParticipantID   string `json:"participantId"`
+					ParticipantType string `json:"participantType"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					http.Error(w, "invalid JSON", http.StatusBadRequest)
+					return
+				}
+				pType := req.ParticipantType
+				if pType == "" {
+					pType = "agent"
+				}
+				p := gateway.ChatParticipant{
+					ID:              uuid.New().String(),
+					ChatID:          groupID,
+					ParticipantType: pType,
+					ParticipantID:   req.ParticipantID,
+					Role:            "member",
+					JoinedAt:        time.Now().Unix(),
+				}
+				_ = s.store.AddChatParticipant(p)
+				list, _ := s.store.ListChatParticipants(groupID)
+				json.NewEncoder(w).Encode(list)
+
+			case "DELETE":
+				pid := r.URL.Query().Get("participantId")
+				if pid == "" {
+					http.Error(w, "missing participantId", http.StatusBadRequest)
+					return
+				}
+				_ = s.store.RemoveChatParticipant(groupID, pid)
+				json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+
+			default:
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			}
+			return
+		}
+
+		sess, err := s.store.GetSession(groupID)
+		if err != nil || sess == nil {
+			http.Error(w, "group not found", http.StatusNotFound)
+			return
+		}
+		json.NewEncoder(w).Encode(sess)
+	}
+}
+
+func (s *Server) handleTelegramAgents() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		bots, err := s.store.ListTelegramBots()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		result := make(map[string]interface{})
+		for _, b := range bots {
+			if b.AgentID != "" && b.Enabled {
+				result[b.AgentID] = map[string]interface{}{
+					"connected": true,
+					"botId":     b.ID,
+					"botName":   b.Name,
+					"status":    b.Status,
+				}
+			}
+		}
+		json.NewEncoder(w).Encode(result)
 	}
 }

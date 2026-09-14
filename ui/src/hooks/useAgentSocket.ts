@@ -1,49 +1,24 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useAppStore } from '../store/useAppStore';
 
-export function useAgentSocket() {
-  const wsRef = useRef<WebSocket | null>(null);
-  const {
-    activeSessionId,
-    activeAgent,
-    activeModel,
-    appendMessage,
-    appendToolCall,
-    updateToolCall,
-    startStreamingAssistantMessage,
-    appendThinkingDelta,
-    appendTextDelta,
-    appendStreamingToolCall,
-    updateStreamingToolResult,
-    finalizeStreamingMessage,
-    setIsGenerating,
-    setThinkingStatus,
-    loadSessions,
-    appendLogEvent,
-    loadTasks,
-  } = useAppStore();
+// Application-wide singleton WebSocket connection
+let globalWs: WebSocket | null = null;
+let reconnectTimeout: any = null;
+let isExplicitDisconnect = false;
+let subscriberCount = 0;
 
-  const activeSessionIdRef = useRef(activeSessionId);
-  useEffect(() => {
-    activeSessionIdRef.current = activeSessionId;
-  }, [activeSessionId]);
+function connectGlobalSocket() {
+  if (globalWs && (globalWs.readyState === WebSocket.OPEN || globalWs.readyState === WebSocket.CONNECTING)) {
+    return;
+  }
 
-  useEffect(() => {
-    loadTasks();
-    const taskInterval = setInterval(() => {
-      loadTasks();
-    }, 4000);
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const host = window.location.host;
+  const wsUrl = `${protocol}//${host}/ws`;
 
-    return () => clearInterval(taskInterval);
-  }, [loadTasks]);
-
-  useEffect(() => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
-    const wsUrl = `${protocol}//${host}/ws`;
-
+  try {
     const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
+    globalWs = ws;
 
     ws.onopen = () => {
       console.log('✅ Connected to KendaliAI Gateway Event Stream');
@@ -56,99 +31,96 @@ export function useAgentSocket() {
         const ev = JSON.parse(event.data);
         if (!ev || !ev.type) return;
 
+        const store = useAppStore.getState();
+
         // 1. Always record in global streaming logs
-        appendLogEvent(ev);
+        store.appendLogEvent(ev);
 
         // 2. Dispatch reminder notifications and task events globally
         if (ev.type === 'reminder.triggered') {
           window.dispatchEvent(new CustomEvent('kendali:reminder', { detail: ev.payload }));
         }
         if (ev.type.startsWith('task.')) {
-          loadTasks();
+          store.loadTasks();
           window.dispatchEvent(new CustomEvent('kendali:tasks_updated', { detail: ev }));
         }
 
         // 3. Handle active session chat updates if matching active session
-        const currentSid = activeSessionIdRef.current;
+        const currentSid = store.activeSessionId;
         const isCurrentSession = !currentSid || ev.sessionId === currentSid;
 
         switch (ev.type) {
           case 'session.created':
           case 'session.updated':
-            loadSessions();
+            store.loadSessions();
             break;
 
           case 'message.created':
-            loadSessions();
+            store.loadSessions();
             if (isCurrentSession && ev.payload) {
-              const msgPayload = ev.payload;
-              const currentMsgs = useAppStore.getState().messages;
-
-              // 1. Check if exact ID already exists
-              if (currentMsgs.some((m) => m.id === msgPayload.id)) {
-                break;
-              }
-
-              // 2. If it's a user message from web, reconcile with optimistic message
-              if (msgPayload.role === 'user') {
-                const optIdx = currentMsgs.findIndex(
-                  (m) =>
-                    m.role === 'user' &&
-                    (m.id.startsWith('user-') || m.id.startsWith('opt-')) &&
-                    m.content.trim() === (msgPayload.content || '').trim()
-                );
-                if (optIdx !== -1) {
-                  const updated = [...currentMsgs];
-                  updated[optIdx] = msgPayload;
-                  useAppStore.setState({ messages: updated });
-                  break;
-                }
-              }
-
-              appendMessage(msgPayload);
+              store.appendMessage(ev.payload);
             }
             break;
 
           case 'agent.started':
             if (isCurrentSession) {
-              setIsGenerating(true);
-              setThinkingStatus('Planning next step...');
-              startStreamingAssistantMessage('asst-stream-' + Date.now(), activeModel || activeAgent?.model);
+              const payload = (typeof ev.payload === 'object' && ev.payload !== null) ? ev.payload : {};
+              const startedAgentId = payload.agentId || ev.agentId || store.activeAgent?.id;
+              const matchedAgent = store.agents.find((a) => a.id === startedAgentId);
+              const startedAgentName = payload.agentName || matchedAgent?.name || store.activeAgent?.name || 'Agent';
+              const startedAvatar = payload.avatar || matchedAgent?.avatar || store.activeAgent?.avatar || 'purple-pebble';
+              const startedModel = payload.model || matchedAgent?.model || store.activeModel;
+
+              store.setIsGenerating(true);
+              store.setTypingAgent({
+                id: startedAgentId,
+                name: startedAgentName,
+                avatar: startedAvatar,
+              });
+              store.setThinkingStatus(`${startedAgentName} is typing...`);
+              store.startStreamingAssistantMessage(
+                'asst-stream-' + Date.now(),
+                startedModel,
+                startedAgentId,
+                startedAgentName,
+                startedAvatar
+              );
             }
             break;
 
           case 'agent.thinking':
             if (isCurrentSession) {
-              setIsGenerating(true);
-              setThinkingStatus(typeof ev.payload === 'string' ? ev.payload : 'Thinking...');
+              store.setIsGenerating(true);
+              const statusText = typeof ev.payload === 'string' ? ev.payload : 'Thinking...';
+              store.setThinkingStatus(statusText);
             }
             break;
 
           case 'agent.thinking.delta':
             if (isCurrentSession) {
-              setIsGenerating(true);
-              setThinkingStatus('Reasoning...');
+              store.setIsGenerating(true);
+              store.setThinkingStatus('Reasoning...');
               if (ev.payload?.delta) {
-                appendThinkingDelta(ev.payload.delta);
+                store.appendThinkingDelta(ev.payload.delta);
               }
             }
             break;
 
           case 'agent.text.delta':
             if (isCurrentSession) {
-              setIsGenerating(true);
-              setThinkingStatus('Responding...');
+              store.setIsGenerating(true);
+              store.setThinkingStatus('Responding...');
               if (ev.payload?.delta) {
-                appendTextDelta(ev.payload.delta);
+                store.appendTextDelta(ev.payload.delta);
               }
             }
             break;
 
           case 'agent.tool_call':
             if (isCurrentSession && ev.payload) {
-              setIsGenerating(true);
-              setThinkingStatus(`Running ${ev.payload.tool}...`);
-              appendStreamingToolCall({
+              store.setIsGenerating(true);
+              store.setThinkingStatus(`Running ${ev.payload.tool}...`);
+              store.appendStreamingToolCall({
                 id: ev.payload.id || 'tc-' + Date.now(),
                 tool: ev.payload.tool,
                 arguments: ev.payload.arguments,
@@ -160,8 +132,8 @@ export function useAgentSocket() {
 
           case 'agent.tool_result':
             if (isCurrentSession && ev.payload) {
-              setThinkingStatus(`Finished ${ev.payload.tool}`);
-              updateStreamingToolResult({
+              store.setThinkingStatus(`Finished ${ev.payload.tool}`);
+              store.updateStreamingToolResult({
                 id: ev.payload.id,
                 tool: ev.payload.tool,
                 arguments: {},
@@ -174,23 +146,27 @@ export function useAgentSocket() {
 
           case 'agent.completed':
             if (isCurrentSession) {
-              setIsGenerating(false);
+              store.setIsGenerating(false);
+              store.setTypingAgent(null);
               if (ev.payload) {
-                finalizeStreamingMessage(ev.payload);
+                store.finalizeStreamingMessage(ev.payload);
               }
             }
-            loadSessions();
+            store.loadSessions();
             break;
 
           case 'agent.failed':
             if (isCurrentSession) {
-              setIsGenerating(false);
-              appendMessage({
-                id: 'err-' + Date.now(),
-                sessionId: activeSessionId || '',
+              store.setIsGenerating(false);
+              store.setTypingAgent(null);
+              const errContent = `❌ Error: ${ev.payload || 'An unexpected execution error occurred.'}`;
+              const errId = ev.id ? `err-${ev.id}` : `err-${ev.sessionId || currentSid || 'cur'}-${Date.now()}`;
+              store.appendMessage({
+                id: errId,
+                sessionId: ev.sessionId || currentSid || '',
                 channel: ev.channel || 'web',
                 role: 'assistant',
-                content: `❌ Error: ${ev.payload || 'An unexpected execution error occurred.'}`,
+                content: errContent,
                 createdAt: Date.now(),
               });
             }
@@ -202,83 +178,136 @@ export function useAgentSocket() {
     };
 
     ws.onclose = () => {
-      console.warn('WebSocket connection closed.');
+      console.warn('WebSocket connection closed. Reconnecting in 2.5s...');
+      globalWs = null;
+      if (!isExplicitDisconnect && subscriberCount > 0) {
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = setTimeout(connectGlobalSocket, 2500);
+      }
     };
 
-    return () => {
-      ws.close();
+    ws.onerror = (err) => {
+      console.warn('WebSocket encountered error:', err);
+      try {
+        ws.close();
+      } catch {}
     };
-  }, []);
+  } catch (err) {
+    console.error('Failed to create WebSocket:', err);
+    clearTimeout(reconnectTimeout);
+    reconnectTimeout = setTimeout(connectGlobalSocket, 2500);
+  }
+}
 
-  const sendMessage = async (content: string) => {
-    if (!content.trim()) return;
+export async function sendSocketMessage(content: string) {
+  if (!content.trim()) return;
 
-    const currentSession = activeSessionId || 'sess_' + Date.now();
-    const userMsg = {
-      id: 'user-' + Date.now(),
-      sessionId: currentSession,
-      channel: 'web',
-      role: 'user' as const,
-      content,
-      createdAt: Date.now(),
-    };
-    appendMessage(userMsg);
-    setIsGenerating(true);
-    setThinkingStatus('Thinking...');
+  const store = useAppStore.getState();
+  const currentSessionId = store.activeSessionId || 'sess_' + Date.now();
+  const existingSession = store.sessions.find((s) => s.id === currentSessionId);
+  const isDirect = existingSession?.type === 'direct';
+  const partnerAgent = isDirect
+    ? store.agents.find((a) => a.id === existingSession?.agentId) || store.activeAgent
+    : null;
 
-    // Ensure agentId respects the current session's actual owner
-    const existingSession = useAppStore.getState().sessions.find((s) => s.id === currentSession);
-    const agentId = existingSession?.agentId || (activeAgent ? activeAgent.id : 'personal-assistant');
-    const modelToUse = activeModel || activeAgent?.model;
+  const userMsg = {
+    id: 'user-' + Date.now(),
+    sessionId: currentSessionId,
+    channel: 'web',
+    role: 'user' as const,
+    content,
+    createdAt: Date.now(),
+  };
 
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(
-        JSON.stringify({
-          type: 'message.send',
-          sessionId: currentSession,
+  store.appendMessage(userMsg);
+  store.setIsGenerating(true);
+  if (partnerAgent) {
+    store.setTypingAgent({
+      id: partnerAgent.id,
+      name: partnerAgent.name,
+      avatar: partnerAgent.avatar,
+    });
+    store.setThinkingStatus(`${partnerAgent.name} is typing...`);
+  } else {
+    store.setThinkingStatus('Agent is typing...');
+  }
+
+  // Ensure agentId respects the current session's actual owner
+  const agentId = existingSession?.agentId || (store.activeAgent ? store.activeAgent.id : 'personal-assistant');
+  const modelToUse = store.activeModel || store.activeAgent?.model;
+
+  if (globalWs && globalWs.readyState === WebSocket.OPEN) {
+    globalWs.send(
+      JSON.stringify({
+        type: 'message.send',
+        sessionId: currentSessionId,
+        agentId,
+        model: modelToUse,
+        content,
+      })
+    );
+  } else {
+    // REST API fallback
+    try {
+      const res = await fetch('/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: currentSessionId,
           agentId,
           model: modelToUse,
-          content,
-        })
-      );
-    } else {
-      // REST API fallback
-      try {
-        const res = await fetch('/v1/chat/completions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sessionId: currentSession,
-            agentId,
-            model: modelToUse,
-            messages: [{ role: 'user', content }],
-          }),
-        });
-        const data = await res.json();
-        setIsGenerating(false);
-        if (data.choices && data.choices.length > 0) {
-          appendMessage({
-            id: 'asst-' + Date.now(),
-            sessionId: currentSession,
-            channel: 'web',
-            role: 'assistant',
-            content: data.choices[0].message.content,
-            createdAt: Date.now(),
-          });
-        }
-      } catch (err: any) {
-        setIsGenerating(false);
-        appendMessage({
-          id: 'err-' + Date.now(),
-          sessionId: currentSession,
+          messages: [{ role: 'user', content }],
+        }),
+      });
+      const data = await res.json();
+      store.setIsGenerating(false);
+      store.setTypingAgent(null);
+      if (data.choices && data.choices.length > 0) {
+        store.appendMessage({
+          id: 'asst-' + Date.now(),
+          sessionId: currentSessionId,
           channel: 'web',
           role: 'assistant',
-          content: 'Error: ' + err.message,
+          content: data.choices[0].message.content,
           createdAt: Date.now(),
         });
       }
+    } catch (err: any) {
+      store.setIsGenerating(false);
+      store.setTypingAgent(null);
+      store.appendMessage({
+        id: 'err-' + Date.now(),
+        sessionId: currentSessionId,
+        channel: 'web',
+        role: 'assistant',
+        content: '❌ Error: ' + err.message,
+        createdAt: Date.now(),
+      });
     }
-  };
+  }
+}
 
-  return { sendMessage };
+export function useAgentSocket() {
+  const { loadTasks } = useAppStore();
+
+  useEffect(() => {
+    subscriberCount++;
+    isExplicitDisconnect = false;
+    connectGlobalSocket();
+
+    loadTasks();
+    const taskInterval = setInterval(() => {
+      loadTasks();
+    }, 4000);
+
+    return () => {
+      subscriberCount = Math.max(0, subscriberCount - 1);
+      clearInterval(taskInterval);
+      if (subscriberCount === 0) {
+        clearTimeout(reconnectTimeout);
+      }
+    };
+  }, [loadTasks]);
+
+  return { sendMessage: sendSocketMessage };
 }

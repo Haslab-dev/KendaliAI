@@ -4,7 +4,7 @@ import {
   ChevronDown, ChevronUp, Search, Brain, Zap, Settings, Command, AlertCircle,
   CornerDownLeft, Terminal, Sparkles, Smartphone, Database, RefreshCw, FileText, X,
   ShieldCheck, GitFork, Code2, Clock, Bell, ExternalLink, Activity, BookOpen,
-  Folder, Upload, Menu, Bot, Feather, Cpu, Send, MessageSquare
+  Folder, Upload, Menu, Bot, Feather, Cpu, Send, MessageSquare, Users, AtSign
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { navigate } from '../router';
@@ -14,7 +14,8 @@ import { InstallPromptModal } from './InstallPromptModal';
 import { GrokAvatar } from './GrokAvatar';
 import { Sidebar } from './Sidebar';
 import { MarkdownView } from './MarkdownView';
-import { isReasoningModel, SessionMessage } from '../types';
+import { GroupMembersModal } from './GroupMembersModal';
+import { isReasoningModel, SessionMessage, AgentConfig } from '../types';
 
 interface SlashCommand {
   key: string;
@@ -34,9 +35,12 @@ export const ChatArea: React.FC = () => {
     messages,
     isGenerating,
     thinkingStatus,
+    typingAgent,
     theme,
     toggleTheme,
     createSession,
+    createGeneralChat,
+    telegramAgents,
     clearSessionMessages,
     activeSessionId,
     activeModel,
@@ -58,6 +62,8 @@ export const ChatArea: React.FC = () => {
   const [inputText, setInputText] = useState('');
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
   const [isSlashDismissed, setIsSlashDismissed] = useState(false);
+  const [isGroupMembersModalOpen, setIsGroupMembersModalOpen] = useState(false);
+  const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
 
   const [isAgentDropdownOpen, setIsAgentDropdownOpen] = useState(false);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
@@ -129,12 +135,12 @@ export const ChatArea: React.FC = () => {
       }
     } catch {}
     return [
-      { id: 'lead-frontend', name: 'Lead Frontend Dev', fullName: 'Alex Rivera', role: 'Lead Frontend Dev', department: 'Engineering', avatar: 'blue-drop', model: 'gpt-4o', description: 'React, TypeScript, and responsive UI' },
-      { id: 'lead-architecture', name: 'Lead Architecture', fullName: 'Elena Rostova', role: 'Lead Solution Architecture', department: 'Architecture', avatar: 'cyan-bubble', model: 'claude-3-7-sonnet', description: 'System boundaries & RFC specs' },
-      { id: 'lead-backend', name: 'Lead Backend Dev', fullName: 'Marcus Chen', role: 'Lead Backend Dev', department: 'Engineering', avatar: 'green-cloud', model: 'qwen2.5-coder:latest', description: 'Go server & SQLite runtime' },
-      { id: 'legal-counsel', name: 'Legal Counsel', fullName: 'Sarah Vance', role: 'Legal Counsel & Compliance', department: 'Legal', avatar: 'bronze-shield', model: 'gpt-4o', description: 'Licenses & privacy compliance' },
-      { id: 'chief-security', name: 'Chief Security', fullName: 'Kavita Patel', role: 'Chief Security & QA Officer', department: 'Security', avatar: 'ruby-capsule', model: 'gpt-4o', description: 'Secrets scanning & OWASP audits' },
-      { id: 'devops-lead', name: 'DevOps Lead', fullName: 'Darius Thorne', role: 'DevOps & Infrastructure Lead', department: 'Operations', avatar: 'orange-leaf', model: 'deepseek-chat', description: 'Docker, CI/CD, and mesh networks' },
+      { id: 'lead-frontend', name: 'Lead Frontend Dev', fullName: 'Alex Rivera', role: 'Lead Frontend Dev', department: 'Engineering', avatar: 'blue-drop', model: 'gpt-6-astra', description: 'React, TypeScript, and responsive UI' },
+      { id: 'lead-architecture', name: 'Lead Architecture', fullName: 'Elena Rostova', role: 'Lead Solution Architecture', department: 'Architecture', avatar: 'cyan-bubble', model: 'glm-5-3-flash', description: 'System boundaries & RFC specs' },
+      { id: 'lead-backend', name: 'Lead Backend Dev', fullName: 'Marcus Chen', role: 'Lead Backend Dev', department: 'Engineering', avatar: 'green-cloud', model: 'codestral-latest', description: 'Go server & SQLite runtime' },
+      { id: 'legal-counsel', name: 'Legal Counsel', fullName: 'Sarah Vance', role: 'Legal Counsel & Compliance', department: 'Legal', avatar: 'bronze-shield', model: 'gpt-5-6-luna', description: 'Licenses & privacy compliance' },
+      { id: 'chief-security', name: 'Chief Security', fullName: 'Kavita Patel', role: 'Chief Security & QA Officer', department: 'Security', avatar: 'ruby-capsule', model: 'gpt-oss-120b', description: 'Secrets scanning & OWASP audits' },
+      { id: 'devops-lead', name: 'DevOps Lead', fullName: 'Darius Thorne', role: 'DevOps & Infrastructure Lead', department: 'Operations', avatar: 'orange-leaf', model: 'deepseek-v4-flash', description: 'Docker, CI/CD, and mesh networks' },
     ];
   }, []);
 
@@ -478,6 +484,29 @@ export const ChatArea: React.FC = () => {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (isTypingMention && mentionSuggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedMentionIndex((prev) => (prev + 1) % mentionSuggestions.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedMentionIndex((prev) => (prev - 1 + mentionSuggestions.length) % mentionSuggestions.length);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        const selected = mentionSuggestions[selectedMentionIndex] || mentionSuggestions[0];
+        if (selected) handleSelectMention(selected);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        return;
+      }
+    }
+
     if (isTypingSlash && filteredSuggestions.length > 0) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
@@ -570,11 +599,59 @@ export const ChatArea: React.FC = () => {
   }, [availableModels, modelSearch]);
 
   const currentSession = sessions.find((s) => s.id === activeSessionId);
-  const isTelegramSession = currentSession?.channelId === 'telegram';
-  const botLabel = isTelegramSession ? '@kendaliai_bot' : 'Telegram Bot';
+  const sessionType: 'direct' | 'group' | 'general' =
+    currentSession?.type || (currentSession?.agentId ? 'direct' : 'general');
+  const isDirect = sessionType === 'direct';
+  const isGroup = sessionType === 'group';
+  const isGeneral = sessionType === 'general';
+
+  const partnerAgent = isDirect
+    ? agents.find((a) => a.id === currentSession?.agentId) || activeAgent
+    : null;
+
+  const isTgConnected = partnerAgent
+    ? partnerAgent.telegramConnected || !!telegramAgents[partnerAgent.id]?.connected
+    : false;
+
+  // Mention (@) Autocomplete logic
+  const atLastIndex = inputText.lastIndexOf('@');
+  const isTypingMention =
+    atLastIndex !== -1 &&
+    !inputText.slice(atLastIndex).includes(' ') &&
+    !isTypingSlash;
+  const mentionQuery = isTypingMention ? inputText.slice(atLastIndex + 1).toLowerCase() : '';
+
+  const mentionSuggestions = useMemo(() => {
+    if (!isTypingMention) return [];
+    let candidateAgents = agents;
+    if (isGroup) {
+      const partIds = currentSession?.participants
+        ? currentSession.participants
+            .filter((p) => p.participantType === 'agent' || !p.participantType)
+            .map((p) => p.participantId)
+        : [];
+      candidateAgents = agents.filter((a) => partIds.includes(a.id));
+    } else if (isDirect && currentSession?.agentId) {
+      candidateAgents = agents.filter((a) => a.id === currentSession.agentId);
+    }
+    if (!mentionQuery) return candidateAgents;
+    return candidateAgents.filter(
+      (a) =>
+        a.name.toLowerCase().includes(mentionQuery) ||
+        (a.role || '').toLowerCase().includes(mentionQuery) ||
+        a.id.toLowerCase().includes(mentionQuery)
+    );
+  }, [isTypingMention, agents, isGroup, isDirect, currentSession, mentionQuery]);
+
+  const handleSelectMention = (agent: AgentConfig) => {
+    const beforeAt = inputText.slice(0, atLastIndex);
+    const nextInput = `${beforeAt}@${agent.name} `;
+    setInputText(nextInput);
+    textareaRef.current?.focus();
+  };
 
   return (
-    <main className="flex-1 h-full flex flex-col bg-[#F7F7F5] overflow-hidden relative">
+    <main className="flex-1 h-full flex flex-col bg-[#F7F7F5] dark:bg-[#121212] overflow-hidden relative">
       {/* Reminder high-priority banner */}
       {activeReminder && (
         <div className="bg-[#FFF5EB] border-b border-[#F5E3CF] px-4 py-2 z-30 select-none">
@@ -602,62 +679,323 @@ export const ChatArea: React.FC = () => {
         </div>
       )}
 
-      {/* Chat Header matching Grok Bot style */}
-      {/* Revamped Responsive Chat Header */}
-      <div className="w-full min-h-[58px] sm:min-h-[64px] shrink-0 flex flex-row gap-2.5 sm:gap-3 px-3 sm:px-6 items-center bg-[#FFFFFF] dark:bg-[#141414] border-b border-[#E5E7EB] dark:border-[#27272A] z-20 select-none py-1.5 sm:py-2">
-        {/* Mobile menu trigger for Agents & Session History Drawer */}
+      {/* WhatsApp-Style Responsive Chat Header */}
+      <div className="w-full min-h-[60px] shrink-0 flex flex-row gap-2.5 sm:gap-3 px-3 sm:px-6 items-center bg-[#FFFFFF] dark:bg-[#141414] border-b border-[#E5E7EB] dark:border-[#27272A] z-20 select-none py-2">
+        {/* Mobile menu trigger */}
         <button
           onClick={() => setIsMobileDrawerOpen(true)}
           className="p-1.5 text-[#333333] dark:text-[#E5E7EB] hover:text-[#000000] md:hidden rounded-lg hover:bg-[#F7F7F5] dark:hover:bg-[#1F1F1F] cursor-pointer shrink-0"
-          title="Open Agents & Session History Drawer"
+          title="Open Chats Drawer"
         >
           <Menu size={20} />
         </button>
 
-        {/* Grok Specialist Agent Avatar + Switcher Trigger */}
-        <div
-          onClick={() => setIsAgentPickerOpen(true)}
-          className="relative shrink-0 flex items-center justify-center cursor-pointer group"
-          title="Click to switch specialist agent worker"
-        >
-          <GrokAvatar
-            id={activeAgent?.avatar || activeAgent?.id || 'purple-pebble'}
-            size={38}
-            className="drop-shadow-xs transition-transform group-hover:scale-105"
-          />
-          <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#16A34A] border-2 border-white dark:border-black" title="Active" />
-        </div>
+        {/* CASE 1: DIRECT CHAT WITH AGENT PERSON */}
+        {isDirect && (
+          <>
+            <div
+              onClick={() => setIsAgentPickerOpen(true)}
+              className="relative shrink-0 flex items-center justify-center cursor-pointer group"
+              title="Click to switch specialist agent worker"
+            >
+              <GrokAvatar
+                id={partnerAgent?.avatar || partnerAgent?.id || 'purple-pebble'}
+                size={40}
+                className="drop-shadow-xs transition-transform group-hover:scale-105"
+              />
+              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#16A34A] border-2 border-white dark:border-black" title="Online" />
+            </div>
 
-        {/* Header Title & Role (Click to switch agent worker) */}
-        <div
-          onClick={() => setIsAgentPickerOpen(true)}
-          className="flex flex-col justify-center min-w-0 flex-1 cursor-pointer group/agent-title overflow-hidden"
-          title="Click to switch specialist agent worker"
-        >
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className="text-[14px] sm:text-[16px] leading-tight text-[#000000] dark:text-white font-sans font-bold tracking-tight truncate group-hover/agent-title:text-[#007AFF] transition-colors">
-              {activeAgent?.name || 'Chief of Staff'}
-            </span>
-            <ChevronDown size={13} className="text-[#8A8A85] group-hover/agent-title:text-[#007AFF] transition-colors shrink-0" />
-            <span className="hidden xs:inline-block text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.2 rounded-full font-bold font-sans uppercase tracking-wider bg-blue-50 dark:bg-blue-950/40 text-[#007AFF] border border-blue-100 dark:border-blue-900/40 shrink-0">
-              {activeAgent?.role || activeAgent?.department || 'Specialist'}
-            </span>
-            {currentSession?.title && currentSession.title !== 'New Chat' && (
-              <span className="hidden md:inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-mono bg-[#F7F7F5] dark:bg-[#1F1F1F] text-[#8A8A85] border border-[#E5E7EB] dark:border-[#2C2C2E] truncate max-w-[160px]" title={`Session: ${currentSession.title}`}>
-                <MessageSquare size={9} className="shrink-0" />
-                <span className="truncate">{currentSession.title}</span>
+            <div
+              onClick={() => setIsAgentPickerOpen(true)}
+              className="flex flex-col justify-center min-w-0 flex-1 cursor-pointer group/agent-title overflow-hidden"
+              title="Click to switch specialist agent worker"
+            >
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="text-[14px] sm:text-[16px] leading-tight text-[#000000] dark:text-white font-sans font-bold tracking-tight truncate group-hover/agent-title:text-[#007AFF] transition-colors">
+                  {partnerAgent?.name || 'Specialist Agent'}
+                </span>
+                <ChevronDown size={13} className="text-[#8A8A85] group-hover/agent-title:text-[#007AFF] transition-colors shrink-0" />
+                <span className="hidden xs:inline-block text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.2 rounded-full font-bold font-sans uppercase tracking-wider bg-blue-50 dark:bg-blue-950/40 text-[#007AFF] border border-blue-100 dark:border-blue-900/40 shrink-0">
+                  {partnerAgent?.role || partnerAgent?.department || 'Specialist'}
+                </span>
+                {isTgConnected && (
+                  <span
+                    className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-[#E1F2FB] dark:bg-[#0E3550] text-[#0088cc] shrink-0 font-mono"
+                    title="Telegram Bot Linked"
+                  >
+                    <Send size={8} /> TG Bot
+                  </span>
+                )}
+              </div>
+              <div className="text-[11px] leading-tight font-sans truncate flex items-center gap-1 mt-0.5">
+                {isGenerating ? (
+                  <span className="text-[#007AFF] dark:text-[#3B82F6] font-medium flex items-center gap-1.5 animate-pulse">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF]" />
+                    <span>{partnerAgent?.name || 'Agent'} is typing...</span>
+                  </span>
+                ) : (
+                  <>
+                    <span className="text-emerald-600 dark:text-emerald-400 font-medium">● Online</span>
+                    <span className="hidden sm:inline text-[#8A8A85]">· {partnerAgent?.description || 'Autonomous specialist agent'}</span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Read-only Model Pill (NO model selection dropdown - Agent Person owns AI configuration) */}
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-black/5 dark:bg-white/5 border border-[#E5E7EB] dark:border-[#27272A] rounded-[6px] text-[11px] font-mono text-[#6B7280] dark:text-[#A1A1AA] shrink-0" title={`Configured Model: ${partnerAgent?.model || 'gpt-4o'}`}>
+              <Cpu size={12} className="text-[#007AFF]" />
+              <span>{partnerAgent?.model || 'gpt-4o'}</span>
+            </div>
+          </>
+        )}
+
+        {/* CASE 2: GROUP CHAT WITH MULTIPLE AGENT PERSONS */}
+        {isGroup && (
+          <>
+            <div
+              onClick={() => setIsGroupMembersModalOpen(true)}
+              className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900/40 flex items-center justify-center shrink-0 cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/60 transition-colors"
+              title="Click to manage group members"
+            >
+              <Users size={18} className="text-[#007AFF]" />
+            </div>
+
+            <div
+              onClick={() => setIsGroupMembersModalOpen(true)}
+              className="flex flex-col justify-center min-w-0 flex-1 cursor-pointer group/group-title overflow-hidden"
+              title="Click to manage group members"
+            >
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="text-[14px] sm:text-[16px] leading-tight text-[#000000] dark:text-white font-sans font-bold tracking-tight truncate group-hover/group-title:text-[#007AFF] transition-colors">
+                  {currentSession?.title || 'Group Chat'}
+                </span>
+                <span className="text-[9px] sm:text-[10px] px-2 py-0.2 rounded-full font-bold font-sans uppercase tracking-wider bg-blue-50 dark:bg-blue-950/40 text-[#007AFF] border border-blue-100 dark:border-blue-900/40 shrink-0">
+                  Group
+                </span>
+              </div>
+              <div className="text-[11px] leading-tight font-sans truncate flex items-center gap-1 mt-0.5">
+                {isGenerating ? (
+                  <span className="text-[#007AFF] dark:text-[#3B82F6] font-medium flex items-center gap-1.5 animate-pulse">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF]" />
+                    <span>{typingAgent?.name ? `${typingAgent.name} is typing...` : 'Team is replying...'}</span>
+                  </span>
+                ) : (
+                  <div className="text-[#007AFF] hover:underline flex items-center gap-1">
+                    <Users size={11} />
+                    <span>{currentSession?.participants?.length || 0} Agent Persons + You · Manage Members</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Manage Members Button */}
+            <button
+              type="button"
+              onClick={() => setIsGroupMembersModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-[#007AFF] border border-blue-200 dark:border-blue-900/60 rounded-[6px] text-[11px] font-bold transition-colors cursor-pointer shrink-0"
+              title="Add or remove agent persons"
+            >
+              <Users size={13} />
+              <span className="hidden sm:inline">Manage Members</span>
+            </button>
+          </>
+        )}
+
+        {/* CASE 3: GENERAL CHAT (TRADITIONAL CHAT WITH MODEL SELECTION) */}
+        {isGeneral && (
+          <>
+            <div className="w-10 h-10 rounded-full bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/40 flex items-center justify-center shrink-0">
+              <Bot size={18} className="text-[#D97706]" />
+            </div>
+
+            <div className="flex flex-col justify-center min-w-0 flex-1 overflow-hidden">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="text-[14px] sm:text-[16px] leading-tight text-[#000000] dark:text-white font-sans font-bold tracking-tight truncate">
+                  {currentSession?.title || 'General Chat'}
+                </span>
+                <span className="text-[9px] sm:text-[10px] px-2 py-0.2 rounded-full font-bold font-sans uppercase tracking-wider bg-amber-50 dark:bg-amber-950/40 text-[#D97706] border border-amber-200 dark:border-amber-900/40 shrink-0">
+                  General
+                </span>
+              </div>
+              <span className="text-[11px] text-[#8A8A85] truncate font-sans mt-0.5">
+                Traditional multi-model chat
               </span>
-            )}
-          </div>
-          <div className="text-[11px] leading-tight text-[#8A8A85] font-sans truncate flex items-center gap-1 mt-0.5">
-            <span className="text-emerald-600 dark:text-emerald-400 font-medium">● Online</span>
-            <span className="hidden sm:inline">· {activeAgent?.description || 'Autonomous specialist agent'}</span>
-          </div>
-        </div>
+            </div>
 
-        {/* Action Chips */}
+            {/* New Chat Button */}
+            <button
+              type="button"
+              onClick={() => createGeneralChat()}
+              className="flex items-center gap-1 px-2.5 py-1.5 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 rounded-[6px] text-[11px] font-semibold text-[#333333] dark:text-[#E5E7EB] transition-colors cursor-pointer shrink-0"
+              title="Start fresh general chat"
+            >
+              <Plus size={13} />
+              <span className="hidden sm:inline">New Chat</span>
+            </button>
+
+            {/* Model Selector Dropdown - PRESERVED & EXPOSED ONLY IN GENERAL CHAT */}
+            <div className="relative shrink-0" ref={modelDropdownRef}>
+              <button
+                onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
+                className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 bg-[#FFFFFF] dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] hover:border-[#333333] rounded-[6px] text-[11px] font-sans text-[#333333] dark:text-[#E5E7EB] transition-all shadow-2xs cursor-pointer"
+                title={`Active Model: ${effectiveModel} (Click to change)`}
+              >
+                <Cpu size={13} className="text-[#007AFF] shrink-0" />
+                <span className="font-mono font-semibold max-w-[70px] xs:max-w-[90px] sm:max-w-[130px] truncate">
+                  {effectiveModel}
+                </span>
+                <ChevronDown size={11} className={`text-[#8A8A85] shrink-0 transition-transform ${isModelDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isModelDropdownOpen && (
+                <div className="fixed sm:absolute inset-x-3 sm:inset-auto top-[62px] sm:top-auto sm:right-0 sm:mt-1 sm:w-80 bg-[#FFFFFF] dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[10px] shadow-2xl p-2.5 z-50 animate-in fade-in duration-100 flex flex-col gap-2 max-w-sm mx-auto sm:max-w-none">
+                  {/* Header with Refresh */}
+                  <div className="flex items-center justify-between px-1 pb-1.5 border-b border-[#E5E7EB] dark:border-[#2C2C2E]">
+                    <div className="flex items-center gap-1.5">
+                      <Cpu size={14} className="text-[#007AFF]" />
+                      <span className="text-xs font-bold text-[#000000] dark:text-white font-sans">
+                        Select LLM Model
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        loadModels(true);
+                      }}
+                      disabled={isLoadingModels}
+                      className="flex items-center gap-1 text-[10px] font-bold text-[#007AFF] hover:underline cursor-pointer p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
+                      title="Probe connected providers for latest models"
+                    >
+                      <RefreshCw size={11} className={isLoadingModels ? 'animate-spin' : ''} />
+                      <span>{isLoadingModels ? 'Fetching...' : 'Fetch Models'}</span>
+                    </button>
+                  </div>
+
+                  {/* Model Search */}
+                  <div className="relative">
+                    <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#8A8A85]" />
+                    <input
+                      type="text"
+                      placeholder="Search model (e.g. gpt-4o, qwen, claude)..."
+                      value={modelSearch}
+                      onChange={(e) => setModelSearch(e.target.value)}
+                      className="w-full pl-7 pr-2.5 py-1 bg-[#F7F7F5] dark:bg-[#141414] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[6px] text-xs text-[#000000] dark:text-white outline-none focus:border-[#0F0F0F]"
+                    />
+                  </div>
+
+                  {/* Models List Grouped by Provider */}
+                  <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-1 pr-1">
+                    {filteredModels.length === 0 ? (
+                      <div className="p-4 text-center text-xs text-[#8A8A85]">
+                        No matching models found. Try fetching or enter custom ID below.
+                      </div>
+                    ) : (
+                      filteredModels.map((m) => {
+                        const isSelected = effectiveModel === m.id || effectiveModel === m.name;
+                        const isSysDefault = defaultModel === m.id;
+
+                        return (
+                          <div
+                            key={`${m.providerId}-${m.id}`}
+                            onClick={() => {
+                              setActiveModel(m.id);
+                              setIsModelDropdownOpen(false);
+                            }}
+                            className={`flex items-center justify-between p-2 rounded-[8px] cursor-pointer transition-colors ${
+                              isSelected
+                                ? 'bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900'
+                                : 'hover:bg-gray-50 dark:hover:bg-white/5 border border-transparent'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <Cpu size={13} className={isSelected ? 'text-[#007AFF]' : 'text-[#8A8A85]'} />
+                              <div className="flex flex-col min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`text-xs font-mono font-semibold truncate ${isSelected ? 'text-[#007AFF]' : 'text-[#000000] dark:text-white'}`}>
+                                    {m.name}
+                                  </span>
+                                  {isSysDefault && (
+                                    <span className="text-[8px] font-bold px-1 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 uppercase">
+                                      Default
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-[10px] text-[#8A8A85] truncate font-sans">
+                                  {m.providerName || m.providerType}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1 shrink-0 ml-2">
+                              {!isSysDefault && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDefaultModel(m.id, m.providerId);
+                                  }}
+                                  className="text-[9px] px-1.5 py-0.5 rounded border border-[#E5E7EB] dark:border-[#2C2C2E] hover:bg-gray-100 dark:hover:bg-gray-800 text-[#8A8A85] hover:text-[#000000] dark:hover:text-white font-semibold transition-colors"
+                                  title="Set as system default model"
+                                >
+                                  Set Default
+                                </button>
+                              )}
+                              {isSelected && <Check size={14} className="text-[#007AFF]" />}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Custom Model Quick Enter */}
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!customModelInput.trim()) return;
+                      setActiveModel(customModelInput.trim());
+                      setCustomModelInput('');
+                      setIsModelDropdownOpen(false);
+                    }}
+                    className="pt-2 border-t border-[#E5E7EB] dark:border-[#2C2C2E] flex items-center gap-1.5"
+                  >
+                    <input
+                      type="text"
+                      placeholder="Enter custom model ID..."
+                      value={customModelInput}
+                      onChange={(e) => setCustomModelInput(e.target.value)}
+                      className="flex-1 px-2.5 py-1 bg-[#F7F7F5] dark:bg-[#141414] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[6px] text-xs font-mono text-[#000000] dark:text-white outline-none focus:border-[#0F0F0F]"
+                    />
+                    <button
+                      type="submit"
+                      className="px-2.5 py-1 bg-[#0F0F0F] dark:bg-white text-white dark:text-black text-xs font-bold rounded-[6px] hover:bg-black/90 cursor-pointer"
+                    >
+                      Apply
+                    </button>
+                  </form>
+
+                  {/* Configure Providers Link */}
+                  <div
+                    onClick={() => {
+                      setIsModelDropdownOpen(false);
+                      navigate('providers');
+                    }}
+                    className="border-t border-[#E5E7EB] dark:border-[#2C2C2E] pt-1.5 px-1 text-[11px] text-[#007AFF] hover:underline cursor-pointer flex items-center justify-between font-sans"
+                  >
+                    <span>Manage Providers &amp; API Keys...</span>
+                    <ExternalLink size={11} />
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* Universal Action Chips */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          {/* Review Diff Chip (Desktop) */}
           <button
             onClick={handleQuickReview}
             className="hidden sm:flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-[#FFF5EB] border border-[#E5E7EB] hover:border-[#D97706] rounded-[6px] text-[11px] font-sans text-[#333333] transition-colors shadow-2xs cursor-pointer"
@@ -667,7 +1005,6 @@ export const ChatArea: React.FC = () => {
             <span>Review Diff</span>
           </button>
 
-          {/* Worktrees Chip (Desktop) */}
           <button
             onClick={() => navigate('worktrees')}
             className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-[#FFFFFF] border border-[#E5E7EB] hover:border-[#333333] rounded-[6px] text-[11px] font-sans text-[#333333] transition-colors shadow-2xs cursor-pointer"
@@ -676,174 +1013,6 @@ export const ChatArea: React.FC = () => {
             <GitFork size={13} className="text-[#333333]" />
             <span>Worktrees</span>
           </button>
-
-          {/* Files Chip (Desktop) */}
-          <button
-            onClick={() => navigate('editor')}
-            className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-[#FFFFFF] border border-[#E5E7EB] hover:border-[#333333] rounded-[6px] text-[11px] font-sans text-[#333333] transition-colors shadow-2xs cursor-pointer"
-            title="File Explorer & Code Editor"
-          >
-            <Folder size={13} className="text-[#333333]" />
-            <span>Files</span>
-          </button>
-
-          {/* Model Chip & Dropdown */}
-          <div className="relative shrink-0" ref={modelDropdownRef}>
-            <button
-              onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
-              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 bg-[#FFFFFF] dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] hover:border-[#333333] rounded-[6px] text-[11px] font-sans text-[#333333] dark:text-[#E5E7EB] transition-all shadow-2xs cursor-pointer"
-              title={`Active Model: ${effectiveModel} (Click to change)`}
-            >
-              <Cpu size={13} className="text-[#007AFF] shrink-0" />
-              <span className="font-mono font-semibold max-w-[70px] xs:max-w-[90px] sm:max-w-[130px] truncate">
-                {effectiveModel}
-              </span>
-              <ChevronDown size={11} className={`text-[#8A8A85] shrink-0 transition-transform ${isModelDropdownOpen ? 'rotate-180' : ''}`} />
-            </button>
-
-            {isModelDropdownOpen && (
-              <div className="fixed sm:absolute inset-x-3 sm:inset-auto top-[62px] sm:top-auto sm:right-0 sm:mt-1 sm:w-80 bg-[#FFFFFF] dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[10px] shadow-2xl p-2.5 z-50 animate-in fade-in duration-100 flex flex-col gap-2 max-w-sm mx-auto sm:max-w-none">
-                {/* Header with Refresh */}
-                <div className="flex items-center justify-between px-1 pb-1.5 border-b border-[#E5E7EB] dark:border-[#2C2C2E]">
-                  <div className="flex items-center gap-1.5">
-                    <Cpu size={14} className="text-[#007AFF]" />
-                    <span className="text-xs font-bold text-[#000000] dark:text-white font-sans">
-                      Select LLM Model
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      loadModels(true);
-                    }}
-                    disabled={isLoadingModels}
-                    className="flex items-center gap-1 text-[10px] font-bold text-[#007AFF] hover:underline cursor-pointer p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
-                    title="Probe connected providers for latest models"
-                  >
-                    <RefreshCw size={11} className={isLoadingModels ? 'animate-spin' : ''} />
-                    <span>{isLoadingModels ? 'Fetching...' : 'Fetch Models'}</span>
-                  </button>
-                </div>
-
-                {/* Model Search */}
-                <div className="relative">
-                  <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#8A8A85]" />
-                  <input
-                    type="text"
-                    placeholder="Search model (e.g. gpt-4o, qwen, claude)..."
-                    value={modelSearch}
-                    onChange={(e) => setModelSearch(e.target.value)}
-                    className="w-full pl-7 pr-2.5 py-1 bg-[#F7F7F5] dark:bg-[#141414] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[6px] text-xs text-[#000000] dark:text-white outline-none focus:border-[#0F0F0F]"
-                  />
-                </div>
-
-                {/* Models List Grouped by Provider */}
-                <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-1 pr-1">
-                  {filteredModels.length === 0 ? (
-                    <div className="p-4 text-center text-xs text-[#8A8A85]">
-                      No matching models found. Try fetching or enter custom ID below.
-                    </div>
-                  ) : (
-                    filteredModels.map((m) => {
-                      const isSelected = effectiveModel === m.id || effectiveModel === m.name;
-                      const isSysDefault = defaultModel === m.id;
-
-                      return (
-                        <div
-                          key={`${m.providerId}-${m.id}`}
-                          onClick={() => {
-                            setActiveModel(m.id);
-                            setIsModelDropdownOpen(false);
-                          }}
-                          className={`flex items-center justify-between p-2 rounded-[8px] cursor-pointer transition-colors ${
-                            isSelected
-                              ? 'bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900'
-                              : 'hover:bg-gray-50 dark:hover:bg-white/5 border border-transparent'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 min-w-0 flex-1">
-                            <Cpu size={13} className={isSelected ? 'text-[#007AFF]' : 'text-[#8A8A85]'} />
-                            <div className="flex flex-col min-w-0">
-                              <div className="flex items-center gap-1.5">
-                                <span className={`text-xs font-mono font-semibold truncate ${isSelected ? 'text-[#007AFF]' : 'text-[#000000] dark:text-white'}`}>
-                                  {m.name}
-                                </span>
-                                {isSysDefault && (
-                                  <span className="text-[8px] font-bold px-1 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 uppercase">
-                                    Default
-                                  </span>
-                                )}
-                              </div>
-                              <span className="text-[10px] text-[#8A8A85] truncate font-sans">
-                                {m.providerName || m.providerType}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-1 shrink-0 ml-2">
-                            {/* Make Default Button */}
-                            {!isSysDefault && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setDefaultModel(m.id, m.providerId);
-                                }}
-                                className="text-[9px] px-1.5 py-0.5 rounded border border-[#E5E7EB] dark:border-[#2C2C2E] hover:bg-gray-100 dark:hover:bg-gray-800 text-[#8A8A85] hover:text-[#000000] dark:hover:text-white font-semibold transition-colors"
-                                title="Set as system default model"
-                              >
-                                Set Default
-                              </button>
-                            )}
-                            {isSelected && <Check size={14} className="text-[#007AFF]" />}
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-
-                {/* Custom Model Quick Enter */}
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (!customModelInput.trim()) return;
-                    setActiveModel(customModelInput.trim());
-                    setCustomModelInput('');
-                    setIsModelDropdownOpen(false);
-                  }}
-                  className="pt-2 border-t border-[#E5E7EB] dark:border-[#2C2C2E] flex items-center gap-1.5"
-                >
-                  <input
-                    type="text"
-                    placeholder="Enter custom model ID..."
-                    value={customModelInput}
-                    onChange={(e) => setCustomModelInput(e.target.value)}
-                    className="flex-1 px-2.5 py-1 bg-[#F7F7F5] dark:bg-[#141414] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[6px] text-xs font-mono text-[#000000] dark:text-white outline-none focus:border-[#0F0F0F]"
-                  />
-                  <button
-                    type="submit"
-                    className="px-2.5 py-1 bg-[#0F0F0F] dark:bg-white text-white dark:text-black text-xs font-bold rounded-[6px] hover:bg-black/90 cursor-pointer"
-                  >
-                    Apply
-                  </button>
-                </form>
-
-                {/* Configure Providers Link */}
-                <div
-                  onClick={() => {
-                    setIsModelDropdownOpen(false);
-                    navigate('providers');
-                  }}
-                  className="border-t border-[#E5E7EB] dark:border-[#2C2C2E] pt-1.5 px-1 text-[11px] text-[#007AFF] hover:underline cursor-pointer flex items-center justify-between font-sans"
-                >
-                  <span>Manage Providers &amp; API Keys...</span>
-                  <ExternalLink size={11} />
-                </div>
-              </div>
-            )}
-          </div>
         </div>
       </div>
 
@@ -876,30 +1045,62 @@ export const ChatArea: React.FC = () => {
             </div>
           )}
 
-          {/* Zero State View with Big Grok Bot Avatar */}
+          {/* Zero State View matching session type */}
           {messages.length === 0 && (
             <div className="flex flex-col items-center justify-center text-center my-auto py-10 animate-fade-in">
-              <div className="relative mb-5 group cursor-pointer" onClick={() => setIsAgentPickerOpen(true)} title="Switch Specialist Agent Worker">
-                <GrokAvatar
-                  id={activeAgent?.avatar || activeAgent?.id || 'purple-pebble'}
-                  size={96}
-                  className="drop-shadow-xl transition-all duration-300 group-hover:scale-108"
-                />
-                <span className="absolute bottom-1 right-1 w-5 h-5 rounded-full bg-[#16A34A] border-3 border-white ring-2 ring-emerald-500/20" title="Online" />
-              </div>
-              <h1 className="text-2xl font-bold font-sans text-[#000000] mb-1.5 tracking-tight flex items-center justify-center gap-2">
-                <span>{activeAgent?.name || 'Chief of Staff'}</span>
-                <button
-                  onClick={() => setIsAgentPickerOpen(true)}
-                  className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-[#007AFF] border border-blue-100 hover:bg-blue-100 cursor-pointer"
-                  title="Switch agent"
-                >
-                  Change Agent
-                </button>
-              </h1>
-              <p className="text-xs text-[#8A8A85] font-sans mb-7 max-w-md leading-relaxed">
-                {activeAgent?.description || 'Autonomous specialist agent equipped with dedicated skills, tools, and Telegram gateway routing.'}
-              </p>
+              {isDirect ? (
+                <>
+                  <div className="relative mb-5 group cursor-pointer" onClick={() => setIsAgentPickerOpen(true)} title="Switch Specialist Agent Worker">
+                    <GrokAvatar
+                      id={partnerAgent?.avatar || partnerAgent?.id || 'purple-pebble'}
+                      size={96}
+                      className="drop-shadow-xl transition-all duration-300 group-hover:scale-108"
+                    />
+                    <span className="absolute bottom-1 right-1 w-5 h-5 rounded-full bg-[#16A34A] border-3 border-white ring-2 ring-emerald-500/20" title="Online" />
+                  </div>
+                  <h1 className="text-2xl font-bold font-sans text-[#000000] dark:text-white mb-1.5 tracking-tight flex items-center justify-center gap-2">
+                    <span>{partnerAgent?.name || 'Agent Person'}</span>
+                  </h1>
+                  <p className="text-xs text-[#8A8A85] font-sans mb-7 max-w-md leading-relaxed">
+                    {partnerAgent?.description || 'Autonomous specialist agent equipped with dedicated skills, tools, and continuous memory.'}
+                  </p>
+                </>
+              ) : isGroup ? (
+                <>
+                  <div
+                    className="w-24 h-24 rounded-full bg-blue-50 dark:bg-blue-950/40 border-2 border-blue-200 dark:border-blue-900 flex items-center justify-center mb-5 cursor-pointer shadow-lg"
+                    onClick={() => setIsGroupMembersModalOpen(true)}
+                    title="Manage group members"
+                  >
+                    <Users size={44} className="text-[#007AFF]" />
+                  </div>
+                  <h1 className="text-2xl font-bold font-sans text-[#000000] dark:text-white mb-1.5 tracking-tight">
+                    {currentSession?.title || 'Group Chat Room'}
+                  </h1>
+                  <p className="text-xs text-[#8A8A85] font-sans mb-4 max-w-md leading-relaxed">
+                    This group includes {currentSession?.participants?.length || 0} Agent Persons and you. Mention an agent using <span className="font-mono font-bold text-[#007AFF]">@AgentName</span> to address them directly, or ask open questions to the room.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setIsGroupMembersModalOpen(true)}
+                    className="mb-7 px-3.5 py-1.5 bg-blue-50 dark:bg-blue-950/40 text-[#007AFF] border border-blue-200 dark:border-blue-900/60 rounded-[8px] text-xs font-bold hover:bg-blue-100 transition-colors cursor-pointer"
+                  >
+                    + View &amp; Manage Members
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="w-20 h-20 rounded-full bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-200 dark:border-amber-900 flex items-center justify-center mb-5 shadow-lg">
+                    <Bot size={40} className="text-[#D97706]" />
+                  </div>
+                  <h1 className="text-2xl font-bold font-sans text-[#000000] dark:text-white mb-1.5 tracking-tight">
+                    General Chat
+                  </h1>
+                  <p className="text-xs text-[#8A8A85] font-sans mb-7 max-w-md leading-relaxed">
+                    Traditional ad-hoc session. You can switch models freely using the model selector dropdown in the header.
+                  </p>
+                </>
+              )}
 
               {/* Quick Starters */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full max-w-xl">
@@ -911,32 +1112,32 @@ export const ChatArea: React.FC = () => {
                     icon: <ShieldCheck size={14} className="text-[#16A34A]" />,
                   },
                   {
-                    title: 'Build Landing Page',
+                    title: 'Build UI Component',
                     desc: 'Scaffold responsive layout with clean CSS',
-                    prompt: 'Let\'s build a responsive modern landing page component with clean design tokens.',
+                    prompt: 'Let\'s build a responsive modern interface component with clean design tokens.',
                     icon: <Code2 size={14} className="text-[#007AFF]" />,
                   },
                   {
-                    title: 'Create Background Agent Task',
-                    desc: 'Run autonomous task in isolated worker pool',
-                    prompt: 'Please create a background agent task to monitor our endpoint health every 5 minutes.',
+                    title: 'Create Automated Routine',
+                    desc: 'Schedule recurring automation task',
+                    prompt: 'Please set up an automated routine to monitor workspace health every 30 minutes.',
                     icon: <Clock size={14} className="text-[#D97706]" />,
                   },
                   {
                     title: 'Git Worktree Branch',
-                    desc: 'Create isolated worktree for parallel development',
-                    prompt: 'Create a new git worktree for feature refactoring and report its status.',
+                    desc: 'Create isolated worktree for development',
+                    prompt: 'Create a new git worktree for feature development and report its status.',
                     icon: <GitFork size={14} className="text-[#8A8A85]" />,
                   },
                 ].map((item) => (
                   <div
                     key={item.title}
                     onClick={() => sendMessage(item.prompt)}
-                    className="p-3 bg-[#FFFFFF] hover:bg-[#FFF5EB] border border-[#E5E7EB] hover:border-[#D97706] rounded-[8px] text-left cursor-pointer transition-all shadow-2xs group"
+                    className="p-3 bg-[#FFFFFF] dark:bg-[#1C1C1E] hover:bg-[#FFF5EB] dark:hover:bg-[#2C2218] border border-[#E5E7EB] dark:border-[#2C2C2E] hover:border-[#D97706] rounded-[8px] text-left cursor-pointer transition-all shadow-2xs group"
                   >
                     <div className="flex items-center gap-2 mb-1">
                       <span>{item.icon}</span>
-                      <span className="text-xs font-bold font-funnel text-[#000000]">{item.title}</span>
+                      <span className="text-xs font-bold font-funnel text-[#000000] dark:text-white">{item.title}</span>
                     </div>
                     <div className="text-[11px] text-[#8A8A85] font-geist">{item.desc}</div>
                   </div>
@@ -955,10 +1156,41 @@ export const ChatArea: React.FC = () => {
                 msg={msg}
                 isCurrentStreaming={isCurrentStreaming}
                 activeAgent={activeAgent}
+                agents={agents}
                 thinkingStatus={thinkingStatus}
               />
             );
           })}
+
+          {/* Typing Indicator when waiting for first assistant token/turn */}
+          {isGenerating && messages.length > 0 && messages[messages.length - 1].role === 'user' && (
+            <div className="w-full flex flex-row gap-3 justify-start items-start animate-fade-in pl-1">
+              <div className="shrink-0 mt-1">
+                <GrokAvatar
+                  id={typingAgent?.avatar || activeAgent?.avatar || 'purple-pebble'}
+                  size={38}
+                  className="drop-shadow-xs"
+                />
+              </div>
+              <div className="flex flex-col gap-1 min-w-0">
+                <div className="flex items-center gap-2 px-1">
+                  <span className="text-[13px] font-bold text-[#007AFF] dark:text-[#3B82F6] font-sans">
+                    {typingAgent?.name || activeAgent?.name || 'Agent'}
+                  </span>
+                </div>
+                <div className="p-[10px_16px] bg-[#FFFFFF] dark:bg-[#1A1A1A] rounded-[16px] rounded-tl-[4px] border border-[#E5E7EB] dark:border-[#2C2C2E] shadow-2xs flex items-center gap-2.5">
+                  <span className="text-[12px] text-[#8A8A85] font-geist">
+                    {thinkingStatus || `${typingAgent?.name || 'Agent'} is typing...`}
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] animate-bounce [animation-delay:-0.3s]" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] animate-bounce [animation-delay:-0.15s]" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] animate-bounce" />
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div ref={messagesEndRef} className="h-1 shrink-0" />
         </div>
@@ -992,6 +1224,15 @@ export const ChatArea: React.FC = () => {
 
       {/* WhatsApp-Style Clean Floating Input Bar */}
       <div className="w-full shrink-0 px-3 sm:px-14 py-2 sm:py-3 bg-[#FFFFFF] dark:bg-[#141414] border-t border-[#E5E7EB] dark:border-[#27272A] relative select-none pb-[calc(env(safe-area-inset-bottom,0px)+8px)]">
+        {/* Mention Autocomplete Popover Modal */}
+        {isTypingMention && mentionSuggestions.length > 0 && (
+          <MentionAutocompleteModal
+            agents={mentionSuggestions}
+            selectedIndex={selectedMentionIndex}
+            onSelect={handleSelectMention}
+          />
+        )}
+
         {/* Slash Command Autocomplete Popover Modal */}
         {isTypingSlash && filteredSuggestions.length > 0 && (
           <SlashAutocompleteModal
@@ -1045,10 +1286,29 @@ export const ChatArea: React.FC = () => {
               value={inputText}
               onChange={handleTextareaInput}
               onKeyDown={handleKeyDown}
-              placeholder={`Message ${activeAgent?.name || 'agent'}…`}
+              placeholder={
+                isGroup
+                  ? 'Message the group room (@ to mention specific agent)…'
+                  : isDirect
+                  ? `Message ${partnerAgent?.name || 'agent'}…`
+                  : 'Type a message, slash command (/), or discuss…'
+              }
               className="flex-1 min-w-0 bg-transparent text-[14px] text-[#000000] dark:text-white placeholder:text-[#8A8A85] font-sans resize-none outline-none py-1.5 max-h-36 custom-scrollbar leading-relaxed"
               style={{ minHeight: '26px' }}
             />
+
+            {/* Quick Mention Trigger */}
+            <button
+              type="button"
+              onClick={() => {
+                setInputText((prev) => prev + '@');
+                textareaRef.current?.focus();
+              }}
+              className="p-1.5 text-[#8A8A85] hover:text-[#007AFF] rounded-full hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors shrink-0 mb-0.5 cursor-pointer"
+              title="Mention an agent person (@)"
+            >
+              <AtSign size={16} />
+            </button>
 
             {/* Quick Slash Commands Trigger */}
             <button
@@ -1209,11 +1469,11 @@ export const ChatArea: React.FC = () => {
                 type="button"
                 onClick={() => {
                   setIsAgentPickerOpen(false);
-                  navigate('agency');
+                  navigate('agents');
                 }}
                 className="text-xs font-bold text-[#007AFF] hover:underline flex items-center gap-1 cursor-pointer"
               >
-                <span>Manage Staff in Agency HQ →</span>
+                <span>Manage Agent Persons →</span>
               </button>
               <button
                 type="button"
@@ -1226,7 +1486,66 @@ export const ChatArea: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Group Members Management Modal */}
+      <GroupMembersModal
+        isOpen={isGroupMembersModalOpen}
+        onClose={() => setIsGroupMembersModalOpen(false)}
+        session={currentSession || null}
+      />
     </main>
+  );
+};
+
+// Autocomplete Popover Modal for Mentioning Agent Persons (@)
+const MentionAutocompleteModal: React.FC<{
+  agents: AgentConfig[];
+  selectedIndex: number;
+  onSelect: (agent: AgentConfig) => void;
+}> = ({ agents, selectedIndex, onSelect }) => {
+  if (agents.length === 0) return null;
+
+  return (
+    <div className="absolute bottom-full left-4 right-4 sm:left-14 sm:right-14 mb-2 bg-[#FFFFFF] dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[10px] shadow-2xl overflow-hidden z-40 animate-in fade-in duration-100 max-h-60 overflow-y-auto custom-scrollbar p-1">
+      <div className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] border-b border-[#E5E7EB] dark:border-[#2C2C2E] flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <AtSign size={12} className="text-[#007AFF]" />
+          <span>Mention Agent Person</span>
+        </div>
+        <span className="font-mono text-[9px]">↑↓ Navigate · Tab / Enter Select</span>
+      </div>
+
+      <div className="space-y-0.5 pt-1">
+        {agents.map((agent, idx) => {
+          const isSelected = idx === selectedIndex;
+          return (
+            <div
+              key={agent.id}
+              onClick={() => onSelect(agent)}
+              className={`flex items-center justify-between px-2.5 py-2 rounded-[6px] cursor-pointer transition-colors ${
+                isSelected
+                  ? 'bg-blue-50 dark:bg-blue-950/40 text-[#007AFF]'
+                  : 'hover:bg-black/5 dark:hover:bg-white/5 text-[#000000] dark:text-white'
+              }`}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <GrokAvatar id={agent.avatar || agent.id} size={28} />
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-xs font-bold font-sans truncate">@{agent.name}</span>
+                  <span className="text-[10px] text-[#8A8A85] truncate font-sans">
+                    ({agent.role || agent.department || 'Specialist'})
+                  </span>
+                </div>
+              </div>
+
+              <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-gray-100 dark:bg-[#27272A] text-[#8A8A85] shrink-0 ml-2">
+                {agent.model || 'gpt-4o'}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 };
 
@@ -1369,12 +1688,12 @@ const ThoughtProcessAccordion: React.FC<{ thought: string; isStreaming?: boolean
   );
 };
 
-// Optimized, Memoized Chat Message Item
-// Only the active streaming message re-renders on token deltas; previous messages are untouched.
+// WhatsApp-Style Chat Message Item with Agent Person Identity & Routine badges
 interface ChatMessageItemProps {
   msg: SessionMessage;
   isCurrentStreaming: boolean;
   activeAgent: any;
+  agents: AgentConfig[];
   thinkingStatus: string;
 }
 
@@ -1382,86 +1701,128 @@ const ChatMessageItem = React.memo<ChatMessageItemProps>(({
   msg,
   isCurrentStreaming,
   activeAgent,
+  agents,
   thinkingStatus,
 }) => {
   if (msg.role === 'user') {
     return (
-      <div className="w-full flex flex-row justify-end items-start">
-        <div className="w-full max-w-[520px] p-[12px_16px] bg-[#0F0F0F] dark:bg-[#1C1C1E] text-[#FFFFFF] rounded-[8px] shadow-sm border border-transparent dark:border-[#2C2C2E]">
-          <div className="text-[13px]/[20px] font-geist whitespace-pre-wrap break-words">
+      <div className="w-full flex flex-row justify-end items-start animate-fade-in">
+        <div className="w-full max-w-[560px] p-[12px_16px] bg-[#0F0F0F] dark:bg-[#1C1C1E] text-[#FFFFFF] rounded-[16px] rounded-tr-[4px] shadow-sm border border-transparent dark:border-[#2C2C2E]">
+          <div className="text-[13px]/[21px] font-geist whitespace-pre-wrap break-words">
             {msg.content}
+          </div>
+          <div className="text-[10px] text-white/50 text-right mt-1 font-mono">
+            {new Date(msg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </div>
         </div>
       </div>
     );
   }
 
+  // Assistant / Agent Person Message
+  const senderAgent =
+    agents.find((a) => a.id === msg.senderId) ||
+    (msg.senderName ? agents.find((a) => a.name === msg.senderName) : null) ||
+    activeAgent;
+
+  const senderName = msg.senderName || senderAgent?.name || 'Agent Assistant';
+  const senderAvatar = msg.senderAvatar || senderAgent?.avatar || 'purple-pebble';
+  const senderRole = senderAgent?.role || senderAgent?.department;
+  const isRoutine = msg.content?.startsWith('[Routine') || msg.id?.startsWith('routine-');
+
   return (
-    <div className="w-full flex flex-row gap-3.5 justify-start items-start">
-      {/* Big Grok Avatar */}
-      <div className="shrink-0 mt-0.5 relative group">
+    <div className="w-full flex flex-row gap-3 justify-start items-start animate-fade-in">
+      {/* Grok Avatar of the specific Agent Person */}
+      <div className="shrink-0 mt-1 relative group">
         <GrokAvatar
-          id={activeAgent?.avatar || activeAgent?.id || 'purple-pebble'}
+          id={senderAvatar}
           size={38}
           className="drop-shadow-xs transition-transform group-hover:scale-105"
         />
       </div>
 
-      {/* Agent Bubble Container */}
-      <div className="flex-1 flex flex-col gap-2.5 min-w-0">
-        {/* Collapsible Thought Process */}
-        {msg.thought && (
-          <ThoughtProcessAccordion
-            thought={msg.thought}
-            isStreaming={isCurrentStreaming && !msg.content}
-          />
-        )}
-
-        {/* Tool Execution Cards */}
-        {msg.toolCalls && msg.toolCalls.length > 0 && (
-          <div className="space-y-1.5 my-1">
-            {msg.toolCalls.map((tc) => (
-              <ToolExecutionCard key={tc.id} toolCall={tc} />
-            ))}
-          </div>
-        )}
-
-        {/* Message Content with Markdown */}
-        <div className="text-[13px]/[21px] text-[#000000] dark:text-[#E5E7EB] font-geist leading-relaxed break-words">
-          <MarkdownView content={msg.content} isStreaming={isCurrentStreaming} />
-          {isCurrentStreaming && msg.content && (
-            <span className="inline-block w-1.5 h-3.5 bg-[#007AFF] animate-pulse ml-1 align-middle rounded-[1px]" />
+      {/* Bubble Container */}
+      <div className="flex-1 flex flex-col gap-1 min-w-0 max-w-[720px]">
+        {/* Sender Name & Role Pill Header */}
+        <div className="flex items-center gap-2 px-1">
+          <span className="text-[13px] font-bold text-[#007AFF] dark:text-[#3B82F6] font-sans">
+            {senderName}
+          </span>
+          {senderRole && (
+            <span className="text-[9px] px-1.5 py-0.2 rounded-full font-bold uppercase tracking-wider bg-gray-100 dark:bg-[#27272A] text-[#6B7280] dark:text-[#9CA3AF]">
+              {senderRole}
+            </span>
           )}
-          {isCurrentStreaming && !msg.content && !msg.thought && (!msg.toolCalls || msg.toolCalls.length === 0) && (
-            <div className="flex items-center gap-2 text-xs text-[#8A8A85] py-1 font-mono">
-              <RefreshCw size={12} className="animate-spin text-[#007AFF]" />
-              <span>{thinkingStatus || 'Agent thinking...'}</span>
-            </div>
+          {isRoutine && (
+            <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.2 rounded-full font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-900/50">
+              <Clock size={9} /> Routine
+            </span>
           )}
         </div>
 
-        {/* Grounding RAG Chips */}
-        {msg.ragSources && msg.ragSources.length > 0 && (
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {msg.ragSources.map((rs, idx) => (
-              <div
-                key={`${rs.title}-${idx}`}
-                className="flex items-center gap-1 px-2 py-0.5 bg-[#FFF5EB] dark:bg-amber-950/30 rounded-[4px] text-[10px] text-[#F97316] font-funnel border border-amber-500/10"
-                title={`RAG grounded: ${rs.title} (score: ${rs.score.toFixed(2)})`}
-              >
-                <BookOpen size={10} className="text-[#F97316]" />
-                <span>doc:{rs.title}</span>
-              </div>
-            ))}
-          </div>
-        )}
+        {/* Message Card */}
+        <div className="w-full p-[12px_16px] bg-[#FFFFFF] dark:bg-[#1A1A1A] rounded-[16px] rounded-tl-[4px] border border-[#E5E7EB] dark:border-[#2C2C2E] shadow-2xs">
+          {/* Collapsible Thought Process */}
+          {msg.thought && (
+            <ThoughtProcessAccordion
+              thought={msg.thought}
+              isStreaming={isCurrentStreaming && !msg.content}
+            />
+          )}
 
-        {/* Token Count & Time Footer */}
-        <div className="text-[10px] text-[#8A8A85] font-funnel">
-          {msg.tokens ? `${msg.tokens} tokens` : 'local execution'} ·{' '}
-          {new Date(msg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          {/* Tool Execution Cards */}
+          {msg.toolCalls && msg.toolCalls.length > 0 && (
+            <div className="space-y-1.5 my-1.5">
+              {msg.toolCalls.map((tc) => (
+                <ToolExecutionCard key={tc.id} toolCall={tc} />
+              ))}
+            </div>
+          )}
+
+          {/* Message Content with Markdown */}
+          <div className="text-[13px]/[21px] text-[#000000] dark:text-[#E5E7EB] font-geist leading-relaxed break-words">
+            <MarkdownView content={msg.content} isStreaming={isCurrentStreaming} />
+            {isCurrentStreaming && msg.content && (
+              <span className="inline-block w-1.5 h-3.5 bg-[#007AFF] animate-pulse ml-1 align-middle rounded-[1px]" />
+            )}
+            {isCurrentStreaming && !msg.content && !msg.thought && (!msg.toolCalls || msg.toolCalls.length === 0) && (
+              <div className="flex items-center gap-2.5 text-xs text-[#8A8A85] py-1 font-geist">
+                <span>{thinkingStatus || `${senderName} is typing...`}</span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] animate-bounce [animation-delay:-0.3s]" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] animate-bounce [animation-delay:-0.15s]" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] animate-bounce" />
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Grounding RAG Chips */}
+          {msg.ragSources && msg.ragSources.length > 0 && (
+            <div className="flex items-center gap-1.5 flex-wrap mt-2">
+              {msg.ragSources.map((rs, idx) => (
+                <div
+                  key={`${rs.title}-${idx}`}
+                  className="flex items-center gap-1 px-2 py-0.5 bg-[#FFF5EB] dark:bg-amber-950/30 rounded-[4px] text-[10px] text-[#F97316] font-funnel border border-amber-500/10"
+                  title={`RAG grounded: ${rs.title} (score: ${rs.score.toFixed(2)})`}
+                >
+                  <BookOpen size={10} className="text-[#F97316]" />
+                  <span>doc:{rs.title}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Token Count & Time Footer */}
+          <div className="text-[10px] text-[#8A8A85] font-mono flex items-center justify-between pt-2 border-t border-[#F3F4F6] dark:border-[#27272A] mt-2">
+            <span>{msg.model || senderAgent?.model || 'gpt-4o'}</span>
+            <span>
+              {new Date(msg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          </div>
         </div>
       </div>
     </div>
   );
 });
+

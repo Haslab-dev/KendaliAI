@@ -166,6 +166,15 @@ func (a *TelegramAdapter) IsRunning(botID string) bool {
 	return running
 }
 
+func (a *TelegramAdapter) GetBotUsername(botID string) string {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if runner, ok := a.runners[botID]; ok && runner.Bot != nil {
+		return runner.Bot.Self.UserName
+	}
+	return ""
+}
+
 func (a *TelegramAdapter) TestToken(token string) (bool, string, error) {
 	bot, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
@@ -306,6 +315,47 @@ func (a *TelegramAdapter) NotifyUserApproved(chatID int64, botID string) {
 		msg := "🎉 *Access Approved by Administrator!*\n\nYour Telegram account has been authorized to use KendaliAI. Send any message to start chatting with your agents!"
 		_, _ = a.sendTelegramMessage(runner.Bot, chatID, 0, msg, "Markdown")
 	}
+}
+
+func (a *TelegramAdapter) SendAgentNotification(agentID string, text string) error {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	var targetRunner *BotRunner
+	for _, r := range a.runners {
+		if r.Config.AgentID == agentID && r.Bot != nil {
+			targetRunner = r
+			break
+		}
+	}
+	if targetRunner == nil {
+		// Fallback to any active runner
+		for _, r := range a.runners {
+			if r.Bot != nil {
+				targetRunner = r
+				break
+			}
+		}
+	}
+	if targetRunner == nil {
+		return fmt.Errorf("no active Telegram bot available")
+	}
+
+	var target *ChatTarget
+	for _, t := range a.sessionTarget {
+		if t.BotID == targetRunner.Config.ID && t.ChatID != 0 {
+			target = t
+			break
+		}
+	}
+
+	if target == nil {
+		return fmt.Errorf("no user chat registered for bot %s yet", targetRunner.Config.Name)
+	}
+
+	notice := fmt.Sprintf("⏰ <b>[Routine Notification]:</b>\n%s", html.EscapeString(text))
+	_, err := a.sendTelegramMessage(targetRunner.Bot, target.ChatID, target.MessageThreadID, notice, "HTML")
+	return err
 }
 
 func (a *TelegramAdapter) sendTelegramMessage(bot *tgbotapi.BotAPI, chatID int64, threadID int, text string, parseMode string) (int, error) {
@@ -778,8 +828,10 @@ func (a *TelegramAdapter) handleRawTelegramMessage(runner *BotRunner, msg *RawTe
 		}
 
 		targetAgent := runner.Config.AgentID
-		if oldSess, _ := a.store.GetSession(defaultSessionID); oldSess != nil && oldSess.AgentID != "" {
-			targetAgent = oldSess.AgentID
+		if targetAgent == "" {
+			if oldSess, _ := a.store.GetSession(defaultSessionID); oldSess != nil && oldSess.AgentID != "" {
+				targetAgent = oldSess.AgentID
+			}
 		}
 
 		meta := ChatTarget{
@@ -892,15 +944,19 @@ func (a *TelegramAdapter) handleRawTelegramMessage(runner *BotRunner, msg *RawTe
 	}
 
 	// 5. Shortcut agent prefixes
+	explicitAgentOverride := false
 	targetAgent := runner.Config.AgentID
 	if strings.HasPrefix(cleanText, "/coding ") {
 		targetAgent = "coding-agent"
+		explicitAgentOverride = true
 		cleanText = strings.TrimPrefix(cleanText, "/coding ")
 	} else if strings.HasPrefix(cleanText, "/research ") {
 		targetAgent = "research-agent"
+		explicitAgentOverride = true
 		cleanText = strings.TrimPrefix(cleanText, "/research ")
 	} else if strings.HasPrefix(cleanText, "/knowledge ") {
 		targetAgent = "knowledge-agent"
+		explicitAgentOverride = true
 		cleanText = strings.TrimPrefix(cleanText, "/knowledge ")
 	}
 
@@ -963,8 +1019,14 @@ func (a *TelegramAdapter) handleRawTelegramMessage(runner *BotRunner, msg *RawTe
 		sess.ChannelID = "telegram"
 		sess.Metadata = string(metaJSON)
 		sess.UpdatedAt = time.Now().Unix()
-		if targetAgent != runner.Config.AgentID && sess.AgentID != targetAgent {
+		if explicitAgentOverride {
 			sess.AgentID = targetAgent
+		} else if runner.Config.AgentID != "" {
+			// Always sync to the bot's configured Agent Person
+			sess.AgentID = runner.Config.AgentID
+			targetAgent = runner.Config.AgentID
+		} else if sess.AgentID != "" {
+			targetAgent = sess.AgentID
 		}
 		_ = a.store.SaveSession(*sess)
 		targetAgent = sess.AgentID

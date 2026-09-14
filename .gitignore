@@ -28,6 +28,7 @@ config.json
 # Build output
 build/
 tmp/
+bin/
 
 # Editor directories and files
 .vscode/*

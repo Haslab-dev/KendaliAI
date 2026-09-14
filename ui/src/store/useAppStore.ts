@@ -14,8 +14,16 @@ interface AppState {
   deleteSession: (id: string) => Promise<void>;
   clearSessionMessages: (id: string) => Promise<void>;
 
+  telegramAgents: Record<string, { connected: boolean; botId: string; botName: string }>;
+  loadTelegramAgents: () => Promise<void>;
+
+  createDirectChat: (agentId: string) => Promise<string>;
+  createGroupChat: (title: string, participants: string[], avatar?: string) => Promise<string>;
+  createGeneralChat: (title?: string) => Promise<string>;
+  updateGroupParticipants: (groupId: string, participants: string[]) => Promise<void>;
+
   activeAgent: AgentConfig | null;
-  setActiveAgent: (agent: AgentConfig) => void;
+  setActiveAgent: (agent: AgentConfig | null) => void;
   agents: AgentConfig[];
   loadAgents: () => Promise<void>;
 
@@ -40,7 +48,13 @@ interface AppState {
   appendMessage: (msg: SessionMessage) => void;
   appendToolCall: (tc: ToolCallRecord) => void;
   updateToolCall: (tc: ToolCallRecord) => void;
-  startStreamingAssistantMessage: (id: string, model?: string) => void;
+  startStreamingAssistantMessage: (
+    id: string,
+    model?: string,
+    senderId?: string,
+    senderName?: string,
+    senderAvatar?: string
+  ) => void;
   appendThinkingDelta: (delta: string) => void;
   appendTextDelta: (delta: string) => void;
   appendStreamingToolCall: (tc: ToolCallRecord) => void;
@@ -51,6 +65,8 @@ interface AppState {
   setIsGenerating: (val: boolean) => void;
   thinkingStatus: string;
   setThinkingStatus: (status: string) => void;
+  typingAgent: { id: string; name: string; avatar?: string } | null;
+  setTypingAgent: (agent: { id: string; name: string; avatar?: string } | null) => void;
 
   activeModel: string | null;
   setActiveModel: (model: string | null) => void;
@@ -87,6 +103,19 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  telegramAgents: {},
+  loadTelegramAgents: async () => {
+    try {
+      const res = await fetch('/api/telegram/agents');
+      if (res.ok) {
+        const data = await res.json();
+        set({ telegramAgents: data || {} });
+      }
+    } catch (e) {
+      console.warn('Failed to load telegram agents:', e);
+    }
+  },
+
   selectSession: async (id: string) => {
     set({ activeSessionId: id });
     try {
@@ -94,37 +123,41 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (res.ok) {
         const data = await res.json();
         set({ messages: data.messages || [] });
-        if (data.session && data.session.agentId) {
-          const targetId = data.session.agentId;
-          const matchedAgent = get().agents.find((a) => a.id === targetId);
-          if (matchedAgent) {
-            set({ activeAgent: matchedAgent });
-          } else {
-            // Check office staff from local storage or defaults
-            let staffInfo: any = null;
-            try {
-              const saved = localStorage.getItem('kendali_office_workers');
-              if (saved) {
-                const parsed = JSON.parse(saved);
-                if (Array.isArray(parsed)) {
-                  staffInfo = parsed.find((w: any) => w.id === targetId);
-                }
+        const sess: Session | undefined = data.session;
+        if (sess) {
+          if (sess.type === 'direct' && sess.agentId) {
+            const targetId = sess.agentId;
+            let matchedAgent = get().agents.find((a) => a.id === targetId);
+            if (matchedAgent) {
+              set({ activeAgent: matchedAgent });
+              if (matchedAgent.model) {
+                set({ activeModel: matchedAgent.model });
               }
-            } catch {}
+            } else {
+              // Check office staff from local storage or defaults
+              let staffInfo: any = null;
+              try {
+                const saved = localStorage.getItem('kendali_office_workers');
+                if (saved) {
+                  const parsed = JSON.parse(saved);
+                  if (Array.isArray(parsed)) {
+                    staffInfo = parsed.find((w: any) => w.id === targetId);
+                  }
+                }
+              } catch {}
 
-            const defStaff: Record<string, { name: string; role: string; avatar: string; model?: string }> = {
-              'lead-frontend': { name: 'Senior Dev', role: 'Lead Frontend Dev', avatar: 'blue-drop', model: 'gpt-4o' },
-              'lead-architecture': { name: 'Architect Lead', role: 'Lead Architecture', avatar: 'cyan-bubble', model: 'claude-3-7-sonnet' },
-              'lead-backend': { name: 'Lead Backend Dev', role: 'Lead Backend Dev', avatar: 'green-cloud', model: 'qwen2.5-coder:latest' },
-              'legal-counsel': { name: 'Legal Counsel', role: 'Legal & Compliance', avatar: 'bronze-shield', model: 'gpt-4o' },
-              'chief-security': { name: 'Security Lead', role: 'Chief Security Officer', avatar: 'ruby-capsule', model: 'gpt-4o' },
-              'devops-lead': { name: 'DevOps Lead', role: 'DevOps & Infra', avatar: 'orange-leaf', model: 'deepseek-chat' },
-              'personal-assistant': { name: 'Personal Assistant', role: 'Personal Assistant', avatar: 'blue-drop', model: 'gpt-4o' },
-            };
+              const defStaff: Record<string, { name: string; role: string; avatar: string; model?: string }> = {
+                'lead-frontend': { name: 'Senior Dev', role: 'Lead Frontend Dev', avatar: 'blue-drop', model: 'gpt-4o' },
+                'lead-architecture': { name: 'Architect Lead', role: 'Lead Architecture', avatar: 'cyan-bubble', model: 'claude-3-7-sonnet' },
+                'lead-backend': { name: 'Lead Backend Dev', role: 'Lead Backend Dev', avatar: 'green-cloud', model: 'qwen2.5-coder:latest' },
+                'legal-counsel': { name: 'Legal Counsel', role: 'Legal & Compliance', avatar: 'bronze-shield', model: 'gpt-4o' },
+                'chief-security': { name: 'Security Lead', role: 'Chief Security Officer', avatar: 'ruby-capsule', model: 'gpt-4o' },
+                'devops-lead': { name: 'DevOps Lead', role: 'DevOps & Infra', avatar: 'orange-leaf', model: 'deepseek-chat' },
+                'personal-assistant': { name: 'Personal Assistant', role: 'Personal Assistant', avatar: 'blue-drop', model: 'gpt-4o' },
+              };
 
-            const staff = staffInfo || defStaff[targetId];
-            set({
-              activeAgent: {
+              const staff = staffInfo || defStaff[targetId];
+              const createdAgent: AgentConfig = {
                 id: targetId,
                 name: staff?.role || staff?.name || targetId,
                 role: staff?.role,
@@ -139,8 +172,21 @@ export const useAppStore = create<AppState>((set, get) => ({
                 policy: {},
                 avatar: staff?.avatar || 'blue-drop',
                 isDefault: false,
-              },
-            });
+              };
+              set({ activeAgent: createdAgent });
+              if (createdAgent.model) {
+                set({ activeModel: createdAgent.model });
+              }
+            }
+          } else if (sess.type === 'group') {
+            set({ activeAgent: null });
+          } else {
+            // General chat - agent is null or personal-assistant, restore user preferred model
+            set({ activeAgent: null });
+            const savedModel = localStorage.getItem('kendali_active_model') || get().defaultModel;
+            if (savedModel) {
+              set({ activeModel: savedModel });
+            }
           }
         }
       }
@@ -159,32 +205,113 @@ export const useAppStore = create<AppState>((set, get) => ({
       const res = await fetch('/api/sessions');
       const sessions = await res.json();
       set({ sessions: sessions || [] });
+      get().loadTelegramAgents().catch(() => {});
     } catch (e) {
       console.error('Failed to load sessions:', e);
     }
   },
 
-  createSession: async (agentId) => {
-    const currentAgent = get().activeAgent;
-    const targetAgentId = agentId || (currentAgent ? currentAgent.id : 'personal-assistant');
+  createDirectChat: async (agentId: string) => {
+    const existing = get().sessions.find(
+      (s) => (s.id === `direct_${agentId}` || (s.type === 'direct' && s.agentId === agentId))
+    );
+    if (existing) {
+      await get().selectSession(existing.id);
+      return existing.id;
+    }
+
+    const agent = get().agents.find((a) => a.id === agentId);
+    const title = agent ? (agent.name || agent.role || agentId) : agentId;
+    const avatar = agent ? (agent.avatar || 'blue-drop') : 'blue-drop';
+
     try {
       const res = await fetch('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          agentId: targetAgentId,
-          title: 'New Chat',
+          id: `direct_${agentId}`,
+          agentId,
+          title,
+          type: 'direct',
+          avatar,
+          channelId: 'web',
+          participants: [{ participantType: 'agent', participantId: agentId, role: 'member' }],
+        }),
+      });
+      const newSess = await res.json();
+      await get().loadSessions();
+      await get().selectSession(newSess.id);
+      return newSess.id;
+    } catch (e) {
+      console.error('Failed to create direct chat:', e);
+      return '';
+    }
+  },
+
+  createGroupChat: async (title: string, participants: string[], avatar = 'users') => {
+    try {
+      const res = await fetch('/api/groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          participants,
+          avatar,
+        }),
+      });
+      const newGroup = await res.json();
+      await get().loadSessions();
+      await get().selectSession(newGroup.id);
+      return newGroup.id;
+    } catch (e) {
+      console.error('Failed to create group chat:', e);
+      return '';
+    }
+  },
+
+  createGeneralChat: async (title = 'New Chat') => {
+    try {
+      const res = await fetch('/api/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          type: 'general',
+          avatar: 'bot',
           channelId: 'web',
         }),
       });
       const newSess = await res.json();
       await get().loadSessions();
-      set({ activeSessionId: newSess.id, messages: [] });
+      await get().selectSession(newSess.id);
       return newSess.id;
     } catch (e) {
-      console.error('Failed to create session:', e);
+      console.error('Failed to create general chat:', e);
       return '';
     }
+  },
+
+  updateGroupParticipants: async (groupId: string, participants: string[]) => {
+    try {
+      await fetch(`/api/groups/${groupId}/participants`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participants }),
+      });
+      await get().loadSessions();
+      if (get().activeSessionId === groupId) {
+        await get().selectSession(groupId);
+      }
+    } catch (e) {
+      console.error('Failed to update group participants:', e);
+    }
+  },
+
+  createSession: async (agentId) => {
+    if (agentId) {
+      return get().createDirectChat(agentId);
+    }
+    return get().createGeneralChat();
   },
 
   deleteSession: async (id) => {
@@ -194,9 +321,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (get().activeSessionId === id) {
         const remaining = get().sessions;
         if (remaining.length > 0) {
-          set({ activeSessionId: remaining[0].id });
+          await get().selectSession(remaining[0].id);
         } else {
-          get().createSession();
+          await get().createGeneralChat();
         }
       }
     } catch (e) {
@@ -223,7 +350,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       const res = await fetch('/api/agents');
       const agents = await res.json();
       set({ agents: agents || [] });
-      if (agents && agents.length > 0 && !get().activeAgent) {
+      get().loadTelegramAgents().catch(() => {});
+      if (agents && agents.length > 0 && !get().activeAgent && !get().activeSessionId) {
         set({ activeAgent: agents[0] });
       }
     } catch (e) {
@@ -279,9 +407,21 @@ export const useAppStore = create<AppState>((set, get) => ({
   setMessages: (messages) => set({ messages }),
   appendMessage: (msg) =>
     set((s) => {
+      // 1. Exact ID check
       if (s.messages.some((m) => m.id === msg.id)) {
         return { messages: s.messages };
       }
+      // 2. Exact role + content deduplication within 4 seconds (guards against duplicate event delivery or dual-socket race)
+      const lastMsg = s.messages.length > 0 ? s.messages[s.messages.length - 1] : null;
+      if (
+        lastMsg &&
+        lastMsg.role === msg.role &&
+        lastMsg.content.trim() === (msg.content || '').trim() &&
+        Math.abs((msg.createdAt || Date.now()) - (lastMsg.createdAt || 0)) < 4000
+      ) {
+        return { messages: s.messages };
+      }
+      // 3. User optimistic message reconciliation
       if (msg.role === 'user') {
         const optIdx = s.messages.findIndex(
           (m) =>
@@ -324,12 +464,19 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
   },
 
-  startStreamingAssistantMessage: (id, model) => {
+  startStreamingAssistantMessage: (id, model, senderId, senderName, senderAvatar) => {
     set((s) => {
       const msgs = [...s.messages];
       if (msgs.length > 0 && msgs[msgs.length - 1].role === 'assistant' && msgs[msgs.length - 1].id.startsWith('asst-stream-')) {
+        const last = { ...msgs[msgs.length - 1] };
+        if (model) last.model = model;
+        if (senderId) last.senderId = senderId;
+        if (senderName) last.senderName = senderName;
+        if (senderAvatar) last.senderAvatar = senderAvatar;
+        msgs[msgs.length - 1] = last;
         return { messages: msgs };
       }
+      const matchedAgent = senderId ? s.agents.find((a) => a.id === senderId) : null;
       const draft: SessionMessage = {
         id,
         sessionId: s.activeSessionId || '',
@@ -338,7 +485,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         content: '',
         thought: '',
         toolCalls: [],
-        model: model || s.activeModel || s.activeAgent?.model || 'default',
+        senderId: senderId || s.activeAgent?.id,
+        senderName: senderName || matchedAgent?.name || s.activeAgent?.name,
+        senderAvatar: senderAvatar || matchedAgent?.avatar || s.activeAgent?.avatar,
+        model: model || matchedAgent?.model || s.activeModel || s.activeAgent?.model || 'default',
         createdAt: Date.now(),
       };
       return { messages: [...msgs, draft] };
@@ -459,6 +609,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setIsGenerating: (isGenerating) => set({ isGenerating }),
   thinkingStatus: 'Thinking...',
   setThinkingStatus: (thinkingStatus) => set({ thinkingStatus }),
+  typingAgent: null,
+  setTypingAgent: (typingAgent) => set({ typingAgent }),
 
   availableModels: [],
   defaultModel: null,

@@ -148,10 +148,10 @@ export const DashboardPane: React.FC = () => {
       action: () => navigate('docs'),
     },
     {
-      title: 'Agency HQ Office & Department Staff',
-      desc: 'Supervise Legal, Lead Frontend, Backend, and Architecture agents paired with Telegram bots',
-      tag: '🏢 Agency HQ',
-      action: () => navigate('agency'),
+      title: 'Agent Persons & Department Staff',
+      desc: 'Supervise Personal Assistant, Frontend, Backend, and Architecture agents paired with Telegram bots',
+      tag: '👥 Agent Persons',
+      action: () => navigate('agents'),
     },
     {
       title: 'Manage Agent Worktrees',

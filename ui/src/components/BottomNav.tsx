@@ -17,35 +17,31 @@ import {
   Sun,
   Moon,
   Building2,
+  Users2,
   type LucideIcon,
 } from 'lucide-react';
 import { navigate, RouteName, useRoute } from '../router';
 import { useAppStore } from '../store/useAppStore';
 
-// Matches mobile design references (refs/mobile/dashboard.html):
-// Bottom Nav: Dashboard, Agency HQ (Office), Chat, Branches (worktrees), Settings + More Drawer
 const PRIMARY_MOBILE_ITEMS: { id: RouteName; label: string; icon: LucideIcon }[] = [
   { id: 'dashboard', label: 'Overview', icon: Layers },
-  { id: 'agency', label: 'Office', icon: Building2 },
+  { id: 'agents', label: 'Agents', icon: Users2 },
   { id: 'chat', label: 'Chat', icon: MessageSquare },
-  { id: 'worktrees', label: 'Branches', icon: FolderGit2 },
-  { id: 'settings', label: 'Settings', icon: SettingsIcon },
 ];
 
 const ALL_MOBILE_FEATURES: { id: RouteName; label: string; desc: string; icon: LucideIcon }[] = [
   { id: 'dashboard', label: 'Dashboard', desc: 'System overview & executive metrics', icon: Layers },
-  { id: 'agency', label: 'Agency HQ', desc: 'Office staff, worker roles & bot pairing', icon: Building2 },
+  { id: 'agents', label: 'Agent Persons', desc: 'Agency office staff, personal assistants & bot pairing', icon: Users2 },
   { id: 'chat', label: 'Hermes Chat', desc: 'Coding agent & reasoning canvas', icon: MessageSquare },
   { id: 'editor', label: 'Workspace Editor', desc: 'File explorer & in-browser editor', icon: Code2 },
   { id: 'terminal', label: 'Shell Terminal', desc: 'Interactive shell session & command line', icon: Terminal },
-  { id: 'agents', label: 'Agent Personas', desc: 'Autonomous personas, prompts & tools', icon: Bot },
   { id: 'scheduler', label: 'Scheduler & Reminders', desc: 'Natural language & cron automation', icon: CalendarClock },
-  { id: 'worktrees', label: 'Git Worktrees', desc: 'Isolated branches & safe checkouts', icon: FolderGit2 },
+  { id: 'worktrees', label: 'Branches (Worktrees)', desc: 'Isolated git branches & worktrees', icon: FolderGit2 },
   { id: 'plugins', label: 'Plugins & Skills', desc: 'Hot-register tools & agent plugins', icon: Plug },
   { id: 'docs', label: 'Knowledge Base', desc: 'Vector embeddings RAG & chunk search', icon: BookOpen },
   { id: 'providers', label: 'Providers & MCP', desc: 'OpenAI, Ollama, DeepSeek & MCP tools', icon: Zap },
   { id: 'telegram', label: 'Telegram Gateway', desc: 'Bi-directional bot & topic streaming', icon: Send },
-  { id: 'settings', label: 'Policy Guardrails', desc: 'Tool approval permissions & security', icon: SettingsIcon },
+  { id: 'settings', label: 'Settings', desc: 'Tool approvals, policies & configuration', icon: SettingsIcon },
 ];
 
 export const BottomNav: React.FC = () => {

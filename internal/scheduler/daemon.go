@@ -17,29 +17,35 @@ import (
 	"github.com/kendaliai/app/internal/messaging"
 )
 
-// ScheduledTask represents a cron job or reminder task.
+// ScheduledTask represents a cron job or routine automation task.
 type ScheduledTask struct {
-	ID         string     `json:"id"`
-	Name       string     `json:"name"`
-	Schedule   string     `json:"schedule"` // e.g. "0 1 * * *", "every 1 am", "in 30 minutes"
-	Prompt     string     `json:"prompt"`   // reminder notification message or agent instruction
-	SessionID  string     `json:"sessionId,omitempty"`
-	Channel    string     `json:"channel,omitempty"` // "web", "telegram", etc.
-	Enabled    bool       `json:"enabled"`
-	CreatedAt  time.Time  `json:"createdAt"`
-	NextRun    time.Time  `json:"nextRun"`
-	LastRun    *time.Time `json:"lastRun,omitempty"`
-	RunCount   int        `json:"runCount"`
-	LastOutput string     `json:"lastOutput,omitempty"`
+	ID              string     `json:"id"`
+	Name            string     `json:"name"`
+	Schedule        string     `json:"schedule"` // e.g. "0 1 * * *", "every 1 am", "in 30 minutes"
+	Prompt          string     `json:"prompt"`   // reminder notification message or agent instruction
+	TargetType      string     `json:"targetType,omitempty"` // "agent" or "group"
+	TargetID        string     `json:"targetId,omitempty"`
+	SessionID       string     `json:"sessionId,omitempty"`
+	DeliverTelegram bool       `json:"deliverTelegram,omitempty"`
+	Channel         string     `json:"channel,omitempty"` // "web", "telegram", etc.
+	Enabled         bool       `json:"enabled"`
+	CreatedAt       time.Time  `json:"createdAt"`
+	NextRun         time.Time  `json:"nextRun"`
+	LastRun         *time.Time `json:"lastRun,omitempty"`
+	RunCount        int        `json:"runCount"`
+	LastOutput      string     `json:"lastOutput,omitempty"`
 }
 
-// Daemon manages scheduled reminders and cron jobs.
+// TurnExecutor is invoked when a routine triggers in a conversation
+var TurnExecutor func(ctx context.Context, sessionID, agentID, prompt, channel string, deliverTelegram bool) error
+
+// Daemon manages scheduled reminders, routines, and cron jobs.
 type Daemon struct {
-	mu      sync.RWMutex
+	mu       sync.RWMutex
 	storeDir string
-	tasks   map[string]*ScheduledTask
-	bus     *messaging.EventBus
-	stopCh  chan struct{}
+	tasks    map[string]*ScheduledTask
+	bus      *messaging.EventBus
+	stopCh   chan struct{}
 }
 
 var DefaultDaemon *Daemon
@@ -52,9 +58,9 @@ func NewDaemon(bus *messaging.EventBus) *Daemon {
 
 	d := &Daemon{
 		storeDir: storeDir,
-		tasks:   make(map[string]*ScheduledTask),
-		bus:     bus,
-		stopCh:  make(chan struct{}),
+		tasks:    make(map[string]*ScheduledTask),
+		bus:      bus,
+		stopCh:   make(chan struct{}),
 	}
 
 	d.loadTasks()
@@ -64,7 +70,7 @@ func NewDaemon(bus *messaging.EventBus) *Daemon {
 
 // Start begins the scheduler tick loop.
 func (d *Daemon) Start(ctx context.Context) {
-	log.Println("⏰ Scheduler Daemon started (evaluating cron jobs and reminders)")
+	log.Println("⏰ Routine Daemon started (evaluating persistent automations and cron jobs)")
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
@@ -103,7 +109,7 @@ func (d *Daemon) tick(ctx context.Context) {
 }
 
 func (d *Daemon) executeTask(ctx context.Context, task *ScheduledTask, fireTime time.Time) {
-	log.Printf("🔔 Triggering scheduled reminder: [%s] %s (Prompt: %s)", task.ID, task.Name, task.Prompt)
+	log.Printf("🔔 Triggering routine automation: [%s] %s (Prompt: %s)", task.ID, task.Name, task.Prompt)
 
 	// Publish reminder triggered event on event bus
 	if d.bus != nil {
@@ -112,13 +118,29 @@ func (d *Daemon) executeTask(ctx context.Context, task *ScheduledTask, fireTime 
 			SessionID: task.SessionID,
 			Channel:   task.Channel,
 			Payload: map[string]interface{}{
-				"taskId":    task.ID,
-				"name":      task.Name,
-				"prompt":    task.Prompt,
-				"schedule":  task.Schedule,
-				"timestamp": fireTime.UnixMilli(),
+				"taskId":          task.ID,
+				"name":            task.Name,
+				"prompt":          task.Prompt,
+				"schedule":        task.Schedule,
+				"targetType":      task.TargetType,
+				"targetId":        task.TargetID,
+				"deliverTelegram": task.DeliverTelegram,
+				"timestamp":       fireTime.UnixMilli(),
 			},
 		})
+	}
+
+	// Route into conversation system via TurnExecutor
+	if TurnExecutor != nil && task.SessionID != "" {
+		targetAgent := task.TargetID
+		if targetAgent == "" {
+			targetAgent = "personal-assistant"
+		}
+		go func(sid, aid, pmt string, delTg bool) {
+			tCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			defer cancel()
+			_ = TurnExecutor(tCtx, sid, aid, "[Routine: "+task.Name+"] "+pmt, "routine", delTg)
+		}(task.SessionID, targetAgent, task.Prompt, task.DeliverTelegram)
 	}
 
 	d.mu.Lock()
@@ -140,31 +162,49 @@ func (d *Daemon) executeTask(ctx context.Context, task *ScheduledTask, fireTime 
 
 // AddTask registers a new scheduled reminder or cron task.
 func (d *Daemon) AddTask(name, schedule, prompt, sessionID, channel string) (*ScheduledTask, error) {
-	if strings.TrimSpace(name) == "" {
-		return nil, fmt.Errorf("task name is required")
-	}
-	if strings.TrimSpace(schedule) == "" {
-		return nil, fmt.Errorf("schedule is required")
-	}
-
-	now := time.Now()
-	next := CalculateNextRun(schedule, now)
-	if next.IsZero() {
-		return nil, fmt.Errorf("invalid schedule expression: %s", schedule)
-	}
-
-	id := "sched_" + uuid.New().String()[:8]
-	task := &ScheduledTask{
-		ID:        id,
+	return d.AddRoutineTask(ScheduledTask{
 		Name:      name,
 		Schedule:  schedule,
 		Prompt:    prompt,
 		SessionID: sessionID,
 		Channel:   channel,
-		Enabled:   true,
-		CreatedAt: now,
-		NextRun:   next,
-		RunCount:  0,
+	})
+}
+
+// AddRoutineTask registers a routine task with target and delivery options.
+func (d *Daemon) AddRoutineTask(t ScheduledTask) (*ScheduledTask, error) {
+	if strings.TrimSpace(t.Name) == "" {
+		return nil, fmt.Errorf("task name is required")
+	}
+	if strings.TrimSpace(t.Schedule) == "" {
+		return nil, fmt.Errorf("schedule is required")
+	}
+
+	now := time.Now()
+	next := CalculateNextRun(t.Schedule, now)
+	if next.IsZero() {
+		return nil, fmt.Errorf("invalid schedule expression: %s", t.Schedule)
+	}
+
+	id := t.ID
+	if id == "" {
+		id = "routine_" + uuid.New().String()[:8]
+	}
+
+	task := &ScheduledTask{
+		ID:              id,
+		Name:            t.Name,
+		Schedule:        t.Schedule,
+		Prompt:          t.Prompt,
+		TargetType:      t.TargetType,
+		TargetID:        t.TargetID,
+		SessionID:       t.SessionID,
+		DeliverTelegram: t.DeliverTelegram,
+		Channel:         t.Channel,
+		Enabled:         true,
+		CreatedAt:       now,
+		NextRun:         next,
+		RunCount:        0,
 	}
 
 	d.mu.Lock()

@@ -311,4 +311,37 @@ var schemaQueries = []string{
 	)`,
 	`CREATE INDEX IF NOT EXISTS idx_doc_chunks_session ON document_chunks(session_id)`,
 	`CREATE INDEX IF NOT EXISTS idx_doc_chunks_doc ON document_chunks(document_id)`,
+	`CREATE TABLE IF NOT EXISTS chat_participants (
+		id TEXT PRIMARY KEY,
+		chat_id TEXT NOT NULL,
+		participant_type TEXT NOT NULL,
+		participant_id TEXT NOT NULL,
+		role TEXT DEFAULT 'member',
+		joined_at INTEGER
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_chat_participants_chat ON chat_participants(chat_id)`,
+	`CREATE TABLE IF NOT EXISTS chat_summaries (
+		chat_id TEXT PRIMARY KEY,
+		summary TEXT NOT NULL,
+		key_decisions TEXT DEFAULT '[]',
+		last_message_id TEXT DEFAULT '',
+		updated_at INTEGER
+	)`,
+	`CREATE TABLE IF NOT EXISTS routines (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		schedule TEXT NOT NULL,
+		prompt TEXT NOT NULL,
+		target_type TEXT DEFAULT 'agent',
+		target_id TEXT DEFAULT '',
+		chat_id TEXT DEFAULT '',
+		deliver_telegram INTEGER DEFAULT 0,
+		enabled INTEGER DEFAULT 1,
+		last_run_at INTEGER,
+		next_run_at INTEGER,
+		run_count INTEGER DEFAULT 0,
+		last_output TEXT,
+		created_at INTEGER,
+		updated_at INTEGER
+	)`,
 }

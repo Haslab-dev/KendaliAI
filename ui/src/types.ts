@@ -55,19 +55,35 @@ export interface AgentConfig {
   policy: Record<string, string>;
   avatar: string;
   isDefault: boolean;
+  telegramConnected?: boolean;
+  telegramBot?: TelegramBotConfig;
   createdAt?: number;
   updatedAt?: number;
+}
+
+export interface ChatParticipant {
+  id: string;
+  chatId: string;
+  participantType: 'agent' | 'user';
+  participantId: string;
+  role?: 'owner' | 'member';
+  joinedAt?: number;
 }
 
 export interface Session {
   id: string;
   agentId: string;
   title: string;
+  type?: 'direct' | 'group' | 'general';
+  avatar?: string;
+  summary?: string;
   channelId: string;
   userId: string;
   status: string;
   pinned: boolean;
   metadata?: string;
+  participants?: ChatParticipant[];
+  lastMessage?: SessionMessage;
   createdAt: number;
   updatedAt: number;
 }
@@ -93,6 +109,11 @@ export interface SessionMessage {
   agentId?: string;
   channel: string;
   role: 'user' | 'assistant' | 'system' | 'tool';
+  senderType?: 'user' | 'agent' | 'routine' | 'system';
+  senderId?: string;
+  senderName?: string;
+  senderAvatar?: string;
+  recipientAgentId?: string;
   content: string;
   thought?: string;
   toolCalls?: ToolCallRecord[];
@@ -101,6 +122,24 @@ export interface SessionMessage {
   model?: string;
   ragSources?: RagSource[];
   createdAt: number;
+}
+
+export interface RoutineTask {
+  id: string;
+  name: string;
+  schedule: string;
+  prompt: string;
+  targetType?: 'agent' | 'group';
+  targetId?: string;
+  sessionId?: string;
+  deliverTelegram?: boolean;
+  channel?: string;
+  enabled: boolean;
+  createdAt?: string;
+  nextRun?: string;
+  lastRun?: string;
+  runCount?: number;
+  lastOutput?: string;
 }
 
 export interface MCPServerConfig {
@@ -135,14 +174,15 @@ export interface PolicyRule {
 }
 
 export interface TelegramBotConfig {
-  id: string;
-  name: string;
-  token: string;
-  agentId: string;
+  id?: string;
+  name?: string;
+  username?: string;
+  token?: string;
+  agentId?: string;
   model?: string;
   providerId?: string;
-  enabled: boolean;
-  status: 'running' | 'stopped' | 'error';
+  enabled?: boolean;
+  status?: 'running' | 'stopped' | 'error' | 'connected' | 'unlinked';
   mode?: 'direct' | 'topic_group';
   chatId?: string;
   topicId?: number;

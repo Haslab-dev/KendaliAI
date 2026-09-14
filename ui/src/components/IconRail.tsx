@@ -15,6 +15,7 @@ import {
   Sun,
   Moon,
   Building2,
+  Users2,
   type LucideIcon,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
@@ -29,12 +30,11 @@ interface NavItem {
 
 const PRIMARY_NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Executive Dashboard', icon: Layers },
-  { id: 'agency', label: 'Agency HQ (Office & Staff)', icon: Building2 },
-  { id: 'chat', label: 'Chat & Coding Agent', icon: MessageSquare },
+  { id: 'agents', label: 'Agent Persons (Agency)', icon: Users2 },
+  { id: 'chat', label: 'Chat & Messaging', icon: MessageSquare },
   { id: 'editor', label: 'Workspace Editor', icon: Code2 },
   { id: 'terminal', label: 'Shell Terminal', icon: Terminal },
-  { id: 'agents', label: 'Agent Personas', icon: Bot },
-  { id: 'scheduler', label: 'Scheduler & Tasks', icon: CalendarClock },
+  { id: 'scheduler', label: 'Scheduler & Routines', icon: CalendarClock },
   { id: 'worktrees', label: 'Git Worktrees', icon: FolderGit2 },
   { id: 'plugins', label: 'Plugins & Skills', icon: Plug },
   { id: 'docs', label: 'Knowledge Base (RAG)', icon: BookOpen },

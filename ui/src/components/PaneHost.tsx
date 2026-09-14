@@ -36,14 +36,14 @@ import { DashboardPane } from '../panes/dashboard';
 import { AgencyHQPane } from '../panes/agency';
 import { LogsStreamingView } from './LogsStreamingView';
 import { TerminalPane } from '../panes/terminal';
-import { Layers, Building2 } from 'lucide-react';
+import { Layers, Building2, Users2 } from 'lucide-react';
 
 const PANES: Record<
   Exclude<RouteName, 'chat'>,
   { label: string; icon: LucideIcon }
 > = {
   dashboard: { label: 'Dashboard', icon: Layers },
-  agency: { label: 'Agency HQ', icon: Building2 },
+  agency: { label: 'Agent Persons', icon: Users2 },
   editor: { label: 'Files & Code Editor', icon: Code2 },
   terminal: { label: 'Shell Terminal', icon: Terminal },
   worktrees: { label: 'Git Worktrees', icon: GitFork },
@@ -51,7 +51,7 @@ const PANES: Record<
   plugins: { label: 'Plugins & Extensions', icon: Puzzle },
   logs: { label: 'Streaming Logs', icon: Terminal },
   providers: { label: 'Providers & Models', icon: Zap },
-  agents: { label: 'Agent Personas', icon: Bot },
+  agents: { label: 'Agent Persons', icon: Users2 },
   sessions: { label: 'Session Registry', icon: MessageSquare },
   docs: { label: 'Doc Store', icon: FileText },
   mcps: { label: 'MCP Servers', icon: Plug },

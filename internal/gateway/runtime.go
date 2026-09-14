@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -107,17 +108,29 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		}
 		_ = r.store.SaveSession(*sess)
 	} else {
-		if sess.AgentID != "" {
-			agentID = sess.AgentID
-		} else if agentID != "" {
+		if agentID != "" && agentID != sess.AgentID {
 			sess.AgentID = agentID
 			_ = r.store.SaveSession(*sess)
+		} else if sess.AgentID != "" {
+			agentID = sess.AgentID
 		}
 	}
 
-	// 1. Process slash directives in userPrompt: /skill:<agentID>, /agent:<agentID>, /mcp:<serverName>
-	rawPrompt := strings.TrimSpace(userPrompt)
+	// 1. Process group chat @mentions and role-based agent selection
 	activeAgentID := agentID
+	wasStrictMention := false
+	if sess.Type == "group" {
+		participants, _ := r.store.ListChatParticipants(sess.ID)
+		allAgents, _ := r.store.ListAgents()
+		activeAgentID, wasStrictMention = resolveGroupTurnAgent(userPrompt, participants, allAgents)
+	} else if sess.Type == "direct" {
+		if sess.AgentID != "" {
+			activeAgentID = sess.AgentID
+		}
+	}
+
+	// 1b. Process slash directives in userPrompt: /skill:<agentID>, /agent:<agentID>, /mcp:<serverName>
+	rawPrompt := strings.TrimSpace(userPrompt)
 	var extraMCPs []string
 	cleanPrompt := strings.TrimSpace(userPrompt)
 
@@ -136,6 +149,7 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 				targetAgent, err := r.store.GetAgent(targetAgentID)
 				if err == nil && targetAgent != nil {
 					activeAgentID = targetAgentID
+					wasStrictMention = true
 				}
 			}
 			if len(parts) > 1 {
@@ -239,13 +253,16 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 
 	// 2. Save User Message
 	userMsg := SessionMessage{
-		ID:        uuid.New().String(),
-		SessionID: sessionID,
-		AgentID:   activeAgentID,
-		Channel:   channel,
-		Role:      "user",
-		Content:   rawPrompt,
-		CreatedAt: time.Now().UnixMilli(),
+		ID:         uuid.New().String(),
+		SessionID:  sessionID,
+		AgentID:    activeAgentID,
+		Channel:    channel,
+		Role:       "user",
+		SenderType: "user",
+		SenderID:   "user",
+		SenderName: "User",
+		Content:    rawPrompt,
+		CreatedAt:  time.Now().UnixMilli(),
 	}
 	_ = r.store.SaveMessage(userMsg)
 
@@ -256,22 +273,6 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		AgentID:   activeAgentID,
 		Channel:   channel,
 		Payload:   userMsg,
-	})
-
-	// Publish agent.started & thinking
-	r.bus.Publish(messaging.Event{
-		Type:      messaging.EventAgentStarted,
-		SessionID: sessionID,
-		AgentID:   activeAgentID,
-		Channel:   channel,
-	})
-	bgTask := r.taskMgr.Register(sessionID, activeAgentID, rawPrompt, nil)
-	r.bus.Publish(messaging.Event{
-		Type:      messaging.EventAgentThinking,
-		SessionID: sessionID,
-		AgentID:   activeAgentID,
-		Channel:   channel,
-		Payload:   "Planning next step...",
 	})
 
 	// 3. Resolve Agent Config
@@ -316,14 +317,21 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		provCfg, _ = r.store.GetProvider(agentConfig.ProviderID)
 	}
 
-	modelToUse := strings.TrimSpace(modelOverride)
-	if modelToUse == "" || strings.EqualFold(modelToUse, "default") {
+	modelToUse := ""
+	// For direct 1:1 and group chats, the Agent Person's configured model is strictly used!
+	// modelOverride is honored only for general chat sessions.
+	if sess.Type != "general" && agentConfig.Model != "" {
 		modelToUse = strings.TrimSpace(agentConfig.Model)
-	}
-	if modelToUse == "" || strings.EqualFold(modelToUse, "default") {
-		modelToUse = defaultModel
-		if provCfg == nil {
-			provCfg = defaultProv
+	} else {
+		modelToUse = strings.TrimSpace(modelOverride)
+		if modelToUse == "" || strings.EqualFold(modelToUse, "default") {
+			modelToUse = strings.TrimSpace(agentConfig.Model)
+		}
+		if modelToUse == "" || strings.EqualFold(modelToUse, "default") {
+			modelToUse = defaultModel
+			if provCfg == nil {
+				provCfg = defaultProv
+			}
 		}
 	}
 
@@ -357,8 +365,32 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		}
 	}
 
+	// Publish agent.started & thinking with resolved agent and model details
+	r.bus.Publish(messaging.Event{
+		Type:      messaging.EventAgentStarted,
+		SessionID: sessionID,
+		AgentID:   agentConfig.ID,
+		Channel:   channel,
+		Payload: map[string]interface{}{
+			"agentId":    agentConfig.ID,
+			"agentName":  agentConfig.Name,
+			"avatar":     agentConfig.Avatar,
+			"role":       agentConfig.Role,
+			"department": agentConfig.Department,
+			"model":      modelToUse,
+		},
+	})
+	bgTask := r.taskMgr.Register(sessionID, agentConfig.ID, rawPrompt, nil)
+	r.bus.Publish(messaging.Event{
+		Type:      messaging.EventAgentThinking,
+		SessionID: sessionID,
+		AgentID:   agentConfig.ID,
+		Channel:   channel,
+		Payload:   fmt.Sprintf("%s is typing...", agentConfig.Name),
+	})
+
 	// 5. Build System Prompt & Skills
-	sysPrompt := agentConfig.SystemPrompt
+	sysPrompt := fmt.Sprintf("You are %s. You speak and act strictly as %s. Never adopt, impersonate, or prepend any other agent persona or name.\n\n%s", agentConfig.Name, agentConfig.Name, agentConfig.SystemPrompt)
 	if len(agentConfig.Skills) > 0 {
 		sysPrompt += "\n\n## ATTACHED SKILLS (Apply these guidelines when relevant):\n"
 		homeDir, _ := os.UserHomeDir()
@@ -496,6 +528,12 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		"   Use `list_skills({})` and `list_plugins({})`.\n" +
 		"ALWAYS execute these tools when the user asks to create or list skills or plugins. Never hallucinate that you cannot create them.\n"
 
+	sysPrompt += "\n\n## CRITICAL MESSAGING & FORMATTING RULES:\n" +
+		"- You MUST speak directly in character as " + agentConfig.Name + " (" + agentConfig.Role + ").\n" +
+		"- ABSOLUTELY NO internal monologues, meta-plans, or self-narration (e.g. NEVER write 'The user is asking me...', 'I should...', 'Let me...', 'User wants...'). Any thinking must be completely omitted or enclosed strictly in <think> tags.\n" +
+		"- Begin your very first character with your in-character dialogue or greeting directly.\n" +
+		"- NEVER prepend your output with your own name or brackets like [" + agentConfig.Name + "]:.\n"
+
 	// 6. Vector RAG Retrieval & Auto-Ingest
 	embCfg, _ := r.store.GetEmbeddingConfig()
 	var embClient *embedding.Client
@@ -543,81 +581,9 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 	// are embedded on ingest so /doc: and the scored vector search work, but
 	// ordinary chat never pulls document content behind the user's back.
 
-	// 7. Context Compaction & Conversation Assembly (128k Token Limit Safe)
+	// 7. Context Compaction & Model-Aware Layered Assembly
 	history, _ := r.store.GetSessionMessages(sessionID)
-	var conversationMsgs []agent.Message
-	conversationMsgs = append(conversationMsgs, agent.Message{Role: "system", Content: sysPrompt})
-
-	// Helper to trim single massive messages exceeding 20k chars
-	cleanTurnContent := func(txt string, maxChars int) string {
-		if len(txt) <= maxChars {
-			return txt
-		}
-		half := maxChars / 2
-		return txt[:half] + "\n\n... [middle content trimmed for context window] ...\n\n" + txt[len(txt)-half:]
-	}
-
-	recentWindowSize := 8
-	if len(history) <= recentWindowSize {
-		// All history messages fit within recent focus buffer
-		for _, m := range history {
-			conversationMsgs = append(conversationMsgs, agent.Message{
-				Role:    m.Role,
-				Content: cleanTurnContent(m.Content, 24000),
-			})
-		}
-	} else {
-		// Compaction: summarize older turns (0 .. N-recentWindowSize) into a Memory Anchor
-		olderTurns := history[:len(history)-recentWindowSize]
-		recentTurns := history[len(history)-recentWindowSize:]
-
-		var anchor strings.Builder
-		anchor.WriteString("## [CONTEXT COMPACTION MEMORY ANCHOR]\n")
-		anchor.WriteString("The earlier part of this conversation was compacted to preserve context within the 128k limit. Key dialogue history:\n")
-		for _, ot := range olderTurns {
-			roleLabel := "User"
-			if ot.Role == "assistant" {
-				roleLabel = "Assistant"
-			} else if ot.Role == "tool" {
-				roleLabel = "Tool Output"
-			}
-			c := strings.TrimSpace(ot.Content)
-			if len(c) > 280 {
-				c = c[:270] + "..."
-			}
-			anchor.WriteString(fmt.Sprintf("- [%s]: %s\n", roleLabel, c))
-		}
-		anchor.WriteString("\nThe active, recent conversation follows verbatim below:\n")
-
-		// Inject memory anchor as a system message right after main system prompt
-		conversationMsgs = append(conversationMsgs, agent.Message{
-			Role:    "system",
-			Content: anchor.String(),
-		})
-
-		// Add recent turns verbatim
-		for _, m := range recentTurns {
-			conversationMsgs = append(conversationMsgs, agent.Message{
-				Role:    m.Role,
-				Content: cleanTurnContent(m.Content, 24000),
-			})
-		}
-
-		// Check total estimated tokens (threshold ~100k tokens out of 128k)
-		totalChars := 0
-		for _, m := range conversationMsgs {
-			totalChars += len(m.Content)
-		}
-		if totalChars/4 > 100000 {
-			r.bus.Publish(messaging.Event{
-				Type:      "session.compacted",
-				SessionID: sessionID,
-				Payload: map[string]interface{}{
-					"message": "Conversation context approached 100k token limit; active working memory compacted to guarantee safety margin within 128k context.",
-				},
-			})
-		}
-	}
+	conversationMsgs := AssembleLayeredContext(ctx, sessionID, cleanPrompt, sysPrompt, modelToUse, history, r.store, r.bus)
 
 	// The last assembled message is the just-saved user turn. When a /doc:
 	// injection is active, give the model the full document context while the
@@ -669,6 +635,10 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 			toolsParam = nil
 		}
 
+		var textStreamStarted bool
+		var textStreamInReasoning bool
+		var textInitialBuf strings.Builder
+
 		streamRes, err := StreamOpenAICompatible(ctx, endpoint, apiKey, modelToUse, conversationMsgs, toolsParam, StreamCallbacks{
 			OnThinking: func(delta string) {
 				finalThought.WriteString(delta)
@@ -683,6 +653,52 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 				})
 			},
 			OnText: func(delta string) {
+				if !textStreamStarted {
+					textInitialBuf.WriteString(delta)
+					bufStr := textInitialBuf.String()
+					if !strings.Contains(bufStr, "\n") && len(bufStr) < 140 {
+						return
+					}
+					textStreamStarted = true
+					trimmed := strings.TrimSpace(bufStr)
+					if isReasoningBlock(trimmed) {
+						textStreamInReasoning = true
+						finalThought.WriteString(bufStr)
+						r.bus.Publish(messaging.Event{
+							Type:      messaging.EventAgentThinkingDelta,
+							SessionID: sessionID,
+							AgentID:   agentConfig.ID,
+							Channel:   channel,
+							Payload:   messaging.ThinkingDeltaPayload{Delta: bufStr},
+						})
+						return
+					}
+					// Flush buffered real dialogue
+					r.bus.Publish(messaging.Event{
+						Type:      messaging.EventAgentTextDelta,
+						SessionID: sessionID,
+						AgentID:   agentConfig.ID,
+						Channel:   channel,
+						Payload:   messaging.TextDeltaPayload{Delta: bufStr},
+					})
+					return
+				}
+
+				if textStreamInReasoning {
+					finalThought.WriteString(delta)
+					if strings.Contains(delta, "\n") {
+						textStreamInReasoning = false
+					}
+					r.bus.Publish(messaging.Event{
+						Type:      messaging.EventAgentThinkingDelta,
+						SessionID: sessionID,
+						AgentID:   agentConfig.ID,
+						Channel:   channel,
+						Payload:   messaging.ThinkingDeltaPayload{Delta: delta},
+					})
+					return
+				}
+
 				r.bus.Publish(messaging.Event{
 					Type:      messaging.EventAgentTextDelta,
 					SessionID: sessionID,
@@ -694,6 +710,21 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 				})
 			},
 		})
+
+		if !textStreamStarted && textInitialBuf.Len() > 0 {
+			buffered := textInitialBuf.String()
+			if isReasoningBlock(buffered) {
+				finalThought.WriteString(buffered)
+			} else {
+				r.bus.Publish(messaging.Event{
+					Type:      messaging.EventAgentTextDelta,
+					SessionID: sessionID,
+					AgentID:   agentConfig.ID,
+					Channel:   channel,
+					Payload:   messaging.TextDeltaPayload{Delta: buffered},
+				})
+			}
+		}
 
 		if err != nil {
 			log.Printf("SSE stream error (%v), attempting fallback...", err)
@@ -824,20 +855,38 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 	thought = agent.StripToolCallMarkup(thought)
 	finalContent = agent.StripToolCallMarkup(finalContent)
 
+	// Clean unflagged reasoning / meta-talk (e.g. "The user is...", "User said...")
+	cleanedContent, extractedThought := stripUnflaggedReasoning(finalContent)
+	if extractedThought != "" {
+		if thought == "" {
+			thought = extractedThought
+		} else {
+			thought = thought + "\n\n" + extractedThought
+		}
+		finalContent = cleanedContent
+	}
+
+	reNamePrefix := regexp.MustCompile(`^\[[^\]]+\]:\s*`)
+	finalContent = strings.TrimSpace(reNamePrefix.ReplaceAllString(finalContent, ""))
+
 	// 9. Save Assistant Message
 	assistantMsg := SessionMessage{
-		ID:         uuid.New().String(),
-		SessionID:  sessionID,
-		AgentID:    agentConfig.ID,
-		Channel:    channel,
-		Role:       "assistant",
-		Content:    finalContent,
-		Thought:    thought,
-		ToolCalls:  recordedToolCalls,
-		RagSources: dedupeRagSources(ragSources),
-		Tokens:     totalTokens,
-		Model:      modelToUse,
-		CreatedAt:  time.Now().UnixMilli(),
+		ID:           uuid.New().String(),
+		SessionID:    sessionID,
+		AgentID:      agentConfig.ID,
+		Channel:      channel,
+		Role:         "assistant",
+		SenderType:   "agent",
+		SenderID:     agentConfig.ID,
+		SenderName:   agentConfig.Name,
+		SenderAvatar: agentConfig.Avatar,
+		Content:      finalContent,
+		Thought:      thought,
+		ToolCalls:    recordedToolCalls,
+		RagSources:   dedupeRagSources(ragSources),
+		Tokens:       totalTokens,
+		Model:        modelToUse,
+		CreatedAt:    time.Now().UnixMilli(),
 	}
 	_ = r.store.SaveMessage(assistantMsg)
 
@@ -850,6 +899,10 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		Payload:   assistantMsg,
 	})
 	r.taskMgr.Complete(bgTask.ID, assistantMsg.Content)
+
+	if sess.Type == "group" && !wasStrictMention {
+		go r.triggerGroupPOV(sessionID, agentConfig.ID, rawPrompt, assistantMsg.Content, channel)
+	}
 
 	return &assistantMsg, nil
 }
@@ -1169,4 +1222,582 @@ func (r *Runtime) autoGenerateSessionTitle(sessionID, endpoint, apiKey, model, u
 		Payload:   *sess,
 		Timestamp: time.Now(),
 	})
+}
+
+func resolveGroupTurnAgent(prompt string, participants []ChatParticipant, allAgents []AgentConfig) (string, bool) {
+	low := strings.ToLower(prompt)
+
+	agentMap := make(map[string]AgentConfig)
+	for _, a := range allAgents {
+		agentMap[a.ID] = a
+	}
+
+	// 1. Explicit @mentions (e.g. @Alex, @Marcus, @AlexRivera, @lead-frontend)
+	for _, ag := range allAgents {
+		handle := "@" + strings.ToLower(ag.ID)
+		nameHandle := "@" + strings.ToLower(strings.ReplaceAll(ag.Name, " ", ""))
+		firstName := strings.ToLower(strings.Split(ag.Name, " ")[0])
+		firstNameHandle := "@" + firstName
+
+		if strings.Contains(low, handle) || strings.Contains(low, nameHandle) || strings.Contains(low, firstNameHandle) {
+			return ag.ID, true
+		}
+	}
+
+	// 2. Direct vocatives & greetings (e.g. "Halo Alex", "Hai Marcus", "Hey Elena", "lex,", "chen:", "alex gimana")
+	for _, ag := range allAgents {
+		firstName := strings.ToLower(strings.Split(ag.Name, " ")[0])
+		nameParts := strings.Fields(strings.ToLower(ag.Name))
+		lastName := ""
+		if len(nameParts) > 1 {
+			lastName = nameParts[len(nameParts)-1]
+		}
+
+		nicknames := []string{firstName}
+		if lastName != "" {
+			nicknames = append(nicknames, lastName)
+		}
+		if firstName == "alex" {
+			nicknames = append(nicknames, "lex")
+		} else if firstName == "marcus" {
+			nicknames = append(nicknames, "chen")
+		} else if ag.ID == "personal-assistant" {
+			nicknames = append(nicknames, "pa", "assistant")
+		}
+
+		for _, nick := range nicknames {
+			// Greeting prefixes: "halo alex", "hai marcus", "hi alex", "hey chen", etc.
+			for _, g := range []string{"halo " + nick, "hai " + nick, "hi " + nick, "hey " + nick, "hello " + nick, "woi " + nick, "bro " + nick, "bang " + nick} {
+				if strings.Contains(low, g) {
+					return ag.ID, true
+				}
+			}
+
+			// Punctuation addressing: "alex,", "marcus:", "lex ", "chen?"
+			if strings.HasPrefix(low, nick+",") || strings.HasPrefix(low, nick+":") || strings.HasPrefix(low, nick+" ") ||
+				strings.Contains(low, "gimana "+nick) || strings.Contains(low, nick+" gimana") ||
+				strings.Contains(low, "apa "+nick) || strings.Contains(low, nick+" apa") ||
+				strings.Contains(low, "menurut "+nick) || strings.Contains(low, "to "+nick) {
+				return ag.ID, true
+			}
+
+			// Distinct standalone word match
+			matched, _ := regexp.MatchString(`\b`+regexp.QuoteMeta(nick)+`\b`, low)
+			if matched && len(nick) >= 3 && nick != "and" && nick != "all" && nick != "the" && nick != "apa" {
+				return ag.ID, true
+			}
+		}
+	}
+
+	// 3. Domain keyword matching (General question / topic)
+	bestAgent := ""
+	bestScore := 0
+
+	for _, p := range participants {
+		if p.ParticipantType != "agent" {
+			continue
+		}
+		ag, ok := agentMap[p.ParticipantID]
+		if !ok {
+			continue
+		}
+
+		score := 0
+		roleLow := strings.ToLower(ag.Name + " " + ag.Role + " " + ag.Department + " " + ag.Description + " " + strings.Join(ag.Skills, " "))
+
+		if ag.ID == "lead-frontend" || strings.Contains(roleLow, "frontend") {
+			for _, kw := range []string{"frontend", "react", "ui", "tailwind", "css", "component", "vite", "web", "html", "browser", "ux", "screen", "button", "layout"} {
+				if strings.Contains(low, kw) {
+					score += 5
+				}
+			}
+		}
+		if ag.ID == "lead-backend" || strings.Contains(roleLow, "backend") {
+			for _, kw := range []string{"backend", "golang", "go", "sqlite", "sql", "database", "db", "query", "websocket", "socket", "server", "api", "endpoint", "concurrency", "goroutine", "table", "schema"} {
+				if strings.Contains(low, kw) {
+					score += 5
+				}
+			}
+		}
+		if ag.ID == "lead-architecture" || strings.Contains(roleLow, "architect") {
+			for _, kw := range []string{"architecture", "arsitektur", "design system", "distributed", "system design", "microservice", "infrastructure", "scalability", "pattern"} {
+				if strings.Contains(low, kw) {
+					score += 5
+				}
+			}
+		}
+		if ag.ID == "legal" || strings.Contains(roleLow, "legal") {
+			for _, kw := range []string{"legal", "lisensi", "license", "compliance", "copyright", "gpl", "mit", "apache", "hukum", "kontrak"} {
+				if strings.Contains(low, kw) {
+					score += 5
+				}
+			}
+		}
+		if ag.ID == "personal-assistant" {
+			for _, kw := range []string{"jadwal", "reminder", "schedule", "routine", "koordinasi", "todo", "task", "meeting", "ingat", "catat"} {
+				if strings.Contains(low, kw) {
+					score += 5
+				}
+			}
+		}
+
+		for _, word := range strings.Fields(low) {
+			word = strings.Trim(word, ",.?!\"':;()[]{}")
+			if len(word) >= 4 && strings.Contains(roleLow, word) {
+				score += 2
+			}
+		}
+
+		if score > bestScore {
+			bestScore = score
+			bestAgent = ag.ID
+		}
+	}
+
+	if bestAgent != "" && bestScore >= 4 {
+		return bestAgent, false
+	}
+
+	// 4. Default to first participant agent, or personal-assistant
+	if len(participants) > 0 {
+		for _, p := range participants {
+			if p.ParticipantType == "agent" {
+				return p.ParticipantID, false
+			}
+		}
+	}
+	return "personal-assistant", false
+}
+
+// isStrictlyMentioned returns true if prompt explicitly targets a specific agent
+func isStrictlyMentioned(prompt string, allAgents []AgentConfig) bool {
+	low := strings.ToLower(prompt)
+	for _, ag := range allAgents {
+		handle := "@" + strings.ToLower(ag.ID)
+		nameHandle := "@" + strings.ToLower(strings.ReplaceAll(ag.Name, " ", ""))
+		firstName := strings.ToLower(strings.Split(ag.Name, " ")[0])
+		firstNameHandle := "@" + firstName
+
+		if strings.Contains(low, handle) || strings.Contains(low, nameHandle) || strings.Contains(low, firstNameHandle) {
+			return true
+		}
+
+		nameParts := strings.Fields(strings.ToLower(ag.Name))
+		lastName := ""
+		if len(nameParts) > 1 {
+			lastName = nameParts[len(nameParts)-1]
+		}
+
+		nicknames := []string{firstName}
+		if lastName != "" {
+			nicknames = append(nicknames, lastName)
+		}
+		if firstName == "alex" {
+			nicknames = append(nicknames, "lex")
+		} else if firstName == "marcus" {
+			nicknames = append(nicknames, "chen")
+		} else if ag.ID == "personal-assistant" {
+			nicknames = append(nicknames, "pa", "assistant")
+		}
+
+		for _, nick := range nicknames {
+			for _, g := range []string{"halo " + nick, "hai " + nick, "hi " + nick, "hey " + nick, "hello " + nick, "woi " + nick, "bro " + nick, "bang " + nick} {
+				if strings.Contains(low, g) {
+					return true
+				}
+			}
+			if strings.HasPrefix(low, nick+",") || strings.HasPrefix(low, nick+":") || strings.HasPrefix(low, nick+" ") ||
+				strings.Contains(low, "gimana "+nick) || strings.Contains(low, nick+" gimana") ||
+				strings.Contains(low, "apa "+nick) || strings.Contains(low, nick+" apa") ||
+				strings.Contains(low, "menurut "+nick) || strings.Contains(low, "to "+nick) {
+				return true
+			}
+			matched, _ := regexp.MatchString(`\b`+regexp.QuoteMeta(nick)+`\b`, low)
+			if matched && len(nick) >= 3 && nick != "and" && nick != "all" && nick != "the" && nick != "apa" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func isReasoningBlock(s string) bool {
+	low := strings.ToLower(strings.TrimSpace(s))
+	if low == "" {
+		return false
+	}
+	prefixes := []string{
+		"the user is", "the user asks", "the user wants", "the user said",
+		"the user directed", "the user's", "user said", "user is",
+		"user asks", "user wants", "i should", "i need to",
+		"i can explain", "i will adopt", "i am adopting", "i'm adopting",
+		"let me", "let's", "wait,", "so i am", "looking at",
+		"thinking process:", "reasoning:", "internal thought:",
+		"in this response", "in this turn", "as marcus chen,", "as alex rivera,",
+	}
+	for _, p := range prefixes {
+		if strings.HasPrefix(low, p) {
+			return true
+		}
+	}
+	return false
+}
+
+func stripUnflaggedReasoning(content string) (string, string) {
+	trimmed := strings.TrimSpace(content)
+	if trimmed == "" {
+		return "", ""
+	}
+
+	// 1. Try paragraph split (\n\n)
+	paragraphs := strings.Split(content, "\n\n")
+	if len(paragraphs) > 1 {
+		first := strings.TrimSpace(paragraphs[0])
+		if isReasoningBlock(first) {
+			var thoughts []string
+			var actualDialogue []string
+			inReasoning := true
+			for _, p := range paragraphs {
+				pTrim := strings.TrimSpace(p)
+				if inReasoning && (pTrim == "" || isReasoningBlock(pTrim)) {
+					if pTrim != "" {
+						thoughts = append(thoughts, pTrim)
+					}
+				} else {
+					inReasoning = false
+					actualDialogue = append(actualDialogue, p)
+				}
+			}
+			if len(actualDialogue) > 0 {
+				return strings.TrimSpace(strings.Join(actualDialogue, "\n\n")), strings.Join(thoughts, "\n\n")
+			}
+		}
+	}
+
+	// 2. Try single newline split (\n) if reasoning and dialogue are on consecutive lines
+	lines := strings.Split(content, "\n")
+	if len(lines) > 1 {
+		firstLine := strings.TrimSpace(lines[0])
+		if isReasoningBlock(firstLine) {
+			var thoughts []string
+			var actualDialogue []string
+			inReasoning := true
+			for _, l := range lines {
+				lTrim := strings.TrimSpace(l)
+				if inReasoning && (lTrim == "" || isReasoningBlock(lTrim)) {
+					if lTrim != "" {
+						thoughts = append(thoughts, lTrim)
+					}
+				} else {
+					inReasoning = false
+					actualDialogue = append(actualDialogue, l)
+				}
+			}
+			if len(actualDialogue) > 0 {
+				return strings.TrimSpace(strings.Join(actualDialogue, "\n")), strings.Join(thoughts, "\n")
+			}
+		}
+	}
+
+	return content, ""
+}
+
+func (r *Runtime) triggerGroupPOV(sessionID, activeAgentID, userPrompt, primaryResponse, channel string) {
+	// Natural pause before peer chimes in
+	time.Sleep(1500 * time.Millisecond)
+
+	trimmedPrompt := strings.TrimSpace(strings.ToLower(userPrompt))
+	if len(trimmedPrompt) < 6 || trimmedPrompt == "halo" || trimmedPrompt == "test" || trimmedPrompt == "tes" || trimmedPrompt == "ok" || trimmedPrompt == "oke" {
+		return
+	}
+
+	participants, err := r.store.ListChatParticipants(sessionID)
+	if err != nil || len(participants) < 2 {
+		return
+	}
+
+	var peerAgentIDs []string
+	for _, p := range participants {
+		if p.ParticipantType == "agent" && p.ParticipantID != activeAgentID {
+			peerAgentIDs = append(peerAgentIDs, p.ParticipantID)
+		}
+	}
+	if len(peerAgentIDs) == 0 {
+		return
+	}
+
+	allAgents, _ := r.store.ListAgents()
+	if isStrictlyMentioned(userPrompt, allAgents) {
+		return
+	}
+	agentMap := make(map[string]AgentConfig)
+	for _, a := range allAgents {
+		agentMap[a.ID] = a
+	}
+
+	bestPeerID := selectPOVPeer(activeAgentID, peerAgentIDs, userPrompt, primaryResponse, agentMap)
+	peerAgent, exists := agentMap[bestPeerID]
+	if !exists {
+		return
+	}
+
+	defaultModel, defaultProv := r.ResolveDefaultModel()
+	peerModel := peerAgent.Model
+	if peerModel == "" {
+		peerModel = defaultModel
+	}
+	var provCfg *ProviderConfig
+	if peerAgent.ProviderID != "" {
+		provCfg, _ = r.store.GetProvider(peerAgent.ProviderID)
+	}
+	if provCfg == nil {
+		providersList, _ := r.store.ListProviders()
+		for _, p := range providersList {
+			if !p.Enabled {
+				continue
+			}
+			for _, m := range p.Models {
+				if m.ID == peerModel || strings.EqualFold(m.ID, peerModel) {
+					provCfg = &p
+					peerModel = m.ID
+					break
+				}
+			}
+			if provCfg != nil {
+				break
+			}
+		}
+	}
+	if provCfg == nil {
+		provCfg = defaultProv
+	}
+	if provCfg == nil || provCfg.APIKey == "" {
+		return
+	}
+
+	activeAgentName := activeAgentID
+	if ag, ok := agentMap[activeAgentID]; ok {
+		activeAgentName = ag.Name
+	}
+
+	povSystemPrompt := fmt.Sprintf(
+		"You are %s, the %s (%s) at KendaliAI. You are participating in an active group chat with the user and team members.\n"+
+			"Your teammate %s just answered the user.\n\n"+
+			"RULES:\n"+
+			"- Provide a brief, natural point of view (POV) or collaborative reaction from your domain (%s).\n"+
+			"- Keep it conversational, in-character, and concise (1 to 2 short paragraphs max).\n"+
+			"- Do NOT repeat what %s already stated. Build upon it, add a practical consideration from your layer, or offer support.\n"+
+			"- Speak directly in character. NEVER output meta-reasoning, thought steps, or brackets like [%s]:.\n"+
+			"- If this topic has zero relevance to you or you have nothing meaningful to add, output exactly PASS.\n\n"+
+			"Persona Guidelines:\n%s",
+		peerAgent.Name, peerAgent.Role, peerAgent.Department, activeAgentName, peerAgent.Role, activeAgentName, peerAgent.Name, peerAgent.SystemPrompt,
+	)
+
+	povUserPrompt := fmt.Sprintf("User: \"%s\"\n\n%s: \"%s\"\n\nChime in briefly with your POV as %s (or PASS):",
+		userPrompt, activeAgentName, primaryResponse, peerAgent.Name)
+
+	povMessages := []agent.Message{
+		{Role: "system", Content: povSystemPrompt},
+		{Role: "user", Content: povUserPrompt},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	r.bus.Publish(messaging.Event{
+		Type:      messaging.EventAgentStarted,
+		SessionID: sessionID,
+		AgentID:   peerAgent.ID,
+		Channel:   channel,
+		Payload: map[string]interface{}{
+			"agentId":    peerAgent.ID,
+			"agentName":  peerAgent.Name,
+			"avatar":     peerAgent.Avatar,
+			"role":       peerAgent.Role,
+			"department": peerAgent.Department,
+			"model":      peerModel,
+		},
+	})
+	r.bus.Publish(messaging.Event{
+		Type:      messaging.EventAgentThinking,
+		SessionID: sessionID,
+		AgentID:   peerAgent.ID,
+		Channel:   channel,
+		Payload:   fmt.Sprintf("%s is typing...", peerAgent.Name),
+	})
+
+	var povBuf strings.Builder
+	var povStreamStarted bool
+	var povInReasoning bool
+	var povInitialBuf strings.Builder
+
+	streamRes, err := StreamOpenAICompatible(ctx, provCfg.Endpoint, provCfg.APIKey, peerModel, povMessages, nil, StreamCallbacks{
+		OnThinking: func(delta string) {
+			r.bus.Publish(messaging.Event{
+				Type:      messaging.EventAgentThinkingDelta,
+				SessionID: sessionID,
+				AgentID:   peerAgent.ID,
+				Channel:   channel,
+				Payload: messaging.ThinkingDeltaPayload{
+					Delta: delta,
+				},
+			})
+		},
+		OnText: func(delta string) {
+			povBuf.WriteString(delta)
+			if !povStreamStarted {
+				povInitialBuf.WriteString(delta)
+				bufStr := povInitialBuf.String()
+				if !strings.Contains(bufStr, "\n") && len(bufStr) < 140 {
+					return
+				}
+				povStreamStarted = true
+				trimmed := strings.TrimSpace(bufStr)
+				if isReasoningBlock(trimmed) {
+					povInReasoning = true
+					r.bus.Publish(messaging.Event{
+						Type:      messaging.EventAgentThinkingDelta,
+						SessionID: sessionID,
+						AgentID:   peerAgent.ID,
+						Channel:   channel,
+						Payload:   messaging.ThinkingDeltaPayload{Delta: bufStr},
+					})
+					return
+				}
+				r.bus.Publish(messaging.Event{
+					Type:      messaging.EventAgentTextDelta,
+					SessionID: sessionID,
+					AgentID:   peerAgent.ID,
+					Channel:   channel,
+					Payload:   messaging.TextDeltaPayload{Delta: bufStr},
+				})
+				return
+			}
+			if povInReasoning {
+				if strings.Contains(delta, "\n") {
+					povInReasoning = false
+				}
+				r.bus.Publish(messaging.Event{
+					Type:      messaging.EventAgentThinkingDelta,
+					SessionID: sessionID,
+					AgentID:   peerAgent.ID,
+					Channel:   channel,
+					Payload:   messaging.ThinkingDeltaPayload{Delta: delta},
+				})
+				return
+			}
+			r.bus.Publish(messaging.Event{
+				Type:      messaging.EventAgentTextDelta,
+				SessionID: sessionID,
+				AgentID:   peerAgent.ID,
+				Channel:   channel,
+				Payload: messaging.TextDeltaPayload{
+					Delta: delta,
+				},
+			})
+		},
+	})
+
+	if !povStreamStarted && povInitialBuf.Len() > 0 {
+		buffered := povInitialBuf.String()
+		if !isReasoningBlock(buffered) {
+			r.bus.Publish(messaging.Event{
+				Type:      messaging.EventAgentTextDelta,
+				SessionID: sessionID,
+				AgentID:   peerAgent.ID,
+				Channel:   channel,
+				Payload:   messaging.TextDeltaPayload{Delta: buffered},
+			})
+		}
+	}
+	if err != nil && streamRes == nil {
+		return
+	}
+
+	rawPOV := ""
+	if streamRes != nil && streamRes.Content != "" {
+		rawPOV = strings.TrimSpace(streamRes.Content)
+	} else {
+		rawPOV = strings.TrimSpace(povBuf.String())
+	}
+
+	if rawPOV == "" || strings.EqualFold(rawPOV, "pass") || strings.HasPrefix(strings.ToLower(rawPOV), "pass.") {
+		return
+	}
+
+	cleanPOV, _ := stripUnflaggedReasoning(rawPOV)
+	reNamePrefix := regexp.MustCompile(`^\[[^\]]+\]:\s*`)
+	cleanPOV = strings.TrimSpace(reNamePrefix.ReplaceAllString(cleanPOV, ""))
+	if cleanPOV == "" || strings.EqualFold(cleanPOV, "pass") {
+		return
+	}
+
+	peerMsg := SessionMessage{
+		ID:           uuid.New().String(),
+		SessionID:    sessionID,
+		AgentID:      peerAgent.ID,
+		Channel:      channel,
+		Role:         "assistant",
+		SenderType:   "agent",
+		SenderID:     peerAgent.ID,
+		SenderName:   peerAgent.Name,
+		SenderAvatar: peerAgent.Avatar,
+		Content:      cleanPOV,
+		Model:        peerModel,
+		CreatedAt:    time.Now().UnixMilli(),
+	}
+	_ = r.store.SaveMessage(peerMsg)
+
+	r.bus.Publish(messaging.Event{
+		Type:      messaging.EventMessageCreated,
+		SessionID: sessionID,
+		AgentID:   peerAgent.ID,
+		Channel:   channel,
+		Payload:   peerMsg,
+	})
+
+	r.bus.Publish(messaging.Event{
+		Type:      messaging.EventAgentCompleted,
+		SessionID: sessionID,
+		AgentID:   peerAgent.ID,
+		Channel:   channel,
+		Payload:   peerMsg,
+	})
+}
+
+func selectPOVPeer(activeAgentID string, candidateIDs []string, userPrompt, primaryResponse string, agentMap map[string]AgentConfig) string {
+	combined := strings.ToLower(userPrompt + " " + primaryResponse)
+
+	var scores = make(map[string]int)
+	for _, id := range candidateIDs {
+		scores[id] = 1
+		ag := agentMap[id]
+		roleLow := strings.ToLower(ag.Role + " " + ag.Department + " " + strings.Join(ag.Skills, " "))
+
+		if (id == "lead-frontend" || strings.Contains(roleLow, "frontend")) && (strings.Contains(combined, "api") || strings.Contains(combined, "websocket") || strings.Contains(combined, "server") || strings.Contains(combined, "data") || strings.Contains(combined, "ui") || strings.Contains(combined, "user")) {
+			scores[id] += 5
+		}
+		if (id == "lead-backend" || strings.Contains(roleLow, "backend")) && (strings.Contains(combined, "ui") || strings.Contains(combined, "component") || strings.Contains(combined, "react") || strings.Contains(combined, "fetch") || strings.Contains(combined, "store") || strings.Contains(combined, "post")) {
+			scores[id] += 5
+		}
+		if (id == "lead-architecture" || strings.Contains(roleLow, "architect")) && (strings.Contains(combined, "system") || strings.Contains(combined, "architecture") || strings.Contains(combined, "flow") || strings.Contains(combined, "scale") || strings.Contains(combined, "pattern")) {
+			scores[id] += 5
+		}
+		if id == "personal-assistant" && (strings.Contains(combined, "jadwal") || strings.Contains(combined, "next") || strings.Contains(combined, "plan") || strings.Contains(combined, "todo") || strings.Contains(combined, "langkah")) {
+			scores[id] += 4
+		}
+		if strings.Contains(roleLow, "security") && (strings.Contains(combined, "auth") || strings.Contains(combined, "token") || strings.Contains(combined, "secret") || strings.Contains(combined, "security")) {
+			scores[id] += 6
+		}
+	}
+
+	bestID := candidateIDs[0]
+	bestScore := -1
+	for _, id := range candidateIDs {
+		if scores[id] > bestScore {
+			bestScore = scores[id]
+			bestID = id
+		}
+	}
+	return bestID
 }

@@ -1,359 +1,239 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Plus,
   Search,
   X,
-  Pin,
   Trash2,
   ChevronDown,
   ChevronRight,
   MessageSquare,
   Send,
-  Puzzle,
   Settings,
   Bot,
+  Users,
+  Clock,
   Sparkles,
+  Terminal,
+  Shield,
+  Cpu,
+  Code2,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { navigate } from '../router';
 import { GrokAvatar } from './GrokAvatar';
-import { TelegramBotConfig } from '../types';
-
-interface AgentGroupMeta {
-  id: string;
-  name: string;
-  avatar: string;
-  role?: string;
-  department?: string;
-  model?: string;
-}
+import { CreateGroupModal } from './CreateGroupModal';
+import { AgentConfig, Session } from '../types';
 
 export interface SidebarProps {
   onClose?: () => void;
   isMobile?: boolean;
 }
 
+type TabFilter = 'all' | 'direct' | 'groups' | 'general';
+
 export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) => {
   const {
     sessions,
     activeSessionId,
     selectSession,
-    createSession,
     deleteSession,
     agents,
     activeAgent,
-    setActiveAgent,
-    setActiveModel,
+    createDirectChat,
+    createGeneralChat,
+    telegramAgents,
   } = useAppStore();
 
   const [sessionSearch, setSessionSearch] = useState('');
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
-  const [telegramBots, setTelegramBots] = useState<TelegramBotConfig[]>([]);
+  const [activeTab, setActiveTab] = useState<TabFilter>('all');
+  const [isGeneralCollapsed, setIsGeneralCollapsed] = useState(false);
+  const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
 
-  // Load telegram bots to show live connection pills
-  useEffect(() => {
-    fetch('/api/telegram/bots')
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) setTelegramBots(data);
-      })
-      .catch(() => {});
-  }, []);
+  // Separate sessions by type
+  const { directSessions, groupSessions, generalSessions } = useMemo(() => {
+    const direct: Session[] = [];
+    const group: Session[] = [];
+    const general: Session[] = [];
 
-  // Map of connected bots by agentId
-  const connectedBotsMap = useMemo(() => {
-    const map = new Map<string, TelegramBotConfig>();
-    telegramBots.forEach((b) => {
-      if (b.agentId) map.set(b.agentId, b);
-    });
-    return map;
-  }, [telegramBots]);
-
-  // Combine store agents and office workers from localStorage
-  const officeStaffList = useMemo<AgentGroupMeta[]>(() => {
-    const list: AgentGroupMeta[] = [];
-    const seenIds = new Set<string>();
-
-    // 1. Office workers from localStorage or default staff
-    try {
-      const saved = localStorage.getItem('kendali_office_workers');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          parsed.forEach((w: any) => {
-            if (w.id && !seenIds.has(w.id)) {
-              seenIds.add(w.id);
-              list.push({
-                id: w.id,
-                name: w.role || w.name,
-                avatar: w.avatar || 'blue-drop',
-                role: w.role,
-                department: w.department,
-                model: w.model,
-              });
-            }
-          });
-        }
+    sessions.forEach((s) => {
+      if (s.type === 'group') {
+        group.push(s);
+      } else if (s.type === 'direct' || (s.agentId && !s.type)) {
+        direct.push(s);
+      } else {
+        general.push(s);
       }
-    } catch {}
+    });
 
-    // Fallback default staff if empty
-    if (list.length === 0) {
-      const defaults: AgentGroupMeta[] = [
-        { id: 'lead-frontend', name: 'Senior Dev', avatar: 'blue-drop', role: 'Lead Frontend Dev', department: 'Engineering', model: 'gpt-4o' },
-        { id: 'lead-architecture', name: 'Architect Lead', avatar: 'cyan-bubble', role: 'Lead Architecture', department: 'Architecture', model: 'claude-3-7-sonnet' },
-        { id: 'lead-backend', name: 'Lead Backend Dev', avatar: 'green-cloud', role: 'Lead Backend Dev', department: 'Engineering', model: 'qwen2.5-coder:latest' },
-        { id: 'legal-counsel', name: 'Legal Counsel', avatar: 'bronze-shield', role: 'Legal & Compliance', department: 'Legal', model: 'gpt-4o' },
-        { id: 'chief-security', name: 'Security Lead', avatar: 'ruby-capsule', role: 'Chief Security Officer', department: 'Security', model: 'gpt-4o' },
-        { id: 'devops-lead', name: 'DevOps Lead', avatar: 'orange-leaf', role: 'DevOps & Infra', department: 'Operations', model: 'deepseek-chat' },
-      ];
-      defaults.forEach((d) => {
-        seenIds.add(d.id);
-        list.push(d);
+    return { directSessions: direct, groupSessions: group, generalSessions: general };
+  }, [sessions]);
+
+  // Combine agents with direct sessions to form persistent contacts list
+  const directAgentContacts = useMemo(() => {
+    const list: {
+      agent: AgentConfig;
+      session?: Session;
+      lastMessageSnippet?: string;
+      lastMessageTime?: number;
+      telegramConnected: boolean;
+    }[] = [];
+
+    // All registered agents
+    agents.forEach((agent) => {
+      const sess = directSessions.find(
+        (s) => s.id === `direct_${agent.id}` || s.agentId === agent.id
+      );
+
+      const isTg =
+        agent.telegramConnected ||
+        !!telegramAgents[agent.id]?.connected;
+
+      const lastSnippet = sess?.lastMessage
+        ? sess.lastMessage.content?.slice(0, 55) || 'Sent attachment'
+        : sess?.summary || agent.role || agent.description || 'Available for instructions';
+
+      const lastTime = sess?.lastMessage?.createdAt || sess?.updatedAt || sess?.createdAt;
+
+      list.push({
+        agent,
+        session: sess,
+        lastMessageSnippet: lastSnippet,
+        lastMessageTime: lastTime,
+        telegramConnected: isTg,
       });
-    }
-
-    // 2. Agents from backend store
-    (agents || []).forEach((a) => {
-      if (!seenIds.has(a.id)) {
-        seenIds.add(a.id);
-        list.push({
-          id: a.id,
-          name: a.name.replace(/^[^\w\s]+/, '').trim() || a.id,
-          avatar: a.avatar || a.id,
-          model: a.model,
-        });
-      }
     });
 
+    // Sort by recent activity
+    list.sort((a, b) => (b.lastMessageTime || 0) - (a.lastMessageTime || 0));
     return list;
-  }, [agents]);
+  }, [agents, directSessions, telegramAgents]);
 
-  // Filter sessions by search term
-  const filteredSessions = useMemo(() => {
-    if (!sessionSearch.trim()) return sessions;
-    const q = sessionSearch.toLowerCase().trim();
-    return sessions.filter(
-      (s) => (s.title || '').toLowerCase().includes(q) || s.id.toLowerCase().includes(q)
-    );
-  }, [sessions, sessionSearch]);
+  // Format relative timestamp
+  const formatTime = (ts?: number) => {
+    if (!ts) return '';
+    const now = Date.now();
+    const timeMs = ts < 1e11 ? ts * 1000 : ts; // handle seconds vs ms
+    const diffSec = Math.floor((now - timeMs) / 1000);
 
-  // Group sessions under each staff agent and sort by recent active activity
-  const groupedSessions = useMemo(() => {
-    const groups: { agent: AgentGroupMeta; sessions: typeof sessions }[] = [];
-    const assignedSessionIds = new Set<string>();
-
-    officeStaffList.forEach((agent) => {
-      const agentSessions = filteredSessions.filter((s) => {
-        if (s.agentId === agent.id) return true;
-        // Also match common aliases
-        if (agent.id === 'lead-frontend' && (s.agentId === 'coder' || s.agentId === 'coding-agent')) return true;
-        if (agent.id === 'lead-architecture' && s.agentId === 'planner') return true;
-        if (agent.id === 'chief-security' && s.agentId === 'reviewer') return true;
-        return false;
-      });
-
-      // Sort sessions within each agent by latest updated/created first
-      agentSessions.sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0));
-
-      agentSessions.forEach((s) => assignedSessionIds.add(s.id));
-      groups.push({ agent, sessions: agentSessions });
-    });
-
-    // Unassigned or general sessions
-    const unassigned = filteredSessions.filter((s) => !assignedSessionIds.has(s.id));
-    if (unassigned.length > 0) {
-      unassigned.sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0));
-      groups.push({
-        agent: {
-          id: 'general',
-          name: 'Chief of Staff',
-          avatar: 'purple-pebble',
-          role: 'General Assistant',
-        },
-        sessions: unassigned,
-      });
-    }
-
-    // Sort groups calmly: prioritize agent workers with genuine recent incoming Telegram messages (< 15 mins),
-    // otherwise sort by actual recent activity timestamp without aggressive jumping on click
-    const getGroupScore = (g: (typeof groups)[0]) => {
-      let maxTime = 0;
-      let latestTgTime = 0;
-
-      for (const s of g.sessions) {
-        const t = s.updatedAt || s.createdAt || 0;
-        if (t > maxTime) maxTime = t;
-
-        const isTg = s.id.startsWith('tg-') || (s as any).channelId === 'telegram' || (s as any).channel === 'telegram';
-        if (isTg && t > latestTgTime) {
-          latestTgTime = t;
-        }
-      }
-
-      // Prioritize only if there is genuine recent incoming Telegram activity (< 15 mins)
-      const nowSec = Math.floor(Date.now() / 1000);
-      if (latestTgTime > 0 && nowSec - latestTgTime < 900) {
-        return 1000000000 + latestTgTime;
-      }
-
-      return maxTime;
-    };
-
-    groups.sort((a, b) => {
-      const scoreA = getGroupScore(a);
-      const scoreB = getGroupScore(b);
-      if (scoreA !== scoreB) {
-        return scoreB - scoreA;
-      }
-      // Put workers with sessions before workers with 0 sessions
-      if (a.sessions.length > 0 && b.sessions.length === 0) return -1;
-      if (a.sessions.length === 0 && b.sessions.length > 0) return 1;
-      return 0;
-    });
-
-    return groups;
-  }, [officeStaffList, filteredSessions]);
-
-  // Sorted staff list for mobile carousel (recent active agent worker / new telegram message first)
-  const sortedStaffList = useMemo(() => {
-    const list = [...officeStaffList];
-    const nowSec = Math.floor(Date.now() / 1000);
-
-    list.sort((a, b) => {
-      const aSessions = sessions.filter((s) => s.agentId === a.id);
-      const bSessions = sessions.filter((s) => s.agentId === b.id);
-
-      const aTgTime = aSessions.reduce((max, s) => {
-        const isTg = s.id.startsWith('tg-') || (s as any).channelId === 'telegram' || (s as any).channel === 'telegram';
-        return isTg ? Math.max(max, s.updatedAt || s.createdAt || 0) : max;
-      }, 0);
-
-      const bTgTime = bSessions.reduce((max, s) => {
-        const isTg = s.id.startsWith('tg-') || (s as any).channelId === 'telegram' || (s as any).channel === 'telegram';
-        return isTg ? Math.max(max, s.updatedAt || s.createdAt || 0) : max;
-      }, 0);
-
-      // Prioritize recent Telegram activity (< 15 mins)
-      const aRecentTg = aTgTime > 0 && nowSec - aTgTime < 900;
-      const bRecentTg = bTgTime > 0 && nowSec - bTgTime < 900;
-      if (aRecentTg || bRecentTg) {
-        if (aRecentTg && !bRecentTg) return -1;
-        if (!aRecentTg && bRecentTg) return 1;
-        if (aTgTime !== bTgTime) return bTgTime - aTgTime;
-      }
-
-      const aTime = aSessions.reduce((max, s) => Math.max(max, s.updatedAt || s.createdAt || 0), 0);
-      const bTime = bSessions.reduce((max, s) => Math.max(max, s.updatedAt || s.createdAt || 0), 0);
-      return bTime - aTime;
-    });
-    return list;
-  }, [officeStaffList, sessions]);
-
-  const toggleGroupCollapse = (agentId: string) => {
-    setCollapsedGroups((prev) => ({
-      ...prev,
-      [agentId]: !prev[agentId],
-    }));
+    if (diffSec < 60) return 'now';
+    if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m`;
+    if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h`;
+    return new Date(timeMs).toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
 
-  const handleSelectSession = async (sessionId: string, agentId?: string) => {
-    if (agentId) {
-      const matched = agents.find((a) => a.id === agentId);
-      if (matched) {
-        setActiveAgent(matched);
-        if (matched.model) setActiveModel(matched.model);
-      } else {
-        const staff = officeStaffList.find((s) => s.id === agentId);
-        if (staff) {
-          if (staff.model) setActiveModel(staff.model);
-          setActiveAgent({
-            id: staff.id,
-            name: staff.role || staff.name,
-            description: `Staff Worker: ${staff.role || staff.name}`,
-            providerId: '',
-            model: staff.model || '',
-            systemPrompt: `You are ${staff.name}. Execute instructions thoroughly and report back clearly.`,
-            skills: [],
-            tools: ['bash', 'file.write', 'file.read', 'git_worktree', 'web.fetch', 'telegram.send'],
-            mcp: [],
-            memoryScopes: ['user', 'workspace'],
-            policy: {},
-            avatar: staff.avatar,
-            isDefault: false,
-          });
-        }
-      }
-    }
+  // Filter contacts by search
+  const filteredContacts = useMemo(() => {
+    if (!sessionSearch.trim()) return directAgentContacts;
+    const q = sessionSearch.toLowerCase();
+    return directAgentContacts.filter(
+      (c) =>
+        c.agent.name.toLowerCase().includes(q) ||
+        (c.agent.role || '').toLowerCase().includes(q) ||
+        (c.lastMessageSnippet || '').toLowerCase().includes(q)
+    );
+  }, [directAgentContacts, sessionSearch]);
+
+  // Filter group chats
+  const filteredGroups = useMemo(() => {
+    if (!sessionSearch.trim()) return groupSessions;
+    const q = sessionSearch.toLowerCase();
+    return groupSessions.filter(
+      (g) =>
+        g.title.toLowerCase().includes(q) ||
+        (g.lastMessage?.content || '').toLowerCase().includes(q)
+    );
+  }, [groupSessions, sessionSearch]);
+
+  // Filter general chats
+  const filteredGeneral = useMemo(() => {
+    if (!sessionSearch.trim()) return generalSessions;
+    const q = sessionSearch.toLowerCase();
+    return generalSessions.filter(
+      (s) =>
+        s.title.toLowerCase().includes(q) ||
+        (s.lastMessage?.content || '').toLowerCase().includes(q)
+    );
+  }, [generalSessions, sessionSearch]);
+
+  const handleSelectAgentContact = async (agentId: string) => {
+    await createDirectChat(agentId);
+    onClose?.();
+    navigate('chat');
+  };
+
+  const handleSelectGroup = async (groupId: string) => {
+    await selectSession(groupId);
+    onClose?.();
+    navigate('chat');
+  };
+
+  const handleSelectGeneral = async (sessionId: string) => {
     await selectSession(sessionId);
     onClose?.();
     navigate('chat');
   };
 
-  const handleCreateChatForAgent = async (agent: AgentGroupMeta) => {
-    if (agent.model) {
-      setActiveModel(agent.model);
-    }
-    const matched = agents.find((a) => a.id === agent.id);
-    if (matched) {
-      setActiveAgent(matched);
-      if (matched.model) setActiveModel(matched.model);
-    } else {
-      setActiveAgent({
-        id: agent.id,
-        name: agent.role || agent.name,
-        description: `Staff Worker: ${agent.role || agent.name}`,
-        providerId: '',
-        model: agent.model || '',
-        systemPrompt: `You are ${agent.name}. Execute instructions thoroughly and report back clearly.`,
-        skills: [],
-        tools: ['bash', 'file.write', 'file.read', 'git_worktree', 'web.fetch', 'telegram.send'],
-        mcp: [],
-        memoryScopes: ['user', 'workspace'],
-        policy: {},
-        avatar: agent.avatar,
-        isDefault: false,
-      });
-    }
-    const newSessionId = await createSession(agent.id);
-    await selectSession(newSessionId);
+  const handleNewGeneralChat = async () => {
+    await createGeneralChat('New Chat');
     onClose?.();
     navigate('chat');
+  };
+
+  // Group avatar icon helper
+  const renderGroupIcon = (avatar?: string) => {
+    switch (avatar) {
+      case 'terminal':
+        return <Terminal size={18} className="text-emerald-500" />;
+      case 'shield':
+        return <Shield size={18} className="text-amber-500" />;
+      case 'cpu':
+        return <Cpu size={18} className="text-indigo-500" />;
+      case 'code':
+        return <Code2 size={18} className="text-blue-500" />;
+      case 'sparkles':
+        return <Sparkles size={18} className="text-purple-500" />;
+      default:
+        return <Users size={18} className="text-[#007AFF]" />;
+    }
   };
 
   return (
     <aside
       data-pencil-name="Sidebar"
-      className={`box-border ${isMobile ? 'w-full' : 'w-[280px]'} shrink-0 h-full flex flex-col justify-between bg-[#FFFFFF] border-r border-[#E5E7EB] dark:bg-[#141414] dark:border-[#27272A] select-none`}
+      className={`box-border ${
+        isMobile ? 'w-full' : 'w-[300px]'
+      } shrink-0 h-full flex flex-col justify-between bg-[#FFFFFF] border-r border-[#E5E7EB] dark:bg-[#141414] dark:border-[#27272A] select-none`}
     >
       {/* Top Header */}
-      <div className="p-3.5 pb-2 flex flex-col gap-3 border-b border-[#E5E7EB] dark:border-[#27272A]">
-        {/* macOS Traffic Lights + New Chat Trigger + Mobile Close */}
+      <div className="p-3.5 pb-2 flex flex-col gap-2.5 border-b border-[#E5E7EB] dark:border-[#27272A]">
+        {/* macOS Traffic Lights + Actions */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-full bg-[#FF5F56] border border-[#E0443E]" />
             <span className="w-3 h-3 rounded-full bg-[#FFBD2E] border border-[#DEA123]" />
             <span className="w-3 h-3 rounded-full bg-[#27C93F] border border-[#1AAB29]" />
-            {isMobile && (
-              <span className="ml-2 text-xs font-bold text-[#000000] dark:text-white font-sans">
-                Agents &amp; Sessions
-              </span>
-            )}
+            <span className="ml-2 text-xs font-bold text-[#000000] dark:text-white font-sans">
+              Chats
+            </span>
           </div>
 
           <div className="flex items-center gap-1">
+            {/* New Group Button */}
             <button
-              onClick={async () => {
-                const sid = await createSession();
-                await selectSession(sid);
-                onClose?.();
-                navigate('chat');
-              }}
-              className="p-1 rounded-[6px] text-[#8A8A85] hover:text-[#000000] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer flex items-center gap-1"
-              title="Create New Chat"
+              onClick={() => setIsCreateGroupOpen(true)}
+              className="p-1 rounded-[6px] text-[#8A8A85] hover:text-[#007AFF] hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors cursor-pointer"
+              title="Create Group Chat"
+            >
+              <Users size={16} />
+            </button>
+
+            {/* New General Chat */}
+            <button
+              onClick={handleNewGeneralChat}
+              className="p-1 rounded-[6px] text-[#8A8A85] hover:text-[#000000] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
+              title="New General Chat"
             >
               <Plus size={16} strokeWidth={2.2} />
-              {isMobile && <span className="text-[11px] font-bold">New Chat</span>}
             </button>
 
             {isMobile && onClose && (
@@ -368,249 +248,333 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
           </div>
         </div>
 
-        {/* Mobile Specialist Staff Agent Quick Switcher Carousel */}
-        {isMobile && (
-          <div className="flex flex-col gap-1.5 pb-2 border-b border-[#E5E7EB] dark:border-[#27272A]">
-            <div className="flex items-center justify-between px-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85]">
-                Specialist Staff Agents
-              </span>
-              <button
-                onClick={() => {
-                  onClose?.();
-                  navigate('agency');
-                }}
-                className="text-[10px] font-semibold text-[#007AFF] hover:underline"
-              >
-                Agency HQ →
-              </button>
-            </div>
-            <div className="flex items-center gap-2 overflow-x-auto py-1 no-scrollbar px-1">
-              {sortedStaffList.map((staff) => {
-                const isCurrentActive = activeAgent?.id === staff.id;
-                return (
-                  <button
-                    key={staff.id}
-                    type="button"
-                    onClick={() => handleCreateChatForAgent(staff)}
-                    className={`flex flex-col items-center p-2 rounded-[8px] border shrink-0 transition-all cursor-pointer ${
-                      isCurrentActive
-                        ? 'border-[#007AFF] bg-blue-50/70 dark:bg-blue-950/30 shadow-xs'
-                        : 'border-[#E5E7EB] dark:border-[#2C2C2E] bg-[#FAFAFA] dark:bg-[#1C1C1E] hover:border-gray-300'
-                    }`}
-                    style={{ minWidth: '76px' }}
-                    title={`${staff.name} (${staff.role || ''})`}
-                  >
-                    <GrokAvatar id={staff.avatar || staff.id} size={30} className="mb-1" />
-                    <span className="text-[10px] font-bold text-[#000000] dark:text-white truncate max-w-[70px] leading-tight">
-                      {staff.name}
-                    </span>
-                    <span className="text-[9px] text-[#8A8A85] truncate max-w-[70px] leading-tight mt-0.5">
-                      {staff.role?.split(' ')[0] || staff.department || 'Staff'}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Search Filter Input */}
-        <div className="w-full h-[32px] flex items-center gap-2 px-2.5 bg-[#F7F7F5] dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[6px]">
+        {/* Search Bar */}
+        <div className="w-full h-[32px] flex items-center gap-2 px-2.5 bg-[#F7F7F5] dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[8px]">
           <Search size={13} className="text-[#8A8A85] shrink-0" />
           <input
             type="text"
             value={sessionSearch}
             onChange={(e) => setSessionSearch(e.target.value)}
-            placeholder="Search sessions..."
+            placeholder="Search agents, groups, messages..."
             className="text-[12px] bg-transparent text-[#000000] dark:text-white placeholder:text-[#8A8A85] outline-none w-full font-sans"
           />
           {sessionSearch && (
-            <button onClick={() => setSessionSearch('')} className="text-[#8A8A85] hover:text-black">
+            <button onClick={() => setSessionSearch('')} className="text-[#8A8A85] hover:text-black dark:hover:text-white cursor-pointer">
               <X size={12} />
             </button>
           )}
         </div>
+
+        {/* Filter Tabs (WhatsApp Style) */}
+        <div className="flex items-center gap-1 pt-0.5">
+          {(['all', 'direct', 'groups', 'general'] as TabFilter[]).map((tab) => {
+            const isActive = activeTab === tab;
+            const labels: Record<TabFilter, string> = {
+              all: 'All',
+              direct: 'Direct',
+              groups: 'Groups',
+              general: 'General',
+            };
+            return (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setActiveTab(tab)}
+                className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold transition-colors cursor-pointer ${
+                  isActive
+                    ? 'bg-[#007AFF] text-white'
+                    : 'bg-[#F3F4F6] dark:bg-[#27272A] text-[#6B7280] dark:text-[#A1A1AA] hover:bg-[#E5E7EB] dark:hover:bg-[#3F3F46]'
+                }`}
+              >
+                {labels[tab]}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* Main Grouped Chat List by Staff Agent */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-3">
-        {groupedSessions.map(({ agent, sessions: agentSessions }) => {
-          const isCollapsed = !!collapsedGroups[agent.id];
-          const connectedBot = connectedBotsMap.get(agent.id);
-          const hasRunningBot = connectedBot && connectedBot.status === 'running';
+      {/* Main WhatsApp-Style Chat List */}
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-4">
+        {/* SECTION 1: DIRECT CHATS (Agent Persons) */}
+        {(activeTab === 'all' || activeTab === 'direct') && (
+          <div>
+            <div className="flex items-center justify-between px-2 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-[#8A8A85]">
+              <span>Direct Chats ({filteredContacts.length})</span>
+            </div>
 
-          const hasTelegramSessions = agentSessions.some(
-            (s) => s.id.startsWith('tg-') || (s as any).channelId === 'telegram' || (s as any).channel === 'telegram'
-          );
-
-          return (
-            <div key={agent.id} className="flex flex-col gap-1">
-              {/* [Icon] Staff Agent Header Row */}
-              <div
-                className="group flex items-center justify-between px-2 py-1.5 rounded-[8px] hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer transition-colors"
-                onClick={() => toggleGroupCollapse(agent.id)}
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  {/* Big Grok geometric SVG Icon matching screenshot */}
-                  <div className="relative shrink-0 flex items-center justify-center">
-                    <GrokAvatar id={agent.avatar || agent.id} size={38} className="shrink-0 drop-shadow-xs" />
-                    {hasRunningBot && (
-                      <span
-                        className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white dark:border-black animate-pulse"
-                        title={`Connected Bot: ${connectedBot.name} (Online)`}
-                      />
-                    )}
-                  </div>
-
-                  <div className="flex flex-col min-w-0">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="text-[13px] font-bold text-[#000000] dark:text-white font-sans truncate leading-tight">
-                        {agent.name}
-                      </span>
-                      {hasTelegramSessions && (
-                        <span
-                          className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded text-[8px] font-bold bg-[#E1F2FB] dark:bg-[#0E3550] text-[#0088cc] shrink-0 font-mono"
-                          title="Connected with Telegram"
-                        >
-                          <Send size={7} /> TG
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-[11px] text-[#8A8A85] truncate font-sans">
-                      {agent.role || 'Autonomous Staff'}
-                    </span>
-                  </div>
+            <div className="space-y-1">
+              {filteredContacts.length === 0 ? (
+                <div className="text-center py-4 text-xs text-[#8A8A85]">
+                  No matching agent contacts.
                 </div>
+              ) : (
+                filteredContacts.map(({ agent, session, lastMessageSnippet, lastMessageTime, telegramConnected }) => {
+                  const isActive =
+                    activeSessionId === session?.id ||
+                    (!activeSessionId && activeAgent?.id === agent.id);
 
-                <div className="flex items-center gap-1 shrink-0">
-                  {/* Plus button: Start fresh chat with this agent */}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleCreateChatForAgent(agent);
-                    }}
-                    className="opacity-60 hover:opacity-100 p-1 text-[#8A8A85] hover:text-[#000000] dark:hover:text-white rounded hover:bg-black/10 dark:hover:bg-white/10 transition-all"
-                    title={`Start fresh chat with ${agent.name}`}
-                  >
-                    <Plus size={13} />
-                  </button>
-
-                  {/* Collapse chevron */}
-                  <span className="text-[#8A8A85] p-0.5">
-                    {isCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
-                  </span>
-                </div>
-              </div>
-
-              {/* Nested Session Chats under this Agent */}
-              {!isCollapsed && (
-                <div className="pl-6 space-y-0.5 border-l border-[#E5E7EB] dark:border-[#27272A] ml-3.5">
-                  {agentSessions.length === 0 ? (
-                    <button
-                      type="button"
-                      onClick={() => handleCreateChatForAgent(agent)}
-                      className="w-full text-left py-1 text-[11px] text-[#8A8A85] hover:text-[#007AFF] transition-colors flex items-center gap-1.5"
+                  return (
+                    <div
+                      key={agent.id}
+                      onClick={() => handleSelectAgentContact(agent.id)}
+                      className={`group flex items-center justify-between p-2 rounded-[10px] cursor-pointer transition-all ${
+                        isActive
+                          ? 'bg-[#EBF5FF] dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/50 shadow-2xs'
+                          : 'hover:bg-black/5 dark:hover:bg-white/5 border border-transparent'
+                      }`}
                     >
-                      <Plus size={11} className="text-[#8A8A85]" />
-                      <span>No sessions yet. Click to chat</span>
-                    </button>
-                  ) : (
-                    agentSessions.map((s, idx) => {
-                      const isActive = s.id === activeSessionId;
-                      const sessionLabel = s.title || `Session Chat ${idx + 1}`;
-                      const isTelegram =
-                        s.id.startsWith('tg-') ||
-                        (s as any).channelId === 'telegram' ||
-                        (s as any).channel === 'telegram';
-                      const isRecent = s.updatedAt && Date.now() / 1000 - s.updatedAt < 600;
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        {/* Grok Avatar with Online Indicator */}
+                        <div className="relative shrink-0 flex items-center justify-center">
+                          <GrokAvatar id={agent.avatar || agent.id} size={40} className="shrink-0 drop-shadow-xs" />
+                          <span
+                            className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white dark:border-black"
+                            title="Online"
+                          />
+                        </div>
 
-                      return (
-                        <div
-                          key={s.id}
-                          onClick={() => handleSelectSession(s.id, agent.id)}
-                          className={`group/session flex items-center justify-between px-2 py-1.5 rounded-[4px] cursor-pointer transition-colors text-left ${
-                            isActive
-                              ? 'bg-[#FFF5EB] dark:bg-[#2C2218] text-[#000000] dark:text-white font-semibold'
-                              : 'text-[#4B5563] dark:text-[#A1A1AA] hover:bg-black/5 dark:hover:bg-white/5'
-                          }`}
-                        >
-                          <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                            {isTelegram ? (
-                              <span
-                                className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded text-[8px] font-bold bg-[#E1F2FB] dark:bg-[#0E3550] text-[#0088cc] shrink-0 font-mono tracking-tight"
-                                title="Telegram Synced Chat"
-                              >
-                                <Send size={7} className="text-[#0088cc]" />
-                                <span>TG</span>
+                        {/* Text details */}
+                        <div className="flex flex-col min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-1">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="text-[13px] font-bold text-[#000000] dark:text-white font-sans truncate">
+                                {agent.name}
                               </span>
-                            ) : (
-                              <MessageSquare size={10} className="text-[#8A8A85] shrink-0 opacity-60" />
-                            )}
-
-                            {isTelegram && isRecent && (
-                              <span
-                                className="w-1.5 h-1.5 rounded-full bg-[#0088cc] animate-pulse shrink-0"
-                                title="Recent Telegram activity"
-                              />
-                            )}
-
-                            <span className="text-[11px] truncate font-sans">
-                              {sessionLabel}
+                              {telegramConnected && (
+                                <span
+                                  className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded text-[8px] font-bold bg-[#E1F2FB] dark:bg-[#0E3550] text-[#0088cc] shrink-0 font-mono"
+                                  title="Telegram Bot Linked"
+                                >
+                                  <Send size={7} /> TG
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-[#8A8A85] shrink-0 font-mono">
+                              {formatTime(lastMessageTime)}
                             </span>
                           </div>
 
-                          {/* Quick delete button (touch-friendly on mobile, hover on desktop) */}
+                          <div className="flex items-center justify-between gap-1 mt-0.5">
+                            <span className="text-[11px] text-[#6B7280] dark:text-[#9CA3AF] truncate font-sans">
+                              {lastMessageSnippet}
+                            </span>
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-gray-100 dark:bg-[#27272A] text-[#8A8A85] shrink-0">
+                              {agent.role?.split(' ')[0] || agent.department || 'Staff'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* SECTION 2: GROUP CHATS */}
+        {(activeTab === 'all' || activeTab === 'groups') && (
+          <div>
+            <div className="flex items-center justify-between px-2 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-[#8A8A85]">
+              <span>Group Chats ({filteredGroups.length})</span>
+              <button
+                type="button"
+                onClick={() => setIsCreateGroupOpen(true)}
+                className="text-[10px] font-bold text-[#007AFF] hover:underline flex items-center gap-0.5 cursor-pointer lowercase"
+              >
+                <Plus size={11} />
+                <span>new group</span>
+              </button>
+            </div>
+
+            <div className="space-y-1">
+              {filteredGroups.length === 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setIsCreateGroupOpen(true)}
+                  className="w-full text-center py-3 text-xs text-[#8A8A85] hover:text-[#007AFF] border border-dashed border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[8px] transition-colors cursor-pointer"
+                >
+                  + Create your first Group Chat
+                </button>
+              ) : (
+                filteredGroups.map((group) => {
+                  const isActive = activeSessionId === group.id;
+                  const memberCount = group.participants?.length || 0;
+                  const lastSnippet = group.lastMessage?.content || 'No messages yet';
+                  const lastTime = group.lastMessage?.createdAt || group.updatedAt || group.createdAt;
+
+                  return (
+                    <div
+                      key={group.id}
+                      onClick={() => handleSelectGroup(group.id)}
+                      className={`group flex items-center justify-between p-2 rounded-[10px] cursor-pointer transition-all ${
+                        isActive
+                          ? 'bg-[#EBF5FF] dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/50 shadow-2xs'
+                          : 'hover:bg-black/5 dark:hover:bg-white/5 border border-transparent'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        {/* Group Icon Circle */}
+                        <div className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900/40 flex items-center justify-center shrink-0">
+                          {renderGroupIcon(group.avatar)}
+                        </div>
+
+                        {/* Group Details */}
+                        <div className="flex flex-col min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-[13px] font-bold text-[#000000] dark:text-white font-sans truncate">
+                              {group.title}
+                            </span>
+                            <span className="text-[10px] text-[#8A8A85] shrink-0 font-mono">
+                              {formatTime(lastTime)}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between gap-1 mt-0.5">
+                            <span className="text-[11px] text-[#6B7280] dark:text-[#9CA3AF] truncate font-sans">
+                              {lastSnippet}
+                            </span>
+                            <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-blue-50 dark:bg-blue-900/40 text-[#007AFF] font-bold shrink-0">
+                              {memberCount} agents
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Delete group */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm(`Delete group "${group.title}"?`)) {
+                            deleteSession(group.id);
+                          }
+                        }}
+                        className="opacity-0 group-hover:opacity-100 p-1 text-[#8A8A85] hover:text-red-500 rounded transition-opacity ml-1 cursor-pointer"
+                        title="Delete group"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* SECTION 3: GENERAL CHAT ACCORDION */}
+        {(activeTab === 'all' || activeTab === 'general') && (
+          <div>
+            <div
+              className="flex items-center justify-between px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] cursor-pointer hover:text-black dark:hover:text-white transition-colors"
+              onClick={() => setIsGeneralCollapsed(!isGeneralCollapsed)}
+            >
+              <div className="flex items-center gap-1">
+                {isGeneralCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+                <span>General Chats ({filteredGeneral.length})</span>
+              </div>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleNewGeneralChat();
+                }}
+                className="text-[10px] font-bold text-[#007AFF] hover:underline flex items-center gap-0.5 cursor-pointer lowercase"
+                title="Create General Chat"
+              >
+                <Plus size={11} />
+                <span>new chat</span>
+              </button>
+            </div>
+
+            {!isGeneralCollapsed && (
+              <div className="space-y-0.5 pt-1">
+                {filteredGeneral.length === 0 ? (
+                  <button
+                    type="button"
+                    onClick={handleNewGeneralChat}
+                    className="w-full text-left py-1.5 px-2 text-[11px] text-[#8A8A85] hover:text-[#007AFF] transition-colors flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Plus size={12} />
+                    <span>Start a general chat</span>
+                  </button>
+                ) : (
+                  filteredGeneral.map((sess) => {
+                    const isActive = activeSessionId === sess.id;
+                    const lastSnippet = sess.lastMessage?.content || sess.title || 'General Chat';
+                    const lastTime = sess.lastMessage?.createdAt || sess.updatedAt || sess.createdAt;
+
+                    return (
+                      <div
+                        key={sess.id}
+                        onClick={() => handleSelectGeneral(sess.id)}
+                        className={`group/general flex items-center justify-between px-2.5 py-1.5 rounded-[8px] cursor-pointer transition-colors text-left ${
+                          isActive
+                            ? 'bg-[#FFF5EB] dark:bg-[#2C2218] text-[#000000] dark:text-white font-semibold'
+                            : 'text-[#4B5563] dark:text-[#A1A1AA] hover:bg-black/5 dark:hover:bg-white/5'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <MessageSquare size={12} className="text-[#8A8A85] shrink-0 opacity-70" />
+                          <span className="text-[11px] truncate font-sans">
+                            {sess.title || 'General Chat'}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className="text-[9px] text-[#8A8A85] font-mono">
+                            {formatTime(lastTime)}
+                          </span>
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              deleteSession(s.id);
+                              deleteSession(sess.id);
                             }}
-                            className="opacity-70 md:opacity-0 md:group-hover/session:opacity-100 p-1 text-[#8A8A85] hover:text-red-500 transition-opacity shrink-0 cursor-pointer"
+                            className="opacity-0 group-hover/general:opacity-100 p-0.5 text-[#8A8A85] hover:text-red-500 transition-opacity cursor-pointer"
                             title="Delete session"
                           >
                             <Trash2 size={11} />
                           </button>
                         </div>
-                      );
-                    })
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Bottom User & Utility Links */}
-      <div className="p-3 border-t border-[#E5E7EB] dark:border-[#27272A] flex flex-col gap-2">
-        {/* Plugins Link */}
+      {/* Bottom Shortcuts */}
+      <div className="p-3 border-t border-[#E5E7EB] dark:border-[#27272A] flex flex-col gap-1.5">
+        {/* Routines & Automations shortcut */}
         <button
           onClick={() => {
             onClose?.();
-            navigate('plugins');
+            navigate('scheduler');
           }}
           className="flex items-center gap-2 px-2 py-1.5 text-xs text-[#4B5563] dark:text-[#A1A1AA] hover:text-black dark:hover:text-white rounded-[6px] hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
         >
-          <Puzzle size={14} className="text-[#8A8A85]" />
-          <span>Plugins &amp; Skills</span>
+          <Clock size={14} className="text-[#D97706]" />
+          <span>Routines &amp; Automations</span>
         </button>
 
-        {/* Agency HQ shortcut */}
+        {/* Agent Persons shortcut */}
         <button
           onClick={() => {
             onClose?.();
-            navigate('agency');
+            navigate('agents');
           }}
           className="flex items-center gap-2 px-2 py-1.5 text-xs text-[#4B5563] dark:text-[#A1A1AA] hover:text-black dark:hover:text-white rounded-[6px] hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
         >
           <Bot size={14} className="text-[#007AFF]" />
-          <span>Agency HQ (Staff)</span>
+          <span>Agent Persons</span>
         </button>
 
-        {/* User Card */}
+        {/* Settings */}
         <div
           onClick={() => {
             onClose?.();
@@ -634,6 +598,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
           <Settings size={13} className="text-[#8A8A85]" />
         </div>
       </div>
+
+      {/* Create Group Modal */}
+      <CreateGroupModal
+        isOpen={isCreateGroupOpen}
+        onClose={() => setIsCreateGroupOpen(false)}
+      />
     </aside>
   );
 };

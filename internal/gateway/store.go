@@ -74,34 +74,78 @@ type ProviderConfig struct {
 }
 
 type AgentConfig struct {
-	ID           string            `json:"id"`
-	Name         string            `json:"name"`
-	Description  string            `json:"description"`
-	ProviderID   string            `json:"providerId"`
-	Model        string            `json:"model"`
-	SystemPrompt string            `json:"systemPrompt"`
-	Skills       []string          `json:"skills"`
-	Tools        []string          `json:"tools"`
-	MCP          []string          `json:"mcp"`
-	MemoryScopes []string          `json:"memoryScopes"`
-	Policy       map[string]string `json:"policy"`
-	Avatar       string            `json:"avatar"`
-	IsDefault    bool              `json:"isDefault"`
-	CreatedAt    int64             `json:"createdAt"`
-	UpdatedAt    int64             `json:"updatedAt"`
+	ID                 string            `json:"id"`
+	Name               string            `json:"name"`
+	Role               string            `json:"role,omitempty"`
+	Department         string            `json:"department,omitempty"`
+	Description        string            `json:"description"`
+	ProviderID         string            `json:"providerId"`
+	Model              string            `json:"model"`
+	SystemPrompt       string            `json:"systemPrompt"`
+	Skills             []string          `json:"skills"`
+	Tools              []string          `json:"tools"`
+	MCP                []string          `json:"mcp"`
+	MemoryScopes       []string          `json:"memoryScopes"`
+	Policy             map[string]string `json:"policy"`
+	Avatar             string            `json:"avatar"`
+	IsDefault          bool              `json:"isDefault"`
+	TelegramConnected  bool              `json:"telegramConnected"`
+	TelegramBot        *TelegramBotConfig `json:"telegramBot,omitempty"`
+	CreatedAt          int64             `json:"createdAt"`
+	UpdatedAt          int64             `json:"updatedAt"`
+}
+
+type ChatParticipant struct {
+	ID              string `json:"id"`
+	ChatID          string `json:"chatId"`
+	ParticipantType string `json:"participantType"` // "agent" or "user"
+	ParticipantID   string `json:"participantId"`
+	Role            string `json:"role"`            // "owner", "member"
+	JoinedAt        int64  `json:"joinedAt"`
+}
+
+type ChatSummary struct {
+	ChatID        string   `json:"chatId"`
+	Summary       string   `json:"summary"`
+	KeyDecisions  []string `json:"keyDecisions"`
+	LastMessageID string   `json:"lastMessageId"`
+	UpdatedAt     int64    `json:"updatedAt"`
+}
+
+type Routine struct {
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	Schedule        string `json:"schedule"`
+	Prompt          string `json:"prompt"`
+	TargetType      string `json:"targetType"` // "agent" or "group"
+	TargetID        string `json:"targetId"`
+	ChatID          string `json:"chatId"`
+	DeliverTelegram bool   `json:"deliverTelegram"`
+	Enabled         bool   `json:"enabled"`
+	LastRunAt       *int64 `json:"lastRunAt,omitempty"`
+	NextRunAt       *int64 `json:"nextRunAt,omitempty"`
+	RunCount        int    `json:"runCount"`
+	LastOutput      string `json:"lastOutput,omitempty"`
+	CreatedAt       int64  `json:"createdAt"`
+	UpdatedAt       int64  `json:"updatedAt"`
 }
 
 type Session struct {
-	ID        string `json:"id"`
-	AgentID   string `json:"agentId"`
-	Title     string `json:"title"`
-	ChannelID string `json:"channelId"`
-	UserID    string `json:"userId"`
-	Status    string `json:"status"`
-	Pinned    bool   `json:"pinned"`
-	Metadata  string `json:"metadata,omitempty"`
-	CreatedAt int64  `json:"createdAt"`
-	UpdatedAt int64  `json:"updatedAt"`
+	ID           string            `json:"id"`
+	AgentID      string            `json:"agentId"`
+	Title        string            `json:"title"`
+	Type         string            `json:"type,omitempty"` // "direct", "group", "general"
+	Avatar       string            `json:"avatar,omitempty"`
+	Summary      string            `json:"summary,omitempty"`
+	ChannelID    string            `json:"channelId"`
+	UserID       string            `json:"userId"`
+	Status       string            `json:"status"`
+	Pinned       bool              `json:"pinned"`
+	Metadata     string            `json:"metadata,omitempty"`
+	Participants []ChatParticipant `json:"participants,omitempty"`
+	LastMessage  *SessionMessage   `json:"lastMessage,omitempty"`
+	CreatedAt    int64             `json:"createdAt"`
+	UpdatedAt    int64             `json:"updatedAt"`
 }
 
 type ToolCallRecord struct {
@@ -114,17 +158,22 @@ type ToolCallRecord struct {
 }
 
 type SessionMessage struct {
-	ID         string           `json:"id"`
-	SessionID  string           `json:"sessionId"`
-	AgentID    string           `json:"agentId,omitempty"`
-	Channel    string           `json:"channel"`
-	Role       string           `json:"role"` // user, assistant, system, tool
-	Content    string           `json:"content"`
-	Thought    string           `json:"thought,omitempty"`
-	ToolCalls  []ToolCallRecord `json:"toolCalls,omitempty"`
-	ToolCallID string           `json:"toolCallId,omitempty"`
-	Tokens     int              `json:"tokens"`
-	Model      string           `json:"model,omitempty"`
+	ID               string           `json:"id"`
+	SessionID        string           `json:"sessionId"`
+	AgentID          string           `json:"agentId,omitempty"`
+	Channel          string           `json:"channel"`
+	Role             string           `json:"role"` // user, assistant, system, tool
+	SenderType       string           `json:"senderType,omitempty"` // user, agent, routine, system
+	SenderID         string           `json:"senderId,omitempty"`
+	SenderName       string           `json:"senderName,omitempty"`
+	SenderAvatar     string           `json:"senderAvatar,omitempty"`
+	RecipientAgentID string           `json:"recipientAgentId,omitempty"`
+	Content          string           `json:"content"`
+	Thought          string           `json:"thought,omitempty"`
+	ToolCalls        []ToolCallRecord `json:"toolCalls,omitempty"`
+	ToolCallID       string           `json:"toolCallId,omitempty"`
+	Tokens           int              `json:"tokens"`
+	Model            string           `json:"model,omitempty"`
 	// RagSources lists the documents injected as RAG context for this
 	// assistant turn, so the UI can show what grounded the answer.
 	RagSources []RagSource      `json:"ragSources,omitempty"`
@@ -282,21 +331,31 @@ func (s *Store) SeedInitialData(cfg *config.Config) {
 	_, _ = s.db.Exec("DELETE FROM agents WHERE id IN ('finance', 'data-science', 'general', 'engineer')")
 	_, _ = s.db.Exec("UPDATE agents SET provider_id = '', model = '' WHERE provider_id = 'deepseek' OR model LIKE 'deepseek%'")
 
+	// Migrate legacy emoji avatars to clean Grok SVG avatar identifiers
+	_, _ = s.db.Exec("UPDATE agents SET avatar = 'purple-pebble' WHERE avatar IN ('🎩', '🤖', '') OR avatar IS NULL")
+	_, _ = s.db.Exec("UPDATE agents SET avatar = 'emerald-spark' WHERE avatar IN ('🔍', '🔬')")
+	_, _ = s.db.Exec("UPDATE agents SET avatar = 'cyan-bubble' WHERE avatar IN ('📚', '🧠')")
+	_, _ = s.db.Exec("UPDATE agents SET avatar = 'blue-drop' WHERE avatar IN ('💻', '🛠️')")
+	_, _ = s.db.Exec("UPDATE agents SET avatar = 'ruby-capsule' WHERE avatar IN ('🛡️')")
+	_, _ = s.db.Exec("UPDATE agents SET avatar = 'amber-star' WHERE avatar IN ('📋')")
+
 	now := time.Now().Unix()
 	bootstrapAgents := []AgentConfig{
 		{
 			ID:           "personal-assistant",
 			Name:         "Personal Assistant",
+			Role:         "Personal Assistant & Executive Coordinator",
+			Department:   "Executive",
 			Description:  "Proactive daily coordinator, task manager, scheduling, and personal executive assistance.",
 			ProviderID:   "",
-			Model:        "",
+			Model:        "gpt-6-astra",
 			SystemPrompt: "You are Personal Assistant, a proactive executive coordinator. You organize schedules, manage tasks, coordinate with other specialized agents, and keep workflows structured and on track.",
 			Skills:       []string{"planning", "coordination", "task-management"},
 			Tools:        []string{"*"},
 			MCP:          []string{},
 			MemoryScopes: []string{"user", "agent", "session", "workspace"},
 			Policy:       map[string]string{},
-			Avatar:       "🎩",
+			Avatar:       "purple-pebble",
 			IsDefault:    true,
 			CreatedAt:    now,
 			UpdatedAt:    now,
@@ -304,16 +363,18 @@ func (s *Store) SeedInitialData(cfg *config.Config) {
 		{
 			ID:           "research-agent",
 			Name:         "Research Agent",
+			Role:         "Lead Research & Intelligence",
+			Department:   "Intelligence",
 			Description:  "In-depth research, web investigation, source synthesis, literature review, and factual verification.",
 			ProviderID:   "",
-			Model:        "",
+			Model:        "deepseek-v4-flash",
 			SystemPrompt: "You are Research Agent, an expert investigator and analyst. You gather facts, evaluate sources, synthesize complex multi-domain information, and provide clear, cited conclusions.",
 			Skills:       []string{"deep-research", "synthesis", "fact-checking"},
 			Tools:        []string{"http.*", "search", "filesystem.read"},
 			MCP:          []string{},
 			MemoryScopes: []string{"user", "session"},
 			Policy:       map[string]string{},
-			Avatar:       "🔍",
+			Avatar:       "emerald-spark",
 			IsDefault:    false,
 			CreatedAt:    now,
 			UpdatedAt:    now,
@@ -321,16 +382,18 @@ func (s *Store) SeedInitialData(cfg *config.Config) {
 		{
 			ID:           "knowledge-agent",
 			Name:         "Knowledge Agent",
+			Role:         "Knowledge & Second Brain Curator",
+			Department:   "Intelligence",
 			Description:  "Second brain, personal documentation, memory recall, concept mapping, and knowledge retrieval.",
 			ProviderID:   "",
-			Model:        "",
+			Model:        "gpt-5-6-luna",
 			SystemPrompt: "You are Knowledge Agent, curator of personal intelligence and second-brain memory. You store, categorize, connect concepts, retrieve documentation, and distill actionable insights.",
 			Skills:       []string{"knowledge-graph", "memory-retrieval", "note-taking"},
 			Tools:        []string{"filesystem.*", "search"},
 			MCP:          []string{},
 			MemoryScopes: []string{"user", "agent", "session"},
 			Policy:       map[string]string{},
-			Avatar:       "📚",
+			Avatar:       "cyan-bubble",
 			IsDefault:    false,
 			CreatedAt:    now,
 			UpdatedAt:    now,
@@ -338,9 +401,11 @@ func (s *Store) SeedInitialData(cfg *config.Config) {
 		{
 			ID:           "coding-agent",
 			Name:         "Coding Agent",
+			Role:         "Senior Full-Stack Engineer",
+			Department:   "Engineering",
 			Description:  "Senior software engineer for architectural planning, code authoring, debugging, refactoring, and test writing.",
 			ProviderID:   "",
-			Model:        "",
+			Model:        "codestral-latest",
 			SystemPrompt: "You are Coding Agent, a world-class senior software engineer and architect. You write clean, idiomatic, robust code, inspect systems thoroughly, diagnose bugs, and execute commands safely.",
 			Skills:       []string{"coding", "debugging", "code-review"},
 			Tools:        []string{"filesystem.*", "shell.*", "git.*", "search", "skill.*", "plugin.*"},
@@ -350,7 +415,7 @@ func (s *Store) SeedInitialData(cfg *config.Config) {
 				"shell.exec":       "approval",
 				"filesystem.write": "allow",
 			},
-			Avatar:    "💻",
+			Avatar:    "blue-drop",
 			IsDefault: false,
 			CreatedAt: now,
 			UpdatedAt: now,
@@ -358,16 +423,18 @@ func (s *Store) SeedInitialData(cfg *config.Config) {
 		{
 			ID:           "reviewer",
 			Name:         "Reviewer Agent",
+			Role:         "Code & Security Reviewer",
+			Department:   "Security",
 			Description:  "Specialized code and security reviewer. Analyzes git diffs, catches vulnerabilities, bugs, secret leaks, and enforces code quality.",
 			ProviderID:   "",
-			Model:        "",
+			Model:        "gpt-oss-120b",
 			SystemPrompt: "You are Reviewer Agent, a senior security and quality code reviewer. You review git diffs, source files, and workspace structures. You detect security flaws (OWASP top 10, injection, hardcoded secrets), race conditions, performance bottlenecks, and edge cases. You output structured, actionable review feedback with exact line references and remediation code.",
 			Skills:       []string{"code-review", "security-audit", "quality-assurance"},
 			Tools:        []string{"review.*", "git.*", "filesystem.read"},
 			MCP:          []string{},
 			MemoryScopes: []string{"user", "workspace"},
 			Policy:       map[string]string{},
-			Avatar:       "🛡️",
+			Avatar:       "ruby-capsule",
 			IsDefault:    false,
 			CreatedAt:    now,
 			UpdatedAt:    now,
@@ -375,16 +442,132 @@ func (s *Store) SeedInitialData(cfg *config.Config) {
 		{
 			ID:           "planner",
 			Name:         "Planner Agent",
+			Role:         "System Architecture Planner",
+			Department:   "Architecture",
 			Description:  "System architect and task decomposition specialist. Breaks complex requirements into step-by-step implementation plans.",
 			ProviderID:   "",
-			Model:        "",
+			Model:        "glm-5-3-flash",
 			SystemPrompt: "You are Planner Agent, an expert system architect and project planner. You break complex goals into structured phases, tasks, acceptance criteria, and worktree isolation plans without modifying code directly.",
 			Skills:       []string{"planning", "architecture", "task-decomposition"},
 			Tools:        []string{"filesystem.read", "search", "git.status"},
 			MCP:          []string{},
 			MemoryScopes: []string{"user", "workspace"},
 			Policy:       map[string]string{},
-			Avatar:       "📋",
+			Avatar:       "amber-star",
+			IsDefault:    false,
+			CreatedAt:    now,
+			UpdatedAt:    now,
+		},
+		{
+			ID:           "lead-frontend",
+			Name:         "Alex Rivera",
+			Role:         "Lead Frontend Dev",
+			Department:   "Engineering",
+			Description:  "Lead web developer specialized in React, TypeScript, Tailwind CSS, and mobile-responsive architectures.",
+			ProviderID:   "",
+			Model:        "gpt-6-astra",
+			SystemPrompt: "You are Alex Rivera, Lead Frontend Developer of KendaliAI. You architect modern, responsive user interfaces with React, TypeScript, and Tailwind CSS. You write clean, decoupled components, handle state management gracefully, and ensure 60fps snappy animations.",
+			Skills:       []string{"react-19", "typescript", "tailwind-css", "mobile-responsive", "vite-build"},
+			Tools:        []string{"bash", "file.write", "file.read", "git_worktree", "web.fetch", "telegram.send"},
+			MCP:          []string{},
+			MemoryScopes: []string{"user", "workspace"},
+			Policy:       map[string]string{},
+			Avatar:       "blue-drop",
+			IsDefault:    false,
+			CreatedAt:    now,
+			UpdatedAt:    now,
+		},
+		{
+			ID:           "lead-architecture",
+			Name:         "Elena Rostova",
+			Role:         "Lead Solution Architecture",
+			Department:   "Architecture",
+			Description:  "System architect designing modular component boundaries, git worktree branching, and RFC specifications.",
+			ProviderID:   "",
+			Model:        "glm-5-3-flash",
+			SystemPrompt: "You are Elena Rostova, Lead Solution Architect of KendaliAI. You define architectural blueprints, evaluate trade-offs between speed and modularity, specify API protocols, and govern system boundaries.",
+			Skills:       []string{"system-design", "worktree-branching", "domain-driven-design", "rfc-specifications"},
+			Tools:        []string{"file.read", "git_worktree", "web.fetch", "rag.query", "telegram.send"},
+			MCP:          []string{},
+			MemoryScopes: []string{"user", "workspace"},
+			Policy:       map[string]string{},
+			Avatar:       "cyan-bubble",
+			IsDefault:    false,
+			CreatedAt:    now,
+			UpdatedAt:    now,
+		},
+		{
+			ID:           "lead-backend",
+			Name:         "Marcus Chen",
+			Role:         "Lead Backend Dev",
+			Department:   "Engineering",
+			Description:  "Distributed systems engineer specialized in Go, SQLite/PostgreSQL, WebSockets, and low-latency API runtimes.",
+			ProviderID:   "",
+			Model:        "codestral-latest",
+			SystemPrompt: "You are Marcus Chen, Lead Backend Developer of KendaliAI. You build robust, concurrent Go servers, manage database persistence, write clean idiomatic Go, and optimize streaming RPCs.",
+			Skills:       []string{"golang", "sqlite", "websockets", "concurrency", "distributed-systems"},
+			Tools:        []string{"bash", "file.write", "file.read", "git_worktree", "rag.query", "telegram.send"},
+			MCP:          []string{},
+			MemoryScopes: []string{"user", "workspace"},
+			Policy:       map[string]string{},
+			Avatar:       "green-cloud",
+			IsDefault:    false,
+			CreatedAt:    now,
+			UpdatedAt:    now,
+		},
+		{
+			ID:           "legal-counsel",
+			Name:         "Sarah Vance",
+			Role:         "Legal Counsel & Compliance",
+			Department:   "Legal",
+			Description:  "Advises on open-source licensing, terms of service, AI data governance, and regulatory compliance.",
+			ProviderID:   "",
+			Model:        "gpt-5-6-luna",
+			SystemPrompt: "You are Sarah Vance, Legal & Compliance Counsel of KendaliAI. You review code licenses (MIT, Apache 2.0, GPL), data privacy considerations, and compliance risks.",
+			Skills:       []string{"licensing-audit", "compliance", "privacy-governance", "ip-review"},
+			Tools:        []string{"file.read", "web.fetch", "telegram.send"},
+			MCP:          []string{},
+			MemoryScopes: []string{"user", "workspace"},
+			Policy:       map[string]string{},
+			Avatar:       "bronze-shield",
+			IsDefault:    false,
+			CreatedAt:    now,
+			UpdatedAt:    now,
+		},
+		{
+			ID:           "chief-security",
+			Name:         "Kavita Patel",
+			Role:         "Chief Security Officer",
+			Department:   "Security",
+			Description:  "Oversees sandbox security, token encryption, permission policies, and OWASP audits.",
+			ProviderID:   "",
+			Model:        "gpt-oss-120b",
+			SystemPrompt: "You are Kavita Patel, Chief Security Officer of KendaliAI. You identify vulnerabilities, enforce least-privilege security policies, prevent credential leaks, and perform red-team analysis.",
+			Skills:       []string{"penetration-testing", "secret-scanning", "owasp-top-10", "rbac-policy"},
+			Tools:        []string{"file.read", "review.diff", "git.status", "telegram.send"},
+			MCP:          []string{},
+			MemoryScopes: []string{"user", "workspace"},
+			Policy:       map[string]string{},
+			Avatar:       "ruby-capsule",
+			IsDefault:    false,
+			CreatedAt:    now,
+			UpdatedAt:    now,
+		},
+		{
+			ID:           "devops-lead",
+			Name:         "Darius Thorne",
+			Role:         "DevOps & Infrastructure Lead",
+			Department:   "Operations",
+			Description:  "Maintains deployment pipelines, Docker containers, system daemons, and cloud infrastructure.",
+			ProviderID:   "",
+			Model:        "deepseek-v4-flash",
+			SystemPrompt: "You are Darius Thorne, DevOps & Infrastructure Lead of KendaliAI. You maintain CI/CD pipelines, Docker environments, release configurations, and system health daemons.",
+			Skills:       []string{"docker", "ci-cd", "linux-daemons", "monitoring", "networking"},
+			Tools:        []string{"bash", "file.write", "file.read", "git.status", "telegram.send"},
+			MCP:          []string{},
+			MemoryScopes: []string{"user", "workspace"},
+			Policy:       map[string]string{},
+			Avatar:       "orange-leaf",
 			IsDefault:    false,
 			CreatedAt:    now,
 			UpdatedAt:    now,
@@ -401,6 +584,8 @@ func (s *Store) SeedInitialData(cfg *config.Config) {
 			_ = s.SaveAgent(*existing)
 		}
 	}
+
+	_ = s.EnsureDirectChatsForAgents()
 
 	// 3. MCP Servers seed
 	mcps, err := s.ListMCPServers()
@@ -604,8 +789,29 @@ func (s *Store) DeleteProvider(id string) error {
 
 // --- Agents CRUD ---
 
+func (s *Store) populateTelegramForAgents(agents []AgentConfig) []AgentConfig {
+	bots, err := s.ListTelegramBots()
+	if err != nil {
+		return agents
+	}
+	botMap := make(map[string]*TelegramBotConfig)
+	for i := range bots {
+		if bots[i].AgentID != "" && bots[i].Enabled {
+			bCopy := bots[i]
+			botMap[bots[i].AgentID] = &bCopy
+		}
+	}
+	for i := range agents {
+		if bot, ok := botMap[agents[i].ID]; ok {
+			agents[i].TelegramConnected = true
+			agents[i].TelegramBot = bot
+		}
+	}
+	return agents
+}
+
 func (s *Store) ListAgents() ([]AgentConfig, error) {
-	rows, err := s.db.Query("SELECT id, name, description, provider_id, model, system_prompt, skills, tools, mcp, memory_scopes, policy, avatar, is_default, created_at, updated_at FROM agents ORDER BY is_default DESC, name ASC")
+	rows, err := s.db.Query("SELECT id, name, description, provider_id, model, system_prompt, skills, tools, mcp, memory_scopes, policy, avatar, is_default, COALESCE(role, ''), COALESCE(department, ''), created_at, updated_at FROM agents ORDER BY is_default DESC, name ASC")
 	if err != nil {
 		return nil, err
 	}
@@ -616,7 +822,7 @@ func (s *Store) ListAgents() ([]AgentConfig, error) {
 		var a AgentConfig
 		var skillsJSON, toolsJSON, mcpJSON, memoryJSON, policyJSON string
 		var isDef int
-		if err := rows.Scan(&a.ID, &a.Name, &a.Description, &a.ProviderID, &a.Model, &a.SystemPrompt, &skillsJSON, &toolsJSON, &mcpJSON, &memoryJSON, &policyJSON, &a.Avatar, &isDef, &a.CreatedAt, &a.UpdatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.Name, &a.Description, &a.ProviderID, &a.Model, &a.SystemPrompt, &skillsJSON, &toolsJSON, &mcpJSON, &memoryJSON, &policyJSON, &a.Avatar, &isDef, &a.Role, &a.Department, &a.CreatedAt, &a.UpdatedAt); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal([]byte(skillsJSON), &a.Skills)
@@ -627,15 +833,15 @@ func (s *Store) ListAgents() ([]AgentConfig, error) {
 		a.IsDefault = isDef == 1
 		res = append(res, a)
 	}
-	return res, nil
+	return s.populateTelegramForAgents(res), nil
 }
 
 func (s *Store) GetAgent(id string) (*AgentConfig, error) {
 	var a AgentConfig
 	var skillsJSON, toolsJSON, mcpJSON, memoryJSON, policyJSON string
 	var isDef int
-	err := s.db.QueryRow("SELECT id, name, description, provider_id, model, system_prompt, skills, tools, mcp, memory_scopes, policy, avatar, is_default, created_at, updated_at FROM agents WHERE id = ?", id).
-		Scan(&a.ID, &a.Name, &a.Description, &a.ProviderID, &a.Model, &a.SystemPrompt, &skillsJSON, &toolsJSON, &mcpJSON, &memoryJSON, &policyJSON, &a.Avatar, &isDef, &a.CreatedAt, &a.UpdatedAt)
+	err := s.db.QueryRow("SELECT id, name, description, provider_id, model, system_prompt, skills, tools, mcp, memory_scopes, policy, avatar, is_default, COALESCE(role, ''), COALESCE(department, ''), created_at, updated_at FROM agents WHERE id = ?", id).
+		Scan(&a.ID, &a.Name, &a.Description, &a.ProviderID, &a.Model, &a.SystemPrompt, &skillsJSON, &toolsJSON, &mcpJSON, &memoryJSON, &policyJSON, &a.Avatar, &isDef, &a.Role, &a.Department, &a.CreatedAt, &a.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -648,6 +854,16 @@ func (s *Store) GetAgent(id string) (*AgentConfig, error) {
 	_ = json.Unmarshal([]byte(memoryJSON), &a.MemoryScopes)
 	_ = json.Unmarshal([]byte(policyJSON), &a.Policy)
 	a.IsDefault = isDef == 1
+
+	bots, _ := s.ListTelegramBots()
+	for i := range bots {
+		if bots[i].AgentID == a.ID && bots[i].Enabled {
+			a.TelegramConnected = true
+			bCopy := bots[i]
+			a.TelegramBot = &bCopy
+			break
+		}
+	}
 	return &a, nil
 }
 
@@ -670,8 +886,8 @@ func (s *Store) SaveAgent(a AgentConfig) error {
 	a.UpdatedAt = time.Now().Unix()
 
 	_, err := s.db.Exec(`
-		INSERT INTO agents (id, name, description, provider_id, model, system_prompt, skills, tools, mcp, memory_scopes, policy, avatar, is_default, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO agents (id, name, description, provider_id, model, system_prompt, skills, tools, mcp, memory_scopes, policy, avatar, is_default, role, department, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			name = excluded.name,
 			description = excluded.description,
@@ -685,10 +901,12 @@ func (s *Store) SaveAgent(a AgentConfig) error {
 			policy = excluded.policy,
 			avatar = excluded.avatar,
 			is_default = excluded.is_default,
+			role = excluded.role,
+			department = excluded.department,
 			updated_at = excluded.updated_at`,
 		a.ID, a.Name, a.Description, a.ProviderID, a.Model, a.SystemPrompt,
 		string(skillsJSON), string(toolsJSON), string(mcpJSON), string(memJSON), string(polJSON),
-		a.Avatar, isDef, a.CreatedAt, a.UpdatedAt)
+		a.Avatar, isDef, a.Role, a.Department, a.CreatedAt, a.UpdatedAt)
 	return err
 }
 
@@ -700,7 +918,7 @@ func (s *Store) DeleteAgent(id string) error {
 // --- Sessions CRUD ---
 
 func (s *Store) ListSessions() ([]Session, error) {
-	rows, err := s.db.Query("SELECT id, agent_id, title, channel_id, user_id, status, pinned, metadata, created_at, updated_at FROM sessions ORDER BY pinned DESC, updated_at DESC")
+	rows, err := s.db.Query("SELECT id, agent_id, title, COALESCE(type, 'direct'), COALESCE(avatar, ''), COALESCE(summary, ''), channel_id, user_id, status, pinned, metadata, created_at, updated_at FROM sessions ORDER BY pinned DESC, updated_at DESC")
 	if err != nil {
 		return nil, err
 	}
@@ -711,13 +929,38 @@ func (s *Store) ListSessions() ([]Session, error) {
 		var sess Session
 		var pinned int
 		var meta sql.NullString
-		if err := rows.Scan(&sess.ID, &sess.AgentID, &sess.Title, &sess.ChannelID, &sess.UserID, &sess.Status, &pinned, &meta, &sess.CreatedAt, &sess.UpdatedAt); err != nil {
+		if err := rows.Scan(&sess.ID, &sess.AgentID, &sess.Title, &sess.Type, &sess.Avatar, &sess.Summary, &sess.ChannelID, &sess.UserID, &sess.Status, &pinned, &meta, &sess.CreatedAt, &sess.UpdatedAt); err != nil {
 			return nil, err
 		}
 		sess.Pinned = pinned == 1
 		if meta.Valid {
 			sess.Metadata = meta.String
 		}
+
+		// Load participants if group
+		if sess.Type == "group" {
+			parts, _ := s.ListChatParticipants(sess.ID)
+			sess.Participants = parts
+		}
+
+		// Populate last message
+		var lastMsg SessionMessage
+		var toolCallsJSON, toolCallID, model, thought, ragSourcesJSON sql.NullString
+		var agentID sql.NullString
+		errLast := s.db.QueryRow(`
+			SELECT id, session_id, agent_id, channel, role, COALESCE(sender_type, 'user'), COALESCE(sender_id, ''), COALESCE(sender_name, ''), COALESCE(sender_avatar, ''), COALESCE(recipient_agent_id, ''), content, thought, tool_calls, tool_call_id, tokens, model, rag_sources, created_at
+			FROM session_messages WHERE session_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`, sess.ID).
+			Scan(&lastMsg.ID, &lastMsg.SessionID, &agentID, &lastMsg.Channel, &lastMsg.Role, &lastMsg.SenderType, &lastMsg.SenderID, &lastMsg.SenderName, &lastMsg.SenderAvatar, &lastMsg.RecipientAgentID, &lastMsg.Content, &thought, &toolCallsJSON, &toolCallID, &lastMsg.Tokens, &model, &ragSourcesJSON, &lastMsg.CreatedAt)
+		if errLast == nil {
+			if agentID.Valid {
+				lastMsg.AgentID = agentID.String
+			}
+			if thought.Valid {
+				lastMsg.Thought = thought.String
+			}
+			sess.LastMessage = &lastMsg
+		}
+
 		res = append(res, sess)
 	}
 	return res, nil
@@ -727,8 +970,8 @@ func (s *Store) GetSession(id string) (*Session, error) {
 	var sess Session
 	var pinned int
 	var meta sql.NullString
-	err := s.db.QueryRow("SELECT id, agent_id, title, channel_id, user_id, status, pinned, metadata, created_at, updated_at FROM sessions WHERE id = ?", id).
-		Scan(&sess.ID, &sess.AgentID, &sess.Title, &sess.ChannelID, &sess.UserID, &sess.Status, &pinned, &meta, &sess.CreatedAt, &sess.UpdatedAt)
+	err := s.db.QueryRow("SELECT id, agent_id, title, COALESCE(type, 'direct'), COALESCE(avatar, ''), COALESCE(summary, ''), channel_id, user_id, status, pinned, metadata, created_at, updated_at FROM sessions WHERE id = ?", id).
+		Scan(&sess.ID, &sess.AgentID, &sess.Title, &sess.Type, &sess.Avatar, &sess.Summary, &sess.ChannelID, &sess.UserID, &sess.Status, &pinned, &meta, &sess.CreatedAt, &sess.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -739,6 +982,10 @@ func (s *Store) GetSession(id string) (*Session, error) {
 	if meta.Valid {
 		sess.Metadata = meta.String
 	}
+	if sess.Type == "group" {
+		parts, _ := s.ListChatParticipants(sess.ID)
+		sess.Participants = parts
+	}
 	return &sess, nil
 }
 
@@ -747,37 +994,317 @@ func (s *Store) SaveSession(sess Session) error {
 	if sess.Pinned {
 		pinned = 1
 	}
+	if sess.Type == "" {
+		if strings.HasPrefix(sess.ID, "group_") {
+			sess.Type = "group"
+		} else if strings.HasPrefix(sess.ID, "general_") {
+			sess.Type = "general"
+		} else {
+			sess.Type = "direct"
+		}
+	}
 	if sess.CreatedAt == 0 {
 		sess.CreatedAt = time.Now().Unix()
 	}
 	sess.UpdatedAt = time.Now().Unix()
 
 	_, err := s.db.Exec(`
-		INSERT INTO sessions (id, agent_id, title, channel_id, user_id, status, pinned, metadata, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO sessions (id, agent_id, title, type, avatar, summary, channel_id, user_id, status, pinned, metadata, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			agent_id = excluded.agent_id,
 			title = excluded.title,
+			type = excluded.type,
+			avatar = excluded.avatar,
+			summary = excluded.summary,
 			channel_id = excluded.channel_id,
 			user_id = excluded.user_id,
 			status = excluded.status,
 			pinned = excluded.pinned,
 			metadata = excluded.metadata,
 			updated_at = excluded.updated_at`,
-		sess.ID, sess.AgentID, sess.Title, sess.ChannelID, sess.UserID, sess.Status, pinned, sess.Metadata, sess.CreatedAt, sess.UpdatedAt)
-	return err
+		sess.ID, sess.AgentID, sess.Title, sess.Type, sess.Avatar, sess.Summary, sess.ChannelID, sess.UserID, sess.Status, pinned, sess.Metadata, sess.CreatedAt, sess.UpdatedAt)
+	if err != nil {
+		return err
+	}
+
+	if len(sess.Participants) > 0 {
+		partIDs := make([]string, 0, len(sess.Participants))
+		for _, p := range sess.Participants {
+			partIDs = append(partIDs, p.ParticipantID)
+		}
+		_ = s.SetChatParticipants(sess.ID, partIDs)
+	}
+
+	return nil
 }
 
 func (s *Store) DeleteSession(id string) error {
 	_, _ = s.db.Exec("DELETE FROM session_messages WHERE session_id = ?", id)
+	_, _ = s.db.Exec("DELETE FROM chat_participants WHERE chat_id = ?", id)
+	_, _ = s.db.Exec("DELETE FROM chat_summaries WHERE chat_id = ?", id)
 	_, err := s.db.Exec("DELETE FROM sessions WHERE id = ?", id)
 	return err
+}
+
+// --- Chat Participants CRUD ---
+
+func (s *Store) ListChatParticipants(chatID string) ([]ChatParticipant, error) {
+	rows, err := s.db.Query("SELECT id, chat_id, participant_type, participant_id, role, joined_at FROM chat_participants WHERE chat_id = ? ORDER BY joined_at ASC", chatID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	res := make([]ChatParticipant, 0)
+	for rows.Next() {
+		var p ChatParticipant
+		if err := rows.Scan(&p.ID, &p.ChatID, &p.ParticipantType, &p.ParticipantID, &p.Role, &p.JoinedAt); err != nil {
+			return nil, err
+		}
+		res = append(res, p)
+	}
+	return res, nil
+}
+
+func (s *Store) AddChatParticipant(p ChatParticipant) error {
+	if p.ID == "" {
+		p.ID = uuid.New().String()
+	}
+	if p.JoinedAt == 0 {
+		p.JoinedAt = time.Now().Unix()
+	}
+	if p.Role == "" {
+		p.Role = "member"
+	}
+	_, err := s.db.Exec(`
+		INSERT INTO chat_participants (id, chat_id, participant_type, participant_id, role, joined_at)
+		VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO NOTHING`,
+		p.ID, p.ChatID, p.ParticipantType, p.ParticipantID, p.Role, p.JoinedAt)
+	return err
+}
+
+func (s *Store) RemoveChatParticipant(chatID, participantID string) error {
+	_, err := s.db.Exec("DELETE FROM chat_participants WHERE chat_id = ? AND participant_id = ?", chatID, participantID)
+	return err
+}
+
+func (s *Store) SetChatParticipants(chatID string, participantIDs []string) error {
+	_, _ = s.db.Exec("DELETE FROM chat_participants WHERE chat_id = ?", chatID)
+	now := time.Now().Unix()
+	for _, pid := range participantIDs {
+		pType := "agent"
+		if pid == "user" || pid == "default" {
+			pType = "user"
+		}
+		_, _ = s.db.Exec(`
+			INSERT INTO chat_participants (id, chat_id, participant_type, participant_id, role, joined_at)
+			VALUES (?, ?, ?, ?, ?, ?)`,
+			uuid.New().String(), chatID, pType, pid, "member", now)
+	}
+	return nil
+}
+
+// --- Chat Summaries CRUD ---
+
+func (s *Store) GetChatSummary(chatID string) (*ChatSummary, error) {
+	var cs ChatSummary
+	var decJSON string
+	err := s.db.QueryRow("SELECT chat_id, summary, key_decisions, last_message_id, updated_at FROM chat_summaries WHERE chat_id = ?", chatID).
+		Scan(&cs.ChatID, &cs.Summary, &decJSON, &cs.LastMessageID, &cs.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	_ = json.Unmarshal([]byte(decJSON), &cs.KeyDecisions)
+	return &cs, nil
+}
+
+func (s *Store) SaveChatSummary(cs ChatSummary) error {
+	cs.UpdatedAt = time.Now().Unix()
+	decJSON, _ := json.Marshal(cs.KeyDecisions)
+	_, err := s.db.Exec(`
+		INSERT INTO chat_summaries (chat_id, summary, key_decisions, last_message_id, updated_at)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(chat_id) DO UPDATE SET
+			summary = excluded.summary,
+			key_decisions = excluded.key_decisions,
+			last_message_id = excluded.last_message_id,
+			updated_at = excluded.updated_at`,
+		cs.ChatID, cs.Summary, string(decJSON), cs.LastMessageID, cs.UpdatedAt)
+	return err
+}
+
+// --- Routines CRUD ---
+
+func (s *Store) ListRoutines() ([]Routine, error) {
+	rows, err := s.db.Query("SELECT id, name, schedule, prompt, target_type, target_id, chat_id, deliver_telegram, enabled, last_run_at, next_run_at, run_count, last_output, created_at, updated_at FROM routines ORDER BY created_at DESC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	res := make([]Routine, 0)
+	for rows.Next() {
+		var r Routine
+		var delTg, en int
+		var lastRun, nextRun sql.NullInt64
+		var lastOut sql.NullString
+		if err := rows.Scan(&r.ID, &r.Name, &r.Schedule, &r.Prompt, &r.TargetType, &r.TargetID, &r.ChatID, &delTg, &en, &lastRun, &nextRun, &r.RunCount, &lastOut, &r.CreatedAt, &r.UpdatedAt); err != nil {
+			return nil, err
+		}
+		r.DeliverTelegram = delTg == 1
+		r.Enabled = en == 1
+		if lastRun.Valid {
+			lr := lastRun.Int64
+			r.LastRunAt = &lr
+		}
+		if nextRun.Valid {
+			nr := nextRun.Int64
+			r.NextRunAt = &nr
+		}
+		if lastOut.Valid {
+			r.LastOutput = lastOut.String
+		}
+		res = append(res, r)
+	}
+	return res, nil
+}
+
+func (s *Store) GetRoutine(id string) (*Routine, error) {
+	var r Routine
+	var delTg, en int
+	var lastRun, nextRun sql.NullInt64
+	var lastOut sql.NullString
+	err := s.db.QueryRow("SELECT id, name, schedule, prompt, target_type, target_id, chat_id, deliver_telegram, enabled, last_run_at, next_run_at, run_count, last_output, created_at, updated_at FROM routines WHERE id = ?", id).
+		Scan(&r.ID, &r.Name, &r.Schedule, &r.Prompt, &r.TargetType, &r.TargetID, &r.ChatID, &delTg, &en, &lastRun, &nextRun, &r.RunCount, &lastOut, &r.CreatedAt, &r.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	r.DeliverTelegram = delTg == 1
+	r.Enabled = en == 1
+	if lastRun.Valid {
+		lr := lastRun.Int64
+		r.LastRunAt = &lr
+	}
+	if nextRun.Valid {
+		nr := nextRun.Int64
+		r.NextRunAt = &nr
+	}
+	if lastOut.Valid {
+		r.LastOutput = lastOut.String
+	}
+	return &r, nil
+}
+
+func (s *Store) SaveRoutine(r Routine) error {
+	delTg := 0
+	if r.DeliverTelegram {
+		delTg = 1
+	}
+	en := 0
+	if r.Enabled {
+		en = 1
+	}
+	if r.CreatedAt == 0 {
+		r.CreatedAt = time.Now().Unix()
+	}
+	r.UpdatedAt = time.Now().Unix()
+
+	var lastRunVal, nextRunVal interface{}
+	if r.LastRunAt != nil {
+		lastRunVal = *r.LastRunAt
+	}
+	if r.NextRunAt != nil {
+		nextRunVal = *r.NextRunAt
+	}
+
+	_, err := s.db.Exec(`
+		INSERT INTO routines (id, name, schedule, prompt, target_type, target_id, chat_id, deliver_telegram, enabled, last_run_at, next_run_at, run_count, last_output, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			name = excluded.name,
+			schedule = excluded.schedule,
+			prompt = excluded.prompt,
+			target_type = excluded.target_type,
+			target_id = excluded.target_id,
+			chat_id = excluded.chat_id,
+			deliver_telegram = excluded.deliver_telegram,
+			enabled = excluded.enabled,
+			last_run_at = excluded.last_run_at,
+			next_run_at = excluded.next_run_at,
+			run_count = excluded.run_count,
+			last_output = excluded.last_output,
+			updated_at = excluded.updated_at`,
+		r.ID, r.Name, r.Schedule, r.Prompt, r.TargetType, r.TargetID, r.ChatID, delTg, en, lastRunVal, nextRunVal, r.RunCount, r.LastOutput, r.CreatedAt, r.UpdatedAt)
+	return err
+}
+
+func (s *Store) DeleteRoutine(id string) error {
+	_, err := s.db.Exec("DELETE FROM routines WHERE id = ?", id)
+	return err
+}
+
+func (s *Store) EnsureDirectChatsForAgents() error {
+	agents, err := s.ListAgents()
+	if err != nil {
+		return err
+	}
+
+	// Ensure General Chat exists
+	genChat, _ := s.GetSession("general_default")
+	if genChat == nil {
+		_ = s.SaveSession(Session{
+			ID:        "general_default",
+			Title:     "General Chat",
+			Type:      "general",
+			AgentID:   "personal-assistant",
+			ChannelID: "web",
+			UserID:    "user",
+			Status:    "active",
+		})
+	}
+
+	// Ensure Direct 1:1 Chat exists for each agent
+	for _, a := range agents {
+		chatID := "direct_" + a.ID
+		existing, _ := s.GetSession(chatID)
+		if existing == nil {
+			_ = s.SaveSession(Session{
+				ID:        chatID,
+				AgentID:   a.ID,
+				Title:     a.Name,
+				Avatar:    a.Avatar,
+				Type:      "direct",
+				ChannelID: "web",
+				UserID:    "user",
+				Status:    "active",
+			})
+		} else {
+			if existing.Type == "" || existing.Type == "direct" {
+				existing.Type = "direct"
+				existing.Title = a.Name
+				existing.Avatar = a.Avatar
+				existing.AgentID = a.ID
+				_ = s.SaveSession(*existing)
+			}
+		}
+	}
+	return nil
 }
 
 // --- Session Messages CRUD ---
 
 func (s *Store) GetSessionMessages(sessionID string) ([]SessionMessage, error) {
-	rows, err := s.db.Query("SELECT id, session_id, agent_id, channel, role, content, thought, tool_calls, tool_call_id, tokens, model, rag_sources, created_at FROM session_messages WHERE session_id = ? ORDER BY created_at ASC, id ASC", sessionID)
+	rows, err := s.db.Query(`
+		SELECT id, session_id, agent_id, channel, role, COALESCE(sender_type, 'user'), COALESCE(sender_id, ''), COALESCE(sender_name, ''), COALESCE(sender_avatar, ''), COALESCE(recipient_agent_id, ''), content, thought, tool_calls, tool_call_id, tokens, model, rag_sources, created_at
+		FROM session_messages WHERE session_id = ? ORDER BY created_at ASC, id ASC`, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -788,7 +1315,7 @@ func (s *Store) GetSessionMessages(sessionID string) ([]SessionMessage, error) {
 		var m SessionMessage
 		var toolCallsJSON, toolCallID, model, thought, ragSourcesJSON sql.NullString
 		var agentID sql.NullString
-		if err := rows.Scan(&m.ID, &m.SessionID, &agentID, &m.Channel, &m.Role, &m.Content, &thought, &toolCallsJSON, &toolCallID, &m.Tokens, &model, &ragSourcesJSON, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.SessionID, &agentID, &m.Channel, &m.Role, &m.SenderType, &m.SenderID, &m.SenderName, &m.SenderAvatar, &m.RecipientAgentID, &m.Content, &thought, &toolCallsJSON, &toolCallID, &m.Tokens, &model, &ragSourcesJSON, &m.CreatedAt); err != nil {
 			return nil, err
 		}
 		if agentID.Valid {
@@ -821,6 +1348,13 @@ func (s *Store) SaveMessage(m SessionMessage) error {
 	if m.CreatedAt == 0 {
 		m.CreatedAt = time.Now().UnixMilli()
 	}
+	if m.SenderType == "" {
+		if m.Role == "assistant" {
+			m.SenderType = "agent"
+		} else {
+			m.SenderType = "user"
+		}
+	}
 	toolCallsJSON, _ := json.Marshal(m.ToolCalls)
 	ragSourcesJSON, _ := json.Marshal(m.RagSources)
 	if len(m.RagSources) == 0 {
@@ -828,9 +1362,9 @@ func (s *Store) SaveMessage(m SessionMessage) error {
 	}
 
 	_, err := s.db.Exec(`
-		INSERT INTO session_messages (id, session_id, agent_id, channel, role, content, thought, tool_calls, tool_call_id, tokens, model, rag_sources, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		m.ID, m.SessionID, m.AgentID, m.Channel, m.Role, m.Content, m.Thought, string(toolCallsJSON), m.ToolCallID, m.Tokens, m.Model, string(ragSourcesJSON), m.CreatedAt)
+		INSERT INTO session_messages (id, session_id, agent_id, channel, role, sender_type, sender_id, sender_name, sender_avatar, recipient_agent_id, content, thought, tool_calls, tool_call_id, tokens, model, rag_sources, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		m.ID, m.SessionID, m.AgentID, m.Channel, m.Role, m.SenderType, m.SenderID, m.SenderName, m.SenderAvatar, m.RecipientAgentID, m.Content, m.Thought, string(toolCallsJSON), m.ToolCallID, m.Tokens, m.Model, string(ragSourcesJSON), m.CreatedAt)
 
 	// Update session updated_at
 	_, _ = s.db.Exec("UPDATE sessions SET updated_at = ? WHERE id = ?", time.Now().Unix(), m.SessionID)
@@ -1044,8 +1578,8 @@ func (s *Store) SaveTelegramBot(b TelegramBotConfig) error {
 		INSERT INTO telegram_bots (id, name, token, agent_id, model, provider_id, enabled, status, last_active_at, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
-			name = excluded.name,
-			token = excluded.token,
+			name = CASE WHEN excluded.name != '' THEN excluded.name ELSE telegram_bots.name END,
+			token = CASE WHEN excluded.token != '' THEN excluded.token ELSE telegram_bots.token END,
 			agent_id = excluded.agent_id,
 			model = excluded.model,
 			provider_id = excluded.provider_id,
@@ -1062,6 +1596,15 @@ func (s *Store) UpdateTelegramBotStatus(id, status string) error {
 
 func (s *Store) DeleteTelegramBot(id string) error {
 	_, err := s.db.Exec("DELETE FROM telegram_bots WHERE id = ?", id)
+	return err
+}
+
+func (s *Store) UpdateTelegramSessionsAgent(botID, agentID string) error {
+	if botID == "" || agentID == "" {
+		return nil
+	}
+	prefix := "%" + botID + "%"
+	_, err := s.db.Exec("UPDATE sessions SET agent_id = ?, updated_at = ? WHERE channel_id = 'telegram' AND id LIKE ?", agentID, time.Now().Unix(), prefix)
 	return err
 }
 
