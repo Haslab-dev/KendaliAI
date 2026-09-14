@@ -113,11 +113,24 @@ export const SkillsPane: React.FC = () => {
                 selectedSkill?.id === sk.id ? 'border-hi ring-1 ring-hi' : 'border-line hover:border-mid'
               } rounded-xl cursor-pointer space-y-1 transition-all`}
             >
-              <div className="font-semibold text-xs text-hi flex items-center gap-1.5">
-                <Brain size={14} className="text-hi" />
-                <span>{sk.name}</span>
-              </div>
-              <div className="text-[11px] text-mid line-clamp-2">{sk.description}</div>
+                <div className="font-semibold text-xs text-hi flex items-center justify-between gap-1.5">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <Brain size={14} className="text-hi shrink-0" />
+                    <span className="truncate">{sk.name}</span>
+                  </div>
+                  {sk.category && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono whitespace-nowrap">
+                      {sk.category}
+                    </span>
+                  )}
+                </div>
+                <div className="text-[11px] text-mid line-clamp-2">{sk.description}</div>
+                {sk.tools && sk.tools.length > 0 && (
+                  <div className="text-[10px] text-lo font-mono flex items-center gap-1 pt-1">
+                    <Wrench size={10} className="text-blue-500" />
+                    <span>{sk.tools.length} executable tool{sk.tools.length > 1 ? 's' : ''}</span>
+                  </div>
+                )}
             </div>
           ))}
         </div>

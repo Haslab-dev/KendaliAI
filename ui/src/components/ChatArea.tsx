@@ -382,10 +382,7 @@ export const ChatArea: React.FC = () => {
     });
 
     // 2. MCP Server integrations
-    const mcpServers = (mcps && mcps.length > 0) ? mcps : [
-      { id: 'github', name: 'github', status: 'ready', toolsCached: [{ name: 'get_issue' }] },
-      { id: 'filesystem', name: 'filesystem', status: 'ready', toolsCached: [{ name: 'read_file' }] },
-    ];
+    const mcpServers = (mcps && mcps.length > 0) ? mcps : [];
 
     mcpServers.forEach((m) => {
       const toolNames = (m.toolsCached || []).map((t: any) => t.name).slice(0, 3).join(', ');

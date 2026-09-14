@@ -170,6 +170,10 @@ export interface SkillItem {
   name: string;
   description: string;
   content?: string;
+  tools?: string[];
+  category?: string;
+  version?: string;
+  path?: string;
 }
 
 export interface PolicyRule {

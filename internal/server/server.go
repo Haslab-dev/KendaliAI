@@ -1152,10 +1152,14 @@ func (s *Server) handleMCPFetchTools() http.HandlerFunc {
 // --- Skills API ---
 
 type SkillItem struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Content     string `json:"content,omitempty"`
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Content     string   `json:"content,omitempty"`
+	Tools       []string `json:"tools,omitempty"`
+	Category    string   `json:"category,omitempty"`
+	Version     string   `json:"version,omitempty"`
+	Path        string   `json:"path,omitempty"`
 }
 
 func (s *Server) handleSkills() http.HandlerFunc {
@@ -1289,10 +1293,44 @@ func (s *Server) handleSkills() http.HandlerFunc {
 						cleanID = strings.TrimPrefix(cleanID, "07-")
 						seen[e.Name()] = true
 						seen[cleanID] = true
+
+						category := "General"
+						lowID := strings.ToLower(e.Name())
+						if strings.Contains(lowID, "monitor") || strings.Contains(lowID, "sre") || strings.Contains(lowID, "incident") {
+							category = "DevOps & SRE"
+						} else if strings.Contains(lowID, "tunnel") || strings.Contains(lowID, "cloudflare") {
+							category = "Networking"
+						} else if strings.Contains(lowID, "research") || strings.Contains(lowID, "tech") {
+							category = "Research & AI"
+						} else if strings.Contains(lowID, "git") || strings.Contains(lowID, "release") {
+							category = "Developer Tools"
+						} else if strings.Contains(lowID, "memory") || strings.Contains(lowID, "adr") {
+							category = "Knowledge & Memory"
+						} else if strings.Contains(lowID, "react") || strings.Contains(lowID, "landing") {
+							category = "Frontend & UI"
+						} else if strings.Contains(lowID, "figma") {
+							category = "Design & MCP"
+						} else if strings.Contains(lowID, "docx") || strings.Contains(lowID, "email") || strings.Contains(lowID, "image") {
+							category = "Media & Docs"
+						}
+
+						var skillTools []string
+						toolsDir := filepath.Join(repoSkillsDir, e.Name(), "tools")
+						if tEntries, err := os.ReadDir(toolsDir); err == nil {
+							for _, te := range tEntries {
+								if !te.IsDir() && !strings.HasPrefix(te.Name(), ".") {
+									skillTools = append(skillTools, te.Name())
+								}
+							}
+						}
+
 						list = append(list, SkillItem{
 							ID:          e.Name(),
 							Name:        name,
 							Description: desc,
+							Tools:       skillTools,
+							Category:    category,
+							Path:        filepath.Join("skills", e.Name()),
 						})
 					}
 				}
@@ -1354,6 +1392,20 @@ func (s *Server) handleTools() http.HandlerFunc {
 				Signature:   t.Signature,
 				Category:    t.Category,
 			})
+		}
+
+		// Also include MCP tools from registered and configured MCP servers
+		if mcpList, err := s.store.ListMCPServers(); err == nil {
+			for _, m := range mcpList {
+				for _, tc := range m.ToolsCached {
+					list = append(list, ToolDTO{
+						Name:        tc.Name,
+						Description: fmt.Sprintf("[%s MCP] %s", m.Name, tc.Description),
+						Signature:   `{"query": "string"}`,
+						Category:    "MCP",
+					})
+				}
+			}
 		}
 		json.NewEncoder(w).Encode(list)
 	}
@@ -2796,6 +2848,7 @@ func (s *Server) handlePlugins() http.HandlerFunc {
 
 		switch r.Method {
 		case "GET":
+			plugins.DefaultManager.Discover()
 			list := plugins.DefaultManager.List()
 			json.NewEncoder(w).Encode(list)
 

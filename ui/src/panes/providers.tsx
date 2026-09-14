@@ -169,6 +169,7 @@ interface ShowcaseMCP {
   toolsCount: number;
   status: 'connected' | 'cached' | 'error';
   enabled?: boolean;
+  toolsCached?: { name: string; description: string }[];
 }
 
 const DEFAULT_SHOWCASE_MCPS: ShowcaseMCP[] = [
@@ -180,6 +181,11 @@ const DEFAULT_SHOWCASE_MCPS: ShowcaseMCP[] = [
     toolsCount: 3,
     status: 'connected',
     enabled: true,
+    toolsCached: [
+      { name: 'web_search_exa', description: 'Neural web search across latest web and news' },
+      { name: 'web_fetch_exa', description: 'Extract clean page content and markdown from URLs' },
+      { name: 'agent_run', description: 'Run deep multi-step Exa research agent' },
+    ],
   },
   {
     id: 'firecrawl',
@@ -189,6 +195,11 @@ const DEFAULT_SHOWCASE_MCPS: ShowcaseMCP[] = [
     toolsCount: 3,
     status: 'connected',
     enabled: true,
+    toolsCached: [
+      { name: 'firecrawl_scrape', description: 'Retrieve and extract clean markdown content from any URL' },
+      { name: 'firecrawl_search', description: 'Search web sources and return ranked results with markdown snippets' },
+      { name: 'firecrawl_parse', description: 'Parse documents (PDF, DOCX, HTML) into markdown' },
+    ],
   },
 ];
 
@@ -200,6 +211,10 @@ export const ProvidersPane: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [activeDefaultId, setActiveDefaultId] = useState<string>('openai');
   const [activeTab, setActiveTab] = useState<'providers' | 'mcps'>('providers');
+
+  const totalMcpTools = useMemo(() => {
+    return mcps.reduce((acc, m) => acc + (m.toolsCount || m.toolsCached?.length || 0), 0);
+  }, [mcps]);
 
   // Notification Toast
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -285,6 +300,7 @@ export const ProvidersPane: React.FC = () => {
             toolsCount: Array.isArray(m.toolsCached) ? m.toolsCached.length : 0,
             status: 'connected',
             enabled: m.enabled !== false,
+            toolsCached: m.toolsCached || [],
           }));
           setMcps(mappedMcp);
         }
@@ -754,7 +770,7 @@ export const ProvidersPane: React.FC = () => {
               : 'bg-transparent border-transparent text-[#8A8A85]'
           }`}
         >
-          MCP Servers ({mcps.length})
+          MCP Servers ({mcps.length} · {totalMcpTools} tools)
         </button>
       </div>
 
@@ -984,7 +1000,7 @@ export const ProvidersPane: React.FC = () => {
             <div className="flex items-center gap-2">
               <Puzzle size={16} className="text-[#007AFF]" />
               <h2 className="text-[14px] font-bold text-[#FFFFFF] font-sans">
-                MCP Servers ({mcps.length})
+                MCP Servers ({mcps.length}) · {totalMcpTools} tools
               </h2>
             </div>
 
@@ -1064,6 +1080,20 @@ export const ProvidersPane: React.FC = () => {
                 <div className="text-[10px] text-[#007AFF] font-sans font-medium flex items-center gap-1">
                   <span>● Active tool provider</span>
                 </div>
+
+                {m.toolsCached && m.toolsCached.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1 pt-1.5 border-t border-[#262626]">
+                    {m.toolsCached.map((t) => (
+                      <span
+                        key={t.name}
+                        className="text-[9px] px-1.5 py-0.5 rounded bg-[#262626] text-[#007AFF] font-mono"
+                        title={t.description}
+                      >
+                        {t.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
