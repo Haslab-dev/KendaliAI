@@ -4,7 +4,8 @@ import {
   ChevronDown, ChevronUp, Search, Brain, Zap, Settings, Command, AlertCircle,
   CornerDownLeft, Terminal, Sparkles, Smartphone, Database, RefreshCw, FileText, X,
   ShieldCheck, GitFork, Code2, Clock, Bell, ExternalLink, Activity, BookOpen,
-  Folder, Upload, Menu, Bot, Feather, Cpu, Send, MessageSquare, Users, AtSign
+  Folder, Upload, Menu, Bot, Feather, Cpu, Send, MessageSquare, Users, AtSign,
+  Square, Smile
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { navigate } from '../router';
@@ -56,6 +57,10 @@ export const ChatArea: React.FC = () => {
     tasks,
     cancelTask,
     selectSession,
+    discussionActive,
+    discussionRound,
+    stopDiscussion,
+    reactToMessage,
   } = useAppStore();
 
   const { sendMessage } = useAgentSocket();
@@ -1158,6 +1163,7 @@ export const ChatArea: React.FC = () => {
                 activeAgent={activeAgent}
                 agents={agents}
                 thinkingStatus={thinkingStatus}
+                onReact={(msgId, emo) => activeSessionId && reactToMessage(activeSessionId, msgId, emo)}
               />
             );
           })}
@@ -1326,23 +1332,29 @@ export const ChatArea: React.FC = () => {
             </button>
           </div>
 
-          {/* Circular Send Button */}
-          <button
-            onClick={handleSend}
-            disabled={!inputText.trim() || isGenerating}
-            className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 shadow-sm transition-all ${
-              inputText.trim() && !isGenerating
-                ? 'bg-[#007AFF] hover:bg-[#0066D6] text-white scale-100 active:scale-95 cursor-pointer shadow-blue-500/20'
-                : 'bg-[#E5E7EB] dark:bg-[#2C2C2E] text-[#9CA3AF] cursor-not-allowed opacity-70'
-            }`}
-            title="Send Message"
-          >
-            {isGenerating ? (
-              <RefreshCw size={18} className="animate-spin text-white" />
-            ) : (
+          {/* Circular Send / Stop Button */}
+          {isGenerating || discussionActive ? (
+            <button
+              onClick={() => activeSessionId && stopDiscussion(activeSessionId)}
+              className="w-11 h-11 rounded-full flex items-center justify-center shrink-0 shadow-sm transition-all bg-red-600 hover:bg-red-700 text-white scale-100 active:scale-95 cursor-pointer shadow-red-500/30"
+              title="Stop Diskusi / Intervensi"
+            >
+              <Square size={16} fill="currentColor" />
+            </button>
+          ) : (
+            <button
+              onClick={handleSend}
+              disabled={!inputText.trim()}
+              className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 shadow-sm transition-all ${
+                inputText.trim()
+                  ? 'bg-[#007AFF] hover:bg-[#0066D6] text-white scale-100 active:scale-95 cursor-pointer shadow-blue-500/20'
+                  : 'bg-[#E5E7EB] dark:bg-[#2C2C2E] text-[#9CA3AF] cursor-not-allowed opacity-70'
+              }`}
+              title="Send Message"
+            >
               <ArrowUp size={20} strokeWidth={2.4} />
-            )}
-          </button>
+            </button>
+          )}
         </div>
       </div>
 
@@ -1695,6 +1707,7 @@ interface ChatMessageItemProps {
   activeAgent: any;
   agents: AgentConfig[];
   thinkingStatus: string;
+  onReact?: (messageId: string, emoji: string) => void;
 }
 
 const ChatMessageItem = React.memo<ChatMessageItemProps>(({
@@ -1703,18 +1716,51 @@ const ChatMessageItem = React.memo<ChatMessageItemProps>(({
   activeAgent,
   agents,
   thinkingStatus,
+  onReact,
 }) => {
   if (msg.role === 'user') {
     return (
-      <div className="w-full flex flex-row justify-end items-start animate-fade-in">
-        <div className="w-full max-w-[560px] p-[12px_16px] bg-[#0F0F0F] dark:bg-[#1C1C1E] text-[#FFFFFF] rounded-[16px] rounded-tr-[4px] shadow-sm border border-transparent dark:border-[#2C2C2E]">
-          <div className="text-[13px]/[21px] font-geist whitespace-pre-wrap break-words">
-            {msg.content}
-          </div>
-          <div className="text-[10px] text-white/50 text-right mt-1 font-mono">
-            {new Date(msg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+      <div className="w-full flex flex-col items-end animate-fade-in group">
+        <div className="relative group/msg max-w-[560px] w-full flex flex-col items-end">
+          {onReact && (
+            <div className="select-none pointer-events-auto opacity-0 group-hover/msg:opacity-100 transition-opacity absolute -top-3.5 right-2 z-10 flex items-center gap-0.5 bg-white dark:bg-[#2C2C2E] border border-gray-200 dark:border-neutral-700 rounded-full px-1.5 py-0.5 shadow-md">
+              {['😂', '👍', '❤️', '🔥', '🤔', '🎉'].map((emo) => (
+                <button
+                  key={emo}
+                  type="button"
+                  onClick={() => onReact(msg.id, emo)}
+                  className="select-none hover:scale-125 transition-transform text-[13px] px-1 py-0.5 rounded cursor-pointer leading-none"
+                  title={`React ${emo}`}
+                >
+                  {emo}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="w-full p-[12px_16px] bg-[#0F0F0F] dark:bg-[#1C1C1E] text-[#FFFFFF] rounded-[16px] rounded-tr-[4px] shadow-sm border border-transparent dark:border-[#2C2C2E]">
+            <div className="text-[13px]/[21px] font-geist whitespace-pre-wrap break-words">
+              {msg.content}
+            </div>
+            <div className="text-[10px] text-white/50 text-right mt-1 font-mono">
+              {new Date(msg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </div>
           </div>
         </div>
+        {msg.reactions && msg.reactions.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-1 px-1">
+            {msg.reactions.map((r, idx) => (
+              <span
+                key={idx}
+                onClick={() => onReact && onReact(msg.id, r.emoji)}
+                title={r.senderName ? `Reacted by ${r.senderName} (click to react)` : undefined}
+                className="inline-flex items-center gap-1 text-[12px] px-2 py-0.5 rounded-full bg-[#1C1C1E] text-white border border-neutral-700/60 select-none shadow-2xs hover:scale-105 cursor-pointer transition-transform"
+              >
+                <span>{r.emoji}</span>
+                {r.senderName && <span className="text-[9px] text-neutral-400">{r.senderName.split(' ')[0]}</span>}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
@@ -1760,67 +1806,103 @@ const ChatMessageItem = React.memo<ChatMessageItemProps>(({
           )}
         </div>
 
-        {/* Message Card */}
-        <div className="w-full p-[12px_16px] bg-[#FFFFFF] dark:bg-[#1A1A1A] rounded-[16px] rounded-tl-[4px] border border-[#E5E7EB] dark:border-[#2C2C2E] shadow-2xs">
-          {/* Collapsible Thought Process */}
-          {msg.thought && (
-            <ThoughtProcessAccordion
-              thought={msg.thought}
-              isStreaming={isCurrentStreaming && !msg.content}
-            />
-          )}
-
-          {/* Tool Execution Cards */}
-          {msg.toolCalls && msg.toolCalls.length > 0 && (
-            <div className="space-y-1.5 my-1.5">
-              {msg.toolCalls.map((tc) => (
-                <ToolExecutionCard key={tc.id} toolCall={tc} />
+        {/* Message Card Container with Hover Reactions */}
+        <div className="relative group/msg w-full">
+          {onReact && (
+            <div className="select-none pointer-events-auto opacity-0 group-hover/msg:opacity-100 transition-opacity absolute -top-3.5 right-2 z-10 flex items-center gap-0.5 bg-white dark:bg-[#2C2C2E] border border-gray-200 dark:border-neutral-700 rounded-full px-1.5 py-0.5 shadow-md">
+              {['😂', '👍', '❤️', '🔥', '🤔', '🎉'].map((emo) => (
+                <button
+                  key={emo}
+                  type="button"
+                  onClick={() => onReact(msg.id, emo)}
+                  className="select-none hover:scale-125 transition-transform text-[13px] px-1 py-0.5 rounded cursor-pointer leading-none"
+                  title={`React ${emo}`}
+                >
+                  {emo}
+                </button>
               ))}
             </div>
           )}
 
-          {/* Message Content with Markdown */}
-          <div className="text-[13px]/[21px] text-[#000000] dark:text-[#E5E7EB] font-geist leading-relaxed break-words">
-            <MarkdownView content={msg.content} isStreaming={isCurrentStreaming} />
-            {isCurrentStreaming && msg.content && (
-              <span className="inline-block w-1.5 h-3.5 bg-[#007AFF] animate-pulse ml-1 align-middle rounded-[1px]" />
+          {/* Message Card */}
+          <div className="w-full p-[12px_16px] bg-[#FFFFFF] dark:bg-[#1A1A1A] rounded-[16px] rounded-tl-[4px] border border-[#E5E7EB] dark:border-[#2C2C2E] shadow-2xs">
+            {/* Collapsible Thought Process */}
+            {msg.thought && (
+              <ThoughtProcessAccordion
+                thought={msg.thought}
+                isStreaming={isCurrentStreaming && !msg.content}
+              />
             )}
-            {isCurrentStreaming && !msg.content && !msg.thought && (!msg.toolCalls || msg.toolCalls.length === 0) && (
-              <div className="flex items-center gap-2.5 text-xs text-[#8A8A85] py-1 font-geist">
-                <span>{thinkingStatus || `${senderName} is typing...`}</span>
-                <span className="inline-flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] animate-bounce [animation-delay:-0.3s]" />
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] animate-bounce [animation-delay:-0.15s]" />
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] animate-bounce" />
-                </span>
+
+            {/* Tool Execution Cards */}
+            {msg.toolCalls && msg.toolCalls.length > 0 && (
+              <div className="space-y-1.5 my-1.5">
+                {msg.toolCalls.map((tc) => (
+                  <ToolExecutionCard key={tc.id} toolCall={tc} />
+                ))}
               </div>
             )}
-          </div>
 
-          {/* Grounding RAG Chips */}
-          {msg.ragSources && msg.ragSources.length > 0 && (
-            <div className="flex items-center gap-1.5 flex-wrap mt-2">
-              {msg.ragSources.map((rs, idx) => (
-                <div
-                  key={`${rs.title}-${idx}`}
-                  className="flex items-center gap-1 px-2 py-0.5 bg-[#FFF5EB] dark:bg-amber-950/30 rounded-[4px] text-[10px] text-[#F97316] font-funnel border border-amber-500/10"
-                  title={`RAG grounded: ${rs.title} (score: ${rs.score.toFixed(2)})`}
-                >
-                  <BookOpen size={10} className="text-[#F97316]" />
-                  <span>doc:{rs.title}</span>
+            {/* Message Content with Markdown */}
+            <div className="text-[13px]/[21px] text-[#000000] dark:text-[#E5E7EB] font-geist leading-relaxed break-words">
+              <MarkdownView content={msg.content} isStreaming={isCurrentStreaming} />
+              {isCurrentStreaming && msg.content && (
+                <span className="inline-block w-1.5 h-3.5 bg-[#007AFF] animate-pulse ml-1 align-middle rounded-[1px]" />
+              )}
+              {isCurrentStreaming && !msg.content && !msg.thought && (!msg.toolCalls || msg.toolCalls.length === 0) && (
+                <div className="flex items-center gap-2.5 text-xs text-[#8A8A85] py-1 font-geist">
+                  <span>{thinkingStatus || `${senderName} is typing...`}</span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] animate-bounce [animation-delay:-0.3s]" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] animate-bounce [animation-delay:-0.15s]" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] animate-bounce" />
+                  </span>
                 </div>
-              ))}
+              )}
             </div>
-          )}
 
-          {/* Token Count & Time Footer */}
-          <div className="text-[10px] text-[#8A8A85] font-mono flex items-center justify-between pt-2 border-t border-[#F3F4F6] dark:border-[#27272A] mt-2">
-            <span>{msg.model || senderAgent?.model || 'gpt-4o'}</span>
-            <span>
-              {new Date(msg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </span>
+            {/* Grounding RAG Chips */}
+            {msg.ragSources && msg.ragSources.length > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap mt-2">
+                {msg.ragSources.map((rs, idx) => (
+                  <div
+                    key={`${rs.title}-${idx}`}
+                    className="flex items-center gap-1 px-2 py-0.5 bg-[#FFF5EB] dark:bg-amber-950/30 rounded-[4px] text-[10px] text-[#F97316] font-funnel border border-amber-500/10"
+                    title={`RAG grounded: ${rs.title} (score: ${rs.score.toFixed(2)})`}
+                  >
+                    <BookOpen size={10} className="text-[#F97316]" />
+                    <span>doc:{rs.title}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Token Count & Time Footer */}
+            <div className="text-[10px] text-[#8A8A85] font-mono flex items-center justify-between pt-2 border-t border-[#F3F4F6] dark:border-[#27272A] mt-2">
+              <span>{msg.model || senderAgent?.model || 'gpt-4o'}</span>
+              <span>
+                {new Date(msg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </div>
           </div>
         </div>
+
+        {/* Message Reaction Chips */}
+        {msg.reactions && msg.reactions.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-0.5 px-1">
+            {msg.reactions.map((r, idx) => (
+              <span
+                key={idx}
+                onClick={() => onReact && onReact(msg.id, r.emoji)}
+                title={r.senderName ? `Reacted by ${r.senderName} (click to react)` : undefined}
+                className="inline-flex items-center gap-1 text-[12px] px-2 py-0.5 rounded-full bg-white dark:bg-[#1E1E1E] text-neutral-800 dark:text-neutral-200 border border-neutral-200 dark:border-[#2C2C2E] select-none shadow-2xs hover:scale-105 cursor-pointer transition-transform"
+              >
+                <span>{r.emoji}</span>
+                {r.senderName && <span className="text-[9px] text-neutral-500 dark:text-neutral-400">{r.senderName.split(' ')[0]}</span>}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -62,6 +62,29 @@ function connectGlobalSocket() {
             }
             break;
 
+          case 'message.reaction':
+            if (isCurrentSession && ev.payload?.messageId && ev.payload?.emoji) {
+              store.addMessageReaction(ev.payload.messageId, {
+                emoji: ev.payload.emoji,
+                senderId: ev.payload.senderId || ev.agentId || 'agent',
+                senderName: ev.payload.senderName || ev.agentId || 'Agent',
+              });
+            }
+            break;
+
+          case 'discussion.active':
+            if (isCurrentSession) {
+              store.setDiscussionState(true, ev.payload?.currentRound || 1);
+            }
+            break;
+
+          case 'discussion.stopped':
+            if (isCurrentSession) {
+              store.setDiscussionState(false, 0);
+              store.setIsGenerating(false);
+            }
+            break;
+
           case 'agent.started':
             if (isCurrentSession) {
               const payload = (typeof ev.payload === 'object' && ev.payload !== null) ? ev.payload : {};

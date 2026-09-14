@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { AgentConfig, ProviderConfig, Session, SessionMessage, ToolCallRecord, MCPServerConfig, GatewayLogEvent, BackgroundTask, GlobalModelOption } from '../types';
+import { AgentConfig, ProviderConfig, Session, SessionMessage, MessageReaction, ToolCallRecord, MCPServerConfig, GatewayLogEvent, BackgroundTask, GlobalModelOption } from '../types';
 
 interface AppState {
   theme: 'dark' | 'light';
@@ -46,6 +46,7 @@ interface AppState {
   messages: SessionMessage[];
   loadSessionMessages: (sessionId: string) => Promise<void>;
   appendMessage: (msg: SessionMessage) => void;
+  addMessageReaction: (messageId: string, reaction: MessageReaction) => void;
   appendToolCall: (tc: ToolCallRecord) => void;
   updateToolCall: (tc: ToolCallRecord) => void;
   startStreamingAssistantMessage: (
@@ -70,6 +71,12 @@ interface AppState {
 
   activeModel: string | null;
   setActiveModel: (model: string | null) => void;
+
+  discussionActive: boolean;
+  discussionRound: number;
+  setDiscussionState: (active: boolean, round?: number) => void;
+  stopDiscussion: (sessionId: string) => Promise<void>;
+  reactToMessage: (sessionId: string, messageId: string, emoji: string) => Promise<void>;
 
   logs: GatewayLogEvent[];
   loadLogs: () => Promise<void>;
@@ -435,8 +442,78 @@ export const useAppStore = create<AppState>((set, get) => ({
           return { messages: copy };
         }
       }
+      // 4. Assistant streaming draft reconciliation
+      if (msg.role === 'assistant') {
+        const streamIdx = s.messages.findIndex(
+          (m) =>
+            m.role === 'assistant' &&
+            m.id.startsWith('asst-stream-') &&
+            (!msg.senderId || !m.senderId || m.senderId === msg.senderId)
+        );
+        if (streamIdx !== -1) {
+          const copy = [...s.messages];
+          copy[streamIdx] = {
+            ...copy[streamIdx],
+            ...msg,
+            thought: msg.thought || copy[streamIdx].thought,
+            toolCalls: msg.toolCalls && msg.toolCalls.length > 0 ? msg.toolCalls : copy[streamIdx].toolCalls,
+          };
+          return { messages: copy };
+        }
+      }
       return { messages: [...s.messages, msg] };
     }),
+  addMessageReaction: (messageId, reaction) =>
+    set((state) => ({
+      messages: state.messages.map((m) => {
+        if (m.id === messageId) {
+          const existing = m.reactions || [];
+          const found = existing.some(
+            (r) => r.emoji === reaction.emoji && (r.senderId === reaction.senderId || r.senderName === reaction.senderName)
+          );
+          if (found) return m;
+          return { ...m, reactions: [...existing, reaction] };
+        }
+        return m;
+      }),
+    })),
+  discussionActive: false,
+  discussionRound: 0,
+  setDiscussionState: (active, round = 0) => set({ discussionActive: active, discussionRound: round }),
+  stopDiscussion: async (sessionId: string) => {
+    try {
+      set({ discussionActive: false, isGenerating: false });
+      await fetch(`/api/sessions/${sessionId}/stop`, { method: 'POST' });
+    } catch (e) {
+      console.error('Failed to stop discussion:', e);
+    }
+  },
+  reactToMessage: async (sessionId: string, messageId: string, emoji: string) => {
+    try {
+      const myReaction = { emoji, senderId: 'user', senderName: 'You' };
+      set((state) => ({
+        messages: state.messages.map((m) => {
+          if (m.id === messageId) {
+            const existing = m.reactions || [];
+            const found = existing.some(
+              (r) => r.emoji === emoji && (r.senderId === 'user' || r.senderName === 'You')
+            );
+            if (found) return m;
+            return { ...m, reactions: [...existing, myReaction] };
+          }
+          return m;
+        }),
+      }));
+
+      await fetch(`/api/sessions/${sessionId}/messages/${messageId}/reaction`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emoji, senderId: 'user', senderName: 'You' }),
+      });
+    } catch (e) {
+      console.error('Failed to add message reaction:', e);
+    }
+  },
   appendToolCall: (tc) => {
     set((s) => {
       const msgs = [...s.messages];
@@ -592,7 +669,54 @@ export const useAppStore = create<AppState>((set, get) => ({
   finalizeStreamingMessage: (finalMsg) => {
     set((s) => {
       const msgs = [...s.messages];
-      if (msgs.length > 0 && msgs[msgs.length - 1].role === 'assistant') {
+
+      // 1. If finalMsg.id already exists in messages, update it and remove any leftover asst-stream- draft for this agent
+      const exactIdx = msgs.findIndex((m) => m.id === finalMsg.id);
+      if (exactIdx !== -1) {
+        msgs[exactIdx] = {
+          ...msgs[exactIdx],
+          ...finalMsg,
+          toolCalls: finalMsg.toolCalls && finalMsg.toolCalls.length > 0 ? finalMsg.toolCalls : msgs[exactIdx].toolCalls,
+          thought: finalMsg.thought || msgs[exactIdx].thought,
+        };
+        const cleaned = msgs.filter(
+          (m, idx) =>
+            idx === exactIdx ||
+            !(m.role === 'assistant' && m.id.startsWith('asst-stream-') && (!finalMsg.senderId || !m.senderId || m.senderId === finalMsg.senderId))
+        );
+        return { messages: cleaned };
+      }
+
+      // 2. Find streaming message draft for this agent
+      let streamIdx = -1;
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        if (
+          msgs[i].role === 'assistant' &&
+          msgs[i].id.startsWith('asst-stream-') &&
+          (!finalMsg.senderId || !msgs[i].senderId || msgs[i].senderId === finalMsg.senderId)
+        ) {
+          streamIdx = i;
+          break;
+        }
+      }
+
+      // 3. Fallback: any asst-stream-
+      if (streamIdx === -1) {
+        for (let i = msgs.length - 1; i >= 0; i--) {
+          if (msgs[i].role === 'assistant' && msgs[i].id.startsWith('asst-stream-')) {
+            streamIdx = i;
+            break;
+          }
+        }
+      }
+
+      if (streamIdx !== -1) {
+        msgs[streamIdx] = {
+          ...finalMsg,
+          toolCalls: finalMsg.toolCalls && finalMsg.toolCalls.length > 0 ? finalMsg.toolCalls : msgs[streamIdx].toolCalls,
+          thought: finalMsg.thought || msgs[streamIdx].thought,
+        };
+      } else if (msgs.length > 0 && msgs[msgs.length - 1].role === 'assistant') {
         msgs[msgs.length - 1] = {
           ...finalMsg,
           toolCalls: finalMsg.toolCalls && finalMsg.toolCalls.length > 0 ? finalMsg.toolCalls : msgs[msgs.length - 1].toolCalls,

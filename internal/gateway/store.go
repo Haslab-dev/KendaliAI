@@ -177,7 +177,14 @@ type SessionMessage struct {
 	// RagSources lists the documents injected as RAG context for this
 	// assistant turn, so the UI can show what grounded the answer.
 	RagSources []RagSource      `json:"ragSources,omitempty"`
+	Reactions  []MessageReaction `json:"reactions,omitempty"`
 	CreatedAt  int64            `json:"createdAt"`
+}
+
+type MessageReaction struct {
+	Emoji      string `json:"emoji"`
+	SenderID   string `json:"senderId"`
+	SenderName string `json:"senderName,omitempty"`
 }
 
 // RagSource names a document used as RAG context for a turn.
@@ -244,6 +251,7 @@ func (s *Store) SeedInitialData(cfg *config.Config) {
 	_, _ = s.db.Exec("ALTER TABLE session_messages ADD COLUMN thought TEXT DEFAULT ''")
 	_, _ = s.db.Exec("ALTER TABLE document_chunks ADD COLUMN embedding_model TEXT DEFAULT ''")
 	_, _ = s.db.Exec("ALTER TABLE session_messages ADD COLUMN rag_sources TEXT DEFAULT ''")
+	_, _ = s.db.Exec("ALTER TABLE session_messages ADD COLUMN reactions TEXT DEFAULT '[]'")
 	_, _ = s.db.Exec("ALTER TABLE document_chunks ADD COLUMN dimensions INTEGER DEFAULT 0")
 
 	_, _ = s.db.Exec(`CREATE TABLE IF NOT EXISTS documents (
@@ -568,6 +576,25 @@ func (s *Store) SeedInitialData(cfg *config.Config) {
 			MemoryScopes: []string{"user", "workspace"},
 			Policy:       map[string]string{},
 			Avatar:       "orange-leaf",
+			IsDefault:    false,
+			CreatedAt:    now,
+			UpdatedAt:    now,
+		},
+		{
+			ID:           "sre-agent",
+			Name:         "Alex Vance",
+			Role:         "Site Reliability & Incident Response",
+			Department:   "Operations",
+			Description:  "SRE specialist for production incident response, error triage, telemetry diagnostics, and deterministic health monitoring.",
+			ProviderID:   "",
+			Model:        "",
+			SystemPrompt: "You are Alex Vance, Site Reliability Engineer and Incident Responder at KendaliAI. You investigate production incidents, analyze HTTP 5xx spikes, trace connection leaks, inspect server telemetry, correlate errors with git commits, and provide clear diagnoses with high confidence. You NEVER modify production or restart critical services without explicit human authorization.",
+			Skills:       []string{"incident-response", "vps-monitor", "telemetry-triage", "root-cause-analysis"},
+			Tools:        []string{"bash", "file.read", "git.status", "git_diff", "telegram.send"},
+			MCP:          []string{},
+			MemoryScopes: []string{"user", "workspace"},
+			Policy:       map[string]string{},
+			Avatar:       "amber-star",
 			IsDefault:    false,
 			CreatedAt:    now,
 			UpdatedAt:    now,
@@ -1303,7 +1330,7 @@ func (s *Store) EnsureDirectChatsForAgents() error {
 
 func (s *Store) GetSessionMessages(sessionID string) ([]SessionMessage, error) {
 	rows, err := s.db.Query(`
-		SELECT id, session_id, agent_id, channel, role, COALESCE(sender_type, 'user'), COALESCE(sender_id, ''), COALESCE(sender_name, ''), COALESCE(sender_avatar, ''), COALESCE(recipient_agent_id, ''), content, thought, tool_calls, tool_call_id, tokens, model, rag_sources, created_at
+		SELECT id, session_id, agent_id, channel, role, COALESCE(sender_type, 'user'), COALESCE(sender_id, ''), COALESCE(sender_name, ''), COALESCE(sender_avatar, ''), COALESCE(recipient_agent_id, ''), content, thought, tool_calls, tool_call_id, tokens, model, rag_sources, COALESCE(reactions, '[]'), created_at
 		FROM session_messages WHERE session_id = ? ORDER BY created_at ASC, id ASC`, sessionID)
 	if err != nil {
 		return nil, err
@@ -1313,9 +1340,9 @@ func (s *Store) GetSessionMessages(sessionID string) ([]SessionMessage, error) {
 	res := make([]SessionMessage, 0)
 	for rows.Next() {
 		var m SessionMessage
-		var toolCallsJSON, toolCallID, model, thought, ragSourcesJSON sql.NullString
+		var toolCallsJSON, toolCallID, model, thought, ragSourcesJSON, reactionsJSON sql.NullString
 		var agentID sql.NullString
-		if err := rows.Scan(&m.ID, &m.SessionID, &agentID, &m.Channel, &m.Role, &m.SenderType, &m.SenderID, &m.SenderName, &m.SenderAvatar, &m.RecipientAgentID, &m.Content, &thought, &toolCallsJSON, &toolCallID, &m.Tokens, &model, &ragSourcesJSON, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.SessionID, &agentID, &m.Channel, &m.Role, &m.SenderType, &m.SenderID, &m.SenderName, &m.SenderAvatar, &m.RecipientAgentID, &m.Content, &thought, &toolCallsJSON, &toolCallID, &m.Tokens, &model, &ragSourcesJSON, &reactionsJSON, &m.CreatedAt); err != nil {
 			return nil, err
 		}
 		if agentID.Valid {
@@ -1336,9 +1363,78 @@ func (s *Store) GetSessionMessages(sessionID string) ([]SessionMessage, error) {
 		if ragSourcesJSON.Valid && ragSourcesJSON.String != "" {
 			_ = json.Unmarshal([]byte(ragSourcesJSON.String), &m.RagSources)
 		}
+		if reactionsJSON.Valid && reactionsJSON.String != "" {
+			_ = json.Unmarshal([]byte(reactionsJSON.String), &m.Reactions)
+		}
 		res = append(res, m)
 	}
 	return res, nil
+}
+
+func (s *Store) GetMessage(messageID string) (*SessionMessage, error) {
+	var m SessionMessage
+	var toolCallsJSON, toolCallID, model, thought, ragSourcesJSON, reactionsJSON sql.NullString
+	var agentID sql.NullString
+	row := s.db.QueryRow(`
+		SELECT id, session_id, agent_id, channel, role, COALESCE(sender_type, 'user'), COALESCE(sender_id, ''), COALESCE(sender_name, ''), COALESCE(sender_avatar, ''), COALESCE(recipient_agent_id, ''), content, thought, tool_calls, tool_call_id, tokens, model, rag_sources, COALESCE(reactions, '[]'), created_at
+		FROM session_messages WHERE id = ?`, messageID)
+	err := row.Scan(&m.ID, &m.SessionID, &agentID, &m.Channel, &m.Role, &m.SenderType, &m.SenderID, &m.SenderName, &m.SenderAvatar, &m.RecipientAgentID, &m.Content, &thought, &toolCallsJSON, &toolCallID, &m.Tokens, &model, &ragSourcesJSON, &reactionsJSON, &m.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	if agentID.Valid {
+		m.AgentID = agentID.String
+	}
+	if thought.Valid {
+		m.Thought = thought.String
+	}
+	if toolCallID.Valid {
+		m.ToolCallID = toolCallID.String
+	}
+	if model.Valid {
+		m.Model = model.String
+	}
+	if toolCallsJSON.Valid && toolCallsJSON.String != "" {
+		_ = json.Unmarshal([]byte(toolCallsJSON.String), &m.ToolCalls)
+	}
+	if ragSourcesJSON.Valid && ragSourcesJSON.String != "" {
+		_ = json.Unmarshal([]byte(ragSourcesJSON.String), &m.RagSources)
+	}
+	if reactionsJSON.Valid && reactionsJSON.String != "" {
+		_ = json.Unmarshal([]byte(reactionsJSON.String), &m.Reactions)
+	}
+	return &m, nil
+}
+
+func (s *Store) AddMessageReaction(sessionID, messageID, emoji, senderID, senderName string) (*SessionMessage, error) {
+	if messageID == "" || emoji == "" {
+		return nil, fmt.Errorf("messageID and emoji are required")
+	}
+	m, err := s.GetMessage(messageID)
+	if err != nil {
+		return nil, err
+	}
+
+	already := false
+	for _, r := range m.Reactions {
+		if r.Emoji == emoji && (senderID == "" || r.SenderID == senderID) {
+			already = true
+			break
+		}
+	}
+	if !already {
+		m.Reactions = append(m.Reactions, MessageReaction{
+			Emoji:      emoji,
+			SenderID:   senderID,
+			SenderName: senderName,
+		})
+		reactionsRaw, _ := json.Marshal(m.Reactions)
+		_, err = s.db.Exec("UPDATE session_messages SET reactions = ? WHERE id = ?", string(reactionsRaw), messageID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return m, nil
 }
 
 func (s *Store) SaveMessage(m SessionMessage) error {
@@ -1360,11 +1456,15 @@ func (s *Store) SaveMessage(m SessionMessage) error {
 	if len(m.RagSources) == 0 {
 		ragSourcesJSON = []byte("")
 	}
+	reactionsJSON, _ := json.Marshal(m.Reactions)
+	if len(m.Reactions) == 0 {
+		reactionsJSON = []byte("[]")
+	}
 
 	_, err := s.db.Exec(`
-		INSERT INTO session_messages (id, session_id, agent_id, channel, role, sender_type, sender_id, sender_name, sender_avatar, recipient_agent_id, content, thought, tool_calls, tool_call_id, tokens, model, rag_sources, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		m.ID, m.SessionID, m.AgentID, m.Channel, m.Role, m.SenderType, m.SenderID, m.SenderName, m.SenderAvatar, m.RecipientAgentID, m.Content, m.Thought, string(toolCallsJSON), m.ToolCallID, m.Tokens, m.Model, string(ragSourcesJSON), m.CreatedAt)
+		INSERT INTO session_messages (id, session_id, agent_id, channel, role, sender_type, sender_id, sender_name, sender_avatar, recipient_agent_id, content, thought, tool_calls, tool_call_id, tokens, model, rag_sources, reactions, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		m.ID, m.SessionID, m.AgentID, m.Channel, m.Role, m.SenderType, m.SenderID, m.SenderName, m.SenderAvatar, m.RecipientAgentID, m.Content, m.Thought, string(toolCallsJSON), m.ToolCallID, m.Tokens, m.Model, string(ragSourcesJSON), string(reactionsJSON), m.CreatedAt)
 
 	// Update session updated_at
 	_, _ = s.db.Exec("UPDATE sessions SET updated_at = ? WHERE id = ?", time.Now().Unix(), m.SessionID)

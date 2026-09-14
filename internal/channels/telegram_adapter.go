@@ -64,9 +64,22 @@ type RawTelegramMessage struct {
 	} `json:"forum_topic_created,omitempty"`
 }
 
+type RawTelegramCallbackQuery struct {
+	ID      string `json:"id"`
+	From    struct {
+		ID        int64  `json:"id"`
+		UserName  string `json:"username,omitempty"`
+		FirstName string `json:"first_name,omitempty"`
+		LastName  string `json:"last_name,omitempty"`
+	} `json:"from"`
+	Message *RawTelegramMessage `json:"message,omitempty"`
+	Data    string              `json:"data"`
+}
+
 type RawTelegramUpdate struct {
-	UpdateID int                 `json:"update_id"`
-	Message  *RawTelegramMessage `json:"message,omitempty"`
+	UpdateID      int                       `json:"update_id"`
+	Message       *RawTelegramMessage       `json:"message,omitempty"`
+	CallbackQuery *RawTelegramCallbackQuery `json:"callback_query,omitempty"`
 }
 
 type TelegramAdapter struct {
@@ -77,6 +90,7 @@ type TelegramAdapter struct {
 	bus           *messaging.EventBus
 	activeChats   map[string]string      // key: "botID:chatID" or "botID:chatID:threadID" -> sessionID
 	sessionTarget map[string]*ChatTarget // key: sessionID -> ChatTarget
+	lastMsgID     map[string]int         // key: sessionID -> last Telegram messageID
 }
 
 var DefaultAdapter *TelegramAdapter
@@ -89,6 +103,7 @@ func InitTelegramAdapter(store *gateway.Store, rt *gateway.Runtime, bus *messagi
 		bus:           bus,
 		activeChats:   make(map[string]string),
 		sessionTarget: make(map[string]*ChatTarget),
+		lastMsgID:     make(map[string]int),
 	}
 	go DefaultAdapter.listenGlobalEvents()
 	return DefaultAdapter
@@ -259,8 +274,8 @@ func (a *TelegramAdapter) resolveChatTarget(sessionID string) *ChatTarget {
 func (a *TelegramAdapter) listenGlobalEvents() {
 	sub := a.bus.Subscribe("*")
 	for ev := range sub.Ch {
-		// Only sync to Telegram if the event was NOT originated by Telegram itself!
-		if ev.Channel == "telegram" {
+		// Only sync to Telegram if the event was from human web chat, NOT telegram, routine, or system events!
+		if ev.Channel == "telegram" || ev.Channel == "routine" || ev.Channel == "system" {
 			continue
 		}
 
@@ -278,8 +293,13 @@ func (a *TelegramAdapter) listenGlobalEvents() {
 
 		switch ev.Type {
 		case messaging.EventMessageCreated:
-			// If a user sent a message from Web in this session, mirror it to Telegram
+			// If a human user sent a message from Web in this session, mirror it to Telegram
 			if msgPayload, ok := ev.Payload.(gateway.SessionMessage); ok && msgPayload.Role == "user" {
+				// Do not mirror internal routine notifications or bracketed system turns
+				content := strings.TrimSpace(msgPayload.Content)
+				if strings.HasPrefix(content, "[Routine") || strings.HasPrefix(content, "[SYSTEM") {
+					continue
+				}
 				notice := fmt.Sprintf("💻 <b>[Web User]:</b>\n%s", FormatMarkdownForTelegram(msgPayload.Content))
 				_, _ = a.sendTelegramMessage(runner.Bot, target.ChatID, target.MessageThreadID, notice, "HTML")
 			}
@@ -292,6 +312,19 @@ func (a *TelegramAdapter) listenGlobalEvents() {
 					continue
 				}
 				a.sendTelegramChunks(runner.Bot, target.ChatID, target.MessageThreadID, content)
+			}
+
+		case messaging.EventMessageReaction:
+			if reactPayload, ok := ev.Payload.(messaging.MessageReactionPayload); ok {
+				mid, err := strconv.Atoi(reactPayload.MessageID)
+				if err != nil || mid <= 0 {
+					a.mu.RLock()
+					mid = a.lastMsgID[ev.SessionID]
+					a.mu.RUnlock()
+				}
+				if mid > 0 {
+					_ = a.SetMessageReaction(runner.Bot, target.ChatID, mid, reactPayload.Emoji)
+				}
 			}
 		}
 	}
@@ -317,35 +350,82 @@ func (a *TelegramAdapter) NotifyUserApproved(chatID int64, botID string) {
 	}
 }
 
-func (a *TelegramAdapter) SendAgentNotification(agentID string, text string) error {
+// SendRoutineNotification delivers an automation or routine reminder message to Telegram.
+// It resolves the target user/chat from sessionID, falling back to any active chat in the store.
+func (a *TelegramAdapter) SendRoutineNotification(sessionID, agentID, text string) error {
 	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	var targetRunner *BotRunner
+	var runners []*BotRunner
 	for _, r := range a.runners {
-		if r.Config.AgentID == agentID && r.Bot != nil {
-			targetRunner = r
-			break
+		if r.Bot != nil {
+			runners = append(runners, r)
 		}
 	}
-	if targetRunner == nil {
-		// Fallback to any active runner
-		for _, r := range a.runners {
-			if r.Bot != nil {
+	a.mu.RUnlock()
+
+	if len(runners) == 0 {
+		return fmt.Errorf("no active Telegram bot available")
+	}
+
+	var target *ChatTarget
+	var targetRunner *BotRunner
+
+	// 1. Resolve from specific sessionID if provided
+	if sessionID != "" {
+		target = a.resolveChatTarget(sessionID)
+		if target != nil {
+			a.mu.RLock()
+			if r, ok := a.runners[target.BotID]; ok && r.Bot != nil {
+				targetRunner = r
+			}
+			a.mu.RUnlock()
+		}
+	}
+
+	// 2. If targetRunner not yet set, match by agentID
+	if targetRunner == nil && agentID != "" {
+		for _, r := range runners {
+			if r.Config.AgentID == agentID {
 				targetRunner = r
 				break
 			}
 		}
 	}
+
+	// 3. Fallback to first available runner
 	if targetRunner == nil {
-		return fmt.Errorf("no active Telegram bot available")
+		targetRunner = runners[0]
 	}
 
-	var target *ChatTarget
-	for _, t := range a.sessionTarget {
-		if t.BotID == targetRunner.Config.ID && t.ChatID != 0 {
-			target = t
-			break
+	// 4. If target not found yet, check in-memory sessionTarget
+	if target == nil {
+		a.mu.RLock()
+		for _, t := range a.sessionTarget {
+			if t.BotID == targetRunner.Config.ID && t.ChatID != 0 {
+				target = t
+				break
+			}
+		}
+		a.mu.RUnlock()
+	}
+
+	// 5. If still nil, load from DB sessions table
+	if target == nil && a.store != nil {
+		sessions, err := a.store.ListSessions()
+		if err == nil {
+			for _, s := range sessions {
+				if s.ChannelID == "telegram" || strings.HasPrefix(s.ID, "tg-") {
+					resolved := a.resolveChatTarget(s.ID)
+					if resolved != nil && resolved.ChatID != 0 {
+						if resolved.BotID == targetRunner.Config.ID {
+							target = resolved
+							break
+						}
+						if target == nil {
+							target = resolved
+						}
+					}
+				}
+			}
 		}
 	}
 
@@ -353,9 +433,74 @@ func (a *TelegramAdapter) SendAgentNotification(agentID string, text string) err
 		return fmt.Errorf("no user chat registered for bot %s yet", targetRunner.Config.Name)
 	}
 
-	notice := fmt.Sprintf("⏰ <b>[Routine Notification]:</b>\n%s", html.EscapeString(text))
-	_, err := a.sendTelegramMessage(targetRunner.Bot, target.ChatID, target.MessageThreadID, notice, "HTML")
+	// Switch runner to match target.BotID if that runner is active
+	a.mu.RLock()
+	if r, ok := a.runners[target.BotID]; ok && r.Bot != nil {
+		targetRunner = r
+	}
+	a.mu.RUnlock()
+
+	formatted := FormatMarkdownForTelegram(text)
+	if len(formatted) > 4000 {
+		a.sendTelegramChunks(targetRunner.Bot, target.ChatID, target.MessageThreadID, text)
+		log.Printf("📱 [Telegram Adapter] Delivered routine chunks to chat %d via bot %s", target.ChatID, targetRunner.Config.Name)
+		return nil
+	}
+
+	_, err := a.sendTelegramMessage(targetRunner.Bot, target.ChatID, target.MessageThreadID, formatted, "HTML")
+	if err != nil {
+		// Fallback to plain text if HTML parsing encounters entity issues
+		_, err = a.sendTelegramMessage(targetRunner.Bot, target.ChatID, target.MessageThreadID, text, "")
+	}
+
+	if err == nil {
+		log.Printf("📱 [Telegram Adapter] Delivered routine notification to chat %d via bot %s", target.ChatID, targetRunner.Config.Name)
+	} else {
+		log.Printf("⚠️ [Telegram Adapter] Failed to deliver routine message: %v", err)
+	}
 	return err
+}
+
+func (a *TelegramAdapter) SendAgentNotification(agentID string, text string) error {
+	return a.SendRoutineNotification("", agentID, text)
+}
+
+func normalizeTelegramEmoji(emoji string) string {
+	switch emoji {
+	case "😂":
+		return "🤣"
+	case "🚀":
+		return "🔥"
+	case "🚨":
+		return "⚡"
+	case "🤖":
+		return "👨‍💻"
+	case "✨":
+		return "🎉"
+	default:
+		return emoji
+	}
+}
+
+func previewTelegramLog(s string, maxLen int) string {
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.TrimSpace(s)
+	if len(s) > maxLen {
+		return s[:maxLen] + "..."
+	}
+	return s
+}
+
+func makeStopButtonMarkup(sessionID string) string {
+	stopMarkup := map[string]interface{}{
+		"inline_keyboard": [][]map[string]string{
+			{
+				{"text": "⏹️ Stop Diskusi", "callback_data": "stop_discussion:" + sessionID},
+			},
+		},
+	}
+	b, _ := json.Marshal(stopMarkup)
+	return string(b)
 }
 
 func (a *TelegramAdapter) sendTelegramMessage(bot *tgbotapi.BotAPI, chatID int64, threadID int, text string, parseMode string) (int, error) {
@@ -377,6 +522,7 @@ func (a *TelegramAdapter) sendTelegramMessage(bot *tgbotapi.BotAPI, chatID int64
 			resp, err = bot.MakeRequest("sendMessage", params)
 		}
 		if err != nil {
+			log.Printf("⚠️ [Telegram OUT FAILED] Bot: @%s | Chat: %d | Error: %v", bot.Self.UserName, chatID, err)
 			return 0, err
 		}
 	}
@@ -385,6 +531,42 @@ func (a *TelegramAdapter) sendTelegramMessage(bot *tgbotapi.BotAPI, chatID int64
 		MessageID int `json:"message_id"`
 	}
 	_ = json.Unmarshal(resp.Result, &sent)
+	log.Printf("📤 [Telegram OUT] Bot: @%s | Chat: %d | Topic: %d | MsgID: %d | %q",
+		bot.Self.UserName, chatID, threadID, sent.MessageID, previewTelegramLog(text, 60))
+	return sent.MessageID, nil
+}
+
+func (a *TelegramAdapter) sendTelegramMessageWithStopButton(bot *tgbotapi.BotAPI, chatID int64, threadID int, text string, parseMode string, sessionID string) (int, error) {
+	params := tgbotapi.Params{
+		"chat_id":      strconv.FormatInt(chatID, 10),
+		"text":         text,
+		"reply_markup": makeStopButtonMarkup(sessionID),
+	}
+	if threadID != 0 {
+		params["message_thread_id"] = strconv.Itoa(threadID)
+	}
+	if parseMode != "" {
+		params["parse_mode"] = parseMode
+	}
+
+	resp, err := bot.MakeRequest("sendMessage", params)
+	if err != nil {
+		if parseMode != "" {
+			delete(params, "parse_mode")
+			resp, err = bot.MakeRequest("sendMessage", params)
+		}
+		if err != nil {
+			log.Printf("⚠️ [Telegram OUT FAILED] Bot: @%s | Chat: %d | Error: %v", bot.Self.UserName, chatID, err)
+			return 0, err
+		}
+	}
+
+	var sent struct {
+		MessageID int `json:"message_id"`
+	}
+	_ = json.Unmarshal(resp.Result, &sent)
+	log.Printf("📤 [Telegram OUT + StopButton] Bot: @%s | Chat: %d | Topic: %d | MsgID: %d | %q",
+		bot.Self.UserName, chatID, threadID, sent.MessageID, previewTelegramLog(text, 60))
 	return sent.MessageID, nil
 }
 
@@ -403,6 +585,33 @@ func (a *TelegramAdapter) editTelegramMessage(bot *tgbotapi.BotAPI, chatID int64
 		delete(params, "parse_mode")
 		_, err = bot.MakeRequest("editMessageText", params)
 	}
+	if err == nil {
+		log.Printf("✏️ [Telegram EDIT] Bot: @%s | Chat: %d | MsgID: %d | %q",
+			bot.Self.UserName, chatID, messageID, previewTelegramLog(text, 60))
+	}
+	return err
+}
+
+func (a *TelegramAdapter) editTelegramMessageWithStopButton(bot *tgbotapi.BotAPI, chatID int64, messageID int, text string, parseMode string, sessionID string) error {
+	params := tgbotapi.Params{
+		"chat_id":      strconv.FormatInt(chatID, 10),
+		"message_id":   strconv.Itoa(messageID),
+		"text":         text,
+		"reply_markup": makeStopButtonMarkup(sessionID),
+	}
+	if parseMode != "" {
+		params["parse_mode"] = parseMode
+	}
+
+	_, err := bot.MakeRequest("editMessageText", params)
+	if err != nil && parseMode != "" {
+		delete(params, "parse_mode")
+		_, err = bot.MakeRequest("editMessageText", params)
+	}
+	if err == nil {
+		log.Printf("✏️ [Telegram EDIT + StopButton] Bot: @%s | Chat: %d | MsgID: %d | %q",
+			bot.Self.UserName, chatID, messageID, previewTelegramLog(text, 60))
+	}
 	return err
 }
 
@@ -413,6 +622,99 @@ func (a *TelegramAdapter) deleteTelegramMessage(bot *tgbotapi.BotAPI, chatID int
 	}
 	_, err := bot.MakeRequest("deleteMessage", params)
 	return err
+}
+
+// SetMessageReaction reacts to a Telegram message with an emoji (e.g. 🤣, 👍, 🔥, ❤️, 🤔, 🫡, ⚡, 🎉)
+func (a *TelegramAdapter) SetMessageReaction(bot *tgbotapi.BotAPI, chatID int64, messageID int, emoji string) error {
+	if bot == nil || chatID == 0 || messageID == 0 || emoji == "" {
+		return nil
+	}
+	emoji = normalizeTelegramEmoji(emoji)
+	reactionJSON, _ := json.Marshal([]map[string]string{
+		{"type": "emoji", "emoji": emoji},
+	})
+	params := tgbotapi.Params{
+		"chat_id":    strconv.FormatInt(chatID, 10),
+		"message_id": strconv.Itoa(messageID),
+		"reaction":   string(reactionJSON),
+	}
+	_, err := bot.MakeRequest("setMessageReaction", params)
+	if err != nil {
+		log.Printf("⚠️ [Telegram Reaction FAILED] Bot: @%s | Chat: %d | MsgID: %d | Emoji: %s | Error: %v",
+			bot.Self.UserName, chatID, messageID, emoji, err)
+	} else {
+		log.Printf("👍 [Telegram Reaction OK] Bot: @%s | Chat: %d | MsgID: %d | Emoji: %s",
+			bot.Self.UserName, chatID, messageID, emoji)
+	}
+	return err
+}
+
+// ReactToSessionMessage reacts with an emoji on the latest Telegram message in a session.
+func (a *TelegramAdapter) ReactToSessionMessage(sessionID string, emoji string) error {
+	a.mu.RLock()
+	target := a.sessionTarget[sessionID]
+	lastID := a.lastMsgID[sessionID]
+	var runner *BotRunner
+	if target != nil {
+		runner = a.runners[target.BotID]
+	}
+	a.mu.RUnlock()
+
+	if target == nil || runner == nil || runner.Bot == nil || lastID == 0 {
+		return nil
+	}
+	return a.SetMessageReaction(runner.Bot, target.ChatID, lastID, emoji)
+}
+
+func (a *TelegramAdapter) handleCallbackQuery(runner *BotRunner, cb *RawTelegramCallbackQuery) {
+	if cb == nil || runner == nil || runner.Bot == nil {
+		return
+	}
+
+	userName := cb.From.UserName
+	if userName == "" {
+		userName = strings.TrimSpace(cb.From.FirstName + " " + cb.From.LastName)
+	}
+	if userName == "" {
+		userName = "Telegram User"
+	}
+
+	chatID := int64(0)
+	threadID := 0
+	if cb.Message != nil {
+		chatID = cb.Message.Chat.ID
+		threadID = cb.Message.MessageThreadID
+	}
+
+	log.Printf("🔘 [Telegram Callback IN] Bot: @%s | Chat: %d | User: @%s (ID: %d) | Data: %q",
+		runner.Bot.Self.UserName, chatID, userName, cb.From.ID, cb.Data)
+
+	if strings.HasPrefix(cb.Data, "stop_discussion:") {
+		sessionID := strings.TrimPrefix(cb.Data, "stop_discussion:")
+		a.runtime.StopDiscussion(sessionID)
+
+		// Answer callback query so button spinner finishes
+		answerParams := tgbotapi.Params{
+			"callback_query_id": cb.ID,
+			"text":              "⏹️ Diskusi multi-agent dihentikan!",
+			"show_alert":        "false",
+		}
+		_, _ = runner.Bot.MakeRequest("answerCallbackQuery", answerParams)
+
+		if chatID != 0 {
+			stopNotice := fmt.Sprintf("⏹️ <b>Diskusi dihentikan oleh @%s</b>\nSemua agen telah dipause. Kirim pesan baru jika ingin memulai lagi.", userName)
+			_, _ = a.sendTelegramMessage(runner.Bot, chatID, threadID, stopNotice, "HTML")
+		}
+		log.Printf("⏹️ [Telegram] Discussion stopped via inline button for session %s by @%s", sessionID, userName)
+		return
+	}
+
+	// Default acknowledge
+	answerParams := tgbotapi.Params{
+		"callback_query_id": cb.ID,
+		"text":              "OK",
+	}
+	_, _ = runner.Bot.MakeRequest("answerCallbackQuery", answerParams)
 }
 
 var (
@@ -568,6 +870,9 @@ func pickDefaultAgentForTopic(topicName string, fallback string) string {
 	if strings.Contains(lower, "devops") || strings.Contains(lower, "infra") || strings.Contains(lower, "deploy") || strings.Contains(lower, "docker") {
 		return "devops-lead"
 	}
+	if strings.Contains(lower, "sre") || strings.Contains(lower, "incident") || strings.Contains(lower, "outage") || strings.Contains(lower, "monitor") || strings.Contains(lower, "alert") {
+		return "sre-agent"
+	}
 	if strings.Contains(lower, "code") || strings.Contains(lower, "dev") || strings.Contains(lower, "program") || strings.Contains(lower, "tech") {
 		return "coding-agent"
 	}
@@ -598,6 +903,7 @@ func (a *TelegramAdapter) pollBot(ctx context.Context, runner *BotRunner) {
 		}
 		resp, err := runner.Bot.MakeRequest("getUpdates", params)
 		if err != nil {
+			log.Printf("⚠️ [Telegram Poller] Polling error for @%s: %v", runner.Bot.Self.UserName, err)
 			select {
 			case <-ctx.Done():
 				return
@@ -611,12 +917,19 @@ func (a *TelegramAdapter) pollBot(ctx context.Context, runner *BotRunner) {
 			continue
 		}
 
+		if len(rawUpdates) > 0 {
+			log.Printf("📥 [Telegram Poller] Bot: @%s received %d update(s)", runner.Bot.Self.UserName, len(rawUpdates))
+		}
+
 		for _, update := range rawUpdates {
 			if update.UpdateID >= offset {
 				offset = update.UpdateID + 1
 			}
 			if update.Message != nil {
 				go a.handleRawTelegramMessage(runner, update.Message)
+			}
+			if update.CallbackQuery != nil {
+				go a.handleCallbackQuery(runner, update.CallbackQuery)
 			}
 		}
 	}
@@ -632,6 +945,39 @@ func (a *TelegramAdapter) handleRawTelegramMessage(runner *BotRunner, msg *RawTe
 	if userName == "" {
 		userName = "Telegram User"
 	}
+	senderID := msg.From.ID
+	if senderID == 0 {
+		senderID = msg.Chat.ID
+	}
+
+	isGroupChat := msg.Chat.Type == "group" || msg.Chat.Type == "supergroup" || msg.Chat.Title != "" || threadID != 0
+	sessType := "direct"
+	if isGroupChat {
+		sessType = "group"
+	}
+
+	chatType := msg.Chat.Type
+	if chatType == "" {
+		chatType = "private"
+	}
+	topicInfo := "none"
+	if msg.MessageThreadID != 0 {
+		topicInfo = fmt.Sprintf("topic #%d", msg.MessageThreadID)
+	}
+	if msg.ForumTopicCreated != nil {
+		topicInfo = fmt.Sprintf("NEW_TOPIC(%q)", msg.ForumTopicCreated.Name)
+	}
+	log.Printf("📩 [Telegram IN] Bot: @%s | Chat: %d (%s) | Group: %q | Topic: %s | User: @%s (ID: %d) | MsgID: %d | Text: %q",
+		runner.Bot.Self.UserName,
+		chatID,
+		chatType,
+		msg.Chat.Title,
+		topicInfo,
+		userName,
+		senderID,
+		msg.MessageID,
+		msg.Text,
+	)
 
 	// 1. Handle new forum topic creation in supergroups
 	if msg.ForumTopicCreated != nil {
@@ -656,6 +1002,7 @@ func (a *TelegramAdapter) handleRawTelegramMessage(runner *BotRunner, msg *RawTe
 			ID:        sessionID,
 			AgentID:   assignedAgent,
 			Title:     title,
+			Type:      "group",
 			ChannelID: "telegram",
 			UserID:    userName,
 			Status:    "active",
@@ -697,10 +1044,6 @@ func (a *TelegramAdapter) handleRawTelegramMessage(runner *BotRunner, msg *RawTe
 		cleanText = strings.TrimSpace(re.ReplaceAllString(cleanText, ""))
 	}
 
-	senderID := msg.From.ID
-	if senderID == 0 {
-		senderID = msg.Chat.ID
-	}
 	if msg.From.UserName != "" {
 		userName = msg.From.UserName
 	}
@@ -807,6 +1150,26 @@ func (a *TelegramAdapter) handleRawTelegramMessage(runner *BotRunner, msg *RawTe
 		return
 	}
 
+	// Natural emoji reaction in Telegram chats (group chat or private)
+	lowerMsg := strings.ToLower(cleanText)
+	if strings.Contains(lowerMsg, "haha") || strings.Contains(lowerMsg, "wkwk") || strings.Contains(lowerMsg, "lol") || strings.Contains(lowerMsg, "lmao") || strings.Contains(lowerMsg, "rofl") || strings.Contains(lowerMsg, "hehe") || strings.Contains(lowerMsg, "xixi") || strings.Contains(lowerMsg, "lucu") || strings.Contains(lowerMsg, "joke") {
+		go a.SetMessageReaction(runner.Bot, chatID, msg.MessageID, "🤣")
+	} else if strings.Contains(lowerMsg, "mantap") || strings.Contains(lowerMsg, "keren") || strings.Contains(lowerMsg, "awesome") || strings.Contains(lowerMsg, "good job") || strings.Contains(lowerMsg, "congrats") || strings.Contains(lowerMsg, "sip") || strings.Contains(lowerMsg, "jos") || strings.Contains(lowerMsg, "top") || strings.Contains(lowerMsg, "oke") || strings.Contains(lowerMsg, "siap") {
+		go a.SetMessageReaction(runner.Bot, chatID, msg.MessageID, "👍")
+	} else if strings.Contains(lowerMsg, "deploy") || strings.Contains(lowerMsg, "launch") || strings.Contains(lowerMsg, "release") || strings.Contains(lowerMsg, "ship") || strings.Contains(lowerMsg, "gas") {
+		go a.SetMessageReaction(runner.Bot, chatID, msg.MessageID, "🔥")
+	} else if strings.Contains(lowerMsg, "fire") || strings.Contains(lowerMsg, "api") || strings.Contains(lowerMsg, "hot") || strings.Contains(lowerMsg, "semangat") || strings.Contains(lowerMsg, "gokil") {
+		go a.SetMessageReaction(runner.Bot, chatID, msg.MessageID, "🔥")
+	} else if strings.Contains(lowerMsg, "love") || strings.Contains(lowerMsg, "cinta") || strings.Contains(lowerMsg, "makasih") || strings.Contains(lowerMsg, "terima kasih") || strings.Contains(lowerMsg, "thanks") {
+		go a.SetMessageReaction(runner.Bot, chatID, msg.MessageID, "❤️")
+	} else if strings.Contains(lowerMsg, "bingung") || strings.Contains(lowerMsg, "hmmm") || strings.Contains(lowerMsg, "mikir") || strings.Contains(lowerMsg, "kenapa") {
+		go a.SetMessageReaction(runner.Bot, chatID, msg.MessageID, "🤔")
+	} else if strings.Contains(lowerMsg, "incident") || strings.Contains(lowerMsg, "outage") || strings.Contains(lowerMsg, "error 500") || strings.Contains(lowerMsg, "down") || strings.Contains(lowerMsg, "rusak") || strings.Contains(lowerMsg, "bug") {
+		go a.SetMessageReaction(runner.Bot, chatID, msg.MessageID, "⚡")
+	} else if strings.Contains(lowerMsg, "react") || strings.Contains(lowerMsg, "reaksi") || strings.Contains(lowerMsg, "emoji") || strings.Contains(lowerMsg, "tes emoji") || strings.Contains(lowerMsg, "test") {
+		go a.SetMessageReaction(runner.Bot, chatID, msg.MessageID, "🫡")
+	}
+
 	// Unique chat key and default session ID per topic or private chat
 	var chatKey string
 	var defaultSessionID string
@@ -816,6 +1179,27 @@ func (a *TelegramAdapter) handleRawTelegramMessage(runner *BotRunner, msg *RawTe
 	} else {
 		chatKey = fmt.Sprintf("%s:%d", runner.Config.ID, chatID)
 		defaultSessionID = fmt.Sprintf("tg-%s-%d", runner.Config.ID, chatID)
+	}
+
+	// Stop Command Check (Intervention Mechanism for Multi-Agent Discussions)
+	lowerClean := strings.ToLower(cleanText)
+	isStopCmd := cleanText == "/stop" || cleanText == "/bubar" || cleanText == "/pause" || cleanText == "/cancel" ||
+		lowerClean == "stop" || lowerClean == "berhenti" || lowerClean == "cukup" || lowerClean == "udah" ||
+		lowerClean == "pause" || lowerClean == "bubar" || lowerClean == "cancel"
+
+	if isStopCmd {
+		a.mu.RLock()
+		sessID, _ := a.activeChats[chatKey]
+		a.mu.RUnlock()
+		if sessID == "" {
+			sessID = defaultSessionID
+		}
+		a.runtime.StopDiscussion(sessID)
+		go a.SetMessageReaction(runner.Bot, chatID, msg.MessageID, "🫡")
+		stopMsg := fmt.Sprintf("⏹️ <b>Diskusi multi-agent dihentikan oleh @%s</b>\nSemua agent telah dipause. Kirim pesan baru untuk memulai kembali.", userName)
+		_, _ = a.sendTelegramMessage(runner.Bot, chatID, threadID, stopMsg, "HTML")
+		log.Printf("⏹️ [Telegram] Discussion stopped via command %q by user @%s in session %s", cleanText, userName, sessID)
+		return
 	}
 
 	// 2. Handle /new or /reset command
@@ -859,6 +1243,7 @@ func (a *TelegramAdapter) handleRawTelegramMessage(runner *BotRunner, msg *RawTe
 			ID:        newSessionID,
 			AgentID:   targetAgent,
 			Title:     title,
+			Type:      sessType,
 			ChannelID: "telegram",
 			UserID:    userName,
 			Status:    "active",
@@ -976,6 +1361,7 @@ func (a *TelegramAdapter) handleRawTelegramMessage(runner *BotRunner, msg *RawTe
 		GroupName:       msg.Chat.Title,
 	}
 	a.sessionTarget[sessionID] = target
+	a.lastMsgID[sessionID] = msg.MessageID
 	a.mu.Unlock()
 
 	// Ensure session in store
@@ -997,6 +1383,7 @@ func (a *TelegramAdapter) handleRawTelegramMessage(runner *BotRunner, msg *RawTe
 			ID:        sessionID,
 			AgentID:   targetAgent,
 			Title:     title,
+			Type:      sessType,
 			ChannelID: "telegram",
 			UserID:    userName,
 			Status:    "active",
@@ -1016,6 +1403,7 @@ func (a *TelegramAdapter) handleRawTelegramMessage(runner *BotRunner, msg *RawTe
 			Timestamp: time.Now(),
 		})
 	} else {
+		sess.Type = sessType
 		sess.ChannelID = "telegram"
 		sess.Metadata = string(metaJSON)
 		sess.UpdatedAt = time.Now().Unix()
@@ -1064,13 +1452,20 @@ func (a *TelegramAdapter) handleRawTelegramMessage(runner *BotRunner, msg *RawTe
 					content := payload.Content
 					formatted := FormatMarkdownForTelegram(content)
 					if len(formatted) <= 4000 {
-						err := a.editTelegramMessage(runner.Bot, chatID, sentMsgID, formatted, "HTML")
-						if err != nil {
-							_, _ = a.sendTelegramMessage(runner.Bot, chatID, threadID, formatted, "HTML")
+						if isGroupChat {
+							_ = a.editTelegramMessageWithStopButton(runner.Bot, chatID, sentMsgID, formatted, "HTML", sessionID)
+						} else {
+							err := a.editTelegramMessage(runner.Bot, chatID, sentMsgID, formatted, "HTML")
+							if err != nil {
+								_, _ = a.sendTelegramMessage(runner.Bot, chatID, threadID, formatted, "HTML")
+							}
 						}
 					} else {
 						_ = a.deleteTelegramMessage(runner.Bot, chatID, sentMsgID)
 						a.sendTelegramChunks(runner.Bot, chatID, threadID, content)
+						if isGroupChat {
+							_, _ = a.sendTelegramMessageWithStopButton(runner.Bot, chatID, threadID, "💬 <i>Diskusi sedang berlangsung. Klik di bawah untuk menghentikan:</i>", "HTML", sessionID)
+						}
 					}
 				}
 			case messaging.EventAgentFailed:
@@ -1093,8 +1488,11 @@ func (a *TelegramAdapter) handleRawTelegramMessage(runner *BotRunner, msg *RawTe
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
+	log.Printf("🤖 [Telegram Dispatch] Dispatching to Agent %q (Session: %s, Model: %s)", targetAgent, sessionID, modelToUse)
 	_, err := a.runtime.ExecuteTurnWithModel(ctx, sessionID, targetAgent, cleanText, "telegram", modelToUse)
 	if err != nil {
-		log.Printf("❌ Telegram turn error: %v", err)
+		log.Printf("❌ [Telegram Turn] Error executing turn: %v", err)
+	} else {
+		log.Printf("✅ [Telegram Turn] Successfully completed turn for session %s", sessionID)
 	}
 }

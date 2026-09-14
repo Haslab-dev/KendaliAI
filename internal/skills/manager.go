@@ -107,38 +107,106 @@ func (m *Manager) Create(pkg SkillPackage) error {
 	return nil
 }
 
-func (m *Manager) Get(id string) (*SkillPackage, error) {
-	dir := m.skillDir(id)
-	specPath := filepath.Join(dir, "skill.yaml")
-
-	data, err := os.ReadFile(specPath)
-	if err != nil {
-		// Fallback check legacy ~/.kendaliai/skills/generated/<id>
-		homeDir, _ := os.UserHomeDir()
-		legacyDir := filepath.Join(homeDir, ".kendaliai", "skills", "generated", id)
-		data, err = os.ReadFile(filepath.Join(legacyDir, "skill.yaml"))
-		if err != nil {
-			return nil, fmt.Errorf("skill not found: %s", id)
+func parseSkillMD(content []byte) (*SkillSpec, string, error) {
+	parts := strings.SplitN(string(content), "---", 3)
+	if len(parts) >= 3 {
+		var spec SkillSpec
+		if err := yaml.Unmarshal([]byte(parts[1]), &spec); err != nil {
+			return nil, "", err
 		}
-		dir = legacyDir
+		prompt := strings.TrimSpace(parts[2])
+		return &spec, prompt, nil
+	}
+	return nil, "", fmt.Errorf("missing yaml frontmatter in SKILL.md")
+}
+
+func (m *Manager) Get(id string) (*SkillPackage, error) {
+	homeDir, _ := os.UserHomeDir()
+	cwd, _ := os.Getwd()
+
+	candidateDirs := []string{
+		m.skillDir(id),
+		filepath.Join(homeDir, ".kendaliai", "skills", "generated", id),
+		filepath.Join("skills", id),
+		filepath.Join("./skills", id),
+	}
+	if cwd != "" {
+		candidateDirs = append(candidateDirs, filepath.Join(cwd, "skills", id))
 	}
 
-	var spec SkillSpec
-	if err := yaml.Unmarshal(data, &spec); err != nil {
-		return nil, fmt.Errorf("parse spec: %w", err)
+	// Also check numbered prefix folders in skills (e.g. 01-hello-world for hello-world)
+	skillsRoots := []string{"skills", "./skills"}
+	if cwd != "" {
+		skillsRoots = append(skillsRoots, filepath.Join(cwd, "skills"))
+	}
+	for _, sr := range skillsRoots {
+		if entries, err := os.ReadDir(sr); err == nil {
+			for _, e := range entries {
+				if e.IsDir() {
+					name := e.Name()
+					if name == id || strings.EqualFold(name, id) ||
+						strings.TrimPrefix(name, "01-") == id ||
+						strings.TrimPrefix(name, "02-") == id ||
+						strings.TrimPrefix(name, "03-") == id ||
+						strings.TrimPrefix(name, "04-") == id ||
+						strings.TrimPrefix(name, "05-") == id ||
+						strings.TrimPrefix(name, "06-") == id ||
+						strings.TrimPrefix(name, "07-") == id ||
+						strings.TrimPrefix(name, "08-") == id ||
+						strings.TrimPrefix(name, "09-") == id ||
+						strings.TrimPrefix(name, "10-") == id ||
+						strings.TrimPrefix(name, "11-") == id ||
+						strings.TrimPrefix(name, "12-") == id ||
+						strings.TrimPrefix(name, "13-") == id ||
+						strings.TrimPrefix(name, "14-") == id ||
+						strings.TrimPrefix(name, "15-") == id ||
+						strings.TrimPrefix(name, "16-") == id {
+						candidateDirs = append(candidateDirs, filepath.Join(sr, name))
+					}
+				}
+			}
+		}
 	}
 
-	promptPath := filepath.Join(dir, spec.PromptFile)
-	prompt, _ := os.ReadFile(promptPath)
+	for _, dir := range candidateDirs {
+		// 1. Try SKILL.md
+		skillMDPath := filepath.Join(dir, "SKILL.md")
+		if mdData, err := os.ReadFile(skillMDPath); err == nil {
+			spec, prompt, err := parseSkillMD(mdData)
+			if err == nil && spec != nil {
+				if spec.ID == "" {
+					spec.ID = id
+				}
+				examples, _ := os.ReadFile(filepath.Join(dir, "examples.md"))
+				return &SkillPackage{
+					Spec:     *spec,
+					Prompt:   prompt,
+					Examples: string(examples),
+				}, nil
+			}
+		}
 
-	examplesPath := filepath.Join(dir, "examples.md")
-	examples, _ := os.ReadFile(examplesPath)
+		// 2. Try skill.yaml
+		specPath := filepath.Join(dir, "skill.yaml")
+		if data, err := os.ReadFile(specPath); err == nil {
+			var spec SkillSpec
+			if err := yaml.Unmarshal(data, &spec); err == nil {
+				promptFile := spec.PromptFile
+				if promptFile == "" {
+					promptFile = "prompt.md"
+				}
+				prompt, _ := os.ReadFile(filepath.Join(dir, promptFile))
+				examples, _ := os.ReadFile(filepath.Join(dir, "examples.md"))
+				return &SkillPackage{
+					Spec:     spec,
+					Prompt:   string(prompt),
+					Examples: string(examples),
+				}, nil
+			}
+		}
+	}
 
-	return &SkillPackage{
-		Spec:     spec,
-		Prompt:   string(prompt),
-		Examples: string(examples),
-	}, nil
+	return nil, fmt.Errorf("skill not found: %s", id)
 }
 
 func (m *Manager) Update(id string, pkg SkillPackage) error {
@@ -191,6 +259,14 @@ func (m *Manager) List() ([]SkillSpec, error) {
 	dirs := []string{
 		filepath.Join(m.basePath, "generated"),
 		filepath.Join(homeDir, ".kendaliai", "skills", "generated"),
+		"skills",
+		"./skills",
+		filepath.Join(homeDir, ".kendaliai", "skills"),
+	}
+
+	cwd, _ := os.Getwd()
+	if cwd != "" {
+		dirs = append(dirs, filepath.Join(cwd, "skills"))
 	}
 
 	for _, genDir := range dirs {
@@ -205,6 +281,26 @@ func (m *Manager) List() ([]SkillSpec, error) {
 			if !e.IsDir() || seen[e.Name()] {
 				continue
 			}
+
+			// 1. Try SKILL.md
+			skillMDPath := filepath.Join(genDir, e.Name(), "SKILL.md")
+			if mdData, err := os.ReadFile(skillMDPath); err == nil {
+				spec, _, err := parseSkillMD(mdData)
+				if err == nil && spec != nil {
+					if spec.ID == "" {
+						spec.ID = e.Name()
+					}
+					if spec.Name == "" {
+						spec.Name = e.Name()
+					}
+					seen[e.Name()] = true
+					seen[spec.ID] = true
+					specs = append(specs, *spec)
+					continue
+				}
+			}
+
+			// 2. Try skill.yaml
 			specPath := filepath.Join(genDir, e.Name(), "skill.yaml")
 			data, err := os.ReadFile(specPath)
 			if err != nil {
@@ -214,7 +310,14 @@ func (m *Manager) List() ([]SkillSpec, error) {
 			if err := yaml.Unmarshal(data, &spec); err != nil {
 				continue
 			}
+			if spec.ID == "" {
+				spec.ID = e.Name()
+			}
+			if spec.Name == "" {
+				spec.Name = e.Name()
+			}
 			seen[e.Name()] = true
+			seen[spec.ID] = true
 			specs = append(specs, spec)
 		}
 	}

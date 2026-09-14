@@ -67,6 +67,18 @@ func TestResolveGroupTurnAgent(t *testing.T) {
 			expectedAgent: "lead-architecture",
 			expectedStrict: false, // General discussion! Others can share POV!
 		},
+		{
+			name:          "multiple mentions - Marcus first, Alex second",
+			prompt:        "@Marcus Chen, menurutmu arsitektur mana yang paling cocok untuk kendali-ai? Coba tanyakan pendapat @Alex Rivera juga.",
+			expectedAgent: "lead-backend",
+			expectedStrict: true,
+		},
+		{
+			name:          "multiple mentions - Alex first, Marcus second",
+			prompt:        "@Alex Rivera, tolong review component ini ya. Nanti tanyakan juga ke @Marcus Chen.",
+			expectedAgent: "lead-frontend",
+			expectedStrict: true,
+		},
 	}
 
 	for _, tc := range tests {
@@ -79,5 +91,28 @@ func TestResolveGroupTurnAgent(t *testing.T) {
 				t.Errorf("expected strict %v, got %v", tc.expectedStrict, gotStrict)
 			}
 		})
+	}
+}
+
+func TestFindMentionedOtherAgent(t *testing.T) {
+	agents := []AgentConfig{
+		{ID: "personal-assistant", Name: "Personal Assistant"},
+		{ID: "lead-frontend", Name: "Alex Rivera"},
+		{ID: "lead-backend", Name: "Marcus Chen"},
+		{ID: "lead-architecture", Name: "Elena Rostova"},
+	}
+
+	// Marcus mentions Alex at the end
+	msg1 := "Menurut gue arsitektur microservices paling pas. Bagaimana menurutmu @Alex Rivera?"
+	targetID, found := findMentionedOtherAgent(msg1, "lead-backend", agents)
+	if !found || targetID != "lead-frontend" {
+		t.Fatalf("expected 'lead-frontend', got %q (found: %v)", targetID, found)
+	}
+
+	// Should not self-mention
+	msg2 := "Sebagai @Marcus Chen, saya setuju."
+	_, found2 := findMentionedOtherAgent(msg2, "lead-backend", agents)
+	if found2 {
+		t.Fatalf("did not expect self-mention to be detected")
 	}
 }

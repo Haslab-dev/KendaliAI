@@ -59,14 +59,29 @@ func NewServer(db *sql.DB) *Server {
 		scheduler.NewDaemon(bus)
 	}
 	scheduler.TurnExecutor = func(ctx context.Context, sessionID, agentID, prompt, channel string, deliverTelegram bool) error {
-		respMsg, err := rt.ExecuteTurnWithModel(ctx, sessionID, agentID, prompt, channel, "")
+		turnSessionID := sessionID
+		if turnSessionID == "" {
+			turnSessionID = "direct_" + agentID
+		}
+		if channel == "" {
+			channel = "routine"
+		}
+		respMsg, err := rt.ExecuteTurnWithModel(ctx, turnSessionID, agentID, prompt, channel, "")
 		if err != nil {
 			log.Printf("Routine turn execution error: %v", err)
+			// Direct notification fallback if model execution has an error
+			if (deliverTelegram || channel == "telegram") && tg != nil {
+				if sendErr := tg.SendRoutineNotification(sessionID, agentID, prompt); sendErr != nil {
+					log.Printf("⚠️ Telegram routine delivery failed: %v", sendErr)
+				}
+			}
 			return err
 		}
-		if deliverTelegram && respMsg != nil && respMsg.Content != "" {
+		if (deliverTelegram || channel == "telegram") && respMsg != nil && respMsg.Content != "" {
 			if tg != nil {
-				_ = tg.SendAgentNotification(agentID, respMsg.Content)
+				if sendErr := tg.SendRoutineNotification(sessionID, agentID, respMsg.Content); sendErr != nil {
+					log.Printf("⚠️ Telegram routine delivery failed: %v", sendErr)
+				}
 			}
 		}
 		return nil
@@ -959,6 +974,55 @@ func (s *Server) handleSessionDetail() http.HandlerFunc {
 		if len(parts) > 1 && parts[1] == "clear" && r.Method == "POST" {
 			_ = s.store.ClearSessionMessages(sessionID)
 			json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+			return
+		}
+
+		if len(parts) > 1 && parts[1] == "stop" && r.Method == "POST" {
+			s.runtime.StopDiscussion(sessionID)
+			json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "stopped": true})
+			return
+		}
+
+		if len(parts) >= 4 && parts[1] == "messages" && parts[3] == "reaction" && r.Method == "POST" {
+			messageID := parts[2]
+			var req struct {
+				Emoji      string `json:"emoji"`
+				SenderID   string `json:"senderId"`
+				SenderName string `json:"senderName"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, "invalid request body", http.StatusBadRequest)
+				return
+			}
+			if req.Emoji == "" {
+				http.Error(w, "emoji is required", http.StatusBadRequest)
+				return
+			}
+			if req.SenderID == "" {
+				req.SenderID = "user"
+			}
+			if req.SenderName == "" {
+				req.SenderName = "User"
+			}
+			updatedMsg, err := s.store.AddMessageReaction(sessionID, messageID, req.Emoji, req.SenderID, req.SenderName)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			s.bus.Publish(messaging.Event{
+				ID:        uuid.New().String(),
+				Type:      messaging.EventMessageReaction,
+				SessionID: sessionID,
+				Payload: messaging.MessageReactionPayload{
+					SessionID:  sessionID,
+					MessageID:  messageID,
+					Emoji:      req.Emoji,
+					SenderID:   req.SenderID,
+					SenderName: req.SenderName,
+				},
+				Timestamp: time.Now(),
+			})
+			json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "message": updatedMsg})
 			return
 		}
 

@@ -255,6 +255,7 @@ var schemaQueries = []string{
 		tool_call_id TEXT,
 		tokens INTEGER DEFAULT 0,
 		model TEXT,
+		reactions TEXT DEFAULT '[]',
 		created_at INTEGER
 	)`,
 	`CREATE TABLE IF NOT EXISTS mcp_servers (

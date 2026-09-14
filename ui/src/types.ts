@@ -121,7 +121,14 @@ export interface SessionMessage {
   tokens?: number;
   model?: string;
   ragSources?: RagSource[];
+  reactions?: MessageReaction[];
   createdAt: number;
+}
+
+export interface MessageReaction {
+  emoji: string;
+  senderId: string;
+  senderName?: string;
 }
 
 export interface RoutineTask {

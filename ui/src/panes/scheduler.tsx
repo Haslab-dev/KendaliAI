@@ -29,6 +29,8 @@ interface ScheduleItem {
   status: 'running' | 'paused';
   prompt: string;
   target?: string;
+  owner?: string;
+  ownerType?: string;
   deliverTelegram?: boolean;
   targetType?: string;
   targetId?: string;
@@ -54,6 +56,7 @@ export const SchedulerPane: React.FC = () => {
   const [formTitle, setFormTitle] = useState('');
   const [formSchedule, setFormSchedule] = useState('every weekday at 9am');
   const [formPrompt, setFormPrompt] = useState('');
+  const [formOwner, setFormOwner] = useState('Personal Assistant');
   const [formTargetType, setFormTargetType] = useState<'agent' | 'group'>('agent');
   const [formTargetId, setFormTargetId] = useState('');
   const [formDeliverTelegram, setFormDeliverTelegram] = useState(false);
@@ -61,6 +64,7 @@ export const SchedulerPane: React.FC = () => {
   useEffect(() => {
     if (agents.length > 0 && !formTargetId) {
       setFormTargetId(agents[0].id);
+      setFormOwner(agents[0].name);
     }
   }, [agents, formTargetId]);
 
@@ -80,6 +84,8 @@ export const SchedulerPane: React.FC = () => {
             status: d.enabled === false ? 'paused' : 'running',
             prompt: d.prompt || '',
             target: d.targetType ? `${d.targetType}: ${d.targetId}` : (d.channel || 'web'),
+            owner: d.owner || (d.targetId ? d.targetId : 'Personal Assistant'),
+            ownerType: d.ownerType || 'agent',
             deliverTelegram: d.deliverTelegram,
             targetType: d.targetType,
             targetId: d.targetId,
@@ -134,10 +140,16 @@ export const SchedulerPane: React.FC = () => {
   };
 
   const handleRunNow = async (s: ScheduleItem) => {
-    setToastMessage(`Fired: ${s.title}`);
+    setToastMessage(`Triggering: ${s.title}...`);
     setActiveToast(true);
     try {
-      await fetch(`/api/schedules/${s.id}/run`, { method: 'POST' });
+      const res = await fetch(`/api/schedules/${s.id}/run`, { method: 'POST' });
+      if (res.ok) {
+        setToastMessage(`✅ Delivered: ${s.title} — Job executed and sent immediately!`);
+      } else {
+        setToastMessage(`Fired: ${s.title}`);
+      }
+      loadSchedules();
     } catch (err) {
       console.warn('Trigger local fallback:', err);
     }
@@ -171,6 +183,8 @@ export const SchedulerPane: React.FC = () => {
       status: 'running',
       prompt: formPrompt.trim() || formTitle.trim(),
       target: `${formTargetType}: ${targetId}`,
+      owner: formOwner || 'Personal Assistant',
+      ownerType: 'agent',
       deliverTelegram: formDeliverTelegram,
       targetType: formTargetType,
       targetId,
@@ -191,6 +205,8 @@ export const SchedulerPane: React.FC = () => {
           prompt: newItem.prompt,
           targetType: formTargetType,
           targetId,
+          owner: formOwner || 'Personal Assistant',
+          ownerType: 'agent',
           deliverTelegram: formDeliverTelegram,
         }),
       });
@@ -316,9 +332,15 @@ export const SchedulerPane: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Cron string & description */}
-                      <div className="text-[11px] text-[#333333] font-['Geist_Mono',monospace] truncate">
-                        {s.cron} · {s.humanSchedule}
+                      {/* Cron string, description & Owner */}
+                      <div className="flex items-center gap-2 flex-wrap text-[11px] pt-0.5">
+                        <span className="text-[#333333] font-['Geist_Mono',monospace]">
+                          {s.cron} · {s.humanSchedule}
+                        </span>
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-[#F3F4F6] dark:bg-[#27272A] text-[#4B5563] dark:text-[#9CA3AF] text-[10px] font-['Geist_Mono',monospace]">
+                          <Bot size={11} className="text-[#3B82F6]" />
+                          Owner: <strong className="text-[#111827] dark:text-[#F3F4F6]">{s.owner || 'Personal Assistant'}</strong>
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -510,6 +532,23 @@ export const SchedulerPane: React.FC = () => {
                   onChange={(e) => setFormPrompt(e.target.value)}
                   className="border border-[#E5E7EB] rounded-[6px] px-3 py-1.5 text-[12px] focus:outline-none focus:border-[#0F0F0F] resize-none"
                 />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-bold text-[#000000]">Owner (Creator / Responsible Agent)</label>
+                <select
+                  value={formOwner}
+                  onChange={(e) => setFormOwner(e.target.value)}
+                  className="border border-[#E5E7EB] rounded-[6px] px-3 py-1.5 text-[12px] focus:outline-none focus:border-[#0F0F0F] bg-white"
+                >
+                  <option value="Personal Assistant">Personal Assistant (Default)</option>
+                  <option value="User">User (Manual / Self)</option>
+                  {agents.map((a) => (
+                    <option key={a.id} value={a.name}>
+                      {a.name} ({a.role || 'Agent'})
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="flex flex-col gap-1.5">

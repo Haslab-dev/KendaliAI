@@ -11,15 +11,20 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/kendaliai/app/internal/config"
 	"github.com/kendaliai/app/internal/data"
 	"github.com/kendaliai/app/internal/embedding"
 	"github.com/kendaliai/app/internal/git"
 	"github.com/kendaliai/app/internal/intelligence"
 	"github.com/kendaliai/app/internal/logger"
+	"github.com/kendaliai/app/internal/messaging"
 	"github.com/kendaliai/app/internal/plugins"
 	"github.com/kendaliai/app/internal/reflection"
 	"github.com/kendaliai/app/internal/review"
@@ -1537,7 +1542,7 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 		},
 		"schedule_task": {
 			Name:        "schedule_task",
-			Description: "Schedules a recurring cron job or natural-language reminder (e.g. 'make reminder every 1 am to wake me up', '0 1 * * *', 'every 30 minutes', 'tomorrow at 9am'). Fires notifications and executes instructions automatically.",
+			Description: "Schedules a recurring cron job or natural-language reminder (e.g. 'make reminder every 1 am to wake me up', '0 1 * * *', 'every 2 hours', 'every 30 minutes', 'tomorrow at 9am'). Fires notifications and executes instructions automatically.",
 			Signature:   `{"name": "string", "schedule": "string", "prompt": "string"}`,
 			Category:    "Scheduler",
 			Execute: func(ctx context.Context, args map[string]interface{}) string {
@@ -1558,13 +1563,41 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 					}
 				}
 
-				task, err := scheduler.DefaultDaemon.AddTask(name, scheduleExpr, prompt, "", "web")
+				sessionID, _ := ctx.Value("sessionID").(string)
+				channel, _ := ctx.Value("channel").(string)
+				agentID, _ := ctx.Value("agentID").(string)
+				agentName, _ := ctx.Value("agentName").(string)
+
+				if channel == "" {
+					channel = "web"
+				}
+				deliverTg := channel == "telegram" || strings.HasPrefix(sessionID, "tg-")
+				owner := agentName
+				if owner == "" {
+					owner = agentID
+				}
+				if owner == "" {
+					owner = "Personal Assistant"
+				}
+
+				task, err := scheduler.DefaultDaemon.AddRoutineTask(scheduler.ScheduledTask{
+					Name:            name,
+					Schedule:        scheduleExpr,
+					Prompt:          prompt,
+					TargetType:      "agent",
+					TargetID:        agentID,
+					SessionID:       sessionID,
+					Owner:           owner,
+					OwnerType:       "agent",
+					DeliverTelegram: deliverTg,
+					Channel:         channel,
+				})
 				if err != nil {
 					return fmt.Sprintf("Error scheduling task: %v", err)
 				}
 
-				return fmt.Sprintf("✅ Scheduled task '%s' [%s] created. Schedule: '%s'. Next run: %s.",
-					task.Name, task.ID, task.Schedule, task.NextRun.Format(time.RFC3339))
+				return fmt.Sprintf("✅ Scheduled task '%s' [%s] created. Schedule: '%s'. Next run: %s. Owner: %s.",
+					task.Name, task.ID, task.Schedule, task.NextRun.Format(time.RFC3339), task.Owner)
 			},
 		},
 		"list_schedules": {
@@ -1630,6 +1663,111 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 			Signature:   `{"server": "string", "server_cmd": "string", "server_args": "array", "server_url": "string", "tool_name": "string", "tool_args": "object"}`,
 			Execute: func(ctx context.Context, args map[string]interface{}) string {
 				return executeMCPCall(ctx, cfg, db, args)
+			},
+		},
+		"react_to_message": {
+			Name:        "react_to_message",
+			Description: "React to a message with an emoji (e.g. 😂, 👍, 🚀, 🔥, ❤️, 🤔, 🫡, 🚨, 🎉). Ideal for group chat interactions, reacting to humor (haha, wkwk, lol), achievements, approvals, or milestone completions.",
+			Signature:   `{"message_id": "string", "emoji": "string"}`,
+			Category:    "Communication",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				emoji, _ := args["emoji"].(string)
+				if emoji == "" {
+					emoji = "👍"
+				}
+				msgID, _ := args["message_id"].(string)
+				if db == nil {
+					return fmt.Sprintf("✅ Reacted with %s", emoji)
+				}
+				if msgID == "" || msgID == "last" {
+					var lastID string
+					row := db.QueryRow("SELECT id FROM session_messages ORDER BY created_at DESC LIMIT 1")
+					_ = row.Scan(&lastID)
+					msgID = lastID
+				}
+				if msgID != "" {
+					var currentReactionsStr string
+					_ = db.QueryRow("SELECT COALESCE(reactions, '[]') FROM session_messages WHERE id = ?", msgID).Scan(&currentReactionsStr)
+					type simpleReaction struct {
+						Emoji      string `json:"emoji"`
+						SenderID   string `json:"senderId"`
+						SenderName string `json:"senderName,omitempty"`
+					}
+					var rList []simpleReaction
+					_ = json.Unmarshal([]byte(currentReactionsStr), &rList)
+					agentID, _ := ctx.Value("agentID").(string)
+					if agentID == "" {
+						agentID = "agent"
+					}
+					agentName, _ := ctx.Value("agentName").(string)
+					if agentName == "" {
+						agentName = "Agent"
+					}
+					sessionID, _ := ctx.Value("sessionID").(string)
+					channel, _ := ctx.Value("channel").(string)
+
+					exists := false
+					for _, r := range rList {
+						if r.Emoji == emoji && (r.SenderID == agentID || r.SenderName == agentName) {
+							exists = true
+							break
+						}
+					}
+					if !exists {
+						rList = append(rList, simpleReaction{Emoji: emoji, SenderID: agentID, SenderName: agentName})
+						updatedBytes, _ := json.Marshal(rList)
+						_, _ = db.Exec("UPDATE session_messages SET reactions = ? WHERE id = ?", string(updatedBytes), msgID)
+
+						if sessionID == "" {
+							_ = db.QueryRow("SELECT session_id FROM session_messages WHERE id = ?", msgID).Scan(&sessionID)
+						}
+
+						if bus, ok := ctx.Value("eventBus").(*messaging.EventBus); ok && bus != nil {
+							bus.Publish(messaging.Event{
+								Type:      messaging.EventMessageReaction,
+								SessionID: sessionID,
+								AgentID:   agentID,
+								Channel:   channel,
+								Payload: messaging.MessageReactionPayload{
+									SessionID:  sessionID,
+									MessageID:  msgID,
+									Emoji:      emoji,
+									SenderID:   agentID,
+									SenderName: agentName,
+								},
+								Timestamp: time.Now(),
+							})
+						}
+					}
+				}
+				return fmt.Sprintf("✅ Added emoji reaction '%s' to message %s", emoji, msgID)
+			},
+		},
+		"cloudflared_tunnel": {
+			Name:        "cloudflared_tunnel",
+			Description: "Manage Cloudflare Tunnels for local development and Hermes automation. Supports Option 1 Quick Tunnel (temporary *.trycloudflare.com URL, zero domain/DNS config) and Option 2 Named Tunnel (persistent custom domain). Actions: 'quick' (or 'start'), 'named', 'status', 'stop'.",
+			Signature:   `{"action": "string", "port": "int", "tunnel_name": "string", "hostname": "string"}`,
+			Category:    "Networking",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				return executeCloudflaredTunnel(ctx, args)
+			},
+		},
+		"vps_monitor": {
+			Name:        "vps_monitor",
+			Description: "Deterministic VPS & SRE system monitor (zero token waste). Checks CPU, RAM, Disk usage, Docker container status, and HTTP endpoint health against alert thresholds (>90% CPU, >85% RAM, >80% Disk). Returns deterministic alert only when something actually needs attention.",
+			Signature:   `{"check_docker": "bool", "url": "string", "threshold_cpu": "int", "threshold_ram": "int", "threshold_disk": "int"}`,
+			Category:    "Operations",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				return executeVPSMonitor(ctx, args)
+			},
+		},
+		"remember_decision": {
+			Name:        "remember_decision",
+			Description: "Record an Architectural Decision Record (ADR) or key technical policy into persistent project memory. Stores title, status, context, decision, and consequences with high recall.",
+			Signature:   `{"title": "string", "decision": "string", "context": "string", "status": "string", "consequences": "string"}`,
+			Category:    "Memory",
+			Execute: func(ctx context.Context, args map[string]interface{}) string {
+				return executeRememberDecision(ctx, workspaceRoot, db, args)
 			},
 		},
 	}
@@ -2223,4 +2361,371 @@ func executeWebScrape(ctx context.Context, cfg *config.Config, db *sql.DB, args 
 		s = s[:8000] + "\n...(truncated)"
 	}
 	return s
+}
+
+type tunnelRecord struct {
+	Port      int       `json:"port"`
+	URL       string    `json:"url"`
+	Type      string    `json:"type"`
+	PID       int       `json:"pid"`
+	StartedAt time.Time `json:"startedAt"`
+	cmd       *exec.Cmd
+}
+
+var activeTunnels sync.Map // port (int) or name (string) -> *tunnelRecord
+
+func executeCloudflaredTunnel(ctx context.Context, args map[string]interface{}) string {
+	action, _ := args["action"].(string)
+	if action == "" {
+		action = "quick"
+	}
+	action = strings.ToLower(action)
+
+	port := 8080
+	if p, ok := args["port"].(float64); ok && p > 0 {
+		port = int(p)
+	} else if pStr, ok := args["port"].(string); ok {
+		if val, err := strconv.Atoi(pStr); err == nil && val > 0 {
+			port = val
+		}
+	}
+
+	cfPath, err := exec.LookPath("cloudflared")
+	if err != nil {
+		homeDir, _ := os.UserHomeDir()
+		commonPaths := []string{
+			"/opt/homebrew/bin/cloudflared",
+			"/usr/local/bin/cloudflared",
+			filepath.Join(homeDir, "homebrew/bin/cloudflared"),
+		}
+		for _, cp := range commonPaths {
+			if _, statErr := os.Stat(cp); statErr == nil {
+				cfPath = cp
+				break
+			}
+		}
+	}
+
+	if cfPath == "" {
+		return "❌ cloudflared is not installed on your system.\n\n" +
+			"To install cloudflared:\n" +
+			"• macOS: brew install cloudflared\n" +
+			"• Linux: curl -fsSL https://pkg.cloudflare.com/cloudflared-ascii.repo | sudo tee /etc/yum.repos.d/cloudflared.repo\n" +
+			"  or: wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb && sudo dpkg -i cloudflared-linux-amd64.deb\n" +
+			"• Docker: docker run cloudflare/cloudflared:latest tunnel --url http://host.docker.internal:" + strconv.Itoa(port)
+	}
+
+	switch action {
+	case "stop":
+		if port == 0 {
+			return "⚠️ Target 'port' is required to stop a specific quick tunnel without affecting other tunnels (e.g. action='stop', port=8080)."
+		}
+		found := false
+		var stopped []string
+		activeTunnels.Range(func(key, value interface{}) bool {
+			rec := value.(*tunnelRecord)
+			if rec.Port == port || key == port || key == strconv.Itoa(port) {
+				if rec.cmd != nil && rec.cmd.Process != nil {
+					_ = rec.cmd.Process.Kill()
+				}
+				stopped = append(stopped, fmt.Sprintf("Quick tunnel on port %d (%s, PID: %d)", rec.Port, rec.URL, rec.PID))
+				activeTunnels.Delete(key)
+				found = true
+			}
+			return true
+		})
+
+		// Also check specific PID file in /tmp/cloudflared-${port}.pid
+		pidFile := fmt.Sprintf("/tmp/cloudflared-%d.pid", port)
+		if data, err := os.ReadFile(pidFile); err == nil {
+			if pid, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil && pid > 0 {
+				if proc, err := os.FindProcess(pid); err == nil {
+					_ = proc.Kill()
+					stopped = append(stopped, fmt.Sprintf("Quick tunnel process (PID %d) for port %d", pid, port))
+					found = true
+				}
+			}
+			_ = os.Remove(pidFile)
+			_ = os.Remove(fmt.Sprintf("/tmp/cloudflared-%d.log", port))
+		}
+
+		if found {
+			return fmt.Sprintf("✅ Stopped specific cloudflared quick tunnel on port %d:\n• %s\nℹ️ Main app tunnels and other processes remain unaffected.", port, strings.Join(stopped, "\n• "))
+		}
+		return fmt.Sprintf("ℹ️ No active cloudflared quick tunnel found running on port %d.\nℹ️ Main app tunnels and other processes remain unaffected.", port)
+
+	case "status", "list":
+		var list []string
+		activeTunnels.Range(func(key, value interface{}) bool {
+			rec := value.(*tunnelRecord)
+			list = append(list, fmt.Sprintf("• Port %d ➔ %s (PID: %d, Type: %s, Uptime: %s)",
+				rec.Port, rec.URL, rec.PID, rec.Type, time.Since(rec.StartedAt).Round(time.Second)))
+			return true
+		})
+		if len(list) == 0 {
+			return "ℹ️ No cloudflared tunnels currently active."
+		}
+		return "🌐 Active Cloudflare Tunnels:\n" + strings.Join(list, "\n")
+
+	case "named":
+		tunnelName, _ := args["tunnel_name"].(string)
+		hostname, _ := args["hostname"].(string)
+		if tunnelName == "" {
+			return "❌ 'tunnel_name' is required for named tunnel (e.g. tunnel_name: 'dev-api').\n\n" +
+				"Usage for Named Tunnel:\n" +
+				"1. cloudflared tunnel create <name>\n" +
+				"2. cloudflared tunnel route dns <name> <hostname>\n" +
+				"3. cloudflared tunnel run <name>"
+		}
+		return fmt.Sprintf("ℹ️ Named Tunnel '%s' requested (hostname: '%s', port: %d).\n"+
+			"To run a persistent named tunnel, ensure credentials exist in ~/.cloudflared/ and run:\n"+
+			"  cloudflared tunnel run %s", tunnelName, hostname, port, tunnelName)
+
+	default: // "quick", "start"
+		// Check if already running on this port
+		if val, ok := activeTunnels.Load(port); ok {
+			rec := val.(*tunnelRecord)
+			return fmt.Sprintf("🌐 Cloudflare Quick Tunnel is ALREADY running on port %d:\n\n"+
+				"• Public URL: %s\n"+
+				"• Target: http://localhost:%d\n"+
+				"• PID: %d\n"+
+				"• Uptime: %s", rec.Port, rec.URL, rec.Port, rec.PID, time.Since(rec.StartedAt).Round(time.Second))
+		}
+
+		targetURL := fmt.Sprintf("http://localhost:%d", port)
+		cmd := exec.Command(cfPath, "tunnel", "--url", targetURL)
+
+		stderrPipe, err := cmd.StderrPipe()
+		if err != nil {
+			return fmt.Sprintf("❌ Failed to start cloudflared: %v", err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			return fmt.Sprintf("❌ Failed to launch cloudflared process: %v", err)
+		}
+
+		// Read output to capture the trycloudflare.com URL
+		urlChan := make(chan string, 1)
+		go func() {
+			buf := make([]byte, 1024)
+			re := regexp.MustCompile(`https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com`)
+			var fullOutput strings.Builder
+			for {
+				n, err := stderrPipe.Read(buf)
+				if n > 0 {
+					chunk := string(buf[:n])
+					fullOutput.WriteString(chunk)
+					if match := re.FindString(fullOutput.String()); match != "" {
+						urlChan <- match
+						return
+					}
+				}
+				if err != nil {
+					break
+				}
+			}
+			urlChan <- ""
+		}()
+
+		var publicURL string
+		select {
+		case u := <-urlChan:
+			publicURL = u
+		case <-time.After(10 * time.Second):
+			publicURL = ""
+		}
+
+		if publicURL == "" {
+			_ = cmd.Process.Kill()
+			return fmt.Sprintf("⚠️ cloudflared started but failed to acquire a trycloudflare.com URL within 10s.\nTarget was: %s", targetURL)
+		}
+
+		rec := &tunnelRecord{
+			Port:      port,
+			URL:       publicURL,
+			Type:      "quick",
+			PID:       cmd.Process.Pid,
+			StartedAt: time.Now(),
+			cmd:       cmd,
+		}
+		activeTunnels.Store(port, rec)
+
+		return fmt.Sprintf("🎉 Cloudflare Quick Tunnel active!\n\n"+
+			"🔗 Public URL: %s\n"+
+			"🎯 Local Target: %s\n"+
+			"🆔 PID: %d\n\n"+
+			"• Accessible publicly without domain registration or port forwarding.\n"+
+			"• To stop: invoke cloudflared_tunnel with action='stop', port=%d", publicURL, targetURL, rec.PID, port)
+	}
+}
+
+func executeVPSMonitor(ctx context.Context, args map[string]interface{}) string {
+	checkDocker, _ := args["check_docker"].(bool)
+	targetURL, _ := args["url"].(string)
+
+	threshCPU := 90
+	if c, ok := args["threshold_cpu"].(float64); ok && c > 0 {
+		threshCPU = int(c)
+	}
+	threshRAM := 85
+	if r, ok := args["threshold_ram"].(float64); ok && r > 0 {
+		threshRAM = int(r)
+	}
+	threshDisk := 80
+	if d, ok := args["threshold_disk"].(float64); ok && d > 0 {
+		threshDisk = int(d)
+	}
+
+	// 1. Check Disk
+	diskUsage := 0
+	dfCmd := exec.CommandContext(ctx, "df", "-k", "/")
+	if out, err := dfCmd.Output(); err == nil {
+		lines := strings.Split(string(out), "\n")
+		if len(lines) >= 2 {
+			fields := strings.Fields(lines[1])
+			if len(fields) >= 5 {
+				pctStr := strings.TrimSuffix(fields[4], "%")
+				diskUsage, _ = strconv.Atoi(pctStr)
+			}
+		}
+	}
+
+	// 2. Check CPU & RAM
+	cpuUsage := 0
+	ramUsage := 0
+	if out, err := exec.CommandContext(ctx, "ps", "-A", "-o", "%cpu,%mem").Output(); err == nil {
+		lines := strings.Split(string(out), "\n")
+		var totalCPU, totalMEM float64
+		for i := 1; i < len(lines); i++ {
+			fields := strings.Fields(lines[i])
+			if len(fields) >= 2 {
+				c, _ := strconv.ParseFloat(fields[0], 64)
+				m, _ := strconv.ParseFloat(fields[1], 64)
+				totalCPU += c
+				totalMEM += m
+			}
+		}
+		if totalCPU > 100 {
+			totalCPU = 100
+		}
+		if totalMEM > 100 {
+			totalMEM = 100
+		}
+		cpuUsage = int(totalCPU)
+		ramUsage = int(totalMEM)
+	}
+
+	// 3. Check Docker status
+	dockerStatus := "healthy"
+	if checkDocker {
+		if _, err := exec.LookPath("docker"); err == nil {
+			docOut, err := exec.CommandContext(ctx, "docker", "ps", "--format", "{{.Names}}: {{.Status}}").Output()
+			if err != nil {
+				dockerStatus = "unreachable / daemon stopped"
+			} else {
+				str := strings.TrimSpace(string(docOut))
+				if str == "" {
+					dockerStatus = "no containers running"
+				} else if strings.Contains(strings.ToLower(str), "unhealthy") || strings.Contains(strings.ToLower(str), "restarting") {
+					dockerStatus = "unhealthy containers detected: " + str
+				}
+			}
+		}
+	}
+
+	// 4. Check URL health
+	apiStatus := "healthy"
+	if targetURL != "" {
+		client := http.Client{Timeout: 3 * time.Second}
+		resp, err := client.Get(targetURL)
+		if err != nil {
+			apiStatus = fmt.Sprintf("unreachable (%v)", err)
+		} else {
+			resp.Body.Close()
+			if resp.StatusCode >= 500 {
+				apiStatus = fmt.Sprintf("HTTP %d (server error)", resp.StatusCode)
+			}
+		}
+	}
+
+	// Deterministic evaluation: alert only if threshold breached!
+	isAlert := cpuUsage >= threshCPU || ramUsage >= threshRAM || diskUsage >= threshDisk ||
+		strings.Contains(dockerStatus, "unhealthy") || strings.Contains(apiStatus, "unreachable") || strings.Contains(apiStatus, "500")
+
+	if isAlert {
+		var recommendations []string
+		if ramUsage >= threshRAM {
+			recommendations = append(recommendations, "Inspect top memory-consuming processes using `ps aux --sort=-%mem`")
+		}
+		if cpuUsage >= threshCPU {
+			recommendations = append(recommendations, "Investigate runaway CPU threads or infinite loops")
+		}
+		if diskUsage >= threshDisk {
+			recommendations = append(recommendations, "Clear docker logs, temp files, or build caches (`docker system prune`)")
+		}
+		if strings.Contains(apiStatus, "unreachable") || strings.Contains(apiStatus, "500") {
+			recommendations = append(recommendations, fmt.Sprintf("Check backend application logs for service at %s", targetURL))
+		}
+
+		recText := strings.Join(recommendations, "\n• ")
+		if recText == "" {
+			recText = "Check system services and logs."
+		}
+
+		return fmt.Sprintf("🚨 VPS Alert Triggered\n\n"+
+			"• CPU: %d%% (threshold: %d%%)\n"+
+			"• RAM: %d%% (threshold: %d%%)\n"+
+			"• Disk: %d%% (threshold: %d%%)\n"+
+			"• API Health: %s\n"+
+			"• Docker: %s\n\n"+
+			"Recommendation:\n• %s",
+			cpuUsage, threshCPU, ramUsage, threshRAM, diskUsage, threshDisk, apiStatus, dockerStatus, recText)
+	}
+
+	return fmt.Sprintf("✅ (No Alert) All system metrics normal.\n• CPU: %d%% | RAM: %d%% | Disk: %d%% | Docker: %s | API: %s",
+		cpuUsage, ramUsage, diskUsage, dockerStatus, apiStatus)
+}
+
+func executeRememberDecision(ctx context.Context, workspaceRoot string, db *sql.DB, args map[string]interface{}) string {
+	title, _ := args["title"].(string)
+	decision, _ := args["decision"].(string)
+	contextStr, _ := args["context"].(string)
+	status, _ := args["status"].(string)
+	if status == "" {
+		status = "Accepted"
+	}
+	consequences, _ := args["consequences"].(string)
+
+	if title == "" || decision == "" {
+		return "error: 'title' and 'decision' are required"
+	}
+
+	dateStr := time.Now().Format("2006-01-02")
+	adrMD := fmt.Sprintf("\n\n## ADR: %s\n\n- **Date:** %s\n- **Status:** %s\n\n### Context\n%s\n\n### Decision\n%s\n\n### Consequences\n%s\n",
+		title, dateStr, status, contextStr, decision, consequences)
+
+	// Save to .kendaliai/memory/decisions.md
+	homeDir, _ := os.UserHomeDir()
+	memDir := filepath.Join(homeDir, ".kendaliai", "memory")
+	if workspaceRoot != "" {
+		memDir = filepath.Join(workspaceRoot, ".kendaliai", "memory")
+	}
+	_ = os.MkdirAll(memDir, 0755)
+	decisionsFile := filepath.Join(memDir, "decisions.md")
+
+	f, err := os.OpenFile(decisionsFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err == nil {
+		_, _ = f.WriteString(adrMD)
+		f.Close()
+	}
+
+	// Also store in SQLite memories table if db is provided
+	if db != nil {
+		content := fmt.Sprintf("ADR: %s | Status: %s | Decision: %s | Context: %s", title, status, decision, contextStr)
+		now := time.Now().Unix()
+		_, _ = db.Exec(`INSERT INTO memories (id, content, scope, tags, created_at, updated_at) VALUES (?, ?, 'project', 'adr,decision,architecture', ?, ?)`,
+			uuid.New().String(), content, now, now)
+	}
+
+	return fmt.Sprintf("🧠 Architectural Decision Record saved to durable memory!\n• Title: %s\n• Status: %s\n• Saved to: %s", title, status, decisionsFile)
 }

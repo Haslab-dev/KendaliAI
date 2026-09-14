@@ -26,6 +26,8 @@ type ScheduledTask struct {
 	TargetType      string     `json:"targetType,omitempty"` // "agent" or "group"
 	TargetID        string     `json:"targetId,omitempty"`
 	SessionID       string     `json:"sessionId,omitempty"`
+	Owner           string     `json:"owner,omitempty"`     // e.g. "Personal Assistant", "Alex Rivera", "User"
+	OwnerType       string     `json:"ownerType,omitempty"` // "agent", "user", "system"
 	DeliverTelegram bool       `json:"deliverTelegram,omitempty"`
 	Channel         string     `json:"channel,omitempty"` // "web", "telegram", etc.
 	Enabled         bool       `json:"enabled"`
@@ -109,7 +111,16 @@ func (d *Daemon) tick(ctx context.Context) {
 }
 
 func (d *Daemon) executeTask(ctx context.Context, task *ScheduledTask, fireTime time.Time) {
-	log.Printf("🔔 Triggering routine automation: [%s] %s (Prompt: %s)", task.ID, task.Name, task.Prompt)
+	_ = d.executeTaskInternal(ctx, task, fireTime, false)
+}
+
+func (d *Daemon) executeTaskSync(ctx context.Context, task *ScheduledTask, fireTime time.Time) error {
+	return d.executeTaskInternal(ctx, task, fireTime, true)
+}
+
+func (d *Daemon) executeTaskInternal(ctx context.Context, task *ScheduledTask, fireTime time.Time, syncExec bool) error {
+	log.Printf("🔔 Triggering routine automation: [%s] %s (Prompt: %s, Owner: %s, DeliverTelegram: %v)",
+		task.ID, task.Name, task.Prompt, task.Owner, task.DeliverTelegram)
 
 	// Publish reminder triggered event on event bus
 	if d.bus != nil {
@@ -124,40 +135,89 @@ func (d *Daemon) executeTask(ctx context.Context, task *ScheduledTask, fireTime 
 				"schedule":        task.Schedule,
 				"targetType":      task.TargetType,
 				"targetId":        task.TargetID,
+				"owner":           task.Owner,
+				"ownerType":       task.OwnerType,
 				"deliverTelegram": task.DeliverTelegram,
 				"timestamp":       fireTime.UnixMilli(),
 			},
 		})
 	}
 
-	// Route into conversation system via TurnExecutor
-	if TurnExecutor != nil && task.SessionID != "" {
-		targetAgent := task.TargetID
-		if targetAgent == "" {
+	targetAgent := task.TargetID
+	if targetAgent == "" {
+		if task.Owner != "" && (task.OwnerType == "agent" || task.OwnerType == "") {
+			targetAgent = task.Owner
+		} else {
 			targetAgent = "personal-assistant"
 		}
-		go func(sid, aid, pmt string, delTg bool) {
+	}
+	sid := task.SessionID
+	if sid == "" {
+		sid = "direct_" + targetAgent
+	}
+	delTg := task.DeliverTelegram || task.Channel == "telegram"
+
+	var execErr error
+	if TurnExecutor != nil {
+		execFn := func() {
 			tCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 			defer cancel()
-			_ = TurnExecutor(tCtx, sid, aid, "[Routine: "+task.Name+"] "+pmt, "routine", delTg)
-		}(task.SessionID, targetAgent, task.Prompt, task.DeliverTelegram)
+			notificationPrompt := fmt.Sprintf("[Routine Notification - DO NOT CREATE NEW REMINDER]\nTask: %s\nMessage: %s", task.Name, task.Prompt)
+			execErr = TurnExecutor(tCtx, sid, targetAgent, notificationPrompt, "routine", delTg)
+			if execErr != nil {
+				log.Printf("⚠️ Error executing routine turn for %s: %v", task.ID, execErr)
+			}
+		}
+		if syncExec {
+			execFn()
+		} else {
+			go execFn()
+		}
 	}
 
 	d.mu.Lock()
 	task.LastRun = &fireTime
 	task.RunCount++
-	task.LastOutput = fmt.Sprintf("Fired at %s", fireTime.Format("2006-01-02 15:04:05"))
+	if execErr != nil {
+		task.LastOutput = fmt.Sprintf("Fired at %s (error: %v)", fireTime.Format("2006-01-02 15:04:05"), execErr)
+	} else {
+		task.LastOutput = fmt.Sprintf("Delivered at %s (owner: %s)", fireTime.Format("2006-01-02 15:04:05"), task.Owner)
+	}
 
 	// Determine next run time
-	next := CalculateNextRun(task.Schedule, fireTime)
-	if next.IsZero() || next.Equal(task.NextRun) {
-		// One-shot reminder finished
-		task.Enabled = false
+	if IsRecurringSchedule(task.Schedule) {
+		next := CalculateNextRun(task.Schedule, fireTime)
+		if !next.IsZero() {
+			task.NextRun = next
+		}
+		task.Enabled = true
 	} else {
-		task.NextRun = next
+		// One-shot reminder
+		if syncExec {
+			if time.Now().After(task.NextRun) {
+				task.Enabled = false
+			}
+		} else {
+			task.Enabled = false
+		}
 	}
 	d.saveTaskLocked(task)
 	d.mu.Unlock()
+
+	return execErr
+}
+
+// IsRecurringSchedule checks if a schedule expression represents a repeating task.
+func IsRecurringSchedule(expr string) bool {
+	clean := strings.ToLower(strings.TrimSpace(expr))
+	if strings.HasPrefix(clean, "in ") {
+		return false
+	}
+	if strings.HasPrefix(clean, "every") || strings.Contains(clean, "*") || strings.Contains(clean, "/") {
+		return true
+	}
+	fields := strings.Fields(clean)
+	return len(fields) == 5
 }
 
 // AddTask registers a new scheduled reminder or cron task.
@@ -191,6 +251,21 @@ func (d *Daemon) AddRoutineTask(t ScheduledTask) (*ScheduledTask, error) {
 		id = "routine_" + uuid.New().String()[:8]
 	}
 
+	owner := strings.TrimSpace(t.Owner)
+	if owner == "" {
+		if t.TargetID != "" {
+			owner = t.TargetID
+		} else {
+			owner = "Personal Assistant"
+		}
+	}
+	ownerType := strings.TrimSpace(t.OwnerType)
+	if ownerType == "" {
+		ownerType = "agent"
+	}
+
+	delTg := t.DeliverTelegram || t.Channel == "telegram" || strings.HasPrefix(t.SessionID, "tg-")
+
 	task := &ScheduledTask{
 		ID:              id,
 		Name:            t.Name,
@@ -199,7 +274,9 @@ func (d *Daemon) AddRoutineTask(t ScheduledTask) (*ScheduledTask, error) {
 		TargetType:      t.TargetType,
 		TargetID:        t.TargetID,
 		SessionID:       t.SessionID,
-		DeliverTelegram: t.DeliverTelegram,
+		Owner:           owner,
+		OwnerType:       ownerType,
+		DeliverTelegram: delTg,
 		Channel:         t.Channel,
 		Enabled:         true,
 		CreatedAt:       now,
@@ -249,24 +326,68 @@ func (d *Daemon) ToggleTask(id string, enabled bool) (*ScheduledTask, error) {
 	return task, nil
 }
 
-// RunNow triggers a task immediately.
+// RunNow triggers a task immediately and delivers the job.
 func (d *Daemon) RunNow(ctx context.Context, id string) error {
-	d.mu.RLock()
+	d.mu.Lock()
 	task, ok := d.tasks[id]
-	d.mu.RUnlock()
+	if !ok {
+		data, err := os.ReadFile(filepath.Join(d.storeDir, id+".json"))
+		if err == nil {
+			var loadedTask ScheduledTask
+			if json.Unmarshal(data, &loadedTask) == nil && loadedTask.ID != "" {
+				d.tasks[loadedTask.ID] = &loadedTask
+				task = &loadedTask
+				ok = true
+			}
+		}
+	}
+	d.mu.Unlock()
 
 	if !ok {
 		return fmt.Errorf("scheduled task not found: %s", id)
 	}
 
-	d.executeTask(ctx, task, time.Now())
-	return nil
+	return d.executeTaskSync(ctx, task, time.Now())
+}
+
+// GetTask retrieves a task by ID.
+func (d *Daemon) GetTask(id string) *ScheduledTask {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.tasks[id]
 }
 
 // ListTasks returns all scheduled tasks.
 func (d *Daemon) ListTasks() []*ScheduledTask {
-	d.mu.RLock()
-	defer d.mu.RUnlock()
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	// Sync with storeDir to detect any externally written or updated routine tasks
+	if entries, err := os.ReadDir(d.storeDir); err == nil {
+		diskIDs := make(map[string]bool)
+		for _, e := range entries {
+			if !strings.HasSuffix(e.Name(), ".json") {
+				continue
+			}
+			id := strings.TrimSuffix(e.Name(), ".json")
+			diskIDs[id] = true
+			if _, exists := d.tasks[id]; !exists {
+				data, err := os.ReadFile(filepath.Join(d.storeDir, e.Name()))
+				if err == nil {
+					var task ScheduledTask
+					if json.Unmarshal(data, &task) == nil && task.ID != "" {
+						d.tasks[task.ID] = &task
+					}
+				}
+			}
+		}
+		// Prune in-memory tasks that have been removed from disk
+		for id := range d.tasks {
+			if !diskIDs[id] {
+				delete(d.tasks, id)
+			}
+		}
+	}
 
 	list := make([]*ScheduledTask, 0, len(d.tasks))
 	for _, t := range d.tasks {

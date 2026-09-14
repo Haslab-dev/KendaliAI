@@ -22,7 +22,16 @@ const (
 	EventApprovalDenied     EventType = "approval.denied"
 	EventSessionCreated     EventType = "session.created"
 	EventSessionUpdated     EventType = "session.updated"
+	EventMessageReaction    EventType = "message.reaction"
 )
+
+type MessageReactionPayload struct {
+	SessionID  string `json:"sessionId"`
+	MessageID  string `json:"messageId"`
+	Emoji      string `json:"emoji"`
+	SenderID   string `json:"senderId"`
+	SenderName string `json:"senderName,omitempty"`
+}
 
 type MessageEvent struct {
 	ID        string    `json:"id"`
