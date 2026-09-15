@@ -116,3 +116,51 @@ func TestFindMentionedOtherAgent(t *testing.T) {
 		t.Fatalf("did not expect self-mention to be detected")
 	}
 }
+
+func TestFindAllMentionedAgents_QueueOrder(t *testing.T) {
+	agents := []AgentConfig{
+		{ID: "personal-assistant", Name: "Personal Assistant"},
+		{ID: "lead-frontend", Name: "Alex Rivera"},
+		{ID: "lead-backend", Name: "Marcus Chen"},
+		{ID: "lead-architecture", Name: "Elena Rostova"},
+	}
+
+	// 1. Multiple mentions in sequence
+	msg1 := "bagaimana pendapatmu @lead-frontend @lead-backend @lead-architecture"
+	res1 := findAllMentionedAgents(msg1, "", agents)
+	expected1 := []string{"lead-frontend", "lead-backend", "lead-architecture"}
+	if len(res1) != len(expected1) {
+		t.Fatalf("expected %v, got %v", expected1, res1)
+	}
+	for i, id := range expected1 {
+		if res1[i] != id {
+			t.Errorf("at index %d: expected %s, got %s", i, id, res1[i])
+		}
+	}
+
+	// 2. Mention with reverse order in sentence
+	msg2 := "@Elena tolong periksa, lalu tanyakan ke @Marcus Chen dan @Alex"
+	res2 := findAllMentionedAgents(msg2, "", agents)
+	expected2 := []string{"lead-architecture", "lead-backend", "lead-frontend"}
+	if len(res2) != len(expected2) {
+		t.Fatalf("expected %v, got %v", expected2, res2)
+	}
+	for i, id := range expected2 {
+		if res2[i] != id {
+			t.Errorf("at index %d: expected %s, got %s", i, id, res2[i])
+		}
+	}
+
+	// 3. Self-mention exclusion
+	msg3 := "Halo @Alex, ini @Marcus Chen bicara. @Elena juga simak."
+	res3 := findAllMentionedAgents(msg3, "lead-backend", agents)
+	expected3 := []string{"lead-frontend", "lead-architecture"}
+	if len(res3) != len(expected3) {
+		t.Fatalf("expected %v, got %v", expected3, res3)
+	}
+	for i, id := range expected3 {
+		if res3[i] != id {
+			t.Errorf("at index %d: expected %s, got %s", i, id, res3[i])
+		}
+	}
+}

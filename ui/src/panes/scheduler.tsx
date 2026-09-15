@@ -23,6 +23,7 @@ import { useAppStore } from '../store/useAppStore';
 interface ScheduleItem {
   id: string;
   title: string;
+  jobType?: 'notification' | 'task';
   cron: string;
   humanSchedule: string;
   nextRun: string;
@@ -54,12 +55,13 @@ export const SchedulerPane: React.FC = () => {
 
   // Modal Form
   const [formTitle, setFormTitle] = useState('');
+  const [formJobType, setFormJobType] = useState<'notification' | 'task'>('notification');
   const [formSchedule, setFormSchedule] = useState('every weekday at 9am');
   const [formPrompt, setFormPrompt] = useState('');
   const [formOwner, setFormOwner] = useState('Personal Assistant');
   const [formTargetType, setFormTargetType] = useState<'agent' | 'group'>('agent');
   const [formTargetId, setFormTargetId] = useState('');
-  const [formDeliverTelegram, setFormDeliverTelegram] = useState(false);
+  const [formDeliverTelegram, setFormDeliverTelegram] = useState(true);
 
   useEffect(() => {
     if (agents.length > 0 && !formTargetId) {
@@ -77,7 +79,8 @@ export const SchedulerPane: React.FC = () => {
         if (Array.isArray(data)) {
           const mapped: ScheduleItem[] = data.map((d: any, idx: number) => ({
             id: d.id || `sch-${idx}`,
-            title: d.name || d.title || 'Scheduled Agent Routine',
+            title: d.name || d.title || 'Scheduled Routine',
+            jobType: d.jobType || 'notification',
             cron: d.schedule?.includes('*') ? d.schedule : '0 9 * * 1-5',
             humanSchedule: d.schedule || 'daily at 9:00 AM',
             nextRun: d.nextRun || 'in 1h',
@@ -177,6 +180,7 @@ export const SchedulerPane: React.FC = () => {
     const newItem: ScheduleItem = {
       id: `routine-${Date.now()}`,
       title: formTitle.trim(),
+      jobType: formJobType,
       cron: parsedCron || '0 9 * * 1-5',
       humanSchedule: formSchedule.trim() || 'Custom Routine',
       nextRun: 'in 45m',
@@ -201,6 +205,7 @@ export const SchedulerPane: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: newItem.title,
+          jobType: formJobType,
           schedule: newItem.cron,
           prompt: newItem.prompt,
           targetType: formTargetType,
@@ -330,6 +335,15 @@ export const SchedulerPane: React.FC = () => {
                             {s.status}
                           </span>
                         </div>
+                        {s.jobType === 'task' ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-[2px] rounded-[4px] bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                            <Sparkles size={10} /> AI Task
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-[2px] rounded-[4px] bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                            <BellRing size={10} /> Notification
+                          </span>
+                        )}
                       </div>
 
                       {/* Cron string, description & Owner */}
@@ -495,12 +509,74 @@ export const SchedulerPane: React.FC = () => {
             </div>
 
             <form onSubmit={handleCreateSchedule} className="flex flex-col gap-3.5">
+              {/* Job Type Selector: Notification vs Task */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-bold text-[#000000]">Job Type</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormJobType('notification');
+                      setFormDeliverTelegram(true);
+                    }}
+                    className={`p-2.5 rounded-[8px] text-left border transition-all cursor-pointer flex flex-col gap-1 ${
+                      formJobType === 'notification'
+                        ? 'bg-blue-50/90 border-[#007AFF] text-black shadow-xs ring-1 ring-[#007AFF]/20'
+                        : 'bg-white border-[#E5E7EB] text-[#8A8A85] hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 font-bold text-[12px] text-[#007AFF]">
+                      <BellRing size={13} />
+                      <span>Notification Job</span>
+                    </div>
+                    <p className="text-[10px] text-[#6B7280] leading-tight">
+                      Direct notice without AI. Broadcasts directly to chat and Telegram bot.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFormJobType('task')}
+                    className={`p-2.5 rounded-[8px] text-left border transition-all cursor-pointer flex flex-col gap-1 ${
+                      formJobType === 'task'
+                        ? 'bg-purple-50/90 border-[#8B5CF6] text-black shadow-xs ring-1 ring-[#8B5CF6]/20'
+                        : 'bg-white border-[#E5E7EB] text-[#8A8A85] hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 font-bold text-[12px] text-[#8B5CF6]">
+                      <Sparkles size={13} />
+                      <span>Task Job (AI Agent)</span>
+                    </div>
+                    <p className="text-[10px] text-[#6B7280] leading-tight">
+                      AI agent execution. Agent uses LLM and workspace tools to perform task.
+                    </p>
+                  </button>
+                </div>
+              </div>
+
+              {/* Informational Banner according to Job Type */}
+              {formJobType === 'notification' ? (
+                <div className="p-2.5 rounded-[6px] bg-blue-50/80 border border-blue-200 text-[11px] text-[#1E40AF] flex items-start gap-2">
+                  <BellRing size={14} className="shrink-0 mt-0.5 text-[#007AFF]" />
+                  <div className="leading-snug">
+                    <strong>Direct Notification (No AI):</strong> This cron job delivers the notice directly to the chat conversation and Telegram bot at scheduled times without invoking LLM tokens or simulating user chats.
+                  </div>
+                </div>
+              ) : (
+                <div className="p-2.5 rounded-[6px] bg-purple-50/80 border border-purple-200 text-[11px] text-[#5B21B6] flex items-start gap-2">
+                  <Sparkles size={14} className="shrink-0 mt-0.5 text-[#8B5CF6]" />
+                  <div className="leading-snug">
+                    <strong>AI Agent Interaction:</strong> At scheduled times, the assigned agent will process this instruction using their LLM model and tools, generating a full response in the target chat.
+                  </div>
+                </div>
+              )}
+
               <div className="flex flex-col gap-1">
                 <label className="text-[11px] font-bold text-[#000000]">Task Title / Label</label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Daily Standup Reminder"
+                  placeholder={formJobType === 'notification' ? 'e.g. Daily Standup Alert' : 'e.g. Code Review & QA Routine'}
                   value={formTitle}
                   onChange={(e) => setFormTitle(e.target.value)}
                   className="border border-[#E5E7EB] rounded-[6px] px-3 py-1.5 text-[12px] focus:outline-none focus:border-[#0F0F0F]"
@@ -524,10 +600,17 @@ export const SchedulerPane: React.FC = () => {
               </div>
 
               <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-bold text-[#000000]">Agent Instruction / Prompt</label>
+                <label className="text-[11px] font-bold text-[#000000]">
+                  {formJobType === 'notification' ? 'Notification Message' : 'Agent Instruction / Task Prompt'}
+                </label>
                 <textarea
                   rows={3}
-                  placeholder="What prompt should run or what message should be sent?"
+                  required
+                  placeholder={
+                    formJobType === 'notification'
+                      ? 'e.g. Standup time! Please post your yesterday accomplishments and today priorities.'
+                      : 'e.g. Review the open git branch, run test suites, and write a summary report.'
+                  }
                   value={formPrompt}
                   onChange={(e) => setFormPrompt(e.target.value)}
                   className="border border-[#E5E7EB] rounded-[6px] px-3 py-1.5 text-[12px] focus:outline-none focus:border-[#0F0F0F] resize-none"
@@ -535,7 +618,9 @@ export const SchedulerPane: React.FC = () => {
               </div>
 
               <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-bold text-[#000000]">Owner (Creator / Responsible Agent)</label>
+                <label className="text-[11px] font-bold text-[#000000]">
+                  {formJobType === 'notification' ? 'Sender Persona / Identity' : 'Executing Worker Agent (AI)'}
+                </label>
                 <select
                   value={formOwner}
                   onChange={(e) => setFormOwner(e.target.value)}

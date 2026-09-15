@@ -19,13 +19,20 @@ func (tr *ToolRegistry) SchedulerTools() map[string]ToolDef {
 	return map[string]ToolDef{
 		"schedule_task": {
 			Name:        "schedule_task",
-			Description: "Schedules a recurring or one-time task. Supports cron expressions or human schedules like 'daily', 'every weekday 9am'.",
-			Signature:   `{"name": "string", "schedule": "string", "workflow": "string", "payload": "object", "enabled": "boolean"}`,
+			Description: "Schedules a recurring or one-time task. Supports 'notification' (direct message without AI) or 'task' (AI agent interaction), and cron expressions or human schedules like 'daily', 'every weekday 9am'.",
+			Signature:   `{"name": "string", "schedule": "string", "job_type": "string (notification|task)", "workflow": "string", "payload": "object", "enabled": "boolean"}`,
 			Category:    "Scheduler",
 			Execute: func(ctx context.Context, args map[string]interface{}) string {
 				name, _ := args["name"].(string)
 				schedule, _ := args["schedule"].(string)
 				workflow, _ := args["workflow"].(string)
+				jobType, _ := args["job_type"].(string)
+				if jobType == "" {
+					jobType, _ = args["jobType"].(string)
+				}
+				if jobType == "" {
+					jobType = "notification"
+				}
 				enabled := true
 				if e, ok := args["enabled"].(bool); ok {
 					enabled = e
@@ -39,6 +46,7 @@ func (tr *ToolRegistry) SchedulerTools() map[string]ToolDef {
 				task := map[string]interface{}{
 					"id":        taskID,
 					"name":      name,
+					"jobType":   jobType,
 					"schedule":  schedule,
 					"workflow":  workflow,
 					"payload":   args["payload"],

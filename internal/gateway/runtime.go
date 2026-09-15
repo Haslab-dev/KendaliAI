@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -21,7 +22,14 @@ import (
 	"github.com/kendaliai/app/internal/scheduler"
 )
 
-// DiscussionState tracks multi-agent autonomous conversation rounds per session.
+// QueuedTurn represents a pending agent turn in a multi-agent discussion queue.
+type QueuedTurn struct {
+	TargetAgentID  string
+	SenderName     string
+	TriggerContent string
+}
+
+// DiscussionState tracks multi-agent autonomous conversation rounds and queued turns per session.
 type DiscussionState struct {
 	SessionID    string
 	Canceled     bool
@@ -29,6 +37,8 @@ type DiscussionState struct {
 	CurrentRound int
 	MaxRounds    int
 	LastActivity time.Time
+	Queue        []QueuedTurn
+	IsProcessing bool
 }
 
 type Runtime struct {
@@ -59,12 +69,12 @@ func (r *Runtime) StartDiscussionRound(sessionID string) (*DiscussionState, bool
 	defer r.discMu.Unlock()
 
 	ds, ok := r.discussions[sessionID]
-	if !ok || time.Since(ds.LastActivity) > 2*time.Minute {
+	if !ok || time.Since(ds.LastActivity) > 5*time.Minute {
 		ds = &DiscussionState{
 			SessionID:    sessionID,
 			Canceled:     false,
 			CurrentRound: 1,
-			MaxRounds:    5,
+			MaxRounds:    100,
 			LastActivity: time.Now(),
 		}
 		r.discussions[sessionID] = ds
@@ -91,12 +101,14 @@ func (r *Runtime) StartDiscussionRound(sessionID string) (*DiscussionState, bool
 	return ds, true
 }
 
-// StopDiscussion stops any active multi-agent discussion loop for a session.
+// StopDiscussion stops any active multi-agent discussion loop for a session and clears the queue.
 func (r *Runtime) StopDiscussion(sessionID string) bool {
 	r.discMu.Lock()
 	ds, ok := r.discussions[sessionID]
 	if ok {
 		ds.Canceled = true
+		ds.Queue = nil
+		ds.IsProcessing = false
 		if ds.CancelFunc != nil {
 			ds.CancelFunc()
 		}
@@ -134,6 +146,11 @@ func (r *Runtime) IsDiscussionStopped(sessionID string) bool {
 // ResetDiscussion resets the discussion state on a fresh user prompt.
 func (r *Runtime) ResetDiscussion(sessionID string) {
 	r.discMu.Lock()
+	if ds, ok := r.discussions[sessionID]; ok {
+		if ds.CancelFunc != nil {
+			ds.CancelFunc()
+		}
+	}
 	delete(r.discussions, sessionID)
 	r.discMu.Unlock()
 }
@@ -143,7 +160,141 @@ func (r *Runtime) IsDiscussionActive(sessionID string) bool {
 	r.discMu.RLock()
 	defer r.discMu.RUnlock()
 	ds, ok := r.discussions[sessionID]
-	return ok && !ds.Canceled && ds.CurrentRound > 0 && ds.CurrentRound <= ds.MaxRounds
+	return ok && !ds.Canceled && (ds.IsProcessing || len(ds.Queue) > 0)
+}
+
+// EnqueueDiscussionTurns adds multiple agent targets to the discussion queue in order.
+func (r *Runtime) EnqueueDiscussionTurns(sessionID, senderName, triggerContent string, targetAgentIDs []string, autoStart bool) {
+	if len(targetAgentIDs) == 0 {
+		return
+	}
+	r.discMu.Lock()
+	ds, ok := r.discussions[sessionID]
+	if !ok || time.Since(ds.LastActivity) > 5*time.Minute {
+		ds = &DiscussionState{
+			SessionID:    sessionID,
+			Canceled:     false,
+			CurrentRound: 0,
+			MaxRounds:    100, // Long discussion up to 100 turns
+			LastActivity: time.Now(),
+		}
+		r.discussions[sessionID] = ds
+	}
+
+	if ds.Canceled {
+		r.discMu.Unlock()
+		return
+	}
+
+	for _, tid := range targetAgentIDs {
+		if tid == "" {
+			continue
+		}
+		// Avoid duplicate immediate enqueue if identical to last queued
+		if len(ds.Queue) > 0 && ds.Queue[len(ds.Queue)-1].TargetAgentID == tid {
+			continue
+		}
+		ds.Queue = append(ds.Queue, QueuedTurn{
+			TargetAgentID:  tid,
+			SenderName:     senderName,
+			TriggerContent: triggerContent,
+		})
+	}
+	ds.LastActivity = time.Now()
+
+	shouldStart := autoStart && !ds.IsProcessing && len(ds.Queue) > 0
+	if shouldStart {
+		ds.IsProcessing = true
+	}
+	r.discMu.Unlock()
+
+	if shouldStart {
+		go r.processDiscussionQueue(sessionID)
+	}
+}
+
+func (r *Runtime) processDiscussionQueue(sessionID string) {
+	for {
+		// Natural pacing pause (1.8s) so humans can read message & intervene with stop button
+		time.Sleep(1800 * time.Millisecond)
+
+		if r.IsDiscussionStopped(sessionID) {
+			return
+		}
+
+		r.discMu.Lock()
+		ds, ok := r.discussions[sessionID]
+		if !ok || ds.Canceled || len(ds.Queue) == 0 {
+			if ok {
+				ds.IsProcessing = false
+			}
+			r.discMu.Unlock()
+			r.bus.Publish(messaging.Event{
+				Type:      "discussion.stopped",
+				SessionID: sessionID,
+				Payload: map[string]interface{}{
+					"sessionId": sessionID,
+					"stoppedAt": time.Now().UnixMilli(),
+				},
+			})
+			return
+		}
+
+		if ds.CurrentRound >= ds.MaxRounds {
+			log.Printf("⏹️ [Multi-Agent Discussion] Reached safety limit (%d rounds) for session %s", ds.MaxRounds, sessionID)
+			ds.IsProcessing = false
+			ds.Queue = nil
+			r.discMu.Unlock()
+			r.bus.Publish(messaging.Event{
+				Type:      "discussion.stopped",
+				SessionID: sessionID,
+				Payload: map[string]interface{}{
+					"sessionId": sessionID,
+					"stoppedAt": time.Now().UnixMilli(),
+				},
+			})
+			return
+		}
+
+		// Pop next in queue
+		turn := ds.Queue[0]
+		ds.Queue = ds.Queue[1:]
+		ds.CurrentRound++
+		currentRound := ds.CurrentRound
+		maxRounds := ds.MaxRounds
+		ds.LastActivity = time.Now()
+		r.discMu.Unlock()
+
+		r.bus.Publish(messaging.Event{
+			Type:      "discussion.active",
+			SessionID: sessionID,
+			Payload: map[string]interface{}{
+				"sessionId":    sessionID,
+				"currentRound": currentRound,
+				"maxRounds":    maxRounds,
+				"active":       true,
+			},
+		})
+
+		log.Printf("👥 [Multi-Agent Discussion] Turn %d/%d: Invoking queued @%s (by %s) in session %s",
+			currentRound, maxRounds, turn.TargetAgentID, turn.SenderName, sessionID)
+
+		chainPrompt := fmt.Sprintf("@%s addressed you or the group in chat:\n\"%s\"\n\nContinue the discussion concisely in character as your persona. Speak ONLY for yourself from your domain expertise. Do NOT simulate or speak for other agents. You may mention another teammate using @Name if you want their perspective.", turn.SenderName, turn.TriggerContent)
+
+		tCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		r.discMu.Lock()
+		if ds, ok := r.discussions[sessionID]; ok {
+			ds.CancelFunc = cancel
+		}
+		r.discMu.Unlock()
+
+		_, _ = r.ExecuteTurnWithModel(tCtx, sessionID, turn.TargetAgentID, chainPrompt, "agent_chain", "")
+		cancel()
+
+		if r.IsDiscussionStopped(sessionID) {
+			return
+		}
+	}
 }
 
 func (r *Runtime) GetTaskManager() *TaskManager {
@@ -240,7 +391,17 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		} else {
 			participants, _ := r.store.ListChatParticipants(sess.ID)
 			allAgents, _ := r.store.ListAgents()
-			activeAgentID, wasStrictMention = resolveGroupTurnAgent(userPrompt, participants, allAgents)
+			mentioned := findAllMentionedAgents(userPrompt, "", allAgents)
+			if len(mentioned) > 0 {
+				activeAgentID = mentioned[0]
+				wasStrictMention = true
+				if len(mentioned) > 1 {
+					// Queue remaining mentioned agents to answer in order after activeAgentID completes
+					r.EnqueueDiscussionTurns(sessionID, "User", userPrompt, mentioned[1:], false)
+				}
+			} else {
+				activeAgentID, wasStrictMention = resolveGroupTurnAgent(userPrompt, participants, allAgents)
+			}
 		}
 	} else if sess.Type == "direct" {
 		if sess.AgentID != "" {
@@ -1033,38 +1194,32 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 	r.taskMgr.Complete(bgTask.ID, assistantMsg.Content)
 
 	// 10. Multi-Agent Autonomous Chaining in Group Sessions
-	allAgents, _ = r.store.ListAgents()
-	nextAgentID, hasMention := findMentionedOtherAgent(assistantMsg.Content, agentConfig.ID, allAgents)
-	if hasMention && !r.IsDiscussionStopped(sessionID) {
-		if ds, canContinue := r.StartDiscussionRound(sessionID); canContinue {
-			go func(targetID, senderName, replyContent string, round int) {
-				// Natural pacing pause (2s) so humans can read and intervene with stop button
-				time.Sleep(2 * time.Second)
-				if r.IsDiscussionStopped(sessionID) {
-					return
-				}
-				chainPrompt := fmt.Sprintf("@%s addressed you or the group in chat:\n\"%s\"\n\nContinue the discussion concisely in character as your persona. Speak ONLY for yourself from your domain expertise. Do NOT simulate or speak for other agents. You may mention another teammate using @Name if you want their perspective.", senderName, replyContent)
-				tCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-				r.discMu.Lock()
-				if ds != nil {
-					ds.CancelFunc = cancel
-				}
-				r.discMu.Unlock()
-				defer cancel()
-				log.Printf("👥 [Multi-Agent Discussion] Round %d/5: Triggering @%s following @%s in session %s", round, targetID, senderName, sessionID)
-				_, _ = r.ExecuteTurnWithModel(tCtx, sessionID, targetID, chainPrompt, "agent_chain", "")
-			}(nextAgentID, agentConfig.Name, assistantMsg.Content, ds.CurrentRound)
-		} else {
-			log.Printf("⏹️ [Multi-Agent Discussion] Reached max rounds (5) or stopped for session %s", sessionID)
-			r.StopDiscussion(sessionID)
+	if sess.Type == "group" && !r.IsDiscussionStopped(sessionID) {
+		allAgents, _ = r.store.ListAgents()
+		newMentions := findAllMentionedAgents(assistantMsg.Content, agentConfig.ID, allAgents)
+		if len(newMentions) > 0 {
+			log.Printf("👥 [Multi-Agent Discussion] @%s mentioned %v in session %s", agentConfig.Name, newMentions, sessionID)
+			// Enqueue all newly mentioned agents in order
+			r.EnqueueDiscussionTurns(sessionID, agentConfig.Name, assistantMsg.Content, newMentions, false)
 		}
-	} else {
-		if r.IsDiscussionActive(sessionID) {
-			r.StopDiscussion(sessionID)
+
+		// Trigger or continue the queue processor if there are turns pending
+		r.discMu.Lock()
+		ds, ok := r.discussions[sessionID]
+		hasPending := ok && !ds.Canceled && len(ds.Queue) > 0
+		shouldStart := hasPending && !ds.IsProcessing
+		if shouldStart {
+			ds.IsProcessing = true
 		}
-		if sess.Type == "group" && !wasStrictMention && !r.IsDiscussionStopped(sessionID) {
+		r.discMu.Unlock()
+
+		if shouldStart {
+			go r.processDiscussionQueue(sessionID)
+		} else if !hasPending && channel != "agent_chain" && !wasStrictMention && !r.IsDiscussionStopped(sessionID) {
 			go r.triggerGroupPOV(sessionID, agentConfig.ID, rawPrompt, assistantMsg.Content, channel)
 		}
+	} else if r.IsDiscussionActive(sessionID) {
+		r.StopDiscussion(sessionID)
 	}
 
 	return &assistantMsg, nil
@@ -1401,34 +1556,9 @@ func resolveGroupTurnAgent(prompt string, participants []ChatParticipant, allAge
 	}
 
 	// 1. Explicit @mentions (e.g. @Alex, @Marcus, @Marcus Chen, @lead-frontend)
-	// Pick the agent mentioned at the EARLIEST character index in the prompt string.
-	earliestMentionIdx := -1
-	earliestMentionAgent := ""
-
-	for _, ag := range allAgents {
-		handles := []string{
-			"@" + strings.ToLower(ag.ID),
-			"@" + strings.ToLower(strings.ReplaceAll(ag.Name, " ", "")),
-			"@" + strings.ToLower(ag.Name),
-			"@" + strings.ToLower(strings.Fields(ag.Name)[0]),
-		}
-		nameParts := strings.Fields(strings.ToLower(ag.Name))
-		if len(nameParts) > 1 {
-			handles = append(handles, "@"+nameParts[len(nameParts)-1])
-		}
-
-		for _, h := range handles {
-			idx := strings.Index(low, h)
-			if idx != -1 {
-				if earliestMentionIdx == -1 || idx < earliestMentionIdx {
-					earliestMentionIdx = idx
-					earliestMentionAgent = ag.ID
-				}
-			}
-		}
-	}
-	if earliestMentionAgent != "" {
-		return earliestMentionAgent, true
+	mentions := findAllMentionedAgents(prompt, "", allAgents)
+	if len(mentions) > 0 {
+		return mentions[0], true
 	}
 
 	// 2. Direct vocatives & greetings (e.g. "Halo Alex", "Hai Marcus", "Hey Elena", "lex,", "chen:", "alex gimana")
@@ -1629,16 +1759,23 @@ func isStrictlyMentioned(prompt string, allAgents []AgentConfig) bool {
 	return false
 }
 
-// findMentionedOtherAgent checks if an assistant's message @mentions another registered agent.
-func findMentionedOtherAgent(content, currentAgentID string, allAgents []AgentConfig) (string, bool) {
+type mentionSpan struct {
+	startIdx int
+	endIdx   int
+	agentID  string
+}
+
+// findAllMentionedAgents extracts all @mentioned agent IDs in content in the order they appear.
+// If excludeAgentID is non-empty, mentions matching that agent are ignored (e.g. self-mention).
+func findAllMentionedAgents(content, excludeAgentID string, allAgents []AgentConfig) []string {
 	low := strings.ToLower(content)
-	earliestIdx := -1
-	earliestAgent := ""
+	var spans []mentionSpan
 
 	for _, ag := range allAgents {
-		if ag.ID == currentAgentID {
+		if ag.ID == excludeAgentID {
 			continue
 		}
+
 		handles := []string{
 			"@" + strings.ToLower(ag.ID),
 			"@" + strings.ToLower(strings.ReplaceAll(ag.Name, " ", "")),
@@ -1650,18 +1787,78 @@ func findMentionedOtherAgent(content, currentAgentID string, allAgents []AgentCo
 			handles = append(handles, "@"+nameParts[len(nameParts)-1])
 		}
 
+		// Sort handles by length descending so longer handles match first
+		sort.Slice(handles, func(i, j int) bool {
+			return len(handles[i]) > len(handles[j])
+		})
+
 		for _, h := range handles {
-			idx := strings.Index(low, h)
-			if idx != -1 {
-				if earliestIdx == -1 || idx < earliestIdx {
-					earliestIdx = idx
-					earliestAgent = ag.ID
+			if len(h) <= 1 {
+				continue
+			}
+			searchPos := 0
+			for {
+				idx := strings.Index(low[searchPos:], h)
+				if idx == -1 {
+					break
 				}
+				matchStart := searchPos + idx
+				matchEnd := matchStart + len(h)
+
+				// Boundary check: ensure not followed by an alphanumeric character
+				if matchEnd < len(low) {
+					c := low[matchEnd]
+					if (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' {
+						searchPos = matchStart + 1
+						continue
+					}
+				}
+
+				spans = append(spans, mentionSpan{
+					startIdx: matchStart,
+					endIdx:   matchEnd,
+					agentID:  ag.ID,
+				})
+				searchPos = matchEnd
 			}
 		}
 	}
-	if earliestAgent != "" {
-		return earliestAgent, true
+
+	if len(spans) == 0 {
+		return nil
+	}
+
+	// Sort spans by startIdx ascending, then longer spans first
+	sort.Slice(spans, func(i, j int) bool {
+		if spans[i].startIdx != spans[j].startIdx {
+			return spans[i].startIdx < spans[j].startIdx
+		}
+		return (spans[i].endIdx - spans[i].startIdx) > (spans[j].endIdx - spans[j].startIdx)
+	})
+
+	var result []string
+	seenAgents := make(map[string]bool)
+	lastEnd := -1
+
+	for _, sp := range spans {
+		if sp.startIdx < lastEnd {
+			continue
+		}
+		lastEnd = sp.endIdx
+		if !seenAgents[sp.agentID] {
+			seenAgents[sp.agentID] = true
+			result = append(result, sp.agentID)
+		}
+	}
+
+	return result
+}
+
+// findMentionedOtherAgent checks if an assistant's message @mentions another registered agent.
+func findMentionedOtherAgent(content, currentAgentID string, allAgents []AgentConfig) (string, bool) {
+	agents := findAllMentionedAgents(content, currentAgentID, allAgents)
+	if len(agents) > 0 {
+		return agents[0], true
 	}
 	return "", false
 }

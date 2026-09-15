@@ -21,6 +21,7 @@ import (
 type ScheduledTask struct {
 	ID              string     `json:"id"`
 	Name            string     `json:"name"`
+	JobType         string     `json:"jobType,omitempty"` // "notification" (direct notice) or "task" (AI agent turn)
 	Schedule        string     `json:"schedule"` // e.g. "0 1 * * *", "every 1 am", "in 30 minutes"
 	Prompt          string     `json:"prompt"`   // reminder notification message or agent instruction
 	TargetType      string     `json:"targetType,omitempty"` // "agent" or "group"
@@ -38,8 +39,11 @@ type ScheduledTask struct {
 	LastOutput      string     `json:"lastOutput,omitempty"`
 }
 
-// TurnExecutor is invoked when a routine triggers in a conversation
+// TurnExecutor is invoked when a routine task triggers with AI agent interaction in a conversation
 var TurnExecutor func(ctx context.Context, sessionID, agentID, prompt, channel string, deliverTelegram bool) error
+
+// NotificationExecutor delivers a routine notification directly to chat and telegram without running an AI model
+var NotificationExecutor func(ctx context.Context, sessionID, agentID, taskName, message, channel string, deliverTelegram bool) error
 
 // Daemon manages scheduled reminders, routines, and cron jobs.
 type Daemon struct {
@@ -158,20 +162,39 @@ func (d *Daemon) executeTaskInternal(ctx context.Context, task *ScheduledTask, f
 	delTg := task.DeliverTelegram || task.Channel == "telegram"
 
 	var execErr error
-	if TurnExecutor != nil {
-		execFn := func() {
-			tCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-			defer cancel()
-			notificationPrompt := fmt.Sprintf("[Routine Notification - DO NOT CREATE NEW REMINDER]\nTask: %s\nMessage: %s", task.Name, task.Prompt)
-			execErr = TurnExecutor(tCtx, sid, targetAgent, notificationPrompt, "routine", delTg)
-			if execErr != nil {
-				log.Printf("⚠️ Error executing routine turn for %s: %v", task.ID, execErr)
+	jobType := strings.ToLower(strings.TrimSpace(task.JobType))
+	if jobType == "notification" {
+		if NotificationExecutor != nil {
+			execFn := func() {
+				tCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				execErr = NotificationExecutor(tCtx, sid, targetAgent, task.Name, task.Prompt, "notification", delTg)
+				if execErr != nil {
+					log.Printf("⚠️ Error executing routine notification for %s: %v", task.ID, execErr)
+				}
+			}
+			if syncExec {
+				execFn()
+			} else {
+				go execFn()
 			}
 		}
-		if syncExec {
-			execFn()
-		} else {
-			go execFn()
+	} else {
+		if TurnExecutor != nil {
+			execFn := func() {
+				tCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+				defer cancel()
+				notificationPrompt := fmt.Sprintf("[Routine Notification - DO NOT CREATE NEW REMINDER]\nTask: %s\nMessage: %s", task.Name, task.Prompt)
+				execErr = TurnExecutor(tCtx, sid, targetAgent, notificationPrompt, "routine", delTg)
+				if execErr != nil {
+					log.Printf("⚠️ Error executing routine turn for %s: %v", task.ID, execErr)
+				}
+			}
+			if syncExec {
+				execFn()
+			} else {
+				go execFn()
+			}
 		}
 	}
 
@@ -265,10 +288,15 @@ func (d *Daemon) AddRoutineTask(t ScheduledTask) (*ScheduledTask, error) {
 	}
 
 	delTg := t.DeliverTelegram || t.Channel == "telegram" || strings.HasPrefix(t.SessionID, "tg-")
+	jobType := strings.ToLower(strings.TrimSpace(t.JobType))
+	if jobType == "" {
+		jobType = "notification"
+	}
 
 	task := &ScheduledTask{
 		ID:              id,
 		Name:            t.Name,
+		JobType:         jobType,
 		Schedule:        t.Schedule,
 		Prompt:          t.Prompt,
 		TargetType:      t.TargetType,

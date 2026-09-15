@@ -87,6 +87,66 @@ func NewServer(db *sql.DB) *Server {
 		return nil
 	}
 
+	scheduler.NotificationExecutor = func(ctx context.Context, sessionID, agentID, taskName, message, channel string, deliverTelegram bool) error {
+		turnSessionID := sessionID
+		if turnSessionID == "" {
+			turnSessionID = "direct_" + agentID
+		}
+
+		senderID := agentID
+		senderName := "Routine Notification"
+		senderAvatar := "purple-pebble"
+		if agentID != "" {
+			if ag, err := store.GetAgent(agentID); err == nil && ag != nil {
+				senderID = ag.ID
+				senderName = ag.Name
+				senderAvatar = ag.Avatar
+			}
+		}
+
+		content := message
+		if taskName != "" && !strings.Contains(message, taskName) {
+			content = fmt.Sprintf("🔔 **%s**\n\n%s", taskName, message)
+		}
+
+		notifyMsg := gateway.SessionMessage{
+			ID:           "routine-" + uuid.New().String(),
+			SessionID:    turnSessionID,
+			AgentID:      agentID,
+			Channel:      "web",
+			Role:         "assistant",
+			SenderType:   "agent",
+			SenderID:     senderID,
+			SenderName:   senderName,
+			SenderAvatar: senderAvatar,
+			Content:      content,
+			CreatedAt:    time.Now().UnixMilli(),
+		}
+		_ = store.SaveMessage(notifyMsg)
+
+		bus.Publish(messaging.Event{
+			Type:      messaging.EventMessageCreated,
+			SessionID: turnSessionID,
+			AgentID:   agentID,
+			Channel:   "web",
+			Payload:   notifyMsg,
+		})
+		bus.Publish(messaging.Event{
+			Type:      messaging.EventAgentCompleted,
+			SessionID: turnSessionID,
+			AgentID:   agentID,
+			Channel:   "web",
+			Payload:   notifyMsg,
+		})
+
+		if (deliverTelegram || channel == "telegram") && tg != nil {
+			if sendErr := tg.SendRoutineNotification(turnSessionID, agentID, content); sendErr != nil {
+				log.Printf("⚠️ Telegram notification delivery failed: %v", sendErr)
+			}
+		}
+		return nil
+	}
+
 	s := &Server{
 		db:       db,
 		router:   http.NewServeMux(),
