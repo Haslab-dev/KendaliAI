@@ -1542,8 +1542,8 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 		},
 		"schedule_task": {
 			Name:        "schedule_task",
-			Description: "Schedules a recurring cron job or natural-language reminder (e.g. 'make reminder every 1 am to wake me up', '0 1 * * *', 'every 2 hours', 'every 30 minutes', 'tomorrow at 9am'). Fires notifications and executes instructions automatically.",
-			Signature:   `{"name": "string", "schedule": "string", "prompt": "string"}`,
+			Description: "Schedules a recurring cron job or natural-language routine. Supports two job types: 'notification' (direct alert sent to chat and Telegram without AI overhead) or 'task' (AI agent performs reasoning, commands, or tool execution at scheduled times). Supports cron syntax or human expressions like 'every weekday at 9am', 'every 30 minutes', 'tomorrow at 9am'.",
+			Signature:   `{"name": "string", "schedule": "string", "prompt": "string", "job_type": "string (notification|task)", "target_type": "string (agent|group)", "target_id": "string", "deliver_telegram": "boolean"}`,
 			Category:    "Scheduler",
 			Execute: func(ctx context.Context, args map[string]interface{}) string {
 				if scheduler.DefaultDaemon == nil {
@@ -1552,6 +1552,22 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 				name, _ := args["name"].(string)
 				scheduleExpr, _ := args["schedule"].(string)
 				prompt, _ := args["prompt"].(string)
+
+				jobType, _ := args["job_type"].(string)
+				if jobType == "" {
+					jobType, _ = args["jobType"].(string)
+				}
+				if jobType == "" {
+					jobType = "notification"
+				}
+
+				targetType, _ := args["target_type"].(string)
+				if targetType == "" {
+					targetType, _ = args["targetType"].(string)
+				}
+				if targetType == "" {
+					targetType = "agent"
+				}
 
 				if name == "" {
 					name = prompt
@@ -1568,10 +1584,26 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 				agentID, _ := ctx.Value("agentID").(string)
 				agentName, _ := ctx.Value("agentName").(string)
 
+				targetID, _ := args["target_id"].(string)
+				if targetID == "" {
+					targetID, _ = args["targetId"].(string)
+				}
+				if targetID == "" {
+					targetID = agentID
+				}
+
 				if channel == "" {
 					channel = "web"
 				}
 				deliverTg := channel == "telegram" || strings.HasPrefix(sessionID, "tg-")
+				if dt, ok := args["deliver_telegram"].(bool); ok {
+					deliverTg = dt
+				} else if dt, ok := args["deliverTelegram"].(bool); ok {
+					deliverTg = dt
+				} else if jobType == "notification" {
+					deliverTg = true
+				}
+
 				owner := agentName
 				if owner == "" {
 					owner = agentID
@@ -1581,11 +1613,13 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 				}
 
 				task, err := scheduler.DefaultDaemon.AddRoutineTask(scheduler.ScheduledTask{
+					ID:              "",
 					Name:            name,
+					JobType:         jobType,
 					Schedule:        scheduleExpr,
 					Prompt:          prompt,
-					TargetType:      "agent",
-					TargetID:        agentID,
+					TargetType:      targetType,
+					TargetID:        targetID,
 					SessionID:       sessionID,
 					Owner:           owner,
 					OwnerType:       "agent",
@@ -1596,8 +1630,13 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 					return fmt.Sprintf("Error scheduling task: %v", err)
 				}
 
-				return fmt.Sprintf("✅ Scheduled task '%s' [%s] created. Schedule: '%s'. Next run: %s. Owner: %s.",
-					task.Name, task.ID, task.Schedule, task.NextRun.Format(time.RFC3339), task.Owner)
+				typeLabel := "Direct Notification (No AI overhead)"
+				if task.JobType == "task" {
+					typeLabel = "AI Agent Task Execution"
+				}
+
+				return fmt.Sprintf("✅ Scheduled cron [%s] '%s' created (%s). Schedule: '%s'. Next run: %s. Owner: %s. Telegram delivery: %v.",
+					task.ID, task.Name, typeLabel, task.Schedule, task.NextRun.Format(time.RFC3339), task.Owner, task.DeliverTelegram)
 			},
 		},
 		"list_schedules": {

@@ -853,9 +853,13 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 	// Scheduling & Reminders Instructions
 	sysPrompt += "\n\n## MANDATORY SCHEDULING & REMINDER TOOL INSTRUCTIONS:\n" +
 		"When the user asks you to set a reminder, schedule a task, or create a recurring routine (e.g. 'ingatkan saya...', 'buat reminder...', 'jadwalkan...', 'remind me...', 'every X hours...', 'tiap hari...'):\n" +
-		"1. You MUST call the `schedule_task` tool with {\"name\": \"...\", \"schedule\": \"...\", \"prompt\": \"...\"}.\n" +
-		"2. NEVER output a fake confirmation or simulated ID (e.g. 'Reminder baru berhasil dibuat') without actually calling `schedule_task`.\n" +
-		"3. Only state that the reminder is registered after `schedule_task` tool execution confirms it.\n"
+		"1. You MUST call the `schedule_task` tool.\n" +
+		"2. Select `job_type` based on intent:\n" +
+		"   - 'notification': For reminders, notices, and alerts. Delivered directly to chat and Telegram without calling LLM models or consuming AI tokens.\n" +
+		"   - 'task': When an AI agent must actively execute instructions, run tools/skills, or analyze data at scheduled times.\n" +
+		"3. Tool call schema: `{\"name\": \"...\", \"schedule\": \"...\", \"prompt\": \"...\", \"job_type\": \"notification\" | \"task\"}`.\n" +
+		"4. NEVER output a fake confirmation or simulated ID (e.g. 'Reminder baru berhasil dibuat') without actually calling `schedule_task`.\n" +
+		"5. Only state that the reminder is registered after `schedule_task` tool execution confirms it.\n"
 
 	sysPrompt += "\n\n## CRITICAL MESSAGING & FORMATTING RULES:\n" +
 		"- You MUST speak directly in character as " + agentConfig.Name + " (" + agentConfig.Role + ").\n" +
