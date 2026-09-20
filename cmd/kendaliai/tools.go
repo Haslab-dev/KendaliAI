@@ -36,7 +36,7 @@ func runTools(cmd *cobra.Command, args []string) {
 		categories[tool.Category] = append(categories[tool.Category], tool)
 	}
 
-	order := []string{"Explore", "Intelligence", "Editing", "Skill", "Verification", "Memory", "Git", "Object", "MCP", "Shell", "Computer"}
+	order := []string{"Explore", "Intelligence", "Editing", "Skill", "Verification", "Memory", "Git", "Object", "MCP", "Shell", "Computer", "Browser"}
 	fmt.Println()
 	for _, cat := range order {
 		tools := categories[cat]

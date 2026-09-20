@@ -290,6 +290,9 @@ func (s *Server) routes() {
 	// Computer Use screenshots
 	s.router.HandleFunc("/api/computer/shots/", s.handleComputerShots())
 
+	// Browser Use screenshots
+	s.router.HandleFunc("/api/browser/shots/", s.handleBrowserShots())
+
 	// Web UI Static Files
 	s.router.HandleFunc("/", s.handleWebUI())
 }

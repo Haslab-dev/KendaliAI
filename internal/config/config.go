@@ -55,6 +55,8 @@ type Config struct {
 	NativeTools *bool `json:"nativeTools,omitempty" yaml:"nativeTools,omitempty"`
 	// ComputerUse gates the macOS desktop-control tools (internal/computer).
 	ComputerUse ComputerUseConfig `json:"computerUse,omitempty" yaml:"computerUse,omitempty"`
+	// BrowserUse gates the browser-control tools (internal/browser).
+	BrowserUse BrowserUseConfig `json:"browserUse,omitempty" yaml:"browserUse,omitempty"`
 }
 
 // NativeToolsEnabled reports whether native function calling should be

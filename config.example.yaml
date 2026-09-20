@@ -89,3 +89,11 @@ reflection:
 # Set enabled: false to remove the computer_* tools from the agent.
 computerUse:
   enabled: true
+
+# Browser use — lets the chat agent drive a real Chromium (navigate, click,
+# type, scroll, read text, screenshot) with a persistent profile under
+# ~/.kendaliai/browser/profile. Headless by default; set headless: false to
+# watch the browser window while the agent works.
+browserUse:
+  enabled: true
+  headless: true

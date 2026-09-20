@@ -19,6 +19,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kendaliai/app/internal/config"
+	"github.com/kendaliai/app/internal/browser"
 	"github.com/kendaliai/app/internal/data"
 	"github.com/kendaliai/app/internal/embedding"
 	"github.com/kendaliai/app/internal/git"
@@ -1974,6 +1975,22 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 	// macOS computer-use tools (no-op map on other platforms)
 	if config.ComputerUseEnabled(cfg) {
 		for name, tool := range ComputerTools() {
+			registry[name] = tool
+		}
+	}
+
+	// browser-use tools (chromedp, cross-platform)
+	if config.BrowserUseEnabled(cfg) {
+		if cfg != nil {
+			browser.Configure(browser.Config{
+				Headless:    cfg.BrowserUse.Headless,
+				ExecPath:    cfg.BrowserUse.ExecPath,
+				UserDataDir: cfg.BrowserUse.UserDataDir,
+				WindowW:     cfg.BrowserUse.WindowW,
+				WindowH:     cfg.BrowserUse.WindowH,
+			})
+		}
+		for name, tool := range BrowserTools() {
 			registry[name] = tool
 		}
 	}
