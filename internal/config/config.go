@@ -53,6 +53,8 @@ type Config struct {
 	// the legacy `tool: NAME({...})` text protocol. A provider that rejects
 	// native tool calls falls back to the text protocol automatically.
 	NativeTools *bool `json:"nativeTools,omitempty" yaml:"nativeTools,omitempty"`
+	// ComputerUse gates the macOS desktop-control tools (internal/computer).
+	ComputerUse ComputerUseConfig `json:"computerUse,omitempty" yaml:"computerUse,omitempty"`
 }
 
 // NativeToolsEnabled reports whether native function calling should be

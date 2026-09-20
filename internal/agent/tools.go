@@ -1711,6 +1711,13 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 		}
 	}
 
+	// macOS computer-use tools (no-op map on other platforms)
+	if config.ComputerUseEnabled(cfg) {
+		for name, tool := range ComputerTools() {
+			registry[name] = tool
+		}
+	}
+
 	return registry
 }
 

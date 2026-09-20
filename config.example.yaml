@@ -82,3 +82,10 @@ reflection:
   enabled: true
   schedule: "0 0 * * *"
   timezone: Asia/Jakarta
+
+# macOS computer use — lets the chat agent open apps, type, click, take
+# screenshots and read accessible UI text (Calculator, dialogs, etc).
+# Enabled by default on macOS; per-execution still subject to agent policies.
+# Set enabled: false to remove the computer_* tools from the agent.
+computerUse:
+  enabled: true
