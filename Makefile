@@ -8,7 +8,7 @@ VERSION   := $(shell cat VERSION 2>/dev/null || echo "0.2.0")
 PM  := $(shell command -v bun 2>/dev/null || echo "npm")
 AIR := $(shell command -v air 2>/dev/null || echo "$$(go env GOPATH)/bin/air")
 
-.PHONY: all build build-go build-ui dev dev-go dev-ui start start-daemon stop restart status clean lint tidy install air-install bump-version ui-deps
+.PHONY: all build build-go build-ui dev dev-go dev-ui start start-daemon stop restart status desktop check-computer clean lint tidy install air-install bump-version ui-deps
 
 all: build
 
@@ -74,6 +74,24 @@ restart: build-go
 # Show gateway status, uptime, PID, and port listeners
 status: build-go
 	$(BUILD_DIR)/$(BINARY) status
+
+# ── Desktop Mode ──
+# The binary itself is the desktop app: it serves the chat UI and ships the
+# computer-use tools (open apps, type, click, screenshot). This target builds
+# UI + server, starts the daemon, and opens the chat window.
+
+desktop: build
+	$(BUILD_DIR)/$(BINARY) restart >/dev/null 2>&1 || $(BUILD_DIR)/$(BINARY) start -d
+	@printf 'Waiting for gateway'; \
+	for i in $$(seq 1 30); do \
+		if curl -sf http://localhost:8080/health >/dev/null 2>&1; then break; fi; \
+		printf '.'; sleep 0.5; \
+	done; echo ' ready'
+	@open http://localhost:8080
+
+# Verify the computer-use layer of this machine (bpclick, AX permission, capture)
+check-computer: build-go
+	go test ./internal/computer/ -run TestProbe -v -timeout 180s
 
 # ── Maintenance & Code Quality ──
 

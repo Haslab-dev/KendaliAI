@@ -18,6 +18,13 @@ export const ToolExecutionCard: React.FC<ToolExecutionCardProps> = ({ toolCall }
   const isRunning = toolCall.status === 'running';
   const [isOpen, setIsOpen] = useState(isRunning);
 
+  // Computer-use screenshots embed a servable URL in their JSON output.
+  const screenshotUrl = (() => {
+    if (!toolCall.output || toolCall.status === 'denied') return null;
+    const m = toolCall.output.match(/"url"\s*:\s*"([^"]+)"\s*}/);
+    return m && m[1] ? m[1] : null;
+  })();
+
   // Auto-expand when running so user sees real-time action
   useEffect(() => {
     if (isRunning) {
@@ -115,6 +122,15 @@ export const ToolExecutionCard: React.FC<ToolExecutionCardProps> = ({ toolCall }
                 </span>
               )}
             </div>
+            {screenshotUrl && (
+              <img
+                src={screenshotUrl}
+                alt="Screen capture"
+                className="mb-2 rounded-[6px] border border-[#E5E7EB] max-h-80 w-auto custom-scrollbar"
+                onClick={() => window.open(screenshotUrl, '_blank')}
+                style={{ cursor: 'zoom-in' }}
+              />
+            )}
             <pre
               className={`bg-[#FFFFFF] p-2.5 rounded-[6px] border border-[#E5E7EB] overflow-x-auto whitespace-pre-wrap max-h-64 overflow-y-auto custom-scrollbar text-[11px] text-[#333333] ${
                 currentStatus === 'error' ? 'text-red-500' : ''

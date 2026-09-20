@@ -287,6 +287,9 @@ func (s *Server) routes() {
 	s.router.HandleFunc("/api/schedules", s.handleSchedules())
 	s.router.HandleFunc("/api/schedules/", s.handleScheduleAction())
 
+	// Computer Use screenshots
+	s.router.HandleFunc("/api/computer/shots/", s.handleComputerShots())
+
 	// Web UI Static Files
 	s.router.HandleFunc("/", s.handleWebUI())
 }
