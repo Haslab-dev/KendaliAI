@@ -5,7 +5,7 @@ import {
   CornerDownLeft, Terminal, Sparkles, Smartphone, Database, RefreshCw, FileText, X,
   ShieldCheck, GitFork, Code2, Clock, Bell, ExternalLink, Activity, BookOpen,
   Folder, Upload, Menu, Bot, Feather, Cpu, Send, MessageSquare, Users, AtSign,
-  Square, Smile
+  Square, Smile, CheckSquare
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { navigate } from '../router';
@@ -61,6 +61,8 @@ export const ChatArea: React.FC = () => {
     discussionRound,
     stopDiscussion,
     reactToMessage,
+    openSubAgentPanel,
+    deleteMessages,
   } = useAppStore();
 
   const { sendMessage } = useAgentSocket();
@@ -219,6 +221,58 @@ export const ChatArea: React.FC = () => {
   const [showScrollBottomBtn, setShowScrollBottomBtn] = useState(false);
   const isProgrammaticScrollRef = useRef<boolean>(false);
   const rafIdRef = useRef<number | null>(null);
+
+  // ----- WhatsApp-style message selection & deletion -----
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const enterSelection = useCallback((id: string) => {
+    setSelectionMode(true);
+    setSelectedIds(new Set([id]));
+  }, []);
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const exitSelection = useCallback(() => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  }, []);
+
+  const handleDeleteSingle = useCallback(
+    (id: string) => {
+      if (!activeSessionId) return;
+      if (window.confirm('Hapus pesan ini?')) {
+        deleteMessages(activeSessionId, [id]);
+      }
+    },
+    [activeSessionId, deleteMessages]
+  );
+
+  const handleBulkDelete = useCallback(() => {
+    if (!activeSessionId || selectedIds.size === 0) return;
+    if (window.confirm(`Hapus ${selectedIds.size} pesan?`)) {
+      deleteMessages(activeSessionId, [...selectedIds]);
+      exitSelection();
+    }
+  }, [activeSessionId, selectedIds, deleteMessages, exitSelection]);
+
+  const selectAllMessages = useCallback(() => {
+    setSelectedIds(
+      new Set(messages.filter((m) => !m.id.startsWith('asst-stream-')).map((m) => m.id))
+    );
+  }, [messages]);
+
+  // Leaving a session cancels any in-progress selection.
+  useEffect(() => {
+    exitSelection();
+  }, [activeSessionId, exitSelection]);
 
   // Detect user manual scroll to disable auto-scroll when user scrolls up
   const handleScroll = useCallback(() => {
@@ -1018,6 +1072,40 @@ export const ChatArea: React.FC = () => {
         </div>
       </div>
 
+      {/* WhatsApp-style selection action bar */}
+      {selectionMode && (
+        <div className="w-full shrink-0 flex items-center gap-2 px-3 sm:px-6 py-2 bg-[#EBF5FF] dark:bg-[#0E2A3F] border-b border-[#BFDBFE] dark:border-[#0B2A40] z-30 animate-in fade-in slide-in-from-top-1 duration-100">
+          <button
+            onClick={exitSelection}
+            className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+            title="Batalkan seleksi"
+          >
+            <X size={17} className="text-[#333333] dark:text-white" />
+          </button>
+          <span className="text-xs font-bold text-[#000000] dark:text-white flex-1 font-sans">
+            {selectedIds.size} pesan dipilih
+          </span>
+          <button
+            onClick={selectAllMessages}
+            className="text-[11px] font-bold text-[#007AFF] px-2 py-1 rounded hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors cursor-pointer"
+          >
+            Pilih Semua
+          </button>
+          <button
+            onClick={handleBulkDelete}
+            disabled={selectedIds.size === 0}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-[6px] text-[11px] font-bold transition-colors ${
+              selectedIds.size > 0
+                ? 'bg-red-500 text-white hover:bg-red-600 cursor-pointer'
+                : 'bg-black/10 dark:bg-white/10 text-[#8A8A85] cursor-not-allowed'
+            }`}
+          >
+            <Trash2 size={13} />
+            Hapus
+          </button>
+        </div>
+      )}
+
       {/* Messages Scroll Area Container */}
       <div className="flex-1 min-h-0 relative flex flex-col">
         <div
@@ -1031,12 +1119,18 @@ export const ChatArea: React.FC = () => {
               <RefreshCw size={14} className="animate-spin text-[#007AFF] shrink-0" />
               <div className="text-[12px] text-[#333333] font-geist flex-1 truncate">
                 {runningTasks[0].title} — running {Math.max(1, Math.round((Date.now() - runningTasks[0].startedAt) / 1000))}s
+                {runningTasks.length > 1 && (
+                  <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#007AFF] text-white align-middle">
+                    +{runningTasks.length - 1} background
+                  </span>
+                )}
               </div>
               <button
-                onClick={() => selectSession(runningTasks[0].sessionId)}
-                className="px-2.5 py-1 bg-[#007AFF] text-white text-[11px] font-funnel font-bold rounded-[4px] transition-colors"
+                onClick={() => openSubAgentPanel(runningTasks[0].sessionId)}
+                className="px-2.5 py-1 bg-[#007AFF] text-white text-[11px] font-funnel font-bold rounded-[4px] hover:bg-[#0066D6] transition-colors"
+                title="Step into the sub-agent: live process + direct instructions"
               >
-                View
+                Enter
               </button>
               <button
                 onClick={() => cancelTask(runningTasks[0].id)}
@@ -1161,6 +1255,11 @@ export const ChatArea: React.FC = () => {
                 agents={agents}
                 thinkingStatus={thinkingStatus}
                 onReact={(msgId, emo) => activeSessionId && reactToMessage(activeSessionId, msgId, emo)}
+                selectionMode={selectionMode}
+                isSelected={selectedIds.has(msg.id)}
+                onToggleSelect={toggleSelect}
+                onDelete={handleDeleteSingle}
+                onStartSelect={enterSelection}
               />
             );
           })}
@@ -1705,7 +1804,102 @@ interface ChatMessageItemProps {
   agents: AgentConfig[];
   thinkingStatus: string;
   onReact?: (messageId: string, emoji: string) => void;
+  selectionMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: (messageId: string) => void;
+  onDelete?: (messageId: string) => void;
+  onStartSelect?: (messageId: string) => void;
 }
+
+// Circular checkbox shown in WhatsApp-style multi-select mode, anchored to
+// the side opposite the bubble (left for sent, right for received).
+const SelectCheckbox: React.FC<{
+  isSelected: boolean;
+  onToggle: () => void;
+  side: 'left' | 'right';
+}> = ({ isSelected, onToggle, side }) => (
+  <button
+    type="button"
+    onClick={(e) => {
+      e.stopPropagation();
+      onToggle();
+    }}
+    className={`absolute ${side === 'left' ? 'left-2' : 'right-2'} top-1/2 -translate-y-1/2 z-20 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer ${
+      isSelected
+        ? 'bg-[#007AFF] border-[#007AFF]'
+        : 'border-[#9CA3AF] bg-white/90 dark:bg-black/50 hover:border-[#007AFF]'
+    }`}
+    title={isSelected ? 'Batalkan pilihan' : 'Pilih pesan'}
+  >
+    {isSelected && <Check size={12} strokeWidth={3} className="text-white" />}
+  </button>
+);
+
+// Hover toolbar over a message: quick reactions + kebab menu offering
+// "select" (enters multi-select mode) and "delete".
+const MessageHoverBar: React.FC<{
+  msg: SessionMessage;
+  onReact?: (messageId: string, emoji: string) => void;
+  onDelete: (messageId: string) => void;
+  onStartSelect: (messageId: string) => void;
+}> = ({ msg, onReact, onDelete, onStartSelect }) => {
+  const [menuOpen, setMenuOpen] = useState(false);
+  return (
+    <div className="select-none pointer-events-auto opacity-0 group-hover/msg:opacity-100 transition-opacity absolute -top-3.5 right-2 z-10 flex items-center gap-0.5 bg-white dark:bg-[#2C2C2E] border border-gray-200 dark:border-neutral-700 rounded-full px-1.5 py-0.5 shadow-md">
+      {['😂', '👍', '❤️', '🔥', '🤔', '🎉'].map((emo) => (
+        <button
+          key={emo}
+          type="button"
+          onClick={() => onReact?.(msg.id, emo)}
+          className="select-none hover:scale-125 transition-transform text-[13px] px-1 py-0.5 rounded cursor-pointer leading-none"
+          title={`React ${emo}`}
+        >
+          {emo}
+        </button>
+      ))}
+      <span className="w-px h-3.5 bg-gray-200 dark:bg-neutral-700 mx-0.5" />
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setMenuOpen((v) => !v)}
+          className="p-1 rounded-full hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
+          title="Menu pesan"
+        >
+          <ChevronDown size={13} className="text-[#8A8A85]" />
+        </button>
+        {menuOpen && (
+          <>
+            <div className="fixed inset-0 z-30" onClick={() => setMenuOpen(false)} />
+            <div className="absolute right-0 top-full mt-1.5 w-36 bg-white dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[10px] shadow-2xl z-40 py-1 animate-in fade-in zoom-in-95 duration-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onStartSelect(msg.id);
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-[#333333] dark:text-[#E5E7EB] hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer text-left"
+              >
+                <CheckSquare size={13} className="text-[#007AFF]" />
+                Pilih pesan
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onDelete(msg.id);
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 cursor-pointer text-left"
+              >
+                <Trash2 size={13} />
+                Hapus
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const ChatMessageItem = React.memo<ChatMessageItemProps>(({
   msg,
@@ -1714,27 +1908,30 @@ const ChatMessageItem = React.memo<ChatMessageItemProps>(({
   agents,
   thinkingStatus,
   onReact,
+  selectionMode,
+  isSelected,
+  onToggleSelect,
+  onDelete,
+  onStartSelect,
 }) => {
+  const deletable = !msg.id.startsWith('asst-stream-');
+
   if (msg.role === 'user') {
     return (
-      <div className="w-full flex flex-col items-end animate-fade-in group">
+      <div className="w-full relative flex flex-col items-end animate-fade-in group">
+        {selectionMode && deletable && (
+          <SelectCheckbox isSelected={!!isSelected} onToggle={() => onToggleSelect?.(msg.id)} side="left" />
+        )}
         <div className="relative group/msg max-w-[560px] w-full flex flex-col items-end">
-          {onReact && (
-            <div className="select-none pointer-events-auto opacity-0 group-hover/msg:opacity-100 transition-opacity absolute -top-3.5 right-2 z-10 flex items-center gap-0.5 bg-white dark:bg-[#2C2C2E] border border-gray-200 dark:border-neutral-700 rounded-full px-1.5 py-0.5 shadow-md">
-              {['😂', '👍', '❤️', '🔥', '🤔', '🎉'].map((emo) => (
-                <button
-                  key={emo}
-                  type="button"
-                  onClick={() => onReact(msg.id, emo)}
-                  className="select-none hover:scale-125 transition-transform text-[13px] px-1 py-0.5 rounded cursor-pointer leading-none"
-                  title={`React ${emo}`}
-                >
-                  {emo}
-                </button>
-              ))}
-            </div>
+          {!selectionMode && deletable && onReact && onDelete && onStartSelect && (
+            <MessageHoverBar msg={msg} onReact={onReact} onDelete={onDelete} onStartSelect={onStartSelect} />
           )}
-          <div className="w-full p-[12px_16px] bg-[#0F0F0F] dark:bg-[#1C1C1E] text-[#FFFFFF] rounded-[16px] rounded-tr-[4px] shadow-sm border border-transparent dark:border-[#2C2C2E]">
+          <div
+            onClick={selectionMode && deletable ? () => onToggleSelect?.(msg.id) : undefined}
+            className={`w-full p-[12px_16px] bg-[#0F0F0F] dark:bg-[#1C1C1E] text-[#FFFFFF] rounded-[16px] rounded-tr-[4px] shadow-sm border border-transparent dark:border-[#2C2C2E] ${
+              selectionMode && deletable ? 'cursor-pointer' : ''
+            }`}
+          >
             <div className="text-[13px]/[21px] font-geist whitespace-pre-wrap break-words">
               {msg.content}
             </div>
@@ -1774,7 +1971,10 @@ const ChatMessageItem = React.memo<ChatMessageItemProps>(({
   const isRoutine = msg.content?.startsWith('[Routine') || msg.id?.startsWith('routine-');
 
   return (
-    <div className="w-full flex flex-row gap-3 justify-start items-start animate-fade-in">
+    <div className="w-full relative flex flex-row gap-3 justify-start items-start animate-fade-in">
+      {selectionMode && deletable && (
+        <SelectCheckbox isSelected={!!isSelected} onToggle={() => onToggleSelect?.(msg.id)} side="right" />
+      )}
       {/* Grok Avatar of the specific Agent Person */}
       <div className="shrink-0 mt-1 relative group">
         <GrokAvatar
@@ -1805,24 +2005,17 @@ const ChatMessageItem = React.memo<ChatMessageItemProps>(({
 
         {/* Message Card Container with Hover Reactions */}
         <div className="relative group/msg w-full">
-          {onReact && (
-            <div className="select-none pointer-events-auto opacity-0 group-hover/msg:opacity-100 transition-opacity absolute -top-3.5 right-2 z-10 flex items-center gap-0.5 bg-white dark:bg-[#2C2C2E] border border-gray-200 dark:border-neutral-700 rounded-full px-1.5 py-0.5 shadow-md">
-              {['😂', '👍', '❤️', '🔥', '🤔', '🎉'].map((emo) => (
-                <button
-                  key={emo}
-                  type="button"
-                  onClick={() => onReact(msg.id, emo)}
-                  className="select-none hover:scale-125 transition-transform text-[13px] px-1 py-0.5 rounded cursor-pointer leading-none"
-                  title={`React ${emo}`}
-                >
-                  {emo}
-                </button>
-              ))}
-            </div>
+          {!selectionMode && deletable && onDelete && onStartSelect && (
+            <MessageHoverBar msg={msg} onReact={onReact} onDelete={onDelete} onStartSelect={onStartSelect} />
           )}
 
           {/* Message Card */}
-          <div className="w-full p-[12px_16px] bg-[#FFFFFF] dark:bg-[#1A1A1A] rounded-[16px] rounded-tl-[4px] border border-[#E5E7EB] dark:border-[#2C2C2E] shadow-2xs">
+          <div
+            onClick={selectionMode && deletable ? () => onToggleSelect?.(msg.id) : undefined}
+            className={`w-full p-[12px_16px] bg-[#FFFFFF] dark:bg-[#1A1A1A] rounded-[16px] rounded-tl-[4px] border border-[#E5E7EB] dark:border-[#2C2C2E] shadow-2xs ${
+              selectionMode && deletable ? 'cursor-pointer' : ''
+            }`}
+          >
             {/* Collapsible Thought Process */}
             {msg.thought && (
               <ThoughtProcessAccordion
@@ -1857,6 +2050,24 @@ const ChatMessageItem = React.memo<ChatMessageItemProps>(({
                 </div>
               )}
             </div>
+
+            {/* Sub-agent report: clickable entry into the background worklog */}
+            {msg.model === 'subagent' && msg.content?.includes('subtask_') &&
+              (() => {
+                const m = msg.content.match(/subtask_[a-z0-9]+/i);
+                if (!m) return null;
+                return (
+                  <button
+                    type="button"
+                    onClick={() => useAppStore.getState().openSubAgentPanel(m[0])}
+                    className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-[#007AFF] border border-blue-200 dark:border-blue-900/60 rounded-[6px] text-[10px] font-bold transition-colors cursor-pointer"
+                    title="Step into the sub-agent: live process + direct instructions"
+                  >
+                    <Bot size={11} />
+                    Step into sub-agent ({m[0]})
+                  </button>
+                );
+              })()}
 
             {/* Grounding RAG Chips */}
             {msg.ragSources && msg.ragSources.length > 0 && (

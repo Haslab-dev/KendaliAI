@@ -115,7 +115,10 @@
   margin-bottom: 0.65rem;
   line-height: 1.6;
 }
-.markdown-content p:last-child {
+/* Blocks are wrapped in per-block divs while streaming, so only trim the
+   bottom margin of the very last element of the very last block. */
+.markdown-content > div:last-child > p:last-child,
+.markdown-content > p:last-child {
   margin-bottom: 0;
 }
 .markdown-content ul {

@@ -738,6 +738,15 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		}
 	}
 
+	// Background delegation: heavy work runs in an out-of-chat sub-agent
+	// session so interactive turns stay light and responsive.
+	sysPrompt += "\n\n## BACKGROUND DELEGATION — spawn_subagent (heavy work runs OUT of this chat):\n" +
+		"For heavy or long-running work — deep research, large planning, multi-file coding, big code reviews — do NOT grind through it inline; delegate it:\n" +
+		"tool: spawn_subagent({\"task\": \"<complete, self-contained instructions: goal, constraints, expected deliverable>\", \"agent\": \"<optional specialist agent id>\", \"context\": \"<optional extra data>\"})\n" +
+		"- The call returns instantly with a task_id. The sub-agent executes in its own background session: its steps, tool calls and tokens never flood this chat.\n" +
+		"- When the sub-agent finishes, its report is posted back into this conversation automatically. Do not poll or re-ask; just continue helping the user meanwhile.\n" +
+		"- Delegate whenever the work would take many tool steps or produce a very long output. Simple questions and quick edits stay inline as usual.\n"
+
 	// Inject configured MCP servers from store and config.json
 	allMCPs, _ := r.store.ListMCPServers()
 	if config.Cfg != nil && config.Cfg.MCPServers != nil {
@@ -815,13 +824,17 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 
 	// Append Tool instructions
 	toolRegistry := agent.GetToolRegistry(config.Cfg, nil, r.workRoot, r.store.db)
+	// Out-of-chat sub-agent delegation, bound to this turn's parent session.
+	toolRegistry["spawn_subagent"] = r.SpawnSubagentTool(sessionID)
 	sysPrompt += "\n\n## AVAILABLE TOOLS:\n"
 	sysPrompt += "You can execute tools to perform actions. When calling tools, use the standard format:\n"
 	sysPrompt += "tool: TOOL_NAME({\"arg\": \"value\"})\n"
 	sysPrompt += "One tool call per line. No extra explanations before tool calls.\n"
 	sysPrompt += "Tools available:\n"
 	for name, def := range toolRegistry {
-		if r.isToolAllowed(name, agentConfig.Tools) {
+		// spawn_subagent is orchestration with no direct side effects, so it
+		// stays available even on agents with a restrictive tool allowlist.
+		if name == "spawn_subagent" || r.isToolAllowed(name, agentConfig.Tools) {
 			sysPrompt += fmt.Sprintf("- %s: %s (Signature: %s)\n", name, def.Description, def.Signature)
 		}
 	}
@@ -831,7 +844,7 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 	// fallback for providers that reject the tools API.
 	nativeToolsEnabled := config.Cfg.NativeToolsEnabled()
 	toolDefs := agent.BuildToolDefinitions(toolRegistry, func(name string) bool {
-		return r.isToolAllowed(name, agentConfig.Tools)
+		return name == "spawn_subagent" || r.isToolAllowed(name, agentConfig.Tools)
 	})
 	if nativeToolsEnabled && len(toolDefs) > 0 {
 		sysPrompt += "\nTool definitions are also attached via the native function-calling API. Prefer issuing tool calls through it; the `tool: NAME({...})` text format remains available as a fallback.\n"

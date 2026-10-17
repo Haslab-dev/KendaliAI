@@ -56,6 +56,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
     const general: Session[] = [];
 
     sessions.forEach((s) => {
+      // Background sub-agent worklogs live outside the chat list; they are
+      // opened through the running-tasks banner instead.
+      if (s.id.startsWith('subtask_')) return;
       if (s.type === 'group') {
         group.push(s);
       } else if (s.type === 'direct' || (s.agentId && !s.type)) {

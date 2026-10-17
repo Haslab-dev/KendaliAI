@@ -5,6 +5,7 @@ import { useRoute } from './router';
 import { IconRail } from './components/IconRail';
 import { Sidebar } from './components/Sidebar';
 import { ChatArea } from './components/ChatArea';
+import { SubAgentPanel } from './components/SubAgentPanel';
 import { PaneHost } from './components/PaneHost';
 import { BottomNav } from './components/BottomNav';
 import { LoginScreen } from './components/LoginScreen';
@@ -58,8 +59,12 @@ export const App: React.FC = () => {
         await Promise.all([loadProviders(), loadAgents(), loadSessions(), loadMcps()]);
         const currentStore = useAppStore.getState();
         if (!currentStore.activeSessionId) {
-          if (currentStore.sessions.length > 0) {
-            await selectSession(currentStore.sessions[0].id);
+          // Background sub-agent worklogs (subtask_) must never take over the
+          // main chat — e.g. when one was the most recently updated session
+          // during a page reload. Always land on a real conversation.
+          const firstChat = currentStore.sessions.find((s) => !s.id.startsWith('subtask_'));
+          if (firstChat) {
+            await selectSession(firstChat.id);
           } else {
             await createSession();
           }
@@ -99,6 +104,9 @@ export const App: React.FC = () => {
           <div className="flex-1 flex flex-col h-full min-h-0 min-w-0 relative overflow-hidden bg-app pb-[60px] md:pb-0">
             {route === 'chat' ? <ChatArea /> : <PaneHost route="dashboard" />}
           </div>
+
+          {/* Sub-agent focus panel (forge-ade style, chat route only) */}
+          {route === 'chat' && <SubAgentPanel />}
         </>
       ) : (
         <div className="flex-1 flex flex-col h-full min-h-0 min-w-0 relative overflow-hidden pb-[60px] md:pb-0">

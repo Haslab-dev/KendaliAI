@@ -1477,6 +1477,28 @@ func (s *Store) ClearSessionMessages(sessionID string) error {
 	return err
 }
 
+// DeleteMessages removes specific messages from a session (WhatsApp-style
+// single or multi-select deletion) and returns how many rows were removed.
+func (s *Store) DeleteMessages(sessionID string, ids []string) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
+	args := make([]interface{}, 0, len(ids)+1)
+	args = append(args, sessionID)
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	res, err := s.db.Exec(
+		"DELETE FROM session_messages WHERE session_id = ? AND id IN ("+placeholders+")",
+		args...,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 // --- MCP Servers CRUD ---
 
 func (s *Store) ListMCPServers() ([]MCPServerConfig, error) {

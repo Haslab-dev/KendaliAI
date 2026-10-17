@@ -5,6 +5,7 @@ import {
   Database, Eye, EyeOff, FileText, Upload, BookOpen
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
+import { navigate } from '../router';
 import {
   ProviderConfig, AgentConfig, MCPServerConfig, SkillItem, ToolDefinition, TelegramBotConfig,
   ModelItem, isReasoningModel, EmbeddingConfig, DocumentItem
@@ -12,11 +13,22 @@ import {
 
 // 3. Sessions Tab
 export const SessionsPane: React.FC<{ onSelectSession: (id: string) => void }> = ({ onSelectSession }) => {
-  const { sessions, loadSessions, deleteSession } = useAppStore();
+  const { sessions, loadSessions, deleteSession, openSubAgentPanel } = useAppStore();
 
   useEffect(() => {
     loadSessions();
   }, []);
+
+  // Background sub-agent worklogs open in the focus panel, never as the
+  // main chat conversation.
+  const openSession = (id: string) => {
+    if (id.startsWith('subtask_')) {
+      openSubAgentPanel(id);
+      navigate('chat');
+      return;
+    }
+    onSelectSession(id);
+  };
 
   return (
     <div className="space-y-4">

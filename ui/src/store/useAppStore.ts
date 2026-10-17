@@ -43,9 +43,21 @@ interface AppState {
   loadTasks: () => Promise<void>;
   cancelTask: (id: string) => Promise<void>;
 
+  // Sub-agent focus panel (forge-ade style side panel into a background
+  // subtask_ session: live process steps + direct instructions).
+  subagentPanelSessionId: string | null;
+  subagentPanelSession: Session | null;
+  subagentPanelMessages: SessionMessage[];
+  openSubAgentPanel: (sessionId: string) => Promise<void>;
+  closeSubAgentPanel: () => void;
+  appendPanelMessage: (msg: SessionMessage) => void;
+  applyPanelEvent: (ev: any) => void;
+
   messages: SessionMessage[];
   loadSessionMessages: (sessionId: string) => Promise<void>;
   appendMessage: (msg: SessionMessage) => void;
+  deleteMessages: (sessionId: string, ids: string[]) => Promise<void>;
+  removeMessages: (ids: string[]) => void;
   addMessageReaction: (messageId: string, reaction: MessageReaction) => void;
   appendToolCall: (tc: ToolCallRecord) => void;
   updateToolCall: (tc: ToolCallRecord) => void;
@@ -410,6 +422,169 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  subagentPanelSessionId: null,
+  subagentPanelSession: null,
+  subagentPanelMessages: [],
+  openSubAgentPanel: async (sessionId) => {
+    set({ subagentPanelSessionId: sessionId, subagentPanelSession: null, subagentPanelMessages: [] });
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}`);
+      if (res.ok) {
+        const data = await res.json();
+        // Only apply if the panel is still focused on this session.
+        if (get().subagentPanelSessionId === sessionId) {
+          set({ subagentPanelSession: data.session || null, subagentPanelMessages: data.messages || [] });
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load sub-agent session:', e);
+    }
+  },
+  closeSubAgentPanel: () =>
+    set({ subagentPanelSessionId: null, subagentPanelSession: null, subagentPanelMessages: [] }),
+  appendPanelMessage: (msg) =>
+    set((s) => {
+      if (!s.subagentPanelSessionId || msg.sessionId !== s.subagentPanelSessionId) return {};
+      const msgs = [...s.subagentPanelMessages];
+      // Reconcile the optimistic local copy once the persisted user message
+      // arrives (different id, same content) — otherwise it shows twice.
+      if (msg.role === 'user') {
+        const optIdx = msgs.findIndex(
+          (m) => m.role === 'user' && m.id.startsWith('user-') && m.content.trim() === (msg.content || '').trim()
+        );
+        if (optIdx !== -1) {
+          msgs[optIdx] = msg;
+          return { subagentPanelMessages: msgs };
+        }
+      }
+      if (msgs.some((m) => m.id === msg.id)) return {};
+      return { subagentPanelMessages: msgs };
+    }),
+  // Lightweight live tail for the focus panel: mirrors the same gateway
+  // events the main chat handles, but scoped to the panel's own message list.
+  applyPanelEvent: (ev) =>
+    set((s) => {
+      if (!s.subagentPanelSessionId || ev.sessionId !== s.subagentPanelSessionId) return {};
+      const msgs = [...s.subagentPanelMessages];
+      const payload = ev.payload;
+      const type = ev.type as string;
+
+      const ensureDraft = () => {
+        const last = msgs[msgs.length - 1];
+        if (last && last.role === 'assistant' && last.id.startsWith('panel-stream-')) return;
+        msgs.push({
+          id: 'panel-stream-' + Date.now(),
+          sessionId: ev.sessionId,
+          channel: 'web',
+          role: 'assistant',
+          content: '',
+          thought: '',
+          toolCalls: [],
+          createdAt: Date.now(),
+        });
+      };
+
+      switch (type) {
+        case 'message.created': {
+          if (!payload) break;
+          const idx = msgs.findIndex((m) => m.id === payload.id);
+          if (idx !== -1) {
+            msgs[idx] = payload;
+          } else {
+            const draftIdx = payload.role === 'assistant' ? msgs.findIndex((m) => m.id.startsWith('panel-stream-')) : -1;
+            if (draftIdx !== -1) {
+              msgs[draftIdx] = payload;
+            } else {
+              msgs.push(payload);
+            }
+          }
+          break;
+        }
+        case 'agent.text.delta': {
+          ensureDraft();
+          const last = msgs[msgs.length - 1];
+          msgs[msgs.length - 1] = { ...last, content: (last.content || '') + (payload?.delta || '') };
+          break;
+        }
+        case 'agent.thinking.delta': {
+          ensureDraft();
+          const last = msgs[msgs.length - 1];
+          msgs[msgs.length - 1] = { ...last, thought: (last.thought || '') + (payload?.delta || '') };
+          break;
+        }
+        case 'agent.tool_call': {
+          ensureDraft();
+          const last = msgs[msgs.length - 1];
+          const tools = last.toolCalls || [];
+          if (!tools.some((t) => t.id === payload?.id)) {
+            msgs[msgs.length - 1] = {
+              ...last,
+              toolCalls: [
+                ...tools,
+                {
+                  id: payload?.id || 'tc-' + Date.now(),
+                  tool: payload?.tool,
+                  arguments: payload?.arguments,
+                  status: 'running',
+                  output: '',
+                },
+              ],
+            };
+          }
+          break;
+        }
+        case 'agent.tool_result': {
+          for (let i = msgs.length - 1; i >= 0; i--) {
+            const tools = msgs[i].toolCalls;
+            if (tools && tools.length > 0) {
+              const ti = tools.findIndex((t) => t.id === payload?.id || t.tool === payload?.tool);
+              if (ti !== -1) {
+                const updated = [...tools];
+                updated[ti] = {
+                  ...updated[ti],
+                  output: payload?.output || updated[ti].output,
+                  status: payload?.status || 'success',
+                  durationMs: payload?.durationMs,
+                };
+                msgs[i] = { ...msgs[i], toolCalls: updated };
+                break;
+              }
+            }
+          }
+          break;
+        }
+        case 'agent.completed': {
+          if (!payload) break;
+          const draftIdx = msgs.findIndex((m) => m.id.startsWith('panel-stream-'));
+          if (draftIdx !== -1) {
+            msgs[draftIdx] = {
+              ...payload,
+              thought: payload.thought || msgs[draftIdx].thought,
+              toolCalls:
+                payload.toolCalls && payload.toolCalls.length > 0 ? payload.toolCalls : msgs[draftIdx].toolCalls,
+            };
+          } else {
+            const idx = msgs.findIndex((m) => m.id === payload.id);
+            if (idx !== -1) msgs[idx] = payload;
+            else msgs.push(payload);
+          }
+          break;
+        }
+        case 'agent.failed': {
+          msgs.push({
+            id: 'panel-err-' + Date.now(),
+            sessionId: ev.sessionId,
+            channel: 'web',
+            role: 'assistant',
+            content: '❌ ' + (typeof payload === 'string' ? payload : 'Sub-agent run failed.'),
+            createdAt: Date.now(),
+          });
+          break;
+        }
+      }
+      return { subagentPanelMessages: msgs };
+    }),
+
   messages: [],
   setMessages: (messages) => set({ messages }),
   appendMessage: (msg) =>
@@ -462,6 +637,32 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       }
       return { messages: [...s.messages, msg] };
+    }),
+  deleteMessages: async (sessionId, ids) => {
+    if (!sessionId || ids.length === 0) return;
+    // Optimistic removal from the main chat and any open sub-agent panel.
+    get().removeMessages(ids);
+    try {
+      await fetch(`/api/sessions/${sessionId}/messages/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+    } catch (e) {
+      console.error('Failed to delete messages:', e);
+    }
+  },
+  removeMessages: (ids) =>
+    set((s) => {
+      const kill = new Set(ids);
+      const messages = s.messages.some((m) => kill.has(m.id))
+        ? s.messages.filter((m) => !kill.has(m.id))
+        : s.messages;
+      const panel = s.subagentPanelMessages.some((m) => kill.has(m.id))
+        ? s.subagentPanelMessages.filter((m) => !kill.has(m.id))
+        : s.subagentPanelMessages;
+      if (messages === s.messages && panel === s.subagentPanelMessages) return {};
+      return { messages, subagentPanelMessages: panel };
     }),
   addMessageReaction: (messageId, reaction) =>
     set((state) => ({

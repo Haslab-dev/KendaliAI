@@ -7,6 +7,62 @@ let reconnectTimeout: any = null;
 let isExplicitDisconnect = false;
 let subscriberCount = 0;
 
+// ---------------------------------------------------------------------------
+// Streaming delta coalescing.
+// Model tokens arrive as one WS event each (often 20-60+/s). Applying every
+// token to the store re-renders the chat per token, which collapses to O(n^2)
+// on long messages. Buffer deltas and flush them into the store at most every
+// FLUSH_MS; the rendered result is identical, the update rate is not.
+// ---------------------------------------------------------------------------
+const FLUSH_MS = 80;
+let textBuf = '';
+let thinkBuf = '';
+let bufSessionId: string | null = null;
+let flushTimer: any = null;
+let flushSeq = 0;
+
+function scheduleFlush() {
+  if (flushTimer != null) return;
+  flushTimer = setTimeout(() => {
+    flushTimer = null;
+    flushDeltas();
+  }, FLUSH_MS);
+}
+
+function flushDeltas() {
+  if (!textBuf && !thinkBuf) return;
+  const store = useAppStore.getState();
+
+  // User switched session while deltas were in flight: drop them instead of
+  // leaking the tail of one conversation into another.
+  if (bufSessionId && store.activeSessionId && bufSessionId !== store.activeSessionId) {
+    textBuf = '';
+    thinkBuf = '';
+    return;
+  }
+
+  if (thinkBuf) {
+    store.appendThinkingDelta(thinkBuf);
+    store.appendLogEvent({
+      id: `delta-flush-${++flushSeq}`,
+      type: 'agent.thinking.delta',
+      sessionId: bufSessionId || undefined,
+      payload: { delta: thinkBuf },
+    } as any);
+    thinkBuf = '';
+  }
+  if (textBuf) {
+    store.appendTextDelta(textBuf);
+    store.appendLogEvent({
+      id: `delta-flush-${++flushSeq}`,
+      type: 'agent.text.delta',
+      sessionId: bufSessionId || undefined,
+      payload: { delta: textBuf },
+    } as any);
+    textBuf = '';
+  }
+}
+
 function connectGlobalSocket() {
   if (globalWs && (globalWs.readyState === WebSocket.OPEN || globalWs.readyState === WebSocket.CONNECTING)) {
     return;
@@ -32,9 +88,13 @@ function connectGlobalSocket() {
         if (!ev || !ev.type) return;
 
         const store = useAppStore.getState();
+        const isDelta = ev.type === 'agent.text.delta' || ev.type === 'agent.thinking.delta';
 
-        // 1. Always record in global streaming logs
-        store.appendLogEvent(ev);
+        // 1. Record in global streaming logs — except raw deltas, which are
+        //    logged once per coalesced flush in flushDeltas() instead.
+        if (!isDelta) {
+          store.appendLogEvent(ev);
+        }
 
         // 2. Dispatch reminder notifications and task events globally
         if (ev.type === 'reminder.triggered') {
@@ -69,6 +129,12 @@ function connectGlobalSocket() {
                 senderId: ev.payload.senderId || ev.agentId || 'agent',
                 senderName: ev.payload.senderName || ev.agentId || 'Agent',
               });
+            }
+            break;
+
+          case 'message.deleted':
+            if (ev.payload?.ids) {
+              store.removeMessages(ev.payload.ids);
             }
             break;
 
@@ -121,20 +187,24 @@ function connectGlobalSocket() {
 
           case 'agent.thinking.delta':
             if (isCurrentSession) {
-              store.setIsGenerating(true);
-              store.setThinkingStatus('Reasoning...');
+              if (!store.isGenerating) store.setIsGenerating(true);
+              if (store.thinkingStatus !== 'Reasoning...') store.setThinkingStatus('Reasoning...');
               if (ev.payload?.delta) {
-                store.appendThinkingDelta(ev.payload.delta);
+                thinkBuf += ev.payload.delta;
+                bufSessionId = ev.sessionId || bufSessionId;
+                scheduleFlush();
               }
             }
             break;
 
           case 'agent.text.delta':
             if (isCurrentSession) {
-              store.setIsGenerating(true);
-              store.setThinkingStatus('Responding...');
+              if (!store.isGenerating) store.setIsGenerating(true);
+              if (store.thinkingStatus !== 'Responding...') store.setThinkingStatus('Responding...');
               if (ev.payload?.delta) {
-                store.appendTextDelta(ev.payload.delta);
+                textBuf += ev.payload.delta;
+                bufSessionId = ev.sessionId || bufSessionId;
+                scheduleFlush();
               }
             }
             break;
@@ -168,6 +238,7 @@ function connectGlobalSocket() {
             break;
 
           case 'agent.completed':
+            flushDeltas();
             if (isCurrentSession) {
               store.setIsGenerating(false);
               store.setTypingAgent(null);
@@ -194,6 +265,12 @@ function connectGlobalSocket() {
               });
             }
             break;
+        }
+
+        // 4. Mirror events into the sub-agent focus panel when it is open on
+        //    this session (live process tail, independent of the main chat).
+        if (store.subagentPanelSessionId && ev.sessionId === store.subagentPanelSessionId) {
+          store.applyPanelEvent(ev);
         }
       } catch (e) {
         console.error('Error handling WS event:', e);
@@ -307,6 +384,62 @@ export async function sendSocketMessage(content: string) {
         createdAt: Date.now(),
       });
     }
+  }
+}
+
+// Send a follow-up instruction straight into a background sub-agent session
+// without leaving the main chat. The gateway resolves the session's own agent
+// when agentId is omitted.
+export async function sendPanelInstruction(sessionId: string, content: string) {
+  if (!sessionId || !content.trim()) return;
+
+  useAppStore.getState().appendPanelMessage({
+    id: 'user-' + Date.now(),
+    sessionId,
+    channel: 'web',
+    role: 'user',
+    content,
+    createdAt: Date.now(),
+  });
+
+  if (globalWs && globalWs.readyState === WebSocket.OPEN) {
+    globalWs.send(JSON.stringify({ type: 'message.send', sessionId, content }));
+    return;
+  }
+
+  // REST fallback when the socket is down.
+  try {
+    const store = useAppStore.getState();
+    const sess = store.sessions.find((s) => s.id === sessionId);
+    const res = await fetch('/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId,
+        agentId: sess?.agentId,
+        messages: [{ role: 'user', content }],
+      }),
+    });
+    const data = await res.json();
+    if (data.choices && data.choices.length > 0) {
+      store.appendPanelMessage({
+        id: 'asst-' + Date.now(),
+        sessionId,
+        channel: 'web',
+        role: 'assistant',
+        content: data.choices[0].message.content,
+        createdAt: Date.now(),
+      });
+    }
+  } catch (err: any) {
+    useAppStore.getState().appendPanelMessage({
+      id: 'err-' + Date.now(),
+      sessionId,
+      channel: 'web',
+      role: 'assistant',
+      content: '❌ Error: ' + err.message,
+      createdAt: Date.now(),
+    });
   }
 }
 

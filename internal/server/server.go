@@ -1107,6 +1107,33 @@ func (s *Server) handleSessionDetail() http.HandlerFunc {
 			return
 		}
 
+		// POST /api/sessions/{sid}/messages/delete  {"ids": [...]} — delete one
+		// or several messages (WhatsApp-style selection), broadcasting the
+		// removal so every open client drops them live.
+		if len(parts) >= 3 && parts[1] == "messages" && parts[2] == "delete" && r.Method == "POST" {
+			var req struct {
+				IDs []string `json:"ids"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.IDs) == 0 {
+				http.Error(w, "ids required", http.StatusBadRequest)
+				return
+			}
+			deleted, err := s.store.DeleteMessages(sessionID, req.IDs)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			s.bus.Publish(messaging.Event{
+				ID:        uuid.New().String(),
+				Type:      "message.deleted",
+				SessionID: sessionID,
+				Payload:   map[string]interface{}{"ids": req.IDs},
+				Timestamp: time.Now(),
+			})
+			json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "deleted": deleted})
+			return
+		}
+
 		if len(parts) >= 4 && parts[1] == "messages" && parts[3] == "reaction" && r.Method == "POST" {
 			messageID := parts[2]
 			var req struct {
