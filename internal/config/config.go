@@ -57,6 +57,42 @@ type Config struct {
 	ComputerUse ComputerUseConfig `json:"computerUse,omitempty" yaml:"computerUse,omitempty"`
 	// BrowserUse gates the browser-control tools (internal/browser).
 	BrowserUse BrowserUseConfig `json:"browserUse,omitempty" yaml:"browserUse,omitempty"`
+	// Engine selects the agent harness that runs turns. "builtin" (default,
+	// empty) keeps the gateway runtime + cognition loop; "rakit" routes web
+	// turns through the embedded RakitKode engine (internal/agentengine).
+	Engine EngineConfig `json:"engine,omitempty" yaml:"engine,omitempty"`
+}
+
+// EngineConfig configures the embedded RakitKode engine harness.
+type EngineConfig struct {
+	// Kind selects the engine: "" or "builtin" (legacy stacks) | "rakit".
+	Kind string `json:"kind,omitempty" yaml:"kind,omitempty"`
+	// Workspace is the default project folder engine sessions operate on
+	// (defaults to the server's working directory).
+	Workspace string `json:"workspace,omitempty" yaml:"workspace,omitempty"`
+	// AutoApprove auto-approves engine tool calls (headless default true).
+	AutoApprove *bool `json:"autoApprove,omitempty" yaml:"autoApprove,omitempty"`
+	// SyncProviders disables syncing gateway-configured providers into the
+	// engine's provider profiles when false (default true).
+	SyncProviders *bool `json:"syncProviders,omitempty" yaml:"syncProviders,omitempty"`
+	// JevApiKey enables the engine's remote tool-routing classifier
+	// (Typesafe AI Jev). Empty keeps local keyword-heuristic routing only.
+	JevApiKey string `json:"jevApiKey,omitempty" yaml:"jevApiKey,omitempty"`
+	// JevEndpoint overrides the routing service URL (defaults to the
+	// Typesafe AI cloud endpoint).
+	JevEndpoint string `json:"jevEndpoint,omitempty" yaml:"jevEndpoint,omitempty"`
+}
+
+// EngineAutoApprove reports whether engine tool calls should auto-approve
+// (default true when unset).
+func (c *Config) EngineAutoApprove() bool {
+	return c == nil || c.Engine.AutoApprove == nil || *c.Engine.AutoApprove
+}
+
+// EngineSyncProviders reports whether gateway providers should sync into the
+// engine profile list (default true when unset).
+func (c *Config) EngineSyncProviders() bool {
+	return c == nil || c.Engine.SyncProviders == nil || *c.Engine.SyncProviders
 }
 
 // NativeToolsEnabled reports whether native function calling should be

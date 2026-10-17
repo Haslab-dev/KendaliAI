@@ -97,3 +97,17 @@ computerUse:
 browserUse:
   enabled: true
   headless: true
+
+# Embedded RakitKode engine (optional). kind: rakit routes web-chat turns
+# through the ForgeADE-proven coding-agent harness; empty/"builtin" keeps the
+# legacy gateway runtime. jevApiKey enables the engine's remote tool-routing
+# classifier (Typesafe AI Jev) — fewer tools offered per turn means less
+# token bloat; empty keeps local keyword-heuristic routing. jevEndpoint only
+# needed for self-hosted/proxied classifier deployments.
+# engine:
+#   kind: rakit
+#   workspace: /path/to/default/project
+#   autoApprove: true
+#   syncProviders: true
+#   jevApiKey: ""
+#   jevEndpoint: ""

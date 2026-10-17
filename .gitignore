@@ -50,3 +50,4 @@ config.yaml
 
 projects/sample-app
 refs/
+.workspace/

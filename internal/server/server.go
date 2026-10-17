@@ -19,6 +19,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/kendaliai/app/internal/agent"
+	"github.com/kendaliai/app/internal/agentengine"
 	"github.com/kendaliai/app/internal/channels"
 	"github.com/kendaliai/app/internal/config"
 	"github.com/kendaliai/app/internal/embedding"
@@ -41,6 +42,10 @@ type Server struct {
 	tg       *channels.TelegramAdapter
 	explorer *workspace.Explorer
 	upgrader websocket.Upgrader
+
+	// engine is the embedded RakitKode harness; nil unless engine.kind=rakit.
+	engine       *agentengine.Engine
+	engineBridge *agentengine.Bridge
 }
 
 func NewServer(db *sql.DB) *Server {
@@ -162,6 +167,45 @@ func NewServer(db *sql.DB) *Server {
 		},
 	}
 
+	// Embedded RakitKode engine (config: engine.kind: "rakit"). Runs turns
+	// through the ForgeADE-proven agent harness; events are bridged onto the
+	// internal bus with the same shapes the builtin runtime publishes.
+	if agentengine.Enabled() {
+		home, _ := os.UserHomeDir()
+		engWorkspace := config.Cfg.Engine.Workspace
+		if engWorkspace == "" {
+			engWorkspace = cwd
+		}
+		if eng, err := agentengine.New(filepath.Join(home, ".kendaliai"), engWorkspace); err == nil {
+			eng.SetAutoApprove(config.Cfg.EngineAutoApprove())
+			if config.Cfg.EngineSyncProviders() {
+				if providers, err := store.ListProviders(); err == nil {
+					items := make([]agentengine.ProviderInput, 0, len(providers))
+					for _, p := range providers {
+						models := make([]string, 0, len(p.Models))
+						for _, m := range p.Models {
+							models = append(models, m.ID)
+						}
+						items = append(items, agentengine.ProviderInput{
+							ID: p.ID, Name: p.Name, Type: p.Type, APIKey: p.APIKey,
+							Endpoint: p.Endpoint, Models: models,
+							IsDefault: p.IsDefault, Enabled: p.Enabled,
+						})
+					}
+					eng.SyncProviders(items)
+				}
+			}
+			bridge := eng.AttachBridge(bus)
+			bridge.OnAssistant = s.persistEngineAssistant
+			s.engine = eng
+			s.engineBridge = bridge
+			go eng.Start(context.Background())
+			log.Printf("✅ RakitKode engine enabled (workspace: %s)", engWorkspace)
+		} else {
+			log.Printf("⚠️  RakitKode engine init failed, falling back to builtin runtime: %v", err)
+		}
+	}
+
 	s.ensureAuthTable()
 
 	// Auto-start active Telegram bots
@@ -218,6 +262,16 @@ func (s *Server) routes() {
 
 	// WebSocket Gateway
 	s.router.HandleFunc("/ws", s.handleWebSocket())
+
+	// Embedded RakitKode engine (active when config engine.kind=rakit)
+	s.router.HandleFunc("/api/engine/status", s.handleEngineStatus())
+	s.router.HandleFunc("/api/engine/sessions", s.handleEngineSessions())
+	s.router.HandleFunc("/api/engine/sessions/", s.handleEngineSessionAction())
+	s.router.HandleFunc("/api/engine/message", s.handleEngineMessage())
+	s.router.HandleFunc("/api/engine/approval", s.handleEngineApproval())
+	s.router.HandleFunc("/api/engine/stop", s.handleEngineStop())
+	s.router.HandleFunc("/api/engine/providers", s.handleEngineProviders())
+	s.router.HandleFunc("/api/engine/model", s.handleEngineModel())
 
 	// Configuration APIs
 	s.router.HandleFunc("/api/providers", s.handleProviders())
@@ -386,6 +440,10 @@ func (s *Server) handleWebSocket() http.HandlerFunc {
 				go func(sid, aid, txt, mdl string) {
 					ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 					defer cancel()
+					if s.engine != nil {
+						s.runEngineTurn(sid, aid, txt, "web", mdl)
+						return
+					}
 					_, err := s.runtime.ExecuteTurnWithModel(ctx, sid, aid, txt, "web", mdl)
 					if err != nil {
 						log.Printf("Web turn error: %v", err)
