@@ -339,7 +339,7 @@ func (s *Store) SeedInitialData(cfg *config.Config) {
 	_, _ = s.db.Exec("DELETE FROM agents WHERE id IN ('finance', 'data-science', 'general', 'engineer')")
 	_, _ = s.db.Exec("UPDATE agents SET provider_id = '', model = '' WHERE provider_id = 'deepseek' OR model LIKE 'deepseek%'")
 
-	// Migrate legacy emoji avatars to clean Grok SVG avatar identifiers
+	// Migrate legacy emoji avatars to clean SVG avatar identifiers
 	_, _ = s.db.Exec("UPDATE agents SET avatar = 'purple-pebble' WHERE avatar IN ('🎩', '🤖', '') OR avatar IS NULL")
 	_, _ = s.db.Exec("UPDATE agents SET avatar = 'emerald-spark' WHERE avatar IN ('🔍', '🔬')")
 	_, _ = s.db.Exec("UPDATE agents SET avatar = 'cyan-bubble' WHERE avatar IN ('📚', '🧠')")

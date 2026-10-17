@@ -16,7 +16,7 @@ import (
 	"github.com/kendaliai/app/internal/agent"
 	"github.com/kendaliai/app/internal/config"
 	"github.com/kendaliai/app/internal/embedding"
-	"github.com/kendaliai/app/internal/grok"
+	"github.com/kendaliai/app/internal/botmode"
 	"github.com/kendaliai/app/internal/messaging"
 	"github.com/kendaliai/app/internal/plugins"
 	"github.com/kendaliai/app/internal/providers"
@@ -458,16 +458,16 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		cleanPrompt = userPrompt
 	}
 
-	// 1c. Process Grok mode directives (/fun, /think, /deepsearch, /normal, /regular, /mode <mode>)
-	if gMode, remaining, isGrokCmd := grok.ParseSlashCommand(cleanPrompt); isGrokCmd {
-		sess.Metadata = grok.InjectSessionMode(sess.Metadata, gMode)
+	// 1c. Process mode directives (/fun, /think, /deepsearch, /normal, /regular, /mode <mode>)
+	if bMode, remaining, isModeCmd := botmode.ParseSlashCommand(cleanPrompt); isModeCmd {
+		sess.Metadata = botmode.InjectSessionMode(sess.Metadata, bMode)
 		_ = r.store.SaveSession(*sess)
 		r.bus.Publish(messaging.Event{
 			Type:      "session.mode_updated",
 			SessionID: sessionID,
 			Payload: map[string]any{
 				"sessionId": sessionID,
-				"grok_mode": string(gMode),
+				"bot_mode":  string(bMode),
 			},
 		})
 		cleanPrompt = remaining
@@ -479,7 +479,7 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 				Channel:    channel,
 				Role:       "assistant",
 				SenderType: "system",
-				Content:    fmt.Sprintf("⚡ Switched to Grok **%s** mode.", strings.Title(string(gMode))),
+				Content:    fmt.Sprintf("⚡ Switched to **%s** mode.", strings.Title(string(bMode))),
 				CreatedAt:  time.Now().UnixMilli(),
 			}
 			_ = r.store.SaveMessage(repMsg)
@@ -748,8 +748,8 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 
 	// 5. Build System Prompt & Skills
 	sysPrompt := fmt.Sprintf("You are %s. You speak and act strictly as %s. Never adopt, impersonate, or prepend any other agent persona or name.\n\n%s", agentConfig.Name, agentConfig.Name, agentConfig.SystemPrompt)
-	grokMode := grok.ExtractSessionMode(sess.Metadata)
-	sysPrompt += "\n\n" + grok.PersonaPrompt(grokMode)
+	activeBotMode := botmode.ExtractSessionMode(sess.Metadata)
+	sysPrompt += "\n\n" + botmode.PersonaPrompt(activeBotMode)
 	if len(agentConfig.Skills) > 0 {
 		sysPrompt += "\n\n## ATTACHED SKILLS (Apply these guidelines when relevant):\n"
 		homeDir, _ := os.UserHomeDir()
@@ -863,16 +863,16 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 	toolRegistry := agent.GetToolRegistry(config.Cfg, nil, r.workRoot, r.store.db)
 	// Out-of-chat sub-agent delegation, bound to this turn's parent session.
 	toolRegistry["spawn_subagent"] = r.SpawnSubagentTool(sessionID)
-	toolRegistry["grok_deepsearch"] = r.GrokDeepSearchTool(sessionID)
+	toolRegistry["deep_search"] = r.DeepSearchTool(sessionID)
 	sysPrompt += "\n\n## AVAILABLE TOOLS:\n"
 	sysPrompt += "You can execute tools to perform actions. When calling tools, use the standard format:\n"
 	sysPrompt += "tool: TOOL_NAME({\"arg\": \"value\"})\n"
 	sysPrompt += "One tool call per line. No extra explanations before tool calls.\n"
 	sysPrompt += "Tools available:\n"
 	for name, def := range toolRegistry {
-		// spawn_subagent and grok_deepsearch are orchestration with no direct side effects, so they
+		// spawn_subagent and deep_search are orchestration with no direct side effects, so they
 		// stay available even on agents with a restrictive tool allowlist.
-		if name == "spawn_subagent" || name == "grok_deepsearch" || r.isToolAllowed(name, agentConfig.Tools) {
+		if name == "spawn_subagent" || name == "deep_search" || r.isToolAllowed(name, agentConfig.Tools) {
 			sysPrompt += fmt.Sprintf("- %s: %s (Signature: %s)\n", name, def.Description, def.Signature)
 		}
 	}
@@ -882,7 +882,7 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 	// fallback for providers that reject the tools API.
 	nativeToolsEnabled := config.Cfg.NativeToolsEnabled()
 	toolDefs := agent.BuildToolDefinitions(toolRegistry, func(name string) bool {
-		return name == "spawn_subagent" || r.isToolAllowed(name, agentConfig.Tools)
+		return name == "spawn_subagent" || name == "deep_search" || r.isToolAllowed(name, agentConfig.Tools)
 	})
 	if nativeToolsEnabled && len(toolDefs) > 0 {
 		sysPrompt += "\nTool definitions are also attached via the native function-calling API. Prefer issuing tool calls through it; the `tool: NAME({...})` text format remains available as a fallback.\n"

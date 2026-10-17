@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kendaliai/app/internal/agent"
-	"github.com/kendaliai/app/internal/grok"
+	"github.com/kendaliai/app/internal/botmode"
 	"github.com/kendaliai/app/internal/messaging"
 )
 
@@ -345,46 +345,50 @@ func truncateRunes(s string, n int) string {
 	return string(r[:n]) + "…"
 }
 
-// GrokDeepSearchTool returns the grok_deepsearch tool definition.
-func (r *Runtime) GrokDeepSearchTool(parentSessionID string) agent.ToolDef {
+// DeepSearchTool returns the deep_search tool definition.
+func (r *Runtime) DeepSearchTool(parentSessionID string) agent.ToolDef {
 	return agent.ToolDef{
-		Name:        "grok_deepsearch",
-		Description: "Run Grok DeepSearch: decomposes a complex inquiry into multiple parallel research angles, deploys background sub-agents concurrently, and synthesizes findings into a unified, cross-verified report.",
-		Signature:   `{"query": "string - complex topic or question to deep-search", "mode": "string - optional Grok mode (regular, fun, think). Defaults to session mode"}`,
+		Name:        "deep_search",
+		Description: "Run DeepSearch: decomposes a complex inquiry into multiple parallel research angles, deploys background sub-agents concurrently, and synthesizes findings into a unified, cross-verified report.",
+		Signature:   `{"query": "string - complex topic or question to deep-search", "mode": "string - optional mode (regular, fun, think). Defaults to session mode"}`,
 		Category:    "research",
 		Execute: func(ctx context.Context, args map[string]interface{}) string {
-			return r.executeGrokDeepSearch(parentSessionID, args)
+			return r.executeDeepSearch(parentSessionID, args)
 		},
 	}
 }
 
-func (r *Runtime) executeGrokDeepSearch(parentSessionID string, args map[string]interface{}) string {
+func (r *Runtime) executeDeepSearch(parentSessionID string, args map[string]interface{}) string {
 	query := stringArg(args, "query")
 	if strings.TrimSpace(query) == "" {
-		return "Error: grok_deepsearch requires a non-empty 'query' argument."
+		return "Error: deep_search requires a non-empty 'query' argument."
 	}
 	if strings.HasPrefix(parentSessionID, SubagentSessionPrefix) {
-		return "Error: grok_deepsearch cannot be called from within a sub-agent session."
+		return "Error: deep_search cannot be called from within a sub-agent session."
 	}
 	if r.taskMgr == nil {
 		return "Error: task manager unavailable."
 	}
 
 	modeStr := stringArg(args, "mode")
-	activeMode := grok.ParseMode(modeStr)
-	if modeStr == "" {
-		if sess, _ := r.store.GetSession(parentSessionID); sess != nil {
-			activeMode = grok.ExtractSessionMode(sess.Metadata)
+	activeMode := botmode.ParseMode(modeStr)
+	parentChannel := "web"
+	if sess, _ := r.store.GetSession(parentSessionID); sess != nil {
+		if modeStr == "" {
+			activeMode = botmode.ExtractSessionMode(sess.Metadata)
+		}
+		if sess.ChannelID != "" {
+			parentChannel = sess.ChannelID
 		}
 	}
 
-	subtasks := grok.DecomposeQuery(query)
+	subtasks := botmode.DecomposeQuery(query)
 	if len(subtasks) == 0 {
 		return "Error: query could not be decomposed into subtasks."
 	}
 
 	r.bus.Publish(messaging.Event{
-		Type:      "grok.research_progress",
+		Type:      "deepsearch.progress",
 		SessionID: parentSessionID,
 		Payload: map[string]any{
 			"stage":     "decomposed",
@@ -395,7 +399,7 @@ func (r *Runtime) executeGrokDeepSearch(parentSessionID string, args map[string]
 	})
 
 	var wg sync.WaitGroup
-	resultsChan := make(chan grok.SubtaskResult, len(subtasks))
+	resultsChan := make(chan botmode.SubtaskResult, len(subtasks))
 
 	for _, st := range subtasks {
 		sub := st
@@ -406,17 +410,18 @@ func (r *Runtime) executeGrokDeepSearch(parentSessionID string, args map[string]
 			subCtx, cancel := context.WithTimeout(context.Background(), subagentTimeout)
 			defer cancel()
 
+			subAgentID, _, _ := r.resolveSubagentAgent(sub.Role, sub.Query)
 			subSessionID := SubagentSessionPrefix + uuid.New().String()[:8]
 			title := "🛰 " + truncateRunes(sub.Angle+": "+sub.Query, 60)
 			_ = r.store.SaveSession(Session{
 				ID:       subSessionID,
-				AgentID:  sub.Role,
+				AgentID:  subAgentID,
 				Title:    title,
 				Status:   "active",
 				Metadata: fmt.Sprintf(`{"parentSession":%q,"kind":"subagent"}`, parentSessionID),
 			})
 
-			res, err := r.ExecuteTurnWithModel(subCtx, subSessionID, sub.Role, sub.Query, "subagent", "")
+			res, err := r.ExecuteTurnWithModel(subCtx, subSessionID, subAgentID, sub.Query, "subagent", "")
 			output := ""
 			success := true
 			if err != nil {
@@ -426,7 +431,7 @@ func (r *Runtime) executeGrokDeepSearch(parentSessionID string, args map[string]
 				output = res.Content
 			}
 
-			resultsChan <- grok.SubtaskResult{
+			resultsChan <- botmode.SubtaskResult{
 				SubtaskID: sub.ID,
 				Angle:     sub.Angle,
 				Output:    output,
@@ -440,20 +445,20 @@ func (r *Runtime) executeGrokDeepSearch(parentSessionID string, args map[string]
 		wg.Wait()
 		close(resultsChan)
 
-		var collected []grok.SubtaskResult
+		var collected []botmode.SubtaskResult
 		for res := range resultsChan {
 			collected = append(collected, res)
 		}
 
-		synthesized := grok.SynthesizeGrokReport(query, collected, activeMode)
+		synthesized := botmode.SynthesizeReport(query, collected, activeMode)
 
 		repMsg := SessionMessage{
-			ID:         "grok-report-" + uuid.New().String()[:8],
+			ID:         "deepsearch-report-" + uuid.New().String()[:8],
 			SessionID:  parentSessionID,
-			Channel:    "subagent",
+			Channel:    parentChannel,
 			Role:       "assistant",
 			SenderType: "agent",
-			SenderName: "Grok",
+			SenderName: "DeepSearch",
 			Content:    synthesized,
 			CreatedAt:  time.Now().UnixMilli(),
 		}
@@ -461,10 +466,10 @@ func (r *Runtime) executeGrokDeepSearch(parentSessionID string, args map[string]
 		r.bus.Publish(messaging.Event{
 			Type:      messaging.EventMessageCreated,
 			SessionID: parentSessionID,
-			Channel:   "subagent",
+			Channel:   parentChannel,
 			Payload:   repMsg,
 		})
 	}()
 
-	return fmt.Sprintf("Grok DeepSearch launched across %d parallel sub-agents for: %q. Live research progress is underway; the synthesized report will be delivered automatically here when completed.", len(subtasks), query)
+	return fmt.Sprintf("DeepSearch launched across %d parallel sub-agents for: %q. Live research progress is underway; the synthesized report will be delivered automatically here when completed.", len(subtasks), query)
 }

@@ -25,8 +25,8 @@ import (
 	"github.com/Haslab-dev/RakitKode/store"
 	"github.com/Haslab-dev/RakitKode/tools"
 
+	"github.com/kendaliai/app/internal/botmode"
 	"github.com/kendaliai/app/internal/config"
-	"github.com/kendaliai/app/internal/grok"
 )
 
 // Engine owns the embedded RakitKode engine: its event bus, the agent
@@ -257,8 +257,8 @@ func (e *Engine) engineSessionFor(sessionID string) (string, bool) {
 	return rid, ok
 }
 
-// ApplyGrokMode configures the engine session persona to match the requested Grok mode.
-func (e *Engine) ApplyGrokMode(sessionID string, mode grok.Mode) error {
+// ApplyMode configures the engine session persona to match the requested mode.
+func (e *Engine) ApplyMode(sessionID string, mode botmode.Mode) error {
 	rid, err := e.EnsureSession(sessionID, "Kendali "+sessionID)
 	if err != nil {
 		return err
@@ -267,7 +267,7 @@ func (e *Engine) ApplyGrokMode(sessionID string, mode grok.Mode) error {
 	if !ok {
 		return fmt.Errorf("agentengine: session %s not found", rid)
 	}
-	persona := grok.PersonaPrompt(mode)
+	persona := botmode.PersonaPrompt(mode)
 	_, err = e.AgentMgr.UpdateSession(rid, sess.Name, sess.RoleFilter, persona, sess.CustomRules)
 	return err
 }
@@ -279,8 +279,8 @@ func (e *Engine) Send(ctx context.Context, sessionID, content string, mentionedP
 	if content == "" {
 		return fmt.Errorf("agentengine: empty message")
 	}
-	if gMode, remaining, isGrokCmd := grok.ParseSlashCommand(content); isGrokCmd {
-		_ = e.ApplyGrokMode(sessionID, gMode)
+	if bMode, remaining, isModeCmd := botmode.ParseSlashCommand(content); isModeCmd {
+		_ = e.ApplyMode(sessionID, bMode)
 		if remaining == "" {
 			return nil
 		}
