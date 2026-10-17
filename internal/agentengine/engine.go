@@ -26,6 +26,7 @@ import (
 	"github.com/Haslab-dev/RakitKode/tools"
 
 	"github.com/kendaliai/app/internal/config"
+	"github.com/kendaliai/app/internal/grok"
 )
 
 // Engine owns the embedded RakitKode engine: its event bus, the agent
@@ -256,12 +257,34 @@ func (e *Engine) engineSessionFor(sessionID string) (string, bool) {
 	return rid, ok
 }
 
+// ApplyGrokMode configures the engine session persona to match the requested Grok mode.
+func (e *Engine) ApplyGrokMode(sessionID string, mode grok.Mode) error {
+	rid, err := e.EnsureSession(sessionID, "Kendali "+sessionID)
+	if err != nil {
+		return err
+	}
+	sess, ok := e.AgentMgr.GetSession(rid)
+	if !ok {
+		return fmt.Errorf("agentengine: session %s not found", rid)
+	}
+	persona := grok.PersonaPrompt(mode)
+	_, err = e.AgentMgr.UpdateSession(rid, sess.Name, sess.RoleFilter, persona, sess.CustomRules)
+	return err
+}
+
 // Send runs a turn: resolves (or lazily creates) the engine session for the
 // given gateway session ID and submits the user content. The turn runs in
 // the engine's background goroutine; progress arrives as bus events.
 func (e *Engine) Send(ctx context.Context, sessionID, content string, mentionedPaths []string) error {
 	if content == "" {
 		return fmt.Errorf("agentengine: empty message")
+	}
+	if gMode, remaining, isGrokCmd := grok.ParseSlashCommand(content); isGrokCmd {
+		_ = e.ApplyGrokMode(sessionID, gMode)
+		if remaining == "" {
+			return nil
+		}
+		content = remaining
 	}
 	rid, err := e.EnsureSession(sessionID, "Kendali "+sessionID)
 	if err != nil {

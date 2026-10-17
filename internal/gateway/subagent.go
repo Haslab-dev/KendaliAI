@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/kendaliai/app/internal/agent"
+	"github.com/kendaliai/app/internal/grok"
 	"github.com/kendaliai/app/internal/messaging"
 )
 
@@ -341,4 +343,128 @@ func truncateRunes(s string, n int) string {
 		return s
 	}
 	return string(r[:n]) + "…"
+}
+
+// GrokDeepSearchTool returns the grok_deepsearch tool definition.
+func (r *Runtime) GrokDeepSearchTool(parentSessionID string) agent.ToolDef {
+	return agent.ToolDef{
+		Name:        "grok_deepsearch",
+		Description: "Run Grok DeepSearch: decomposes a complex inquiry into multiple parallel research angles, deploys background sub-agents concurrently, and synthesizes findings into a unified, cross-verified report.",
+		Signature:   `{"query": "string - complex topic or question to deep-search", "mode": "string - optional Grok mode (regular, fun, think). Defaults to session mode"}`,
+		Category:    "research",
+		Execute: func(ctx context.Context, args map[string]interface{}) string {
+			return r.executeGrokDeepSearch(parentSessionID, args)
+		},
+	}
+}
+
+func (r *Runtime) executeGrokDeepSearch(parentSessionID string, args map[string]interface{}) string {
+	query := stringArg(args, "query")
+	if strings.TrimSpace(query) == "" {
+		return "Error: grok_deepsearch requires a non-empty 'query' argument."
+	}
+	if strings.HasPrefix(parentSessionID, SubagentSessionPrefix) {
+		return "Error: grok_deepsearch cannot be called from within a sub-agent session."
+	}
+	if r.taskMgr == nil {
+		return "Error: task manager unavailable."
+	}
+
+	modeStr := stringArg(args, "mode")
+	activeMode := grok.ParseMode(modeStr)
+	if modeStr == "" {
+		if sess, _ := r.store.GetSession(parentSessionID); sess != nil {
+			activeMode = grok.ExtractSessionMode(sess.Metadata)
+		}
+	}
+
+	subtasks := grok.DecomposeQuery(query)
+	if len(subtasks) == 0 {
+		return "Error: query could not be decomposed into subtasks."
+	}
+
+	r.bus.Publish(messaging.Event{
+		Type:      "grok.research_progress",
+		SessionID: parentSessionID,
+		Payload: map[string]any{
+			"stage":     "decomposed",
+			"subtasks":  len(subtasks),
+			"query":     query,
+			"timestamp": time.Now().UnixMilli(),
+		},
+	})
+
+	var wg sync.WaitGroup
+	resultsChan := make(chan grok.SubtaskResult, len(subtasks))
+
+	for _, st := range subtasks {
+		sub := st
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			start := time.Now()
+			subCtx, cancel := context.WithTimeout(context.Background(), subagentTimeout)
+			defer cancel()
+
+			subSessionID := SubagentSessionPrefix + uuid.New().String()[:8]
+			title := "🛰 " + truncateRunes(sub.Angle+": "+sub.Query, 60)
+			_ = r.store.SaveSession(Session{
+				ID:       subSessionID,
+				AgentID:  sub.Role,
+				Title:    title,
+				Status:   "active",
+				Metadata: fmt.Sprintf(`{"parentSession":%q,"kind":"subagent"}`, parentSessionID),
+			})
+
+			res, err := r.ExecuteTurnWithModel(subCtx, subSessionID, sub.Role, sub.Query, "subagent", "")
+			output := ""
+			success := true
+			if err != nil {
+				output = "Error: " + err.Error()
+				success = false
+			} else if res != nil {
+				output = res.Content
+			}
+
+			resultsChan <- grok.SubtaskResult{
+				SubtaskID: sub.ID,
+				Angle:     sub.Angle,
+				Output:    output,
+				Duration:  time.Since(start),
+				Success:   success,
+			}
+		}()
+	}
+
+	go func() {
+		wg.Wait()
+		close(resultsChan)
+
+		var collected []grok.SubtaskResult
+		for res := range resultsChan {
+			collected = append(collected, res)
+		}
+
+		synthesized := grok.SynthesizeGrokReport(query, collected, activeMode)
+
+		repMsg := SessionMessage{
+			ID:         "grok-report-" + uuid.New().String()[:8],
+			SessionID:  parentSessionID,
+			Channel:    "subagent",
+			Role:       "assistant",
+			SenderType: "agent",
+			SenderName: "Grok",
+			Content:    synthesized,
+			CreatedAt:  time.Now().UnixMilli(),
+		}
+		_ = r.store.SaveMessage(repMsg)
+		r.bus.Publish(messaging.Event{
+			Type:      messaging.EventMessageCreated,
+			SessionID: parentSessionID,
+			Channel:   "subagent",
+			Payload:   repMsg,
+		})
+	}()
+
+	return fmt.Sprintf("Grok DeepSearch launched across %d parallel sub-agents for: %q. Live research progress is underway; the synthesized report will be delivered automatically here when completed.", len(subtasks), query)
 }
