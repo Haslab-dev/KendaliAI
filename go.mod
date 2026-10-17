@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/google/uuid v1.6.0
-	github.com/mattn/go-sqlite3 v1.14.22 // sqlite driver
+	github.com/mattn/go-sqlite3 v1.14.52 // sqlite driver
 	github.com/sashabaranov/go-openai v1.23.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.18.2
@@ -35,7 +35,7 @@ require (
 )
 
 require (
-	github.com/Haslab-dev/RakitKode v0.2.0
+	github.com/Haslab-dev/RakitKode v0.3.0
 	github.com/aws/aws-sdk-go-v2 v1.42.0
 	github.com/aws/aws-sdk-go-v2/config v1.32.26
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.25

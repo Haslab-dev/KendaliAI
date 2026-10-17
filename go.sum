@@ -2,6 +2,8 @@ github.com/Haslab-dev/RakitKode v0.1.0 h1:5jQ+cylQOxLCSkSYIVDtk6EBPLDxnxQeVKdi+5
 github.com/Haslab-dev/RakitKode v0.1.0/go.mod h1:VpRWmQc/UGjRHZEwcneTYRzZ07XvpG7x+qVNhkcYtxc=
 github.com/Haslab-dev/RakitKode v0.2.0 h1:NIOLDhcnRs/LZsrd75qdlv0a/n/BDzxN0NIDT1CbmI8=
 github.com/Haslab-dev/RakitKode v0.2.0/go.mod h1:alg4uAGTmCHsGD65kmzPRo+cFmoJhwB4nDyOiclHSxs=
+github.com/Haslab-dev/RakitKode v0.3.0 h1:Umacde3pJiZWXDB2gSRjtV3NPkImwuxtEN6ybKGXxwI=
+github.com/Haslab-dev/RakitKode v0.3.0/go.mod h1:9XIsLMSlxcRkZPQaJPHyWT0+AtLBqAK7CFr0MbXboFc=
 github.com/RoaringBitmap/roaring/v2 v2.14.5 h1:ckd0o545JqDPeVJDgeFoaM21eBixUnlWfYgjE5VnyWw=
 github.com/RoaringBitmap/roaring/v2 v2.14.5/go.mod h1:eq4wdNXxtJIS/oikeCzdX1rBzek7ANzbth041hrU8Q4=
 github.com/atotto/clipboard v0.1.4 h1:EH0zSVneZPSuFR11BlR9YppQTVDbh5+16AmcJi4g1z4=
@@ -194,6 +196,8 @@ github.com/mattn/go-runewidth v0.0.27 h1:Feg/Oou5zI/wnpgDF6omIU0OokC9GxLC/WRknhV
 github.com/mattn/go-runewidth v0.0.27/go.mod h1:3qAiGCV4Koz/yuveO58qUefmUTRm8r0IGEXZ9jeHp/8=
 github.com/mattn/go-sqlite3 v1.14.22 h1:2gZY6PC6kBnID23Tichd1K+Z0oS6nE/XwU+Vz/5o4kU=
 github.com/mattn/go-sqlite3 v1.14.22/go.mod h1:Uh1q+B4BYcTPb+yiD3kU8Ct7aC0hY9fxUwlHK0RXw+Y=
+github.com/mattn/go-sqlite3 v1.14.52 h1:wVbm2Qnf4OXkqhBTSPuCRZDRnxfbVrrmiCEroVdog8U=
+github.com/mattn/go-sqlite3 v1.14.52/go.mod h1:6JTjA44L93a0QCyJef5YvlPoKXntQPjzWv5gtm9sB6w=
 github.com/mitchellh/mapstructure v1.5.0 h1:jeMsZIYE/09sWLaz43PL7Gy6RuMjD2eJVyuac5Z2hdY=
 github.com/mitchellh/mapstructure v1.5.0/go.mod h1:bFUtVrKA4DC2yAKiSyO/QUcy7e+RRV2QTWOzhPopBRo=
 github.com/modern-go/concurrent v0.0.0-20180228061459-e0a39a4cb421/go.mod h1:6dJC0mAP4ikYIbvyc7fijjWJddQyLn8Ig3JB5CqoB9Q=
