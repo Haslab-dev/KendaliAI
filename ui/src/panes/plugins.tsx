@@ -67,6 +67,24 @@ interface CatalogSkill {
 
 const DISCOVERY_CATALOG: CatalogSkill[] = [
   {
+    id: '18-open-design-slides',
+    name: 'Open Design Slides (PPT)',
+    category: 'Design & Presentation',
+    description: 'Swiss International 16-column layout slides, locked S01–S22 layouts, 1-click print PDF, and native PPTX presentation export.',
+    tools: ['scaffold_deck.js', 'export_pptx.js'],
+    builtIn: true,
+    promptExample: 'Buatkan slide deck presentasi arsitektur AI 5 slide dengan tema Klein Blue dan grid Swiss 16 kolom.',
+  },
+  {
+    id: '19-open-design-hyperframes',
+    name: 'Open Design HyperFrames Motion',
+    category: 'Motion & Video',
+    description: 'Programmatic 60fps motion graphics and teaser video generator powered by GSAP master timelines and deterministic FFmpeg rendering.',
+    tools: ['scaffold_motion.js', 'render_motion.js'],
+    builtIn: true,
+    promptExample: 'Buatkan video animasi teaser 15 detik untuk peluncuran fitur baru dengan GSAP timeline.',
+  },
+  {
     id: '11-cloudflared-tunnel',
     name: 'Cloudflared Tunnel',
     category: 'Networking',

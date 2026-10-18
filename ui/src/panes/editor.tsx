@@ -18,8 +18,11 @@ import {
   ChevronDown,
   ChevronRight,
   ArrowLeft,
+  Presentation,
+  Video,
 } from 'lucide-react';
 import { navigate } from '../router';
+import { DeckMotionViewer } from '../components/DeckMotionViewer';
 
 interface FileItem {
   name: string;
@@ -57,6 +60,7 @@ export const EditorPane: React.FC = () => {
 
   // Responsive mobile view switcher ('tree' for file explorer, 'editor' for code viewer)
   const [mobileView, setMobileView] = useState<'tree' | 'editor'>('tree');
+  const [viewMode, setViewMode] = useState<'code' | 'preview'>('code');
 
   // Workspace Root & Picker states
   const [currentRoot, setCurrentRoot] = useState<string>('');
@@ -153,6 +157,9 @@ export const EditorPane: React.FC = () => {
     if (existing) {
       setActiveTabPath(item.path);
       setMobileView('editor');
+      if (item.name.includes('deck') || item.name.includes('motion') || item.name.includes('slide') || existing.content.includes('deck-stage') || existing.content.includes('__timelines')) {
+        setViewMode('preview');
+      }
       return;
     }
 
@@ -160,16 +167,22 @@ export const EditorPane: React.FC = () => {
       const res = await fetch(`/api/workspace/file?path=${encodeURIComponent(item.path)}`);
       if (res.ok) {
         const data = await res.json();
+        const content = data.content || '';
         const tab: OpenTab = {
           path: item.path,
           name: item.name,
-          content: data.content || '',
-          savedContent: data.content || '',
+          content,
+          savedContent: content,
           isDirty: false,
         };
         setOpenTabs((prev) => [...prev, tab]);
         setActiveTabPath(item.path);
         setMobileView('editor');
+
+        const isDeckOrMotion = item.name.includes('deck') || item.name.includes('motion') || item.name.includes('slide') || content.includes('deck-stage') || content.includes('__timelines');
+        if (isDeckOrMotion) {
+          setViewMode('preview');
+        }
       }
     } catch (err) {
       console.error('Failed to open file:', err);
@@ -348,6 +361,14 @@ export const EditorPane: React.FC = () => {
         <Folder size={14} className="text-[#8A8A85] flex-shrink-0" />
       );
     }
+    const lower = name.toLowerCase();
+    if (lower.includes('deck') || lower.includes('slide') || lower.endsWith('.pptx')) {
+      return <Presentation size={14} className="text-[#007AFF] flex-shrink-0" />;
+    }
+    if (lower.includes('motion') || lower.includes('hyperframe') || lower.endsWith('.mp4') || lower.endsWith('.webm')) {
+      return <Video size={14} className="text-[#3898FF] flex-shrink-0" />;
+    }
+
     const ext = name.split('.').pop()?.toLowerCase();
     switch (ext) {
       case 'ts':
@@ -635,13 +656,47 @@ export const EditorPane: React.FC = () => {
                 No file open — select a file from explorer
               </div>
             )}
+
+            {/* Code / Preview Switcher for Slides & Motion */}
+            {activeTab && (activeTab.name.endsWith('.html') || activeTab.content.includes('deck-stage') || activeTab.content.includes('__timelines') || activeTab.name.includes('deck') || activeTab.name.includes('motion')) && (
+              <div className="ml-auto flex items-center bg-[#F7F7F5] border border-[#E5E7EB] rounded-[4px] p-0.5 shrink-0 select-none">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('code')}
+                  className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-funnel transition-colors cursor-pointer ${
+                    viewMode === 'code' ? 'bg-[#FFFFFF] text-[#007AFF] font-bold shadow-2xs' : 'text-[#8A8A85] hover:text-[#333333]'
+                  }`}
+                >
+                  <Code2 size={11} />
+                  <span>Code</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('preview')}
+                  className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-funnel transition-colors cursor-pointer ${
+                    viewMode === 'preview' ? 'bg-[#FFFFFF] text-[#007AFF] font-bold shadow-2xs' : 'text-[#8A8A85] hover:text-[#333333]'
+                  }`}
+                >
+                  <Presentation size={11} />
+                  <span>Preview</span>
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* Main Workspace Area (Code Editor) */}
+          {/* Main Workspace Area (Code Editor or Presentation/Motion Preview) */}
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
             {activeTab ? (
-              <>
-                <div className="flex-1 flex flex-row overflow-hidden bg-[#0F0F0F]">
+              viewMode === 'preview' && (activeTab.name.endsWith('.html') || activeTab.content.includes('deck-stage') || activeTab.content.includes('__timelines') || activeTab.name.includes('deck') || activeTab.name.includes('motion')) ? (
+                <DeckMotionViewer
+                  filePath={activeTab.path}
+                  fileName={activeTab.name}
+                  htmlContent={activeTab.content}
+                  onSwitchToCode={() => setViewMode('code')}
+                />
+              ) : (
+                <>
+                  <div className="flex-1 flex flex-row overflow-hidden bg-[#0F0F0F]">
                   <div
                     ref={lineNumbersRef}
                     className="w-10 sm:w-12 py-3 bg-[#0A0A0A] border-r border-[#222222] text-[#555555] text-right pr-2 sm:pr-3 select-none overflow-hidden font-mono text-[11px] sm:text-[12px] leading-5 shrink-0"
@@ -688,7 +743,7 @@ export const EditorPane: React.FC = () => {
                   </button>
                 </div>
               </>
-            ) : (
+            )) : (
               <div className="flex-1 flex flex-col items-center justify-center text-center p-6 sm:p-8 bg-[#F7F7F5]">
                 <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-[#FFFFFF] border border-[#E5E7EB] text-[#8A8A85] mb-3 shadow-2xs">
                   <Code2 size={24} />

@@ -144,23 +144,22 @@ func (m *Manager) Get(id string) (*SkillPackage, error) {
 			for _, e := range entries {
 				if e.IsDir() {
 					name := e.Name()
-					if name == id || strings.EqualFold(name, id) ||
-						strings.TrimPrefix(name, "01-") == id ||
-						strings.TrimPrefix(name, "02-") == id ||
-						strings.TrimPrefix(name, "03-") == id ||
-						strings.TrimPrefix(name, "04-") == id ||
-						strings.TrimPrefix(name, "05-") == id ||
-						strings.TrimPrefix(name, "06-") == id ||
-						strings.TrimPrefix(name, "07-") == id ||
-						strings.TrimPrefix(name, "08-") == id ||
-						strings.TrimPrefix(name, "09-") == id ||
-						strings.TrimPrefix(name, "10-") == id ||
-						strings.TrimPrefix(name, "11-") == id ||
-						strings.TrimPrefix(name, "12-") == id ||
-						strings.TrimPrefix(name, "13-") == id ||
-						strings.TrimPrefix(name, "14-") == id ||
-						strings.TrimPrefix(name, "15-") == id ||
-						strings.TrimPrefix(name, "16-") == id {
+					trimmedPrefix := name
+					// Strip any numeric prefix like "01-", "18-", etc.
+					if idx := strings.Index(name, "-"); idx > 0 {
+						isNum := true
+						for _, r := range name[:idx] {
+							if r < '0' || r > '9' {
+								isNum = false
+								break
+							}
+						}
+						if isNum {
+							trimmedPrefix = name[idx+1:]
+						}
+					}
+
+					if name == id || strings.EqualFold(name, id) || trimmedPrefix == id || strings.EqualFold(trimmedPrefix, id) {
 						candidateDirs = append(candidateDirs, filepath.Join(sr, name))
 					}
 				}
