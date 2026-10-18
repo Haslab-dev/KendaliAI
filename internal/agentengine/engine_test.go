@@ -1,6 +1,7 @@
 package agentengine
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -306,3 +307,47 @@ func TestDecisionEngineDefaultsAndJevToggle(t *testing.T) {
 		t.Fatalf("expected local decision model to remain 'pandu-micro', got %q", st2.DecisionModel)
 	}
 }
+
+func TestDecisionEngine_PanduMicroOfflineRouting(t *testing.T) {
+	config.Cfg = &config.Config{
+		Engine: config.EngineConfig{
+			EnableJev: false,
+		},
+	}
+	e := newTestEngine(t)
+
+	// 1. Adapter routing verifies Pandu-Micro
+	adapter := e.AgentMgr.GetDecisionAdapter()
+	if adapter == nil {
+		t.Fatal("expected decision adapter on AgentMgr")
+	}
+
+	ctx := context.Background()
+	tools := decisions.StandardBenchmarkTools()
+	routed, dec := adapter.Route(ctx, "implement unit test for neural decisions in adapter.go", tools)
+	if dec == nil {
+		t.Fatal("expected route decision")
+	}
+	if dec.Model != "pandu-micro" {
+		t.Errorf("expected decision model 'pandu-micro', got %q", dec.Model)
+	}
+	if dec.Category != "modify" {
+		t.Errorf("expected category 'modify', got %q", dec.Category)
+	}
+	if len(routed) == 0 {
+		t.Error("expected filtered tools to be non-empty")
+	}
+
+	// 2. DecideSubagentRole specifies Pandu-Micro source
+	roleDec := e.AgentMgr.DecideSubagentRole("conduct research and investigate code security")
+	if roleDec == nil {
+		t.Fatal("expected role decision")
+	}
+	if roleDec.Source != "pandu-micro" {
+		t.Errorf("expected role decision source 'pandu-micro', got %q", roleDec.Source)
+	}
+	if roleDec.Role != "research" {
+		t.Errorf("expected role 'research', got %q", roleDec.Role)
+	}
+}
+
