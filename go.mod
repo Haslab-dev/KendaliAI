@@ -35,7 +35,7 @@ require (
 )
 
 require (
-	github.com/Haslab-dev/RakitKode v0.2.14
+	github.com/Haslab-dev/RakitKode v0.2.15
 	github.com/aws/aws-sdk-go-v2 v1.42.0
 	github.com/aws/aws-sdk-go-v2/config v1.32.26
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.25

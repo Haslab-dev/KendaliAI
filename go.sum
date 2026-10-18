@@ -1,5 +1,7 @@
 github.com/Haslab-dev/RakitKode v0.2.14 h1:TtkuoSSRqgLTjSBtvBuHcEFaMbgw7Hr/5whyieRr7cI=
 github.com/Haslab-dev/RakitKode v0.2.14/go.mod h1:9XIsLMSlxcRkZPQaJPHyWT0+AtLBqAK7CFr0MbXboFc=
+github.com/Haslab-dev/RakitKode v0.2.15 h1:S8DjDIZj/tqmYl2jCMOLpPy+bNzyXMgNM8umXvrFEBI=
+github.com/Haslab-dev/RakitKode v0.2.15/go.mod h1:9XIsLMSlxcRkZPQaJPHyWT0+AtLBqAK7CFr0MbXboFc=
 github.com/RoaringBitmap/roaring/v2 v2.14.5 h1:ckd0o545JqDPeVJDgeFoaM21eBixUnlWfYgjE5VnyWw=
 github.com/RoaringBitmap/roaring/v2 v2.14.5/go.mod h1:eq4wdNXxtJIS/oikeCzdX1rBzek7ANzbth041hrU8Q4=
 github.com/atotto/clipboard v0.1.4 h1:EH0zSVneZPSuFR11BlR9YppQTVDbh5+16AmcJi4g1z4=

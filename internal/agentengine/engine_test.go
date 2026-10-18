@@ -4,8 +4,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Haslab-dev/RakitKode/decisions"
 	"github.com/Haslab-dev/RakitKode/events"
 
+	"github.com/kendaliai/app/internal/config"
 	"github.com/kendaliai/app/internal/messaging"
 )
 
@@ -260,5 +262,47 @@ func TestSyncProvidersActivatesDefault(t *testing.T) {
 func TestEnabledFlag(t *testing.T) {
 	if Enabled() {
 		t.Skip("config.Cfg initialized with kind=rakit elsewhere; skip")
+	}
+}
+
+func TestDecisionEngineDefaultsAndJevToggle(t *testing.T) {
+	// 1. Verify default engine has Pandu-Micro and Jev disabled
+	config.Cfg = &config.Config{
+		Engine: config.EngineConfig{
+			EnableJev: false,
+		},
+	}
+	e := newTestEngine(t)
+	st := e.Status()
+
+	if st.DecisionModel != "pandu-micro" {
+		t.Fatalf("expected decision model 'pandu-micro', got %q", st.DecisionModel)
+	}
+	if st.JevEnabled {
+		t.Fatal("expected Jev to be disabled by default")
+	}
+	if st.DecisionMode != string(decisions.ModeLocalOnly) {
+		t.Fatalf("expected mode %q, got %q", decisions.ModeLocalOnly, st.DecisionMode)
+	}
+
+	// 2. Verify with EnableJev: true, mode switches to cascade
+	config.Cfg = &config.Config{
+		Engine: config.EngineConfig{
+			EnableJev:   true,
+			JevApiKey:   "test-key",
+			JevEndpoint: "https://jev.typesafe.ai/v1",
+		},
+	}
+	e2 := newTestEngine(t)
+	st2 := e2.Status()
+
+	if !st2.JevEnabled {
+		t.Fatal("expected Jev to be enabled when configured")
+	}
+	if st2.DecisionMode != string(decisions.ModeCascade) {
+		t.Fatalf("expected mode %q, got %q", decisions.ModeCascade, st2.DecisionMode)
+	}
+	if st2.DecisionModel != "pandu-micro" {
+		t.Fatalf("expected local decision model to remain 'pandu-micro', got %q", st2.DecisionModel)
 	}
 }

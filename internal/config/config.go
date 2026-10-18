@@ -75,12 +75,20 @@ type EngineConfig struct {
 	// SyncProviders disables syncing gateway-configured providers into the
 	// engine's provider profiles when false (default true).
 	SyncProviders *bool `json:"syncProviders,omitempty" yaml:"syncProviders,omitempty"`
+	// EnableJev enables the Typesafe AI Jev intelligent tool and role router.
+	// When false (default), the engine uses Pandu-Micro in-process offline neural decisions.
+	EnableJev bool `json:"enableJev,omitempty" yaml:"enableJev,omitempty"`
 	// JevApiKey enables the engine's remote tool-routing classifier
 	// (Typesafe AI Jev). Empty keeps local keyword-heuristic routing only.
 	JevApiKey string `json:"jevApiKey,omitempty" yaml:"jevApiKey,omitempty"`
 	// JevEndpoint overrides the routing service URL (defaults to the
 	// Typesafe AI cloud endpoint).
 	JevEndpoint string `json:"jevEndpoint,omitempty" yaml:"jevEndpoint,omitempty"`
+}
+
+// EngineEnableJev reports whether Jev remote routing is enabled (default false: uses Pandu-Micro).
+func (c *Config) EngineEnableJev() bool {
+	return c != nil && c.Engine.EnableJev
 }
 
 // EngineAutoApprove reports whether engine tool calls should auto-approve

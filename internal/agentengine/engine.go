@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/Haslab-dev/RakitKode/agent"
+	"github.com/Haslab-dev/RakitKode/decisions"
 	"github.com/Haslab-dev/RakitKode/events"
 	"github.com/Haslab-dev/RakitKode/llm"
 	"github.com/Haslab-dev/RakitKode/mcp"
@@ -97,15 +98,38 @@ func New(dataDir, workspace string) (*Engine, error) {
 		agentMgr.SetDefaultFolder(workspace)
 	}
 
-	// Optional remote tool-routing classifier, configured from app config
-	// (engine.jevApiKey / engine.jevEndpoint) — no .env or env-var fallback.
-	if cfg := config.Cfg; cfg != nil && cfg.Engine.JevApiKey != "" {
-		if router := agentMgr.GetJevRouter(); router != nil {
-			router.SetAPIKey(cfg.Engine.JevApiKey)
-			if cfg.Engine.JevEndpoint != "" {
-				router.SetEndpoint(cfg.Engine.JevEndpoint)
-			}
+	// Decision and tool routing (Pandu-Micro offline by default; Jev cloud cascade only if EnableJev is true)
+	jevEnabled := false
+	jevKey := ""
+	jevEndpoint := ""
+	if cfg := config.Cfg; cfg != nil {
+		jevEnabled = cfg.Engine.EnableJev
+		jevKey = cfg.Engine.JevApiKey
+		jevEndpoint = cfg.Engine.JevEndpoint
+	}
+
+	if router := agentMgr.GetJevRouter(); router != nil {
+		router.SetEnabled(jevEnabled)
+		if jevKey != "" {
+			router.SetAPIKey(jevKey)
 		}
+		if jevEndpoint != "" {
+			router.SetEndpoint(jevEndpoint)
+		}
+	}
+	if adapter := agentMgr.GetDecisionAdapter(); adapter != nil {
+		mode := decisions.ModeLocalOnly
+		if jevEnabled {
+			mode = decisions.ModeCascade
+		}
+		_ = adapter.Configure(decisions.DecisionConfig{
+			EnableJev:           jevEnabled,
+			JevAPIKey:           jevKey,
+			JevEndpoint:         jevEndpoint,
+			Mode:                mode,
+			ConfidenceThreshold: 0.90,
+			FallbackToLocal:     true,
+		})
 	}
 
 	e := &Engine{
@@ -309,13 +333,16 @@ func (e *Engine) ResolveEventSession(engineSessionID string) string {
 
 // Status is the health/snapshot payload for the status endpoint.
 type Status struct {
-	Sessions      int            `json:"sessions"`
-	ToolCount     int            `json:"toolCount"`
-	ActiveModel   llm.Profile    `json:"activeModel"`
-	MCPServers    int            `json:"mcpServers"`
-	DataDir       string         `json:"dataDir"`
-	Workspace     string         `json:"workspace,omitempty"`
-	AutoApprove   bool           `json:"autoApprove"`
+	Sessions      int         `json:"sessions"`
+	ToolCount     int         `json:"toolCount"`
+	ActiveModel   llm.Profile `json:"activeModel"`
+	DecisionModel string      `json:"decisionModel,omitempty"`
+	DecisionMode  string      `json:"decisionMode,omitempty"`
+	JevEnabled    bool        `json:"jevEnabled"`
+	MCPServers    int         `json:"mcpServers"`
+	DataDir       string      `json:"dataDir"`
+	Workspace     string      `json:"workspace,omitempty"`
+	AutoApprove   bool        `json:"autoApprove"`
 }
 
 // Status snapshots the engine.
@@ -323,14 +350,28 @@ func (e *Engine) Status() Status {
 	e.mu.Lock()
 	autoApprove := e.autoApprove
 	e.mu.Unlock()
+
+	decModel := decisions.SmallModelVersion
+	decMode := string(decisions.ModeLocalOnly)
+	jevEnabled := false
+	if adapter := e.AgentMgr.GetDecisionAdapter(); adapter != nil {
+		st := adapter.GetStatus()
+		decModel = st.ModelVersion
+		decMode = string(st.Mode)
+		jevEnabled = st.JevEnabled
+	}
+
 	return Status{
-		Sessions:    len(e.AgentMgr.ListSessions()),
-		ToolCount:   len(e.ToolReg.Definitions()),
-		ActiveModel: e.LLMClient.GetConfig(),
-		MCPServers:  len(e.MCPMgr.ListServers()),
-		DataDir:     e.dataDir,
-		Workspace:   e.workspace,
-		AutoApprove: autoApprove,
+		Sessions:      len(e.AgentMgr.ListSessions()),
+		ToolCount:     len(e.ToolReg.Definitions()),
+		ActiveModel:   e.LLMClient.GetConfig(),
+		DecisionModel: decModel,
+		DecisionMode:  decMode,
+		JevEnabled:    jevEnabled,
+		MCPServers:    len(e.MCPMgr.ListServers()),
+		DataDir:       e.dataDir,
+		Workspace:     e.workspace,
+		AutoApprove:   autoApprove,
 	}
 }
 
