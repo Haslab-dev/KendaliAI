@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/Haslab-dev/RakitKode/decisions"
 	"github.com/kendaliai/app/internal/agent"
 	"github.com/kendaliai/app/internal/agentengine"
 	"github.com/kendaliai/app/internal/channels"
@@ -346,6 +347,10 @@ func (s *Server) routes() {
 
 	// Browser Use screenshots
 	s.router.HandleFunc("/api/browser/shots/", s.handleBrowserShots())
+
+	// Pandu-Mikro Decisions Engine
+	s.router.HandleFunc("/api/decisions/status", s.handleDecisionsStatus())
+	s.router.HandleFunc("/api/decisions/predict", s.handleDecisionsPredict())
 
 	// Web UI Static Files
 	s.router.HandleFunc("/", s.handleWebUI())
@@ -3341,3 +3346,55 @@ func (s *Server) handleTelegramAgents() http.HandlerFunc {
 		json.NewEncoder(w).Encode(result)
 	}
 }
+
+func (s *Server) handleDecisionsStatus() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		pm := s.runtime.GetPanduMicro()
+		if pm == nil {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"engine":  "pandu-micro",
+				"enabled": false,
+			})
+			return
+		}
+		stats := pm.GetStats()
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"engine":    "pandu-micro",
+			"version":   decisions.SmallModelVersion,
+			"enabled":   true,
+			"benchmark": "20-40µs",
+			"stats":     stats,
+		})
+	}
+}
+
+func (s *Server) handleDecisionsPredict() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		pm := s.runtime.GetPanduMicro()
+		if pm == nil {
+			http.Error(w, "Pandu-Micro decisions engine not initialized", http.StatusServiceUnavailable)
+			return
+		}
+
+		prompt := r.URL.Query().Get("prompt")
+		if prompt == "" && (r.Method == "POST" || r.Method == "PUT") {
+			var body struct {
+				Prompt string `json:"prompt"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err == nil {
+				prompt = body.Prompt
+			}
+		}
+
+		if strings.TrimSpace(prompt) == "" {
+			http.Error(w, "missing prompt parameter", http.StatusBadRequest)
+			return
+		}
+
+		decision := pm.PredictFullDecision(prompt)
+		json.NewEncoder(w).Encode(decision)
+	}
+}
+

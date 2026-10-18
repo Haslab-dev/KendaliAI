@@ -29,7 +29,8 @@ function parseSessionMeta(metadataStr?: string): SessionMetadata {
 
 function formatRelativeTime(timestamp: number): string {
   if (!timestamp) return 'now';
-  const diffSec = Math.floor((Date.now() - timestamp) / 1000);
+  const tsMs = timestamp < 10000000000 ? timestamp * 1000 : timestamp;
+  const diffSec = Math.floor((Date.now() - tsMs) / 1000);
   if (diffSec < 60) return 'now';
   const diffMin = Math.floor(diffSec / 60);
   if (diffMin < 60) return `${diffMin}m`;

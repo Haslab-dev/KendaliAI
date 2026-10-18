@@ -12,11 +12,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Haslab-dev/RakitKode/decisions"
 	"github.com/google/uuid"
 	"github.com/kendaliai/app/internal/agent"
+	"github.com/kendaliai/app/internal/botmode"
 	"github.com/kendaliai/app/internal/config"
 	"github.com/kendaliai/app/internal/embedding"
-	"github.com/kendaliai/app/internal/botmode"
 	"github.com/kendaliai/app/internal/messaging"
 	"github.com/kendaliai/app/internal/plugins"
 	"github.com/kendaliai/app/internal/providers"
@@ -49,6 +50,7 @@ type Runtime struct {
 	taskMgr     *TaskManager
 	discMu      sync.RWMutex
 	discussions map[string]*DiscussionState
+	panduMicro  *decisions.SmallNeuralEngine
 }
 
 func NewRuntime(store *Store, bus *messaging.EventBus, workRoot string) *Runtime {
@@ -61,7 +63,13 @@ func NewRuntime(store *Store, bus *messaging.EventBus, workRoot string) *Runtime
 		workRoot:    workRoot,
 		taskMgr:     NewTaskManager(bus),
 		discussions: make(map[string]*DiscussionState),
+		panduMicro:  decisions.NewSmallNeuralEngine(),
 	}
+}
+
+// GetPanduMicro returns the embedded Pandu-Micro neural decisions engine.
+func (r *Runtime) GetPanduMicro() *decisions.SmallNeuralEngine {
+	return r.panduMicro
 }
 
 // StartDiscussionRound tracks or advances the round of an active multi-agent discussion.
@@ -905,6 +913,59 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		sysPrompt += "\nTool definitions are also attached via the native function-calling API. Prefer issuing tool calls through it; the `tool: NAME({...})` text format remains available as a fallback.\n"
 	}
 
+	// 5b. Pandu-Micro In-Process Neural Decision (<40 µs, zero token cost)
+	var panduDec decisions.FullDecision
+	if r.panduMicro != nil {
+		panduDec = r.panduMicro.PredictFullDecision(cleanPrompt)
+		log.Printf("⚡ [Pandu-Micro] decision (%dµs): Category=%s (conf: %.2f), Role=%s, NeedsTools=%.2f, ShouldDelegate=%v, Risk=%s",
+			panduDec.LatencyUs, panduDec.Category, panduDec.CategoryConf, panduDec.Role, panduDec.NeedsTools, panduDec.ShouldDelegate, panduDec.SafetyRisk)
+
+		r.bus.Publish(messaging.Event{
+			Type:      messaging.EventAgentThinking,
+			SessionID: sessionID,
+			AgentID:   agentConfig.ID,
+			Channel:   channel,
+			Payload:   fmt.Sprintf("⚡ Pandu-Mikro: %s (%.0f%% conf, %dµs)", panduDec.Category, panduDec.CategoryConf*100, panduDec.LatencyUs),
+		})
+	}
+
+	// Pandu-Micro Salient Tool Selection (prunes 30+ tools to ~4-8 relevant tools to eliminate planning lag)
+	prunedToolDefs := toolDefs
+	if nativeToolsEnabled && len(toolDefs) > 6 && panduDec.Category != "" {
+		var salient []agent.ToolDefinition
+		for _, td := range toolDefs {
+			name := td.Name
+			// Universal essential tools always available
+			if name == "exec" || name == "read_file" || name == "write_file" || name == "list_files" || name == "search_files" {
+				salient = append(salient, td)
+				continue
+			}
+			switch panduDec.Category {
+			case "explore", "read":
+				if strings.Contains(name, "doc") || strings.Contains(name, "view") || strings.Contains(name, "tree") {
+					salient = append(salient, td)
+				}
+			case "modify":
+				if strings.Contains(name, "slide") || strings.Contains(name, "motion") || strings.Contains(name, "edit") || strings.Contains(name, "git") {
+					salient = append(salient, td)
+				}
+			case "execute":
+				if strings.Contains(name, "terminal") || strings.Contains(name, "bash") || strings.Contains(name, "schedule") {
+					salient = append(salient, td)
+				}
+			case "skills":
+				if strings.Contains(name, "skill") || strings.Contains(name, "plugin") {
+					salient = append(salient, td)
+				}
+			default:
+				salient = append(salient, td)
+			}
+		}
+		if len(salient) > 0 {
+			prunedToolDefs = salient
+		}
+	}
+
 	// Harness Extensibility instructions: Creating Skills & Plugins directly via chat
 	sysPrompt += "\n\n## EXTENDING THE HARNESS (CREATING SKILLS & PLUGINS VIA CHAT):\n" +
 		"You have full capability to create new skills and plugins directly when requested by the user:\n" +
@@ -1029,21 +1090,39 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 	// provider and dispatch structured tool_calls. The text protocol remains
 	// as an automatic fallback (mid-turn, on provider errors, or when the
 	// model replies in text format anyway).
-	nativeTools := nativeToolsEnabled && len(toolDefs) > 0
+	nativeTools := nativeToolsEnabled && len(prunedToolDefs) > 0
 
 	for step := 0; step < 8; step++ {
+		toolsParam := prunedToolDefs
+		if !nativeTools {
+			toolsParam = nil
+		}
+
+		// Pandu-Micro Post-Tool Fast-Path:
+		// If tools have already executed in previous steps and the task is an inspection/query,
+		// or if step >= 1 with tools already run, disable toolsParam to force immediate textual answer
+		if step >= 1 && len(recordedToolCalls) > 0 {
+			toolsParam = nil
+		}
+
+		statusMsg := "Thinking..."
+		if step == 0 {
+			if panduDec.Category != "" {
+				statusMsg = fmt.Sprintf("⚡ Pandu-Mikro: planning %s (%dµs)...", panduDec.Category, panduDec.LatencyUs)
+			} else {
+				statusMsg = "Planning actions..."
+			}
+		} else {
+			statusMsg = "⚡ Pandu-Mikro: formulating response..."
+		}
+
 		r.bus.Publish(messaging.Event{
 			Type:      messaging.EventAgentThinking,
 			SessionID: sessionID,
 			AgentID:   agentConfig.ID,
 			Channel:   channel,
-			Payload:   "Planning next step...",
+			Payload:   statusMsg,
 		})
-
-		toolsParam := toolDefs
-		if !nativeTools {
-			toolsParam = nil
-		}
 
 		filter := newReasoningStreamFilter(
 			func(delta string) {
@@ -1088,12 +1167,21 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 
 		if err != nil {
 			log.Printf("SSE stream error (%v), attempting fallback...", err)
+			// Fast synthesis fallback from tool output if tools already succeeded
+			if step > 0 && len(recordedToolCalls) > 0 {
+				lastTool := recordedToolCalls[len(recordedToolCalls)-1]
+				if lastTool.Output != "" {
+					finalContent = lastTool.Output
+					break
+				}
+			}
+
 			pClient := r.createProviderClient(provCfg, modelToUse)
 
 			var resp *agent.Response
-			if nativeTools {
+			if nativeTools && toolsParam != nil {
 				if tp, ok := pClient.(agent.ToolCallingProvider); ok {
-					resp, err = tp.ChatCompletionWithTools(ctx, conversationMsgs, toolDefs)
+					resp, err = tp.ChatCompletionWithTools(ctx, conversationMsgs, prunedToolDefs)
 					if err != nil {
 						log.Printf("native tool fallback failed (%v), retrying without tools", err)
 						resp = nil
@@ -1199,7 +1287,19 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 	}
 
 	if finalContent == "" && len(recordedToolCalls) > 0 {
-		finalContent = "Completed executing tool actions."
+		lastTool := recordedToolCalls[len(recordedToolCalls)-1]
+		if lastTool.Output != "" {
+			finalContent = lastTool.Output
+		} else {
+			finalContent = "Completed executing tool actions."
+		}
+		r.bus.Publish(messaging.Event{
+			Type:      messaging.EventAgentTextDelta,
+			SessionID: sessionID,
+			AgentID:   agentConfig.ID,
+			Channel:   channel,
+			Payload:   messaging.TextDeltaPayload{Delta: finalContent},
+		})
 	}
 
 	// 8. Extract Thought / Reasoning process

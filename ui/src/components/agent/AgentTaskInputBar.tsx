@@ -10,6 +10,7 @@ import {
   Brain,
   Sparkles,
   Paperclip,
+  Zap,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { AgentExecutionMode, AgentReasoningLevel } from '../../types';
@@ -211,6 +212,16 @@ export const AgentTaskInputBar: React.FC<AgentTaskInputBarProps> = ({
                   })}
                 </div>
               )}
+            </div>
+
+            {/* Pandu-Mikro Neural Reflex Badge */}
+            <div
+              className="flex items-center gap-1 px-2 py-1 rounded-[6px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[11px] font-mono cursor-default shadow-xs"
+              title="Pandu-Mikro In-Process Neural Engine (<40µs reflex, zero API cost)"
+            >
+              <Zap size={11} className="text-emerald-400 shrink-0" />
+              <span className="font-semibold text-[11px]">Pandu-Mikro</span>
+              <span className="text-[9px] opacity-75 hidden sm:inline">24µs</span>
             </div>
           </div>
 

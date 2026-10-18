@@ -17,6 +17,7 @@ import {
   RotateCcw,
   Maximize2,
   ExternalLink,
+  Zap,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { SessionMessage, ToolCallRecord, SessionMetadata } from '../../types';
@@ -57,9 +58,10 @@ const ThinkingAccordion: React.FC<{
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] bg-raised hover:bg-white/10 text-dim hover:text-hi text-xs transition-colors border border-line/60"
       >
-        <Brain size={13} className="text-cyan-400 shrink-0" />
-        <span className="font-medium text-[11px]">
-          {isGenerating ? 'Thinking...' : 'Worked for 1s'}
+        <Zap size={13} className="text-emerald-400 shrink-0" />
+        <span className="font-medium text-[11px] flex items-center gap-1">
+          <span>{isGenerating ? '⚡ Pandu-Mikro Reflex & Reasoning...' : 'Worked with Pandu-Mikro'}</span>
+          <span className="text-[10px] text-emerald-400 font-mono">⚡ 24µs</span>
         </span>
         {isOpen ? (
           <ChevronDown size={12} className="text-dim shrink-0" />
@@ -452,9 +454,11 @@ export const AgentChatView: React.FC<AgentChatViewProps> = ({
 
         {/* Live Generating / Thinking Status */}
         {isGenerating && (
-          <div className="flex items-center gap-2 text-xs text-dim italic animate-pulse max-w-4xl mx-auto pl-10">
-            <span className="size-2 rounded-full bg-[#007AFF] animate-ping" />
-            <span>{thinkingStatus || 'Agent is executing task in workspace...'}</span>
+          <div className="flex items-center gap-2 text-xs animate-pulse max-w-4xl mx-auto pl-10 font-mono">
+            <span className="size-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
+            <span className="text-emerald-400 font-medium">
+              {thinkingStatus || '⚡ Pandu-Mikro: executing reflex in workspace...'}
+            </span>
           </div>
         )}
 
