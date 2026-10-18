@@ -36,6 +36,7 @@ import { DashboardPane } from '../panes/dashboard';
 import { AgencyHQPane } from '../panes/agency';
 import { LogsStreamingView } from './LogsStreamingView';
 import { TerminalPane } from '../panes/terminal';
+import { AgentPane } from '../panes/agent';
 import { Layers, Building2, Users2 } from 'lucide-react';
 
 const PANES: Record<
@@ -43,6 +44,7 @@ const PANES: Record<
   { label: string; icon: LucideIcon }
 > = {
   dashboard: { label: 'Dashboard', icon: Layers },
+  agent: { label: 'Agent Workspace', icon: Bot },
   agency: { label: 'Agent Persons', icon: Users2 },
   editor: { label: 'Files & Code Editor', icon: Code2 },
   terminal: { label: 'Shell Terminal', icon: Terminal },
@@ -74,6 +76,7 @@ export const PaneHost: React.FC<{ route: Exclude<RouteName, 'chat'> }> = ({ rout
 
   const isFullBleed = [
     'dashboard',
+    'agent',
     'agency',
     'editor',
     'terminal',
@@ -105,7 +108,11 @@ export const PaneHost: React.FC<{ route: Exclude<RouteName, 'chat'> }> = ({ rout
           <h1 className="text-sm font-bold text-hi">{meta.label}</h1>
         </div>
       )}
-      {route === 'editor' ? (
+      {route === 'agent' ? (
+        <div className="flex-1 min-h-0 h-full overflow-hidden flex flex-col">
+          <AgentPane />
+        </div>
+      ) : route === 'editor' ? (
         <div className="flex-1 min-h-0 h-full overflow-hidden flex flex-col">
           <EditorPane />
         </div>

@@ -30,8 +30,9 @@ interface NavItem {
 
 const PRIMARY_NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Executive Dashboard', icon: Layers },
+  { id: 'agent', label: 'Agent Workspace (Tasks & Projects)', icon: Bot },
+  { id: 'chat', label: 'Light Chat & Messaging', icon: MessageSquare },
   { id: 'agents', label: 'Agent Persons (Agency)', icon: Users2 },
-  { id: 'chat', label: 'Chat & Messaging', icon: MessageSquare },
   { id: 'editor', label: 'Workspace Editor', icon: Code2 },
   { id: 'terminal', label: 'Shell Terminal', icon: Terminal },
   { id: 'scheduler', label: 'Scheduler & Routines', icon: CalendarClock },

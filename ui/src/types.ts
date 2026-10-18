@@ -70,11 +70,22 @@ export interface ChatParticipant {
   joinedAt?: number;
 }
 
+export interface SessionMetadata {
+  mode?: 'agent' | 'chat';
+  workspace?: string;
+  workspaceName?: string;
+  kind?: string;
+  [key: string]: any;
+}
+
+export type AgentExecutionMode = 'ask' | 'code' | 'plan' | 'bypass';
+export type AgentReasoningLevel = 'off' | 'low' | 'medium' | 'high';
+
 export interface Session {
   id: string;
   agentId: string;
   title: string;
-  type?: 'direct' | 'group' | 'general';
+  type?: 'direct' | 'group' | 'general' | 'agent';
   avatar?: string;
   summary?: string;
   channelId: string;
@@ -87,6 +98,7 @@ export interface Session {
   createdAt: number;
   updatedAt: number;
 }
+
 
 export interface ToolCallRecord {
   id: string;

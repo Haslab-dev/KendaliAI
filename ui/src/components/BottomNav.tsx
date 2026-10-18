@@ -25,14 +25,15 @@ import { useAppStore } from '../store/useAppStore';
 
 const PRIMARY_MOBILE_ITEMS: { id: RouteName; label: string; icon: LucideIcon }[] = [
   { id: 'dashboard', label: 'Overview', icon: Layers },
-  { id: 'agents', label: 'Agents', icon: Users2 },
+  { id: 'agent', label: 'Agent', icon: Bot },
   { id: 'chat', label: 'Chat', icon: MessageSquare },
 ];
 
 const ALL_MOBILE_FEATURES: { id: RouteName; label: string; desc: string; icon: LucideIcon }[] = [
   { id: 'dashboard', label: 'Dashboard', desc: 'System overview & executive metrics', icon: Layers },
+  { id: 'agent', label: 'Agent Workspace', desc: 'Autonomous task execution, slides & projects', icon: Bot },
+  { id: 'chat', label: 'Light Chat', desc: 'Fast conversational assistant & delegation', icon: MessageSquare },
   { id: 'agents', label: 'Agent Persons', desc: 'Agency office staff, personal assistants & bot pairing', icon: Users2 },
-  { id: 'chat', label: 'Hermes Chat', desc: 'Coding agent & reasoning canvas', icon: MessageSquare },
   { id: 'editor', label: 'Workspace Editor', desc: 'File explorer & in-browser editor', icon: Code2 },
   { id: 'terminal', label: 'Shell Terminal', desc: 'Interactive shell session & command line', icon: Terminal },
   { id: 'scheduler', label: 'Scheduler & Reminders', desc: 'Natural language & cron automation', icon: CalendarClock },

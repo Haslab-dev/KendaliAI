@@ -655,7 +655,7 @@ export const ChatArea: React.FC = () => {
   }, [availableModels, modelSearch]);
 
   const currentSession = sessions.find((s) => s.id === activeSessionId);
-  const sessionType: 'direct' | 'group' | 'general' =
+  const sessionType: 'direct' | 'group' | 'general' | 'agent' =
     currentSession?.type || (currentSession?.agentId ? 'direct' : 'general');
   const isDirect = sessionType === 'direct';
   const isGroup = sessionType === 'group';

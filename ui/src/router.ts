@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 // internal/server/server.go keeps working without server changes.
 export const ROUTES = [
   'dashboard',
+  'agent',
   'chat',
   'editor',
   'terminal',

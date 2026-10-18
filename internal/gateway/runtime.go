@@ -775,14 +775,31 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		}
 	}
 
-	// Background delegation: heavy work runs in an out-of-chat sub-agent
-	// session so interactive turns stay light and responsive.
-	sysPrompt += "\n\n## BACKGROUND DELEGATION — spawn_subagent (heavy work runs OUT of this chat):\n" +
-		"For heavy or long-running work — deep research, large planning, multi-file coding, big code reviews — do NOT grind through it inline; delegate it:\n" +
-		"tool: spawn_subagent({\"task\": \"<complete, self-contained instructions: goal, constraints, expected deliverable>\", \"agent\": \"<optional specialist agent id>\", \"context\": \"<optional extra data>\"})\n" +
-		"- The call returns instantly with a task_id. The sub-agent executes in its own background session: its steps, tool calls and tokens never flood this chat.\n" +
-		"- When the sub-agent finishes, its report is posted back into this conversation automatically. Do not poll or re-ask; just continue helping the user meanwhile.\n" +
-		"- Delegate whenever the work would take many tool steps or produce a very long output. Simple questions and quick edits stay inline as usual.\n"
+	// Mode-based behavior: Agent Workspace (direct autonomous execution) vs Light Chat (mandatory delegation)
+	isAgentSession := sess.Type == "agent" || strings.Contains(sess.Metadata, `"mode":"agent"`) || strings.Contains(sess.Metadata, `"kind":"agent"`)
+
+	if isAgentSession {
+		sysPrompt += "\n\n## AGENT WORKSPACE SESSION (Autonomous Task & Load Execution):\n" +
+			"You are operating in the dedicated Agent Workspace (Agent Mode), built for heavy, load-bearing tasks such as deep research, multi-file software engineering, presentation design (open-design-slides), HyperFrames motion animations, CLI scripts, and MCP server tools.\n" +
+			"- You have DIRECT execution rights: run tools, edit files, generate code, create presentation decks (*.deck.html), and generate animations (*.motion.html) directly inline.\n" +
+			"- Work thoroughly and autonomously step-by-step. Inspect requirements, execute the required tools, verify outputs, and report concise status to the user.\n" +
+			"- When creating presentation slides or motion graphics, follow the open-design-slides and open-design-hyperframes skill specifications.\n"
+	} else {
+		sysPrompt += "\n\n## LIGHT CHAT MODE — MANDATORY WORKER DELEGATION:\n" +
+			"You are currently operating in LIGHT CHAT mode. Light Chat is reserved for everyday conversational Q&A, brainstorming, explanations, and quick advice, without flooding this chat with heavy tool steps.\n" +
+			"MANDATORY RULE FOR LOAD / HEAVY TASKS:\n" +
+			"If the user asks for ANY heavy or load task, including:\n" +
+			"1. Deep multi-source web or codebase research\n" +
+			"2. Multi-file coding, refactoring, building, or writing codebases\n" +
+			"3. Running CLI tools, shell commands, or developer scripts\n" +
+			"4. Generating presentation slide decks (open-design-slides) or motion graphics (hyperframes-motion)\n" +
+			"5. Invoking extensive tool chains or MCP tools\n" +
+			"You MUST NOT execute long chains of heavy tools inline in this Light Chat.\n" +
+			"Instead, you MUST immediately call the `spawn_subagent` tool:\n" +
+			"tool: spawn_subagent({\"task\": \"<clear, self-contained instructions for the subagent worker: goal, constraints, deliverable>\", \"agent\": \"coder\" (or appropriate specialist)})\n" +
+			"Inform the user in 1-2 friendly sentences that a background worker has been dispatched, and let the worker deliver the full report into the chat.\n"
+	}
+
 
 	// Inject configured MCP servers from store and config.json
 	allMCPs, _ := r.store.ListMCPServers()

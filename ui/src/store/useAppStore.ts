@@ -14,6 +14,16 @@ interface AppState {
   deleteSession: (id: string) => Promise<void>;
   clearSessionMessages: (id: string) => Promise<void>;
 
+  // Workspace & Agent Mode (Forge ADE clone)
+  activeWorkspacePath: string;
+  workspacePresets: { label: string; path: string }[];
+  loadWorkspaceInfo: () => Promise<void>;
+  switchWorkspace: (path: string) => Promise<void>;
+  activeAgentSessionId: string | null;
+  setActiveAgentSessionId: (id: string | null) => void;
+  selectAgentSession: (id: string) => Promise<void>;
+  createAgentSession: (workspacePath?: string, title?: string) => Promise<string>;
+
   telegramAgents: Record<string, { connected: boolean; botId: string; botName: string }>;
   loadTelegramAgents: () => Promise<void>;
 
@@ -356,6 +366,80 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ messages: [] });
     } catch (e) {
       console.error('Failed to clear messages:', e);
+    }
+  },
+
+  // Workspace & Agent Task Sessions
+  activeWorkspacePath: '',
+  workspacePresets: [],
+  loadWorkspaceInfo: async () => {
+    try {
+      const res = await fetch('/api/workspace/root');
+      if (res.ok) {
+        const data = await res.json();
+        set({
+          activeWorkspacePath: data.current || '',
+          workspacePresets: Array.isArray(data.presets) ? data.presets : [],
+        });
+      }
+    } catch (e) {
+      console.warn('Failed to load workspace info:', e);
+    }
+  },
+  switchWorkspace: async (targetPath: string) => {
+    try {
+      const res = await fetch('/api/workspace/root', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: targetPath }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        set({ activeWorkspacePath: data.current || targetPath });
+      }
+    } catch (e) {
+      console.error('Failed to switch workspace root:', e);
+    }
+  },
+  activeAgentSessionId: null,
+  setActiveAgentSessionId: (id: string | null) => {
+    set({ activeAgentSessionId: id });
+    if (id) {
+      get().selectSession(id);
+    }
+  },
+  selectAgentSession: async (id: string) => {
+    set({ activeAgentSessionId: id });
+    await get().selectSession(id);
+  },
+  createAgentSession: async (workspacePath?: string, title = 'New Task') => {
+    const ws = workspacePath || get().activeWorkspacePath || '';
+    const wsName = ws ? (ws.split('/').filter(Boolean).pop() || 'General') : 'General';
+    const metadata = JSON.stringify({
+      mode: 'agent',
+      workspace: ws,
+      workspaceName: wsName,
+    });
+    try {
+      const res = await fetch('/api/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          type: 'agent',
+          avatar: 'bot',
+          channelId: 'web',
+          metadata,
+        }),
+      });
+      const newSess = await res.json();
+      await get().loadSessions();
+      set({ activeAgentSessionId: newSess.id });
+      await get().selectSession(newSess.id);
+      return newSess.id;
+    } catch (e) {
+      console.error('Failed to create agent session:', e);
+      return '';
     }
   },
 
