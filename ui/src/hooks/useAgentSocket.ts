@@ -1,5 +1,17 @@
 import { useEffect } from 'react';
 import { useAppStore } from '../store/useAppStore';
+import { useAgentStore } from '../store/useAgentStore';
+import { parseSessionMetadata } from '../types';
+
+// Notify the agent workspace that a task turn began (for "Worked for Ns").
+function beginTurnIfAgentTask(sessionId: string | undefined) {
+  if (!sessionId) return;
+  const agentStore = useAgentStore.getState();
+  if (agentStore.turnStart[sessionId]) return;
+  const sess = useAppStore.getState().sessions.find((s) => s.id === sessionId);
+  const isTask = !!agentStore.acpSessions[sessionId] || (sess ? (sess.type === 'agent' || parseSessionMetadata(sess).mode === 'agent') : sessionId.startsWith('acp_'));
+  if (isTask) agentStore.beginTurn(sessionId);
+}
 
 // Application-wide singleton WebSocket connection
 let globalWs: WebSocket | null = null;
@@ -88,6 +100,7 @@ function connectGlobalSocket() {
         if (!ev || !ev.type) return;
 
         const store = useAppStore.getState();
+        const agentStore = useAgentStore.getState();
         const isDelta = ev.type === 'agent.text.delta' || ev.type === 'agent.thinking.delta';
 
         // 1. Record in global streaming logs — except raw deltas, which are
@@ -103,6 +116,14 @@ function connectGlobalSocket() {
         if (ev.type.startsWith('task.')) {
           store.loadTasks();
           window.dispatchEvent(new CustomEvent('kendali:tasks_updated', { detail: ev }));
+        }
+
+        // 2b. ACP (external agent) control-plane events
+        if (ev.type === 'acp.status' && ev.payload) {
+          agentStore.applyACPStatus(ev.payload);
+        }
+        if (ev.type === 'acp.permission' && ev.payload) {
+          agentStore.applyPermission(ev.payload);
         }
 
         // 3. Handle active session chat updates if matching active session
@@ -174,6 +195,7 @@ function connectGlobalSocket() {
                 startedAgentName,
                 startedAvatar
               );
+              beginTurnIfAgentTask(ev.sessionId);
             }
             break;
 
@@ -221,6 +243,7 @@ function connectGlobalSocket() {
                 output: 'Executing capability in workspace...',
               });
             }
+            beginTurnIfAgentTask(ev.sessionId);
             break;
 
           case 'agent.tool_result':
@@ -239,6 +262,9 @@ function connectGlobalSocket() {
 
           case 'agent.completed':
             flushDeltas();
+            if (ev.sessionId) {
+              useAgentStore.getState().endTurn(ev.sessionId);
+            }
             if (isCurrentSession) {
               store.setIsGenerating(false);
               store.setTypingAgent(null);
@@ -250,6 +276,9 @@ function connectGlobalSocket() {
             break;
 
           case 'agent.failed':
+            if (ev.sessionId) {
+              useAgentStore.getState().endTurn(ev.sessionId);
+            }
             if (isCurrentSession) {
               store.setIsGenerating(false);
               store.setTypingAgent(null);

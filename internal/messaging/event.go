@@ -17,12 +17,16 @@ const (
 	EventAgentToolResult    EventType = "agent.tool_result"
 	EventAgentCompleted     EventType = "agent.completed"
 	EventAgentFailed        EventType = "agent.failed"
-	EventApprovalRequested   EventType = "approval.requested"
+	EventApprovalRequested  EventType = "approval.requested"
 	EventApprovalGranted    EventType = "approval.granted"
 	EventApprovalDenied     EventType = "approval.denied"
 	EventSessionCreated     EventType = "session.created"
 	EventSessionUpdated     EventType = "session.updated"
 	EventMessageReaction    EventType = "message.reaction"
+	// ACP (Agent Client Protocol) events — external agents managed by
+	// internal/acp stream through the same bus.
+	EventACPStatus     EventType = "acp.status"
+	EventACPPermission EventType = "acp.permission"
 )
 
 type MessageReactionPayload struct {

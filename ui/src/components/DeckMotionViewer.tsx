@@ -347,7 +347,7 @@ export const DeckMotionViewer: React.FC<DeckMotionViewerProps> = ({
       <div className="h-11 min-h-11 px-4 border-b border-[#222228] bg-[#111116] flex items-center justify-between text-xs">
         {/* Left: Mode Badge & Title */}
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#007AFF]/15 text-[#3898FF] border border-[#007AFF]/30 font-mono text-[11px] font-medium">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-primary/15 text-[#3898FF] border border-primary/30 font-mono text-[11px] font-medium">
             {mode === 'deck' ? <Presentation className="w-3.5 h-3.5" /> : <Video className="w-3.5 h-3.5" />}
             <span>{mode === 'deck' ? 'OPEN DESIGN // SLIDES' : 'HYPERFRAMES // MOTION'}</span>
           </div>
@@ -370,7 +370,7 @@ export const DeckMotionViewer: React.FC<DeckMotionViewerProps> = ({
               <ChevronLeft className="w-4 h-4" />
             </button>
             <div className="font-mono text-xs px-2 py-0.5 rounded bg-[#1A1A22] border border-[#2A2A35]">
-              <span className="font-semibold text-[#007AFF]">{String(activeSlide + 1).padStart(2, '0')}</span>
+              <span className="font-semibold text-primary">{String(activeSlide + 1).padStart(2, '0')}</span>
               <span className="text-[#777777]"> / {String(slideCount).padStart(2, '0')}</span>
             </div>
             <button
@@ -388,7 +388,7 @@ export const DeckMotionViewer: React.FC<DeckMotionViewerProps> = ({
             <button
               type="button"
               onClick={() => sendMotionCommand(isPlaying ? 'pause' : 'play')}
-              className="p-1.5 rounded-full bg-[#007AFF] text-white hover:opacity-90 transition-opacity cursor-pointer"
+              className="p-1.5 rounded-full bg-primary text-white hover:opacity-90 transition-opacity cursor-pointer"
               title="Play / Pause (Space)"
             >
               {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
@@ -415,7 +415,7 @@ export const DeckMotionViewer: React.FC<DeckMotionViewerProps> = ({
                 type="button"
                 onClick={() => setIsThumbnailsOpen(!isThumbnailsOpen)}
                 className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs transition-colors cursor-pointer ${
-                  isThumbnailsOpen ? 'bg-[#007AFF]/20 text-[#3898FF] font-medium' : 'hover:bg-[#222228] text-[#AAAAAA] hover:text-white'
+                  isThumbnailsOpen ? 'bg-primary/20 text-[#3898FF] font-medium' : 'hover:bg-[#222228] text-[#AAAAAA] hover:text-white'
                 }`}
                 title="Toggle Slide Thumbnails Rail"
               >
@@ -438,7 +438,7 @@ export const DeckMotionViewer: React.FC<DeckMotionViewerProps> = ({
             <button
               type="button"
               onClick={() => setIsExportModalOpen(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#007AFF] text-white hover:bg-[#0066D6] transition-all font-medium text-xs shadow-sm shadow-[#007AFF]/25 cursor-pointer"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-primary text-white hover:bg-primary/85 transition-all font-medium text-xs shadow-sm shadow-[#007AFF]/25 cursor-pointer"
               title="Download Motion Video (MP4 / WebM)"
             >
               <Download className="w-3.5 h-3.5" />
@@ -453,7 +453,7 @@ export const DeckMotionViewer: React.FC<DeckMotionViewerProps> = ({
               className="flex items-center gap-1 px-2.5 py-1 rounded bg-[#1A1A22] hover:bg-[#252532] text-[#AAAAAA] hover:text-white border border-[#2A2A35] transition-colors text-xs font-funnel cursor-pointer ml-1"
               title="Switch to Raw Code Editor"
             >
-              <Code2 className="w-3.5 h-3.5 text-[#007AFF]" />
+              <Code2 className="w-3.5 h-3.5 text-primary" />
               <span>Code</span>
             </button>
           )}
@@ -494,15 +494,15 @@ export const DeckMotionViewer: React.FC<DeckMotionViewerProps> = ({
                 onClick={() => sendDeckCommand('go', idx)}
                 className={`p-2 rounded-lg border text-left transition-all flex flex-col gap-1 cursor-pointer ${
                   activeSlide === idx
-                    ? 'border-[#007AFF] bg-[#007AFF]/10 shadow-sm'
+                    ? 'border-primary bg-primary/10 shadow-sm'
                     : 'border-[#222228] bg-[#16161D] hover:bg-[#1E1E26] hover:border-[#33333F]'
                 }`}
               >
                 <div className="flex items-center justify-between text-[11px] font-mono">
-                  <span className={activeSlide === idx ? 'text-[#007AFF] font-bold' : 'text-[#888888]'}>
+                  <span className={activeSlide === idx ? 'text-primary font-bold' : 'text-[#888888]'}>
                     № {String(idx + 1).padStart(2, '0')}
                   </span>
-                  {activeSlide === idx && <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF]" />}
+                  {activeSlide === idx && <span className="w-1.5 h-1.5 rounded-full bg-primary" />}
                 </div>
                 <div className="text-xs font-medium text-[#DDDDDD] truncate">
                   {slideLabels[idx] || `Slide ${idx + 1}`}
@@ -549,7 +549,7 @@ export const DeckMotionViewer: React.FC<DeckMotionViewerProps> = ({
           <button
             type="button"
             onClick={() => sendMotionCommand(isPlaying ? 'pause' : 'play')}
-            className="text-xs font-mono font-medium text-[#007AFF] hover:underline cursor-pointer"
+            className="text-xs font-mono font-medium text-primary hover:underline cursor-pointer"
           >
             {isPlaying ? 'PAUSE' : 'PLAY'}
           </button>
@@ -589,7 +589,7 @@ export const DeckMotionViewer: React.FC<DeckMotionViewerProps> = ({
               className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#1A1A22] hover:bg-[#252532] border border-[#2A2A35] text-[#CCCCCC] hover:text-white text-[11px] font-medium transition-colors ml-1 cursor-pointer"
               title="Export / Download Video"
             >
-              <Download className="w-3 h-3 text-[#007AFF]" />
+              <Download className="w-3 h-3 text-primary" />
               <span>Export</span>
             </button>
           </div>
@@ -603,7 +603,7 @@ export const DeckMotionViewer: React.FC<DeckMotionViewerProps> = ({
             {/* Modal Header */}
             <div className="h-12 px-5 border-b border-[#252530] flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Film className="w-4 h-4 text-[#007AFF]" />
+                <Film className="w-4 h-4 text-primary" />
                 <span className="font-medium text-sm text-white">Download Motion Video</span>
               </div>
               <button
@@ -629,13 +629,13 @@ export const DeckMotionViewer: React.FC<DeckMotionViewerProps> = ({
               </div>
 
               {/* Method 1: Studio Quality 60fps MP4 (HyperFrames Render) */}
-              <div className="p-4 rounded-xl border border-[#007AFF]/35 bg-[#007AFF]/5 flex flex-col gap-2.5 relative">
+              <div className="p-4 rounded-xl border border-primary/35 bg-primary/5 flex flex-col gap-2.5 relative">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-[#007AFF]" />
+                    <Sparkles className="w-4 h-4 text-primary" />
                     <span className="font-semibold text-sm text-white">Studio MP4 Render</span>
                   </div>
-                  <span className="px-2 py-0.5 rounded-full bg-[#007AFF]/20 text-[#3898FF] border border-[#007AFF]/30 text-[10px] font-mono font-medium">
+                  <span className="px-2 py-0.5 rounded-full bg-primary/20 text-[#3898FF] border border-primary/30 text-[10px] font-mono font-medium">
                     RECOMMENDED · 60 FPS
                   </span>
                 </div>
@@ -645,7 +645,7 @@ export const DeckMotionViewer: React.FC<DeckMotionViewerProps> = ({
 
                 {isRendering ? (
                   <div className="flex items-center gap-2.5 p-3 rounded-lg bg-[#121218] border border-[#2A2A38] text-white font-mono text-[11px]">
-                    <Loader2 className="w-4 h-4 animate-spin text-[#007AFF] shrink-0" />
+                    <Loader2 className="w-4 h-4 animate-spin text-primary shrink-0" />
                     <div className="flex-1 truncate">{renderProgress || 'Rendering video...'}</div>
                   </div>
                 ) : renderedOutputPath ? (
@@ -675,7 +675,7 @@ export const DeckMotionViewer: React.FC<DeckMotionViewerProps> = ({
                   <button
                     type="button"
                     onClick={handleRenderHeadless}
-                    className="flex items-center justify-center gap-2 py-2 px-4 rounded-lg bg-[#007AFF] hover:bg-[#0066D6] text-white font-medium transition-all shadow-md shadow-[#007AFF]/20 cursor-pointer"
+                    className="flex items-center justify-center gap-2 py-2 px-4 rounded-lg bg-primary hover:bg-primary/85 text-white font-medium transition-all shadow-md shadow-[#007AFF]/20 cursor-pointer"
                   >
                     <Download className="w-4 h-4" />
                     <span>Render 60fps MP4 Video</span>
@@ -702,7 +702,7 @@ export const DeckMotionViewer: React.FC<DeckMotionViewerProps> = ({
                   onClick={handleStartBrowserRecording}
                   className="flex items-center justify-center gap-2 py-2 px-4 rounded-lg bg-[#20202A] hover:bg-[#282836] border border-[#303040] text-white font-medium transition-colors cursor-pointer"
                 >
-                  <Film className="w-4 h-4 text-[#007AFF]" />
+                  <Film className="w-4 h-4 text-primary" />
                   <span>Record from Browser Tab</span>
                 </button>
               </div>

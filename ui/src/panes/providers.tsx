@@ -697,17 +697,17 @@ export const ProvidersPane: React.FC = () => {
   }, [modelsList]);
 
   return (
-    <div className="w-full min-h-screen bg-[#F7F7F5] dark:bg-[#121212] flex flex-col text-[#000000] dark:text-white transition-colors select-none">
+    <div className="w-full min-h-screen bg-accent/60 dark:bg-background flex flex-col text-foreground transition-colors select-none">
       {/* Page Header */}
-      <div className="w-full bg-[#FFFFFF] dark:bg-[#18181A] border-b border-[#E5E7EB] dark:border-[#27272A] px-4 sm:px-8 py-4 sm:py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+      <div className="w-full bg-card dark:bg-card border-b border-border/70 px-4 sm:px-8 py-4 sm:py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
         <div className="flex flex-col gap-0.5">
           <div className="flex items-center gap-2">
-            <Sliders size={20} className="text-[#007AFF]" />
-            <h1 className="text-[18px] sm:text-[20px] font-bold text-[#000000] dark:text-white font-sans tracking-tight">
+            <Sliders size={20} className="text-primary" />
+            <h1 className="text-[18px] sm:text-[20px] font-bold text-foreground font-sans tracking-tight">
               LLM Providers &amp; MCP
             </h1>
           </div>
-          <p className="text-[12px] text-[#8A8A85] font-sans">
+          <p className="text-[12px] text-muted-foreground font-sans">
             Connect OpenAI, Anthropic, DeepSeek, Ollama, or custom /v1 endpoints · Select available models for chat &amp; agents
           </p>
         </div>
@@ -719,13 +719,13 @@ export const ProvidersPane: React.FC = () => {
               loadModels(true);
             }}
             title="Refresh providers & models"
-            className="p-2 rounded-[8px] border border-[#E5E7EB] dark:border-[#2C2C2E] text-[#8A8A85] hover:text-[#000000] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
+            className="p-2 rounded-[8px] border border-border text-muted-foreground hover:text-foreground hover:bg-foreground/5 transition-colors cursor-pointer"
           >
-            <RefreshCw size={15} className={isLoading ? 'animate-spin text-[#007AFF]' : ''} />
+            <RefreshCw size={15} className={isLoading ? 'animate-spin text-primary' : ''} />
           </button>
           <button
             onClick={handleOpenAddModal}
-            className="flex items-center gap-1.5 px-3.5 sm:px-4 py-2 bg-[#007AFF] hover:bg-[#0066D6] text-white text-[12px] font-bold rounded-[8px] transition-all shadow-sm cursor-pointer active:scale-95"
+            className="flex items-center gap-1.5 px-3.5 sm:px-4 py-2 bg-primary hover:bg-primary/85 text-white text-[12px] font-bold rounded-[8px] transition-all shadow-sm cursor-pointer active:scale-95"
           >
             <Plus size={15} strokeWidth={2.5} />
             <span>Add Provider</span>
@@ -751,13 +751,13 @@ export const ProvidersPane: React.FC = () => {
       )}
 
       {/* Mobile Tab Switcher (Visible on small screens) */}
-      <div className="flex md:hidden px-4 pt-3 pb-1 gap-2 bg-[#F7F7F5] dark:bg-[#121212]">
+      <div className="flex md:hidden px-4 pt-3 pb-1 gap-2 bg-accent/60 dark:bg-background">
         <button
           onClick={() => setActiveTab('providers')}
           className={`flex-1 py-2 text-xs font-bold rounded-[8px] border transition-colors ${
             activeTab === 'providers'
-              ? 'bg-[#FFFFFF] dark:bg-[#1C1C1E] border-[#007AFF] text-[#007AFF] shadow-2xs'
-              : 'bg-transparent border-transparent text-[#8A8A85]'
+              ? 'bg-card border-primary text-primary shadow-2xs'
+              : 'bg-transparent border-transparent text-muted-foreground'
           }`}
         >
           Providers ({providers.length})
@@ -766,8 +766,8 @@ export const ProvidersPane: React.FC = () => {
           onClick={() => setActiveTab('mcps')}
           className={`flex-1 py-2 text-xs font-bold rounded-[8px] border transition-colors ${
             activeTab === 'mcps'
-              ? 'bg-[#FFFFFF] dark:bg-[#1C1C1E] border-[#007AFF] text-[#007AFF] shadow-2xs'
-              : 'bg-transparent border-transparent text-[#8A8A85]'
+              ? 'bg-card border-primary text-primary shadow-2xs'
+              : 'bg-transparent border-transparent text-muted-foreground'
           }`}
         >
           MCP Servers ({mcps.length} · {totalMcpTools} tools)
@@ -783,10 +783,10 @@ export const ProvidersPane: React.FC = () => {
           }`}
         >
           <div className="flex items-center justify-between px-1">
-            <span className="text-xs font-bold uppercase tracking-wider text-[#8A8A85] font-sans">
+            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-sans">
               Configured Providers ({providers.length})
             </span>
-            <span className="text-[11px] text-[#8A8A85]">
+            <span className="text-[11px] text-muted-foreground">
               Active in Chat: {providers.filter((p) => p.enabled).length}
             </span>
           </div>
@@ -798,12 +798,12 @@ export const ProvidersPane: React.FC = () => {
             return (
               <div
                 key={p.id}
-                className={`w-full bg-[#FFFFFF] dark:bg-[#1C1C1E] rounded-[10px] p-4 sm:p-5 flex flex-col gap-3.5 border transition-all shadow-2xs ${
+                className={`w-full bg-card rounded-[10px] p-4 sm:p-5 flex flex-col gap-3.5 border transition-all shadow-2xs ${
                   isDefault
-                    ? 'border-[#007AFF] ring-1 ring-[#007AFF]/30'
+                    ? 'border-primary ring-1 ring-[#007AFF]/30'
                     : p.enabled
-                    ? 'border-[#E5E7EB] dark:border-[#2C2C2E]'
-                    : 'border-[#E5E7EB]/50 dark:border-[#2C2C2E]/50 opacity-60 bg-gray-50/50 dark:bg-[#161618]'
+                    ? 'border-border'
+                    : 'border-border/50 dark:border-border/50 opacity-60 bg-gray-50/50 dark:bg-card'
                 }`}
               >
                 {/* Header Row of Card */}
@@ -818,7 +818,7 @@ export const ProvidersPane: React.FC = () => {
                           ? 'bg-orange-50 dark:bg-orange-950/30 text-orange-600'
                           : p.type === 'deepseek'
                           ? 'bg-cyan-50 dark:bg-cyan-950/30 text-cyan-600'
-                          : 'bg-blue-50 dark:bg-blue-950/30 text-[#007AFF]'
+                          : 'bg-blue-50 dark:bg-blue-950/30 text-primary'
                       }`}
                     >
                       <Cpu size={20} />
@@ -826,21 +826,21 @@ export const ProvidersPane: React.FC = () => {
 
                     <div className="min-w-0 flex-1 flex flex-col">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[15px] sm:text-[16px] font-bold text-[#000000] dark:text-white font-sans truncate">
+                        <span className="text-[15px] sm:text-[16px] font-bold text-foreground font-sans truncate">
                           {p.name}
                         </span>
-                        <span className="text-[9px] px-1.5 py-0.5 rounded font-mono uppercase font-bold bg-gray-100 dark:bg-[#2C2C2E] text-[#8A8A85]">
+                        <span className="text-[9px] px-1.5 py-0.5 rounded font-mono uppercase font-bold bg-gray-100 dark:bg-accent text-muted-foreground">
                           {p.type}
                         </span>
                         {isDefault && (
-                          <span className="bg-[#007AFF] text-white text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                          <span className="bg-primary text-white text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
                             DEFAULT
                           </span>
                         )}
                       </div>
 
-                      <div className="flex items-center gap-2 mt-0.5 text-[11px] text-[#8A8A85] font-mono truncate">
-                        <Globe size={11} className="shrink-0 text-[#8A8A85]" />
+                      <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground font-mono truncate">
+                        <Globe size={11} className="shrink-0 text-muted-foreground" />
                         <span className="truncate">{p.endpoint}</span>
                       </div>
                     </div>
@@ -859,7 +859,7 @@ export const ProvidersPane: React.FC = () => {
                             : 'bg-gray-400'
                         }`}
                       />
-                      <span className="text-[#8A8A85] font-medium capitalize">
+                      <span className="text-muted-foreground font-medium capitalize">
                         {p.enabled ? p.status : 'disabled'}
                       </span>
                     </div>
@@ -870,7 +870,7 @@ export const ProvidersPane: React.FC = () => {
                       title="Test connection"
                       onClick={() => handleTestConnection(p)}
                       disabled={isTesting}
-                      className="p-1.5 text-[#8A8A85] hover:text-[#007AFF] hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-[6px] transition-colors cursor-pointer"
+                      className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-[6px] transition-colors cursor-pointer"
                     >
                       <Play size={15} />
                     </button>
@@ -880,7 +880,7 @@ export const ProvidersPane: React.FC = () => {
                       type="button"
                       title="Fetch & probe latest models from this provider"
                       onClick={() => handleProbeFromCard(p)}
-                      className="p-1.5 text-[#8A8A85] hover:text-[#007AFF] hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-[6px] transition-colors cursor-pointer"
+                      className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-[6px] transition-colors cursor-pointer"
                     >
                       <RefreshCw size={14} />
                     </button>
@@ -890,7 +890,7 @@ export const ProvidersPane: React.FC = () => {
                       type="button"
                       title="Edit provider settings & select models"
                       onClick={() => handleOpenEditModal(p)}
-                      className="p-1.5 text-[#8A8A85] hover:text-[#000000] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 rounded-[6px] transition-colors cursor-pointer"
+                      className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-foreground/5 rounded-[6px] transition-colors cursor-pointer"
                     >
                       <Pencil size={14} />
                     </button>
@@ -901,7 +901,7 @@ export const ProvidersPane: React.FC = () => {
                         type="button"
                         title="Set as system default provider"
                         onClick={() => handleSetDefault(p.id)}
-                        className="p-1.5 text-[#8A8A85] hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-[6px] transition-colors cursor-pointer"
+                        className="p-1.5 text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-[6px] transition-colors cursor-pointer"
                       >
                         <Check size={16} />
                       </button>
@@ -912,7 +912,7 @@ export const ProvidersPane: React.FC = () => {
                       type="button"
                       title="Delete provider"
                       onClick={() => handleDeleteProvider(p.id, p.name)}
-                      className="p-1.5 text-[#8A8A85] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-[6px] transition-colors cursor-pointer"
+                      className="p-1.5 text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-[6px] transition-colors cursor-pointer"
                     >
                       <Trash2 size={14} />
                     </button>
@@ -922,13 +922,13 @@ export const ProvidersPane: React.FC = () => {
                 {/* Models Tag Row on Card */}
                 <div className="pt-2 border-t border-gray-100 dark:border-gray-800 flex flex-col gap-2">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-[#8A8A85] font-sans">
+                    <span className="text-muted-foreground font-sans">
                       Models ({activeModels.length} active of {p.models.length}):
                     </span>
                     <button
                       type="button"
                       onClick={() => handleOpenEditModal(p)}
-                      className="text-[11px] font-bold text-[#007AFF] hover:underline cursor-pointer flex items-center gap-1"
+                      className="text-[11px] font-bold text-primary hover:underline cursor-pointer flex items-center gap-1"
                     >
                       <Sliders size={12} />
                       <span>Select Models</span>
@@ -937,7 +937,7 @@ export const ProvidersPane: React.FC = () => {
 
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {p.models.length === 0 ? (
-                      <span className="text-xs text-[#8A8A85] italic">
+                      <span className="text-xs text-muted-foreground italic">
                         No models configured. Click "Select Models" to probe or add.
                       </span>
                     ) : (
@@ -946,8 +946,8 @@ export const ProvidersPane: React.FC = () => {
                           key={m.id}
                           className={`text-[11px] font-mono px-2 py-0.5 rounded-[5px] border flex items-center gap-1 ${
                             m.enabled
-                              ? 'bg-blue-50/60 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900 text-[#007AFF]'
-                              : 'bg-gray-100/60 dark:bg-gray-800/40 border-gray-200 dark:border-gray-700 text-[#8A8A85] line-through opacity-60'
+                              ? 'bg-blue-50/60 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900 text-primary'
+                              : 'bg-gray-100/60 dark:bg-gray-800/40 border-gray-200 dark:border-gray-700 text-muted-foreground line-through opacity-60'
                           }`}
                         >
                           <span className="truncate max-w-[140px]">{m.name || m.id}</span>
@@ -958,7 +958,7 @@ export const ProvidersPane: React.FC = () => {
                     {p.models.length > 7 && (
                       <button
                         onClick={() => handleOpenEditModal(p)}
-                        className="text-[11px] font-mono px-2 py-0.5 rounded-[5px] bg-black/5 dark:bg-white/5 text-[#8A8A85] hover:text-[#000000] dark:hover:text-white"
+                        className="text-[11px] font-mono px-2 py-0.5 rounded-[5px] bg-black/5 dark:bg-white/5 text-muted-foreground hover:text-foreground"
                       >
                         +{p.models.length - 7} more
                       </button>
@@ -972,17 +972,17 @@ export const ProvidersPane: React.FC = () => {
           {/* Add custom endpoint card */}
           <div
             onClick={handleOpenAddModal}
-            className="w-full bg-[#FFFFFF] dark:bg-[#1C1C1E] border border-dashed border-[#C7C7C2] dark:border-[#3C3C3E] rounded-[10px] p-4 sm:p-5 flex items-center gap-3.5 cursor-pointer hover:border-[#007AFF] hover:bg-blue-50/20 dark:hover:bg-blue-950/10 transition-all shadow-2xs group"
+            className="w-full bg-card border border-dashed border-[#C7C7C2] dark:border-[#3C3C3E] rounded-[10px] p-4 sm:p-5 flex items-center gap-3.5 cursor-pointer hover:border-primary/60 hover:bg-primary/10/20 dark:hover:bg-blue-950/10 transition-all shadow-2xs group"
           >
-            <div className="w-10 h-10 shrink-0 flex items-center justify-center bg-[#F7F7F5] dark:bg-[#252528] rounded-[8px] text-[#8A8A85] group-hover:text-[#007AFF] transition-colors">
+            <div className="w-10 h-10 shrink-0 flex items-center justify-center bg-accent/60 dark:bg-[#252528] rounded-[8px] text-muted-foreground group-hover:text-primary transition-colors">
               <Plus size={20} />
             </div>
 
             <div className="flex flex-col gap-0.5">
-              <div className="text-[13px] sm:text-[14px] font-bold text-[#333333] dark:text-[#E5E7EB] group-hover:text-[#007AFF] transition-colors">
+              <div className="text-[13px] sm:text-[14px] font-bold text-foreground/85 group-hover:text-primary transition-colors">
                 Connect New Provider / Endpoint
               </div>
-              <div className="text-[11px] text-[#8A8A85]">
+              <div className="text-[11px] text-muted-foreground">
                 OpenAI, Anthropic, Ollama, DeepSeek, vLLM, or any custom /v1 API
               </div>
             </div>
@@ -991,15 +991,15 @@ export const ProvidersPane: React.FC = () => {
 
         {/* Right Column: MCP Servers Panel */}
         <div
-          className={`w-full md:w-[360px] lg:w-[400px] shrink-0 bg-[#0F0F0F] rounded-[10px] p-4 sm:p-5 flex flex-col gap-3.5 text-[#FFFFFF] shadow-lg ${
+          className={`w-full md:w-[360px] lg:w-[400px] shrink-0 bg-card rounded-xl p-4 sm:p-5 flex flex-col gap-3.5 text-foreground border border-border shadow-sm ${
             activeTab === 'mcps' ? 'flex' : 'hidden md:flex'
           }`}
         >
           {/* Header */}
-          <div className="w-full flex items-center justify-between pb-2 border-b border-[#262626]">
+          <div className="w-full flex items-center justify-between pb-2 border-b border-border">
             <div className="flex items-center gap-2">
-              <Puzzle size={16} className="text-[#007AFF]" />
-              <h2 className="text-[14px] font-bold text-[#FFFFFF] font-sans">
+              <Puzzle size={16} className="text-primary" />
+              <h2 className="text-[14px] font-bold text-foreground font-sans">
                 MCP Servers ({mcps.length}) · {totalMcpTools} tools
               </h2>
             </div>
@@ -1008,7 +1008,7 @@ export const ProvidersPane: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowApiKeyModal(true)}
-                className="bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-bold font-sans px-2.5 py-1 rounded-[6px] transition-colors cursor-pointer flex items-center gap-1 shadow-sm"
+                className="bg-primary text-primary-fg hover:bg-primary/85 text-[11px] font-bold font-sans px-2.5 py-1 rounded-md transition-colors cursor-pointer flex items-center gap-1 shadow-sm"
               >
                 <Key size={12} />
                 <span>API Keys</span>
@@ -1016,7 +1016,7 @@ export const ProvidersPane: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowMcpModal(true)}
-                className="bg-[#262626] hover:bg-white/20 text-[#FFFFFF] text-[11px] font-bold font-sans px-3 py-1 rounded-[6px] transition-colors cursor-pointer flex items-center gap-1"
+                className="bg-accent hover:bg-foreground/10 text-foreground text-[11px] font-bold font-sans px-3 py-1 rounded-md transition-colors cursor-pointer flex items-center gap-1 border border-border"
               >
                 <Plus size={12} />
                 <span>Connect</span>
@@ -1024,7 +1024,7 @@ export const ProvidersPane: React.FC = () => {
             </div>
           </div>
 
-          <p className="text-[11px] text-[#A3A3A0] leading-relaxed">
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
             Model Context Protocol servers extend agents with dynamic filesystem, database, and API tool integrations.
           </p>
 
@@ -1033,12 +1033,12 @@ export const ProvidersPane: React.FC = () => {
             {mcps.map((m) => (
               <div
                 key={m.id}
-                className="w-full bg-[#1A1A1A] rounded-[8px] p-3 flex flex-col gap-1.5 border border-[#262626] group hover:border-[#383838] transition-colors"
+                className="w-full bg-background rounded-lg p-3 flex flex-col gap-1.5 border border-border group hover:border-border-strong transition-colors"
               >
                 <div className="w-full flex items-center justify-between">
                   <div className="flex items-center gap-2 min-w-0">
-                    <PlugZap size={14} className="text-[#16A34A] shrink-0" />
-                    <span className="text-[12px] font-bold font-mono text-[#FFFFFF] truncate">
+                    <PlugZap size={14} className="text-success shrink-0" />
+                    <span className="text-[12px] font-bold font-mono text-foreground truncate">
                       {m.name}
                     </span>
                   </div>
@@ -1049,23 +1049,23 @@ export const ProvidersPane: React.FC = () => {
                       onClick={() => handleToggleMcpEnabled(m.id, !m.enabled)}
                       className={`text-[10px] px-2 py-0.5 rounded font-sans font-medium transition-colors cursor-pointer flex items-center gap-1 ${
                         m.enabled
-                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                          : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                          ? 'bg-success/10 text-success border border-success/25'
+                          : 'bg-accent text-muted-foreground border border-border'
                       }`}
                       title={m.enabled ? 'Click to disable' : 'Click to enable'}
                     >
-                      <span className={`w-1.5 h-1.5 rounded-full ${m.enabled ? 'bg-emerald-400' : 'bg-zinc-500'}`} />
+                      <span className={`w-1.5 h-1.5 rounded-full ${m.enabled ? 'bg-success' : 'bg-subtle-fg'}`} />
                       <span>{m.enabled ? 'Enabled' : 'Disabled'}</span>
                     </button>
-                    <div className="bg-[#262626] rounded px-2 py-0.5">
-                      <span className="text-[9px] text-[#A3A3A0] font-sans font-medium">
+                    <div className="bg-accent rounded px-2 py-0.5">
+                      <span className="text-[9px] text-muted-foreground font-sans font-medium">
                         {m.toolsCount} tools
                       </span>
                     </div>
                     <button
                       type="button"
                       onClick={() => handleDeleteMcp(m.id)}
-                      className="opacity-60 group-hover:opacity-100 text-[#A3A3A0] hover:text-red-400 p-1 transition-opacity cursor-pointer"
+                      className="opacity-60 group-hover:opacity-100 text-muted-foreground hover:text-destructive p-1 transition-opacity cursor-pointer"
                       title="Disconnect MCP"
                     >
                       <Trash2 size={12} />
@@ -1073,20 +1073,20 @@ export const ProvidersPane: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="text-[10px] text-[#A3A3A0] font-mono truncate">
+                <div className="text-[10px] text-muted-foreground font-mono truncate">
                   {m.transport} · {m.commandOrUrl}
                 </div>
 
-                <div className="text-[10px] text-[#007AFF] font-sans font-medium flex items-center gap-1">
+                <div className="text-[10px] text-primary font-sans font-medium flex items-center gap-1">
                   <span>● Active tool provider</span>
                 </div>
 
                 {m.toolsCached && m.toolsCached.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-1 pt-1.5 border-t border-[#262626]">
+                  <div className="flex flex-wrap gap-1 mt-1 pt-1.5 border-t border-border">
                     {m.toolsCached.map((t) => (
                       <span
                         key={t.name}
-                        className="text-[9px] px-1.5 py-0.5 rounded bg-[#262626] text-[#007AFF] font-mono"
+                        className="text-[9px] px-1.5 py-0.5 rounded bg-accent text-primary font-mono"
                         title={t.description}
                       >
                         {t.name}
@@ -1105,25 +1105,25 @@ export const ProvidersPane: React.FC = () => {
       {/* ------------------------------------------------------------- */}
       {showProviderModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-[#FFFFFF] dark:bg-[#1C1C1E] rounded-[14px] border border-[#E5E7EB] dark:border-[#2C2C2E] shadow-2xl w-full max-w-xl my-auto max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-card rounded-[14px] border border-border shadow-2xl w-full max-w-xl my-auto max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             {/* Modal Header */}
-            <div className="px-5 py-4 border-b border-[#E5E7EB] dark:border-[#2C2C2E] flex items-center justify-between shrink-0">
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-[8px] bg-blue-50 dark:bg-blue-950/40 text-[#007AFF] flex items-center justify-center shrink-0">
+                <div className="w-9 h-9 rounded-[8px] bg-blue-50 dark:bg-blue-950/40 text-primary flex items-center justify-center shrink-0">
                   <Cpu size={18} />
                 </div>
                 <div>
-                  <h3 className="text-[15px] font-bold text-[#000000] dark:text-white font-sans">
+                  <h3 className="text-[15px] font-bold text-foreground font-sans">
                     {modalMode === 'edit' ? `Edit Provider: ${pName}` : 'Add LLM Provider'}
                   </h3>
-                  <p className="text-[11px] text-[#8A8A85] font-sans">
+                  <p className="text-[11px] text-muted-foreground font-sans">
                     Configure endpoint credentials and choose which models appear in chat
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setShowProviderModal(false)}
-                className="text-[#8A8A85] hover:text-[#000000] dark:hover:text-white p-1 rounded-md transition-colors cursor-pointer"
+                className="text-muted-foreground hover:text-foreground p-1 rounded-md transition-colors cursor-pointer"
               >
                 <X size={18} />
               </button>
@@ -1133,7 +1133,7 @@ export const ProvidersPane: React.FC = () => {
             <form onSubmit={handleSaveProvider} className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
               {/* Provider Name */}
               <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-bold text-[#000000] dark:text-white font-sans">
+                <label className="text-[11px] font-bold text-foreground font-sans">
                   Provider Name <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -1142,13 +1142,13 @@ export const ProvidersPane: React.FC = () => {
                   placeholder="e.g. OpenAI, DeepSeek, Ollama Local"
                   value={pName}
                   onChange={(e) => setPName(e.target.value)}
-                  className="w-full border border-[#E5E7EB] dark:border-[#2C2C2E] bg-white dark:bg-[#141414] rounded-[8px] px-3 py-2 text-xs text-[#000000] dark:text-white outline-none focus:border-[#007AFF] transition-colors"
+                  className="w-full border border-border bg-card rounded-[8px] px-3 py-2 text-xs text-foreground outline-none focus:border-primary/60 transition-colors"
                 />
               </div>
 
               {/* Provider Type Selection */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-bold text-[#000000] dark:text-white font-sans">
+                <label className="text-[11px] font-bold text-foreground font-sans">
                   Provider Protocol / Type
                 </label>
                 <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
@@ -1159,8 +1159,8 @@ export const ProvidersPane: React.FC = () => {
                       onClick={() => handleTypeChange(t)}
                       className={`py-1.5 px-2 rounded-[6px] text-[11px] font-mono font-medium capitalize border transition-all cursor-pointer truncate ${
                         pType === t
-                          ? 'bg-[#007AFF] text-white border-[#007AFF]'
-                          : 'bg-white dark:bg-[#141414] border-[#E5E7EB] dark:border-[#2C2C2E] text-[#8A8A85] hover:text-[#000000] dark:hover:text-white'
+                          ? 'bg-primary text-white border-primary'
+                          : 'bg-card border-border text-muted-foreground hover:text-foreground'
                       }`}
                     >
                       {t}
@@ -1171,7 +1171,7 @@ export const ProvidersPane: React.FC = () => {
 
               {/* Base Endpoint URL */}
               <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-bold text-[#000000] dark:text-white font-sans">
+                <label className="text-[11px] font-bold text-foreground font-sans">
                   Base Endpoint URL <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -1180,14 +1180,14 @@ export const ProvidersPane: React.FC = () => {
                   placeholder="https://api.openai.com/v1 or http://localhost:11434"
                   value={pEndpoint}
                   onChange={(e) => setPEndpoint(e.target.value)}
-                  className="w-full border border-[#E5E7EB] dark:border-[#2C2C2E] bg-white dark:bg-[#141414] rounded-[8px] px-3 py-2 text-xs font-mono text-[#000000] dark:text-white outline-none focus:border-[#007AFF] transition-colors"
+                  className="w-full border border-border bg-card rounded-[8px] px-3 py-2 text-xs font-mono text-foreground outline-none focus:border-primary/60 transition-colors"
                 />
               </div>
 
               {/* API Key */}
               <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-bold text-[#000000] dark:text-white font-sans">
-                  API Key {pType === 'ollama' && <span className="text-[#8A8A85] font-normal">(Optional for Ollama)</span>}
+                <label className="text-[11px] font-bold text-foreground font-sans">
+                  API Key {pType === 'ollama' && <span className="text-muted-foreground font-normal">(Optional for Ollama)</span>}
                 </label>
                 <div className="relative">
                   <input
@@ -1195,12 +1195,12 @@ export const ProvidersPane: React.FC = () => {
                     placeholder={pType === 'ollama' ? 'None (local network)' : 'sk-...'}
                     value={pApiKey}
                     onChange={(e) => setPApiKey(e.target.value)}
-                    className="w-full border border-[#E5E7EB] dark:border-[#2C2C2E] bg-white dark:bg-[#141414] rounded-[8px] pl-3 pr-9 py-2 text-xs font-mono text-[#000000] dark:text-white outline-none focus:border-[#007AFF] transition-colors"
+                    className="w-full border border-border bg-card rounded-[8px] pl-3 pr-9 py-2 text-xs font-mono text-foreground outline-none focus:border-primary/60 transition-colors"
                   />
                   <button
                     type="button"
                     onClick={() => setShowKey(!showKey)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8A8A85] hover:text-[#000000] dark:hover:text-white cursor-pointer"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
                   >
                     {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
                   </button>
@@ -1209,22 +1209,22 @@ export const ProvidersPane: React.FC = () => {
 
               {/* Checkbox Options: Enabled & Default */}
               <div className="flex items-center gap-5 py-1">
-                <label className="flex items-center gap-2 text-xs font-sans text-[#333333] dark:text-[#E5E7EB] cursor-pointer">
+                <label className="flex items-center gap-2 text-xs font-sans text-foreground/85 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={pEnabled}
                     onChange={(e) => setPEnabled(e.target.checked)}
-                    className="w-4 h-4 rounded text-[#007AFF] focus:ring-[#007AFF] cursor-pointer"
+                    className="w-4 h-4 rounded text-primary focus:ring-[#007AFF] cursor-pointer"
                   />
                   <span>Enable Provider</span>
                 </label>
 
-                <label className="flex items-center gap-2 text-xs font-sans text-[#333333] dark:text-[#E5E7EB] cursor-pointer">
+                <label className="flex items-center gap-2 text-xs font-sans text-foreground/85 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={pIsDefault}
                     onChange={(e) => setPIsDefault(e.target.checked)}
-                    className="w-4 h-4 rounded text-[#007AFF] focus:ring-[#007AFF] cursor-pointer"
+                    className="w-4 h-4 rounded text-primary focus:ring-[#007AFF] cursor-pointer"
                   />
                   <span>Set as Default Provider</span>
                 </label>
@@ -1233,19 +1233,19 @@ export const ProvidersPane: React.FC = () => {
               {/* --------------------------------------------------------- */}
               {/* MODEL SELECTION & PROBE SECTION                           */}
               {/* --------------------------------------------------------- */}
-              <div className="bg-[#F7F7F5] dark:bg-[#141414] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[10px] p-3.5 space-y-3">
+              <div className="bg-accent/60 dark:bg-background border border-border rounded-[10px] p-3.5 space-y-3">
                 {/* Section Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-[#000000] dark:text-white font-sans">
+                      <span className="text-xs font-bold text-foreground font-sans">
                         Model Selection
                       </span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-blue-100 dark:bg-blue-950/40 text-[#007AFF]">
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-blue-100 dark:bg-blue-950/40 text-primary">
                         {selectedModelsCount} of {modelsList.length} enabled
                       </span>
                     </div>
-                    <span className="text-[10px] text-[#8A8A85]">
+                    <span className="text-[10px] text-muted-foreground">
                       Only checked models will appear in Chat &amp; Agent dropdowns
                     </span>
                   </div>
@@ -1255,7 +1255,7 @@ export const ProvidersPane: React.FC = () => {
                     type="button"
                     onClick={handleFetchModels}
                     disabled={isFetchingModels || !pEndpoint.trim()}
-                    className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-[#007AFF] hover:bg-[#0066D6] disabled:opacity-50 text-white text-[11px] font-bold rounded-[6px] transition-colors cursor-pointer shadow-2xs shrink-0"
+                    className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/85 disabled:opacity-50 text-white text-[11px] font-bold rounded-[6px] transition-colors cursor-pointer shadow-2xs shrink-0"
                     title="Fetch and discover live models from this provider endpoint"
                   >
                     <RefreshCw size={12} className={isFetchingModels ? 'animate-spin' : ''} />
@@ -1283,7 +1283,7 @@ export const ProvidersPane: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setProbeNotice(null)}
-                      className="text-[#8A8A85] hover:text-[#000000] dark:hover:text-white shrink-0 cursor-pointer"
+                      className="text-muted-foreground hover:text-foreground shrink-0 cursor-pointer"
                     >
                       <X size={12} />
                     </button>
@@ -1293,13 +1293,13 @@ export const ProvidersPane: React.FC = () => {
                 {/* Search & Bulk Select Controls */}
                 <div className="flex items-center justify-between gap-2">
                   <div className="relative flex-1">
-                    <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#8A8A85]" />
+                    <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                     <input
                       type="text"
                       placeholder="Filter models..."
                       value={modelSearch}
                       onChange={(e) => setModelSearch(e.target.value)}
-                      className="w-full pl-7 pr-2.5 py-1 bg-white dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[6px] text-xs text-[#000000] dark:text-white outline-none focus:border-[#007AFF]"
+                      className="w-full pl-7 pr-2.5 py-1 bg-card border border-border rounded-[6px] text-xs text-foreground outline-none focus:border-primary/60"
                     />
                   </div>
 
@@ -1307,15 +1307,15 @@ export const ProvidersPane: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => handleSelectAllModels(true)}
-                      className="text-[10px] font-bold text-[#007AFF] hover:underline cursor-pointer"
+                      className="text-[10px] font-bold text-primary hover:underline cursor-pointer"
                     >
                       Select All
                     </button>
-                    <span className="text-[#8A8A85] text-[10px]">·</span>
+                    <span className="text-muted-foreground text-[10px]">·</span>
                     <button
                       type="button"
                       onClick={() => handleSelectAllModels(false)}
-                      className="text-[10px] font-bold text-[#8A8A85] hover:text-[#000000] dark:hover:text-white hover:underline cursor-pointer"
+                      className="text-[10px] font-bold text-muted-foreground hover:text-foreground hover:underline cursor-pointer"
                     >
                       Deselect All
                     </button>
@@ -1323,34 +1323,34 @@ export const ProvidersPane: React.FC = () => {
                 </div>
 
                 {/* Models Checkbox Scroll Area */}
-                <div className="max-h-48 overflow-y-auto border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[8px] bg-white dark:bg-[#1C1C1E] divide-y divide-gray-100 dark:divide-gray-800 custom-scrollbar">
+                <div className="max-h-48 overflow-y-auto border border-border rounded-[8px] bg-card divide-y divide-gray-100 dark:divide-gray-800 custom-scrollbar">
                   {filteredModalModels.length === 0 ? (
-                    <div className="p-4 text-center text-xs text-[#8A8A85]">
+                    <div className="p-4 text-center text-xs text-muted-foreground">
                       No models found. Click "Fetch Models" above or add a custom model below.
                     </div>
                   ) : (
                     filteredModalModels.map((m) => (
                       <label
                         key={m.id}
-                        className="flex items-center justify-between p-2 sm:p-2.5 hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer transition-colors select-none"
+                        className="flex items-center justify-between p-2 sm:p-2.5 hover:bg-foreground/5 cursor-pointer transition-colors select-none"
                       >
                         <div className="flex items-center gap-2.5 min-w-0 flex-1">
                           <input
                             type="checkbox"
                             checked={m.enabled}
                             onChange={() => handleToggleModelCheckbox(m.id)}
-                            className="w-4 h-4 rounded text-[#007AFF] focus:ring-[#007AFF] cursor-pointer shrink-0"
+                            className="w-4 h-4 rounded text-primary focus:ring-[#007AFF] cursor-pointer shrink-0"
                           />
                           <div className="flex items-center gap-1.5 min-w-0 flex-1">
                             <span
                               className={`font-mono text-xs font-semibold truncate ${
-                                m.enabled ? 'text-[#000000] dark:text-white' : 'text-[#8A8A85] line-through'
+                                m.enabled ? 'text-foreground' : 'text-muted-foreground line-through'
                               }`}
                             >
                               {m.id}
                             </span>
                             {m.name && m.name !== m.id && (
-                              <span className="text-[11px] text-[#8A8A85] truncate hidden sm:inline">
+                              <span className="text-[11px] text-muted-foreground truncate hidden sm:inline">
                                 ({m.name})
                               </span>
                             )}
@@ -1368,7 +1368,7 @@ export const ProvidersPane: React.FC = () => {
                             e.preventDefault();
                             handleRemoveModel(m.id);
                           }}
-                          className="text-[#8A8A85] hover:text-red-500 p-1 transition-colors cursor-pointer shrink-0 ml-2"
+                          className="text-muted-foreground hover:text-red-500 p-1 transition-colors cursor-pointer shrink-0 ml-2"
                           title="Remove model from list"
                         >
                           <X size={13} />
@@ -1385,12 +1385,12 @@ export const ProvidersPane: React.FC = () => {
                     placeholder="Add custom model ID (e.g. mistral-large, qwen2.5:32b)..."
                     value={customModelInput}
                     onChange={(e) => setCustomModelInput(e.target.value)}
-                    className="flex-1 px-2.5 py-1.5 bg-white dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[6px] text-xs font-mono text-[#000000] dark:text-white outline-none focus:border-[#007AFF]"
+                    className="flex-1 px-2.5 py-1.5 bg-card border border-border rounded-[6px] text-xs font-mono text-foreground outline-none focus:border-primary/60"
                   />
                   <button
                     type="button"
                     onClick={handleAddCustomModel}
-                    className="px-3 py-1.5 bg-[#0F0F0F] dark:bg-white text-white dark:text-black font-bold text-xs rounded-[6px] hover:opacity-90 transition-opacity cursor-pointer shrink-0"
+                    className="px-3 py-1.5 bg-foreground text-background font-bold text-xs rounded-[6px] hover:opacity-90 transition-opacity cursor-pointer shrink-0"
                   >
                     + Add
                   </button>
@@ -1398,17 +1398,17 @@ export const ProvidersPane: React.FC = () => {
               </div>
 
               {/* Modal Actions */}
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E5E7EB] dark:border-[#2C2C2E]">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
                 <button
                   type="button"
                   onClick={() => setShowProviderModal(false)}
-                  className="px-4 py-2 text-xs font-medium text-[#8A8A85] hover:text-[#000000] dark:hover:text-white cursor-pointer"
+                  className="px-4 py-2 text-xs font-medium text-muted-foreground hover:text-foreground cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#007AFF] hover:bg-[#0066D6] text-white text-xs font-bold rounded-[8px] transition-all shadow-sm cursor-pointer active:scale-95"
+                  className="px-5 py-2 bg-primary hover:bg-primary/85 text-white text-xs font-bold rounded-[8px] transition-all shadow-sm cursor-pointer active:scale-95"
                 >
                   Save Provider
                 </button>
@@ -1423,24 +1423,24 @@ export const ProvidersPane: React.FC = () => {
       {/* ------------------------------------------------------------- */}
       {showMcpModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-          <div className="bg-[#FFFFFF] dark:bg-[#1C1C1E] rounded-[14px] border border-[#E5E7EB] dark:border-[#2C2C2E] shadow-xl w-full max-w-lg p-5 sm:p-6 flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-[#E5E7EB] dark:border-[#2C2C2E] pb-3">
+          <div className="bg-card rounded-[14px] border border-border shadow-xl w-full max-w-lg p-5 sm:p-6 flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-border pb-3">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-[6px] bg-[#0F0F0F] dark:bg-white text-white dark:text-black flex items-center justify-center">
+                <div className="w-8 h-8 rounded-[6px] bg-foreground text-background flex items-center justify-center">
                   <Puzzle size={16} />
                 </div>
                 <div>
-                  <h3 className="text-[15px] font-bold text-[#000000] dark:text-white font-sans">
+                  <h3 className="text-[15px] font-bold text-foreground font-sans">
                     Connect MCP Server
                   </h3>
-                  <p className="text-[11px] text-[#8A8A85] font-sans">
+                  <p className="text-[11px] text-muted-foreground font-sans">
                     Standard Model Context Protocol client connection
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setShowMcpModal(false)}
-                className="text-[#8A8A85] hover:text-[#000000] dark:hover:text-white p-1 rounded transition-colors cursor-pointer"
+                className="text-muted-foreground hover:text-foreground p-1 rounded transition-colors cursor-pointer"
               >
                 <X size={16} />
               </button>
@@ -1448,27 +1448,27 @@ export const ProvidersPane: React.FC = () => {
 
             <form onSubmit={handleSaveMCP} className="flex flex-col gap-3.5">
               <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-bold text-[#000000] dark:text-white">Server Name</label>
+                <label className="text-[11px] font-bold text-foreground">Server Name</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. filesystem, github, postgres"
                   value={mName}
                   onChange={(e) => setMName(e.target.value)}
-                  className="border border-[#E5E7EB] dark:border-[#2C2C2E] bg-white dark:bg-[#141414] rounded-[6px] px-3 py-1.5 text-xs text-[#000000] dark:text-white focus:outline-none focus:border-[#007AFF]"
+                  className="border border-border bg-card rounded-[6px] px-3 py-1.5 text-xs text-foreground focus:outline-none focus:border-primary/60"
                 />
               </div>
 
               <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-bold text-[#000000] dark:text-white">Transport Type</label>
+                <label className="text-[11px] font-bold text-foreground">Transport Type</label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => setMTransport('stdio')}
                     className={`py-1.5 px-3 rounded-[6px] text-xs font-bold border transition-colors cursor-pointer ${
                       mTransport === 'stdio'
-                        ? 'bg-[#007AFF] text-white border-[#007AFF]'
-                        : 'bg-white dark:bg-[#141414] text-[#8A8A85] border-[#E5E7EB] dark:border-[#2C2C2E]'
+                        ? 'bg-primary text-white border-primary'
+                        : 'bg-card text-muted-foreground border-border'
                     }`}
                   >
                     stdio (local process)
@@ -1478,8 +1478,8 @@ export const ProvidersPane: React.FC = () => {
                     onClick={() => setMTransport('sse')}
                     className={`py-1.5 px-3 rounded-[6px] text-xs font-bold border transition-colors cursor-pointer ${
                       mTransport === 'sse'
-                        ? 'bg-[#007AFF] text-white border-[#007AFF]'
-                        : 'bg-white dark:bg-[#141414] text-[#8A8A85] border-[#E5E7EB] dark:border-[#2C2C2E]'
+                        ? 'bg-primary text-white border-primary'
+                        : 'bg-card text-muted-foreground border-border'
                     }`}
                   >
                     SSE (stream)
@@ -1489,8 +1489,8 @@ export const ProvidersPane: React.FC = () => {
                     onClick={() => setMTransport('http')}
                     className={`py-1.5 px-3 rounded-[6px] text-xs font-bold border transition-colors cursor-pointer ${
                       mTransport === 'http'
-                        ? 'bg-[#007AFF] text-white border-[#007AFF]'
-                        : 'bg-white dark:bg-[#141414] text-[#8A8A85] border-[#E5E7EB] dark:border-[#2C2C2E]'
+                        ? 'bg-primary text-white border-primary'
+                        : 'bg-card text-muted-foreground border-border'
                     }`}
                   >
                     HTTP (streamable)
@@ -1501,29 +1501,29 @@ export const ProvidersPane: React.FC = () => {
               {mTransport === 'stdio' ? (
                 <div className="grid grid-cols-3 gap-2">
                   <div className="flex flex-col gap-1">
-                    <label className="text-[11px] font-bold text-[#000000] dark:text-white">Command</label>
+                    <label className="text-[11px] font-bold text-foreground">Command</label>
                     <input
                       type="text"
                       value={mCommand}
                       onChange={(e) => setMCommand(e.target.value)}
                       placeholder="npx or python"
-                      className="border border-[#E5E7EB] dark:border-[#2C2C2E] bg-white dark:bg-[#141414] rounded-[6px] px-3 py-1.5 text-xs font-mono text-[#000000] dark:text-white focus:outline-none focus:border-[#007AFF]"
+                      className="border border-border bg-card rounded-[6px] px-3 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:border-primary/60"
                     />
                   </div>
                   <div className="col-span-2 flex flex-col gap-1">
-                    <label className="text-[11px] font-bold text-[#000000] dark:text-white">Arguments</label>
+                    <label className="text-[11px] font-bold text-foreground">Arguments</label>
                     <input
                       type="text"
                       value={mArgs}
                       onChange={(e) => setMArgs(e.target.value)}
                       placeholder="-y @modelcontextprotocol/server-..."
-                      className="border border-[#E5E7EB] dark:border-[#2C2C2E] bg-white dark:bg-[#141414] rounded-[6px] px-3 py-1.5 text-xs font-mono text-[#000000] dark:text-white focus:outline-none focus:border-[#007AFF]"
+                      className="border border-border bg-card rounded-[6px] px-3 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:border-primary/60"
                     />
                   </div>
                 </div>
               ) : (
                 <div className="flex flex-col gap-1">
-                  <label className="text-[11px] font-bold text-[#000000] dark:text-white">
+                  <label className="text-[11px] font-bold text-foreground">
                     {mTransport === 'http' ? 'HTTP Endpoint URL' : 'SSE Endpoint URL'}
                   </label>
                   <input
@@ -1531,22 +1531,22 @@ export const ProvidersPane: React.FC = () => {
                     value={mUrl}
                     onChange={(e) => setMUrl(e.target.value)}
                     placeholder={mTransport === 'http' ? 'https://mcp.domain.com/mcp' : 'https://mcp.domain.com/sse'}
-                    className="border border-[#E5E7EB] dark:border-[#2C2C2E] bg-white dark:bg-[#141414] rounded-[6px] px-3 py-1.5 text-xs font-mono text-[#000000] dark:text-white focus:outline-none focus:border-[#007AFF]"
+                    className="border border-border bg-card rounded-[6px] px-3 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:border-primary/60"
                   />
                 </div>
               )}
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E5E7EB] dark:border-[#2C2C2E]">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
                 <button
                   type="button"
                   onClick={() => setShowMcpModal(false)}
-                  className="px-3.5 py-1.5 text-xs font-medium text-[#8A8A85] hover:text-[#000000] dark:hover:text-white cursor-pointer"
+                  className="px-3.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-[#007AFF] hover:bg-[#0066D6] text-white text-xs font-bold rounded-[6px] transition-colors cursor-pointer"
+                  className="px-4 py-1.5 bg-primary hover:bg-primary/85 text-white text-xs font-bold rounded-[6px] transition-colors cursor-pointer"
                 >
                   Connect Server
                 </button>

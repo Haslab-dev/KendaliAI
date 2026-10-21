@@ -145,14 +145,14 @@ export const DocsPane: React.FC<{ onChatWithDoc?: (docTitle: string) => void }> 
   );
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#F7F7F5] overflow-y-auto custom-scrollbar">
+    <div className="flex flex-col h-full w-full bg-accent/60 overflow-y-auto custom-scrollbar">
       {/* Page Header matching refs/desktop/knowledge-base.html */}
-      <div className="w-full shrink-0 h-[80px] flex flex-row gap-3.5 px-6 sm:px-9 items-center bg-[#FFFFFF] border-b border-[#E5E7EB] z-10 select-none">
+      <div className="w-full shrink-0 h-[80px] flex flex-row gap-3.5 px-6 sm:px-9 items-center bg-card border-b border-border z-10 select-none">
         <div className="flex-1 flex flex-col gap-0.5 justify-start items-start">
-          <div className="text-[20px] text-[#000000] font-inter font-bold">
+          <div className="text-[20px] text-foreground font-inter font-bold">
             Knowledge Base
           </div>
-          <div className="text-[12px] text-[#8A8A85] font-funnel font-normal">
+          <div className="text-[12px] text-muted-foreground font-funnel font-normal">
             Vector RAG — chunked, embedded, and injected as /doc:&lt;title&gt; context chips
           </div>
         </div>
@@ -160,7 +160,7 @@ export const DocsPane: React.FC<{ onChatWithDoc?: (docTitle: string) => void }> 
         <button
           onClick={handleReindex}
           disabled={isReindexing}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FFFFFF] border border-[#E5E7EB] hover:border-[#333333] rounded-[4px] text-[11px] font-funnel text-[#333333] transition-colors shadow-2xs"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-card border border-border hover:border-[#333333] rounded-[4px] text-[11px] font-funnel text-foreground/85 transition-colors shadow-2xs"
           title="Re-embed all chunks with current model"
         >
           <RefreshCw size={12} className={isReindexing ? 'animate-spin' : ''} />
@@ -176,7 +176,7 @@ export const DocsPane: React.FC<{ onChatWithDoc?: (docTitle: string) => void }> 
             className={`p-3 rounded-[8px] border text-xs flex items-center justify-between ${
               uploadNotice.type === 'error'
                 ? 'bg-red-50 border-red-200 text-red-700'
-                : 'bg-[#E8F8EE] border-[#BBF7D0] text-[#16A34A]'
+                : 'bg-success/10 border-[#BBF7D0] text-success'
             }`}
           >
             <span>{uploadNotice.text}</span>
@@ -189,57 +189,57 @@ export const DocsPane: React.FC<{ onChatWithDoc?: (docTitle: string) => void }> 
         {/* KB Stats row matching reference */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {/* Documents Stat */}
-          <div className="h-[110px] p-5 bg-[#FFFFFF] border border-[#E5E7EB] rounded-[8px] shadow-2xs flex flex-col justify-between">
+          <div className="h-[110px] p-5 bg-card border border-border rounded-[8px] shadow-2xs flex flex-col justify-between">
             <div className="flex items-center gap-2">
-              <BookOpen size={14} className="text-[#007AFF]" />
-              <span className="text-[12px] text-[#8A8A85] font-funnel font-normal">Documents</span>
+              <BookOpen size={14} className="text-primary" />
+              <span className="text-[12px] text-muted-foreground font-funnel font-normal">Documents</span>
             </div>
-            <div className="text-[26px] text-[#000000] font-inter font-bold leading-none">
+            <div className="text-[26px] text-foreground font-inter font-bold leading-none">
               {docs.length || 24}
             </div>
-            <div className="text-[11px] text-[#8A8A85] font-funnel">
+            <div className="text-[11px] text-muted-foreground font-funnel">
               .md .pdf .csv .go .ts .py
             </div>
           </div>
 
           {/* Chunks Stat */}
-          <div className="h-[110px] p-5 bg-[#FFFFFF] border border-[#E5E7EB] rounded-[8px] shadow-2xs flex flex-col justify-between">
+          <div className="h-[110px] p-5 bg-card border border-border rounded-[8px] shadow-2xs flex flex-col justify-between">
             <div className="flex items-center gap-2">
-              <Layers size={14} className="text-[#007AFF]" />
-              <span className="text-[12px] text-[#8A8A85] font-funnel font-normal">Chunks</span>
+              <Layers size={14} className="text-primary" />
+              <span className="text-[12px] text-muted-foreground font-funnel font-normal">Chunks</span>
             </div>
-            <div className="text-[26px] text-[#000000] font-inter font-bold leading-none">
+            <div className="text-[26px] text-foreground font-inter font-bold leading-none">
               {totalChunks || '1,847'}
             </div>
-            <div className="text-[11px] text-[#8A8A85] font-funnel">
+            <div className="text-[11px] text-muted-foreground font-funnel">
               avg 512 tokens
             </div>
           </div>
 
           {/* Embeddings Stat */}
-          <div className="h-[110px] p-5 bg-[#FFFFFF] border border-[#E5E7EB] rounded-[8px] shadow-2xs flex flex-col justify-between">
+          <div className="h-[110px] p-5 bg-card border border-border rounded-[8px] shadow-2xs flex flex-col justify-between">
             <div className="flex items-center gap-2">
-              <Zap size={14} className="text-[#007AFF]" />
-              <span className="text-[12px] text-[#8A8A85] font-funnel font-normal">Embeddings</span>
+              <Zap size={14} className="text-primary" />
+              <span className="text-[12px] text-muted-foreground font-funnel font-normal">Embeddings</span>
             </div>
-            <div className="text-[26px] text-[#000000] font-inter font-bold leading-none">
+            <div className="text-[26px] text-foreground font-inter font-bold leading-none">
               1536-dim
             </div>
-            <div className="text-[11px] text-[#8A8A85] font-funnel truncate">
+            <div className="text-[11px] text-muted-foreground font-funnel truncate">
               {embModel}
             </div>
           </div>
 
           {/* Grounded Answers Stat */}
-          <div className="h-[110px] p-5 bg-[#FFFFFF] border border-[#E5E7EB] rounded-[8px] shadow-2xs flex flex-col justify-between">
+          <div className="h-[110px] p-5 bg-card border border-border rounded-[8px] shadow-2xs flex flex-col justify-between">
             <div className="flex items-center gap-2">
-              <MessageSquareQuote size={14} className="text-[#007AFF]" />
-              <span className="text-[12px] text-[#8A8A85] font-funnel font-normal">Grounded answers</span>
+              <MessageSquareQuote size={14} className="text-primary" />
+              <span className="text-[12px] text-muted-foreground font-funnel font-normal">Grounded answers</span>
             </div>
-            <div className="text-[26px] text-[#000000] font-inter font-bold leading-none">
+            <div className="text-[26px] text-foreground font-inter font-bold leading-none">
               312
             </div>
-            <div className="text-[11px] text-[#8A8A85] font-funnel">
+            <div className="text-[11px] text-muted-foreground font-funnel">
               last 30 days
             </div>
           </div>
@@ -248,11 +248,11 @@ export const DocsPane: React.FC<{ onChatWithDoc?: (docTitle: string) => void }> 
         {/* Two-Column Grid matching reference */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
           {/* Left Column: Ingested Documents */}
-          <div className="lg:col-span-7 bg-[#FFFFFF] border border-[#E5E7EB] rounded-[8px] p-[18px] shadow-2xs flex flex-col gap-3">
+          <div className="lg:col-span-7 bg-card border border-border rounded-[8px] p-[18px] shadow-2xs flex flex-col gap-3">
             <div className="w-full flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <BookOpen size={15} className="text-[#007AFF]" />
-                <span className="text-[14px] text-[#000000] font-inter font-bold">
+                <BookOpen size={15} className="text-primary" />
+                <span className="text-[14px] text-foreground font-inter font-bold">
                   Ingested documents
                 </span>
               </div>
@@ -268,7 +268,7 @@ export const DocsPane: React.FC<{ onChatWithDoc?: (docTitle: string) => void }> 
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isUploading}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#007AFF] hover:bg-[#0066D6] disabled:opacity-50 text-white rounded-[4px] text-[11px] font-funnel font-bold transition-colors shadow-2xs"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/85 disabled:opacity-50 text-white rounded-[4px] text-[11px] font-funnel font-bold transition-colors shadow-2xs"
               >
                 <Upload size={12} className={isUploading ? 'animate-spin' : ''} />
                 <span>{isUploading ? 'Ingesting...' : 'Upload'}</span>
@@ -276,52 +276,52 @@ export const DocsPane: React.FC<{ onChatWithDoc?: (docTitle: string) => void }> 
             </div>
 
             {/* Filter Search */}
-            <div className="w-full flex items-center gap-2 p-[7px_10px] bg-[#F7F7F5] border border-[#E5E7EB] rounded-[4px]">
-              <Search size={13} className="text-[#8A8A85]" />
+            <div className="w-full flex items-center gap-2 p-[7px_10px] bg-accent/60 border border-border rounded-[4px]">
+              <Search size={13} className="text-muted-foreground" />
               <input
                 type="text"
                 placeholder="Filter knowledge documents…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-transparent text-[11px] text-[#000000] placeholder:text-[#8A8A85] font-geist outline-none w-full"
+                className="bg-transparent text-[11px] text-foreground placeholder:text-muted-foreground font-geist outline-none w-full"
               />
             </div>
 
             {/* Documents List */}
             <div className="space-y-1.5 max-h-[480px] overflow-y-auto custom-scrollbar pr-1">
               {filteredDocs.length === 0 ? (
-                <div className="text-center text-[#8A8A85] py-8 text-xs font-funnel">
+                <div className="text-center text-muted-foreground py-8 text-xs font-funnel">
                   {isLoading ? 'Loading vector documents...' : 'No documents found.'}
                 </div>
               ) : (
                 filteredDocs.map((doc) => (
                   <div
                     key={doc.id}
-                    className="flex items-center gap-2.5 p-[10px_12px] bg-[#F7F7F5] hover:bg-[#FFF5EB] border border-[#E5E7EB] rounded-[4px] group transition-colors"
+                    className="flex items-center gap-2.5 p-[10px_12px] bg-accent/60 hover:bg-warning/10 border border-border rounded-[4px] group transition-colors"
                   >
-                    <FileText size={14} className="text-[#333333] shrink-0" />
+                    <FileText size={14} className="text-foreground/85 shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <div className="text-[12px] text-[#000000] font-mono truncate">
+                      <div className="text-[12px] text-foreground font-mono truncate">
                         {doc.title}
                       </div>
-                      <div className="text-[10px] text-[#8A8A85] font-funnel">
+                      <div className="text-[10px] text-muted-foreground font-funnel">
                         {doc.chunkCount || 0} chunks · ingested {new Date(doc.createdAt).toLocaleDateString()}
                       </div>
                     </div>
 
-                    <div className="w-[7px] h-[7px] bg-[#16A34A] rounded-full shrink-0" title="Vector embedded" />
+                    <div className="w-[7px] h-[7px] bg-success rounded-full shrink-0" title="Vector embedded" />
 
                     <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1.5 ml-2">
                       <button
                         onClick={() => handleChatWithDoc(doc)}
-                        className="p-1 text-[#333333] hover:text-[#007AFF] rounded"
+                        className="p-1 text-foreground/85 hover:text-primary rounded"
                         title="Chat grounded with this doc"
                       >
                         <MessageSquare size={13} />
                       </button>
                       <button
                         onClick={() => handleDelete(doc.id)}
-                        className="p-1 text-[#8A8A85] hover:text-red-500 rounded"
+                        className="p-1 text-muted-foreground hover:text-red-500 rounded"
                         title="Delete document"
                       >
                         <Trash2 size={13} />
@@ -336,27 +336,27 @@ export const DocsPane: React.FC<{ onChatWithDoc?: (docTitle: string) => void }> 
           {/* Right Column: Grounding Preview & Vector Test Search */}
           <div className="lg:col-span-5 space-y-4">
             {/* Grounding in chat Preview Card */}
-            <div className="bg-[#FFF5EB] border border-[#F5E3CF] rounded-[8px] p-[18px] shadow-2xs space-y-2.5">
+            <div className="bg-warning/10 border border-[#F5E3CF] rounded-[8px] p-[18px] shadow-2xs space-y-2.5">
               <div className="flex items-center gap-2">
-                <Syringe size={15} className="text-[#F97316]" />
-                <span className="text-[14px] text-[#000000] font-inter font-bold">
+                <Syringe size={15} className="text-agentorange" />
+                <span className="text-[14px] text-foreground font-inter font-bold">
                   Grounding in chat
                 </span>
               </div>
-              <p className="text-[12px]/[19px] text-[#333333] font-geist">
+              <p className="text-[12px]/[19px] text-foreground/85 font-geist">
                 Answers synthesized from retrieved chunks. Chips appear under each assistant message and inject source documents into the context window.
               </p>
 
-              <div className="p-3 bg-[#FFFFFF] border border-[#E5E7EB] rounded-[4px] space-y-2 shadow-2xs">
-                <div className="text-[11px] text-[#8A8A85] font-geist">
+              <div className="p-3 bg-card border border-border rounded-[4px] space-y-2 shadow-2xs">
+                <div className="text-[11px] text-muted-foreground font-geist">
                   "What are the rate limits for the v2 gateway?"
                 </div>
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <div className="px-2 py-0.5 bg-[#FFF5EB] border border-[#F5E3CF] rounded-[4px] text-[10px] text-[#F97316] font-funnel flex items-center gap-1">
+                  <div className="px-2 py-0.5 bg-warning/10 border border-[#F5E3CF] rounded-[4px] text-[10px] text-agentorange font-funnel flex items-center gap-1">
                     <BookOpen size={9} />
                     <span>doc:api-gateway-spec</span>
                   </div>
-                  <div className="px-2 py-0.5 bg-[#FFF5EB] border border-[#F5E3CF] rounded-[4px] text-[10px] text-[#F97316] font-funnel flex items-center gap-1">
+                  <div className="px-2 py-0.5 bg-warning/10 border border-[#F5E3CF] rounded-[4px] text-[10px] text-agentorange font-funnel flex items-center gap-1">
                     <BookOpen size={9} />
                     <span>doc:security-policy</span>
                   </div>
@@ -365,12 +365,12 @@ export const DocsPane: React.FC<{ onChatWithDoc?: (docTitle: string) => void }> 
             </div>
 
             {/* Test Vector Retrieval Search Card */}
-            <div className="bg-[#FFFFFF] border border-[#E5E7EB] rounded-[8px] p-[18px] shadow-2xs space-y-3">
+            <div className="bg-card border border-border rounded-[8px] p-[18px] shadow-2xs space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-[14px] text-[#000000] font-inter font-bold">
+                <span className="text-[14px] text-foreground font-inter font-bold">
                   Vector Retrieval Test
                 </span>
-                <span className="text-[10px] text-[#8A8A85] font-funnel">
+                <span className="text-[10px] text-muted-foreground font-funnel">
                   cosine similarity
                 </span>
               </div>
@@ -382,12 +382,12 @@ export const DocsPane: React.FC<{ onChatWithDoc?: (docTitle: string) => void }> 
                   value={testQuery}
                   onChange={(e) => setTestQuery(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleVectorSearch()}
-                  className="flex-1 px-3 py-1.5 bg-[#F7F7F5] border border-[#E5E7EB] rounded-[4px] text-xs font-geist text-[#000000] outline-none focus:border-[#007AFF]"
+                  className="flex-1 px-3 py-1.5 bg-accent/60 border border-border rounded-[4px] text-xs font-geist text-foreground outline-none focus:border-primary/60"
                 />
                 <button
                   onClick={handleVectorSearch}
                   disabled={isSearching || !testQuery.trim()}
-                  className="px-3 py-1.5 bg-[#007AFF] hover:bg-[#0066D6] disabled:opacity-40 text-white rounded-[4px] text-xs font-funnel font-bold transition-colors shadow-2xs"
+                  className="px-3 py-1.5 bg-primary hover:bg-primary/85 disabled:opacity-40 text-white rounded-[4px] text-xs font-funnel font-bold transition-colors shadow-2xs"
                 >
                   {isSearching ? <RefreshCw size={12} className="animate-spin" /> : 'Search'}
                 </button>
@@ -396,21 +396,21 @@ export const DocsPane: React.FC<{ onChatWithDoc?: (docTitle: string) => void }> 
               {searchResults && (
                 <div className="space-y-2 max-h-64 overflow-y-auto custom-scrollbar pt-1">
                   {searchResults.length === 0 ? (
-                    <div className="text-xs text-[#8A8A85] font-funnel text-center py-3">
+                    <div className="text-xs text-muted-foreground font-funnel text-center py-3">
                       No vector chunks matched above threshold.
                     </div>
                   ) : (
                     searchResults.map((r, i) => (
-                      <div key={i} className="p-2.5 bg-[#F7F7F5] border border-[#E5E7EB] rounded-[4px] space-y-1">
+                      <div key={i} className="p-2.5 bg-accent/60 border border-border rounded-[4px] space-y-1">
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-mono font-bold text-[#000000] truncate max-w-[200px]">
+                          <span className="text-[11px] font-mono font-bold text-foreground truncate max-w-[200px]">
                             {r.title}
                           </span>
-                          <span className="text-[10px] font-mono bg-[#E8F8EE] text-[#16A34A] px-1.5 py-0.5 rounded font-bold">
+                          <span className="text-[10px] font-mono bg-success/10 text-success px-1.5 py-0.5 rounded font-bold">
                             {Math.round(r.score * 100)}% match
                           </span>
                         </div>
-                        <p className="text-[11px] text-[#333333] font-geist line-clamp-3 leading-relaxed">
+                        <p className="text-[11px] text-foreground/85 font-geist line-clamp-3 leading-relaxed">
                           {r.content}
                         </p>
                       </div>

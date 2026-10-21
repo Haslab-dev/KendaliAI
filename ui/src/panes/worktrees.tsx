@@ -150,14 +150,14 @@ export const WorktreesPane: React.FC = () => {
   };
 
   return (
-    <div className="w-full min-h-screen bg-[#F7F7F5] flex flex-col">
+    <div className="w-full min-h-screen bg-accent/60 flex flex-col">
       {/* Page Header matching worktrees.html */}
-      <div className="w-full bg-[#FFFFFF] border-b border-[#E5E7EB] px-6 lg:px-9 py-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="w-full bg-card border-b border-border px-6 lg:px-9 py-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex flex-col gap-[2px]">
-          <h1 className="text-[20px] font-bold text-[#000000] font-sans tracking-tight">
+          <h1 className="text-[20px] font-bold text-foreground font-sans tracking-tight">
             Git Worktrees
           </h1>
-          <p className="text-[12px] text-[#8A8A85] font-['Funnel_Sans',sans-serif]">
+          <p className="text-[12px] text-muted-foreground font-['Funnel_Sans',sans-serif]">
             Isolated checkouts — agents build on branches without touching your main working directory
           </p>
         </div>
@@ -166,13 +166,13 @@ export const WorktreesPane: React.FC = () => {
           <button
             onClick={loadWorktrees}
             title="Refresh worktrees"
-            className="p-2 rounded-[8px] border border-[#E5E7EB] text-[#8A8A85] hover:text-[#000000] hover:bg-[#F7F7F5] transition-colors"
+            className="p-2 rounded-[8px] border border-border text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
           >
             <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
           </button>
           <button
             onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 px-4 py-[9px] bg-[#0F0F0F] text-[#FFFFFF] text-[12px] font-bold rounded-[8px] hover:bg-black/90 transition-all shadow-sm cursor-pointer"
+            className="flex items-center gap-2 px-4 py-[9px] bg-foreground text-background text-[12px] font-bold rounded-[8px] hover:bg-black/90 transition-all shadow-sm cursor-pointer"
           >
             <Plus size={14} />
             <span>New Worktree</span>
@@ -183,7 +183,7 @@ export const WorktreesPane: React.FC = () => {
       {actionNotice && (
         <div className="mx-6 lg:mx-9 mt-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-[8px] flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Check size={14} className="text-[#16A34A]" />
+            <Check size={14} className="text-success" />
             <span>{actionNotice}</span>
           </div>
           <button onClick={() => setActionNotice(null)} className="text-emerald-600 hover:text-emerald-900">
@@ -195,13 +195,13 @@ export const WorktreesPane: React.FC = () => {
       {/* Main Content Area matching worktrees.html */}
       <div className="flex-1 w-full px-6 lg:px-9 py-6 flex flex-col gap-3.5 items-start">
         {/* Main Checkout Protected Card */}
-        <div className="w-full bg-[#EBF5FF] border border-[#BFDBFE] rounded-[8px] p-[14px_18px] flex items-center gap-3">
-          <Lock size={15} className="text-[#007AFF] shrink-0" />
+        <div className="w-full bg-info/10 border border-[#BFDBFE] rounded-[8px] p-[14px_18px] flex items-center gap-3">
+          <Lock size={15} className="text-primary shrink-0" />
           <div className="flex flex-col gap-[1px] min-w-0">
-            <span className="text-[13px] font-bold text-[#000000] font-['Geist',sans-serif] truncate">
+            <span className="text-[13px] font-bold text-foreground font-['Geist',sans-serif] truncate">
               {mainRepoPath}
             </span>
-            <span className="text-[11px] text-[#8A8A85] font-['Funnel_Sans',sans-serif]">
+            <span className="text-[11px] text-muted-foreground font-['Funnel_Sans',sans-serif]">
               Your protected working directory · clean · 0 agents assigned
             </span>
           </div>
@@ -209,15 +209,15 @@ export const WorktreesPane: React.FC = () => {
 
         {/* Worktrees List */}
         {worktrees.length === 0 ? (
-          <div className="w-full p-8 text-center bg-white dark:bg-[#161616] border border-dashed border-[#E5E7EB] dark:border-[#27272A] rounded-[8px] flex flex-col items-center justify-center gap-2">
-            <FolderGit2 size={28} className="text-[#8A8A85]" />
+          <div className="w-full p-8 text-center bg-white dark:bg-card border border-dashed border-border/70 rounded-[8px] flex flex-col items-center justify-center gap-2">
+            <FolderGit2 size={28} className="text-muted-foreground" />
             <h3 className="text-[13px] font-bold text-black dark:text-white">No Linked Worktrees Active</h3>
-            <p className="text-[11px] text-[#8A8A85] max-w-sm">
+            <p className="text-[11px] text-muted-foreground max-w-sm">
               Git worktrees allow agents to write and test changes in completely isolated directories without modifying your main branch.
             </p>
             <button
               onClick={() => setShowAddModal(true)}
-              className="mt-2 flex items-center gap-1.5 px-3 py-1.5 bg-[#0F0F0F] dark:bg-white text-white dark:text-black text-[11px] font-bold rounded-[6px]"
+              className="mt-2 flex items-center gap-1.5 px-3 py-1.5 bg-foreground text-background text-[11px] font-bold rounded-[6px]"
             >
               <Plus size={13} />
               <span>Create Worktree</span>
@@ -228,27 +228,27 @@ export const WorktreesPane: React.FC = () => {
             {worktrees.map((wt) => (
               <div
                 key={wt.id}
-                className="w-full bg-[#FFFFFF] shadow-[0px_1px_2px_0px_#0000000a] border border-[#E5E7EB] rounded-[8px] p-[18px] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5 transition-all hover:border-[#D4D4D0]"
+                className="w-full bg-card shadow-[0px_1px_2px_0px_#0000000a] border border-border rounded-[8px] p-[18px] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5 transition-all hover:border-border-strong"
               >
                 {/* Left: Icon & Info */}
                 <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                  <div className="w-[40px] h-[40px] shrink-0 flex items-center justify-center bg-[#FFF5EB] rounded-[4px]">
-                    <GitBranch size={18} className="text-[#F97316]" />
+                  <div className="w-[40px] h-[40px] shrink-0 flex items-center justify-center bg-warning/10 rounded-[4px]">
+                    <GitBranch size={18} className="text-agentorange" />
                   </div>
 
                   <div className="min-w-0 flex-1 flex flex-col gap-[3px]">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[14px] font-bold text-[#000000] font-sans">
+                      <span className="text-[14px] font-bold text-foreground font-sans">
                         {wt.branch}
                       </span>
-                      <div className="bg-[#F7F7F5] rounded-[4px] px-2 py-[2px] flex items-center">
-                        <span className="text-[10px] text-[#333333] font-['Funnel_Sans',sans-serif]">
+                      <div className="bg-accent/60 rounded-[4px] px-2 py-[2px] flex items-center">
+                        <span className="text-[10px] text-foreground/85 font-['Funnel_Sans',sans-serif]">
                           {wt.agent}
                         </span>
                       </div>
                     </div>
 
-                    <div className="text-[11px] text-[#8A8A85] font-['Geist_Mono',monospace] truncate">
+                    <div className="text-[11px] text-muted-foreground font-['Geist_Mono',monospace] truncate">
                       {wt.path} · {wt.status}
                     </div>
                   </div>
@@ -260,16 +260,16 @@ export const WorktreesPane: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleCopyPath(wt.path)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FFFFFF] border border-[#E5E7EB] rounded-[4px] text-[11px] text-[#333333] font-['Funnel_Sans',sans-serif] hover:bg-[#F7F7F5] transition-colors cursor-pointer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-card border border-border rounded-[4px] text-[11px] text-foreground/85 font-['Funnel_Sans',sans-serif] hover:bg-accent/60 transition-colors cursor-pointer"
                   >
                     {copiedPath === wt.path ? (
                       <>
-                        <Check size={12} className="text-[#16A34A]" />
-                        <span className="text-[#16A34A]">Copied</span>
+                        <Check size={12} className="text-success" />
+                        <span className="text-success">Copied</span>
                       </>
                     ) : (
                       <>
-                        <Copy size={12} className="text-[#8A8A85]" />
+                        <Copy size={12} className="text-muted-foreground" />
                         <span>Copy Path</span>
                       </>
                     )}
@@ -279,9 +279,9 @@ export const WorktreesPane: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleOpenSession(wt.branch)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FFFFFF] border border-[#E5E7EB] rounded-[4px] text-[11px] text-[#333333] font-['Funnel_Sans',sans-serif] hover:bg-[#F7F7F5] transition-colors cursor-pointer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-card border border-border rounded-[4px] text-[11px] text-foreground/85 font-['Funnel_Sans',sans-serif] hover:bg-accent/60 transition-colors cursor-pointer"
                   >
-                    <ExternalLink size={12} className="text-[#333333]" />
+                    <ExternalLink size={12} className="text-foreground/85" />
                     <span>Open Session</span>
                   </button>
 
@@ -289,7 +289,7 @@ export const WorktreesPane: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleRemoveWorktree(wt.path)}
-                    className="p-1.5 bg-[#FFFFFF] border border-[#FECACA] rounded-[4px] text-[#DC2626] hover:bg-red-50 transition-colors"
+                    className="p-1.5 bg-card border border-[#FECACA] rounded-[4px] text-destructive hover:bg-red-50 transition-colors"
                     title="Remove Worktree"
                   >
                     <Trash2 size={12} />
@@ -302,14 +302,14 @@ export const WorktreesPane: React.FC = () => {
 
         {/* Prune Hint / Action */}
         <div className="w-full flex items-center justify-center gap-2 py-3">
-          <Recycle size={13} className="text-[#8A8A85]" />
-          <span className="text-[11px] text-[#8A8A85] font-['Funnel_Sans',sans-serif]">
+          <Recycle size={13} className="text-muted-foreground" />
+          <span className="text-[11px] text-muted-foreground font-['Funnel_Sans',sans-serif]">
             Prune stale or unreferenced worktrees safely
           </span>
           <button
             type="button"
             onClick={handlePrune}
-            className="text-[11px] text-[#007AFF] hover:underline font-['Funnel_Sans',sans-serif] ml-1 cursor-pointer"
+            className="text-[11px] text-primary hover:underline font-['Funnel_Sans',sans-serif] ml-1 cursor-pointer"
           >
             · Prune now
           </button>
@@ -319,20 +319,20 @@ export const WorktreesPane: React.FC = () => {
       {/* New Worktree Modal Dialog */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-[#FFFFFF] rounded-[10px] border border-[#E5E7EB] shadow-xl w-full max-w-lg p-6 flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-[#E5E7EB] pb-3">
+          <div className="bg-card rounded-[10px] border border-border shadow-xl w-full max-w-lg p-6 flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-border pb-3">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-[4px] bg-[#FFF5EB] flex items-center justify-center text-[#F97316]">
+                <div className="w-8 h-8 rounded-[4px] bg-warning/10 flex items-center justify-center text-agentorange">
                   <GitBranch size={16} />
                 </div>
                 <div>
-                  <h3 className="text-[15px] font-bold text-[#000000]">Create New Git Worktree</h3>
-                  <p className="text-[11px] text-[#8A8A85]">Spawn an isolated working tree for agent autonomy</p>
+                  <h3 className="text-[15px] font-bold text-foreground">Create New Git Worktree</h3>
+                  <p className="text-[11px] text-muted-foreground">Spawn an isolated working tree for agent autonomy</p>
                 </div>
               </div>
               <button
                 onClick={() => setShowAddModal(false)}
-                className="text-[#8A8A85] hover:text-[#000000] p-1 rounded transition-colors"
+                className="text-muted-foreground hover:text-foreground p-1 rounded transition-colors"
               >
                 <X size={16} />
               </button>
@@ -340,25 +340,25 @@ export const WorktreesPane: React.FC = () => {
 
             <form onSubmit={handleAddWorktree} className="flex flex-col gap-3.5">
               <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-bold text-[#000000]">Branch Name</label>
+                <label className="text-[11px] font-bold text-foreground">Branch Name</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. feature/checkout-redesign or fix/memory-leak"
                   value={branchName}
                   onChange={(e) => setBranchName(e.target.value)}
-                  className="border border-[#E5E7EB] rounded-[6px] px-3 py-1.5 text-[12px] font-mono focus:outline-none focus:border-[#0F0F0F]"
+                  className="border border-border rounded-[6px] px-3 py-1.5 text-[12px] font-mono focus:outline-none focus:border-foreground/60"
                 />
               </div>
 
               <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-bold text-[#000000]">Worktree Directory Path (optional)</label>
+                <label className="text-[11px] font-bold text-foreground">Worktree Directory Path (optional)</label>
                 <input
                   type="text"
                   placeholder="~/worktrees/kendaliai-custom (auto-derived if empty)"
                   value={customPath}
                   onChange={(e) => setCustomPath(e.target.value)}
-                  className="border border-[#E5E7EB] rounded-[6px] px-3 py-1.5 text-[12px] font-mono focus:outline-none focus:border-[#0F0F0F]"
+                  className="border border-border rounded-[6px] px-3 py-1.5 text-[12px] font-mono focus:outline-none focus:border-foreground/60"
                 />
               </div>
 
@@ -368,19 +368,19 @@ export const WorktreesPane: React.FC = () => {
                   id="createBranch"
                   checked={createBranch}
                   onChange={(e) => setCreateBranch(e.target.checked)}
-                  className="rounded border-[#E5E7EB] text-[#0F0F0F] focus:ring-0"
+                  className="rounded border-border text-[#0F0F0F] focus:ring-0"
                 />
-                <label htmlFor="createBranch" className="text-[12px] text-[#333333] cursor-pointer">
+                <label htmlFor="createBranch" className="text-[12px] text-foreground/85 cursor-pointer">
                   Create new branch if it does not exist (<code className="font-mono text-[11px]">git checkout -b</code>)
                 </label>
               </div>
 
               <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-bold text-[#000000]">Assign Initial Agent Persona</label>
+                <label className="text-[11px] font-bold text-foreground">Assign Initial Agent Persona</label>
                 <select
                   value={assignedAgent}
                   onChange={(e) => setAssignedAgent(e.target.value)}
-                  className="border border-[#E5E7EB] rounded-[6px] px-3 py-1.5 text-[12px] focus:outline-none focus:border-[#0F0F0F]"
+                  className="border border-border rounded-[6px] px-3 py-1.5 text-[12px] focus:outline-none focus:border-foreground/60"
                 >
                   <option value="Coder">Coder Agent (Full codebase read/write access)</option>
                   <option value="Reviewer">Reviewer Agent (Read-only diff verification & audit)</option>
@@ -388,18 +388,18 @@ export const WorktreesPane: React.FC = () => {
                 </select>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E5E7EB]">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-3.5 py-1.5 text-[12px] font-medium text-[#8A8A85] hover:text-[#000000]"
+                  className="px-3.5 py-1.5 text-[12px] font-medium text-muted-foreground hover:text-foreground"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-4 py-1.5 bg-[#0F0F0F] text-[#FFFFFF] text-[12px] font-bold rounded-[6px] hover:bg-black/90 disabled:opacity-50"
+                  className="px-4 py-1.5 bg-foreground text-background text-[12px] font-bold rounded-[6px] hover:bg-black/90 disabled:opacity-50"
                 >
                   {isSubmitting ? 'Spawning...' : 'Create Worktree'}
                 </button>

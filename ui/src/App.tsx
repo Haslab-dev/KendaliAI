@@ -1,33 +1,46 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useAppStore } from './store/useAppStore';
+import { useAgentStore } from './store/useAgentStore';
 import { useAgentSocket } from './hooks/useAgentSocket';
-import { useRoute } from './router';
-import { IconRail } from './components/IconRail';
-import { Sidebar } from './components/Sidebar';
-import { ChatArea } from './components/ChatArea';
-import { SubAgentPanel } from './components/SubAgentPanel';
-import { PaneHost } from './components/PaneHost';
-import { BottomNav } from './components/BottomNav';
+import { useRoute, navigate, navigateSettings } from './router';
+import { ForgeSidebar } from './components/forge/ForgeSidebar';
+import { ForgeWorkspaceHeader } from './components/forge/WorkspaceHeader';
+import { AgentHomeView } from './components/agent/AgentHomeView';
+import { AgentActiveSessionView } from './components/agent/AgentActiveSessionView';
+import { NewTaskModal } from './components/agentui/NewTaskModal';
+import { SettingsScreen } from './components/settings/SettingsScreen';
+import { WhatsAppAssistantView } from './components/assistant/WhatsAppAssistantView';
 import { LoginScreen } from './components/LoginScreen';
+import { TerminalDock } from './components/forge/TerminalDock';
+import { BottomNav } from './components/BottomNav';
+import { isAgentTaskSession } from './types';
 
 type AuthState = 'checking' | 'ok' | 'login';
 
 export const App: React.FC = () => {
   const {
-    theme,
     loadProviders,
     loadAgents,
     loadSessions,
     loadMcps,
-    activeSessionId,
-    createSession,
-    selectSession,
+    loadWorkspaceInfo,
+    setMode,
+    mode,
   } = useAppStore();
 
-  const route = useRoute();
-  const [authState, setAuthState] = useState<AuthState>('checking');
+  const {
+    loadRoster,
+    loadACPSessions,
+    sidebarCollapsed,
+    terminalOpen,
+    setTerminalOpen,
+  } = useAgentStore();
 
-  // Password gate: ask the gateway whether the workspace requires a login.
+  const { route, settingsSection } = useRoute();
+
+  const [authState, setAuthState] = React.useState<AuthState>('checking');
+
+  // Password gate
   useEffect(() => {
     fetch('/api/auth/status')
       .then((r) => r.json())
@@ -35,89 +48,131 @@ export const App: React.FC = () => {
       .catch(() => setAuthState('ok'));
   }, []);
 
-  // Connect to Agent WebSocket
   useAgentSocket();
 
-  // Apply dark/light theme class
+  // Keep the mode in sync with the route
   useEffect(() => {
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-      document.body.classList.remove('light-theme');
-      document.body.classList.add('dark-theme');
-    } else {
-      document.documentElement.classList.remove('dark');
-      document.body.classList.remove('dark-theme');
-      document.body.classList.add('light-theme');
-    }
-  }, [theme]);
+    if (route === 'assistant') setMode('assistant');
+    else if (route === 'agent') setMode('agent');
+  }, [route, setMode]);
 
-  // Initial data loading from Gateway REST API (only after authentication)
+  // Terminal route alias
+  useEffect(() => {
+    if (route === 'terminal') {
+      setTerminalOpen(true);
+      navigate('agent');
+    }
+  }, [route, setTerminalOpen]);
+
+  // Global settings shortcut (⌘,)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === ',') {
+        e.preventDefault();
+        navigateSettings('general');
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Initial data loading
   useEffect(() => {
     if (authState !== 'ok') return;
     const init = async () => {
       try {
-        await Promise.all([loadProviders(), loadAgents(), loadSessions(), loadMcps()]);
-        const currentStore = useAppStore.getState();
-        if (!currentStore.activeSessionId) {
-          // Background sub-agent worklogs (subtask_) must never take over the
-          // main chat — e.g. when one was the most recently updated session
-          // during a page reload. Always land on a real conversation.
-          const firstChat = currentStore.sessions.find((s) => !s.id.startsWith('subtask_'));
-          if (firstChat) {
-            await selectSession(firstChat.id);
-          } else {
-            await createSession();
-          }
-        } else {
-          await selectSession(currentStore.activeSessionId);
+        await Promise.all([
+          loadProviders(),
+          loadAgents(),
+          loadSessions(),
+          loadMcps(),
+          loadWorkspaceInfo(),
+          loadRoster(),
+          loadACPSessions(),
+        ]);
+        if (!window.location.hash) {
+          navigate('agent');
         }
       } catch (err) {
         console.error('Failed to initialize gateway data:', err);
       }
     };
-
     init();
-  }, [authState, loadProviders, loadAgents, loadSessions, loadMcps, selectSession, createSession]);
+  }, [authState]);
 
-  // Login gate: workspace data loads only after authentication
   if (authState === 'checking') {
-    return <div className="h-screen w-screen bg-app" />;
+    return <div className="h-screen w-screen bg-background" />;
   }
   if (authState === 'login') {
     return <LoginScreen onSuccess={() => setAuthState('ok')} />;
   }
 
+  // In settings, full width is used. In Agent mode, the task sidebar shows on desktop.
+  // In Assistant mode, the WhatsApp conversation list replaces the task sidebar.
+  const isSettings = route === 'settings';
+  const isAssistant = route === 'assistant';
+  const showSidebar = !sidebarCollapsed && !isSettings && !isAssistant;
+
   return (
-    <div className="flex h-screen w-screen max-h-screen overflow-hidden bg-app text-hi font-sans">
-      {/* Desktop Icon Rail (hidden on mobile — BottomNav takes over) */}
-      <IconRail />
-
-      {/* Main content area: routed pane or chat workspace */}
-      {route === 'chat' || route === 'dashboard' ? (
-        <>
-          {/* Session sidebar — desktop only */}
-          <div className="hidden md:flex h-full shrink-0">
-            <Sidebar />
-          </div>
-
-          {/* Central Workspace Canvas */}
-          <div className="flex-1 flex flex-col h-full min-h-0 min-w-0 relative overflow-hidden bg-app pb-[60px] md:pb-0">
-            {route === 'chat' ? <ChatArea /> : <PaneHost route="dashboard" />}
-          </div>
-
-          {/* Sub-agent focus panel (forge-ade style, chat route only) */}
-          {route === 'chat' && <SubAgentPanel />}
-        </>
-      ) : (
-        <div className="flex-1 flex flex-col h-full min-h-0 min-w-0 relative overflow-hidden pb-[60px] md:pb-0">
-          <PaneHost route={route} />
+    <div className="flex h-screen max-h-screen w-screen overflow-hidden bg-background font-sans text-foreground">
+      {/* Agent Mode Task Sidebar (Only visible in Agent Mode) */}
+      {showSidebar && (
+        <div className="hidden h-full shrink-0 md:flex">
+          <ForgeSidebar />
         </div>
       )}
 
-      {/* Mobile bottom navigation */}
+      {/* Main Surface */}
+      <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden pb-[54px] md:pb-0">
+        {/* Workspace Header (Shows on both modes) */}
+        {!isSettings && <ForgeWorkspaceHeader />}
+
+        {isSettings ? (
+          <SettingsScreen section={settingsSection} />
+        ) : isAssistant ? (
+          /* Assistant Mode: WhatsApp-style Chat with Telegram Bot Integration */
+          <div className="flex min-h-0 flex-1 overflow-hidden">
+            <WhatsAppAssistantView />
+          </div>
+        ) : (
+          /* Agent Mode: ForgeADE Agent Workspace */
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <AgentSurface />
+            {terminalOpen && <TerminalDock />}
+          </div>
+        )}
+      </div>
+
+      {/* Global New Task Modal (⌘N in Agent mode) */}
+      <NewTaskModal />
+
+      {/* Mobile Navigation */}
       <BottomNav />
     </div>
   );
 };
 
+/* Agent surface — loads the active agent session or home landing. */
+const AgentSurface: React.FC = () => {
+  const sessions = useAppStore((s) => s.sessions);
+  const activeAgentSessionId = useAgentStore((s) => s.activeAgentSessionId);
+  const setActiveAgentSession = useAgentStore((s) => s.setActiveAgentSession);
+  const hasMountedRef = useRef(false);
+
+  useEffect(() => {
+    if (hasMountedRef.current) return;
+    hasMountedRef.current = true;
+    if (activeAgentSessionId) return;
+    const tasks = sessions
+      .filter((s) => isAgentTaskSession(s) && !s.id.startsWith('subtask_'))
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    if (tasks.length > 0) void setActiveAgentSession(tasks[0].id);
+  }, [sessions, activeAgentSessionId, setActiveAgentSession]);
+
+  const exists = !!activeAgentSessionId && sessions.some((s) => s.id === activeAgentSessionId);
+  if (!activeAgentSessionId || !exists) return <AgentHomeView />;
+  return <AgentActiveSessionView sessionId={activeAgentSessionId} />;
+};
+
+export { navigateSettings };
 export default App;

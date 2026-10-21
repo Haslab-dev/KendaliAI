@@ -1,9 +1,23 @@
 import { create } from 'zustand';
 import { AgentConfig, ProviderConfig, Session, SessionMessage, MessageReaction, ToolCallRecord, MCPServerConfig, GatewayLogEvent, BackgroundTask, GlobalModelOption } from '../types';
+import { applyTheme, loadThemeMode, loadThemePack, persistTheme, resolveMode, ThemeMode, ThemePack } from '../lib/theme';
 
 interface AppState {
+  // Top-level UX mode: Agent (forge-ade agent workspace) vs Assistant
+  // (KendaliAI chat/telegram/files). Persisted; shell surfaces derive from it.
+  mode: 'agent' | 'assistant';
+  setMode: (mode: 'agent' | 'assistant') => void;
+  assistantSection: 'chats' | 'telegram' | 'files';
+  setAssistantSection: (s: 'chats' | 'telegram' | 'files') => void;
+
+  // Theme — resolved mode for legacy consumers (`theme === 'dark'`) plus the
+  // full forgeADE mode + pack controls. All writes go through lib/theme.
   theme: 'dark' | 'light';
+  themeMode: ThemeMode;
+  themePack: ThemePack;
   toggleTheme: () => void;
+  setThemeMode: (mode: ThemeMode) => void;
+  setThemePack: (pack: ThemePack) => void;
 
   activeSessionId: string | null;
   setActiveSessionId: (id: string | null) => void;
@@ -107,20 +121,35 @@ interface AppState {
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
-  theme: (localStorage.getItem('kendali_theme') as 'dark' | 'light') || 'dark',
+  mode: (localStorage.getItem('forge:mode') as 'agent' | 'assistant') || 'agent',
+  setMode: (mode) => {
+    localStorage.setItem('forge:mode', mode);
+    set({ mode });
+  },
+  assistantSection: (localStorage.getItem('forge:assistant-section') as 'chats' | 'telegram' | 'files') || 'chats',
+  setAssistantSection: (assistantSection) => {
+    localStorage.setItem('forge:assistant-section', assistantSection);
+    set({ assistantSection });
+  },
+
+  theme: resolveMode(loadThemeMode()),
+  themeMode: loadThemeMode(),
+  themePack: loadThemePack(),
   toggleTheme: () => {
-    const next = get().theme === 'dark' ? 'light' : 'dark';
-    localStorage.setItem('kendali_theme', next);
-    if (next === 'dark') {
-      document.documentElement.classList.add('dark');
-      document.body.classList.remove('light-theme');
-      document.body.classList.add('dark-theme');
-    } else {
-      document.documentElement.classList.remove('dark');
-      document.body.classList.remove('dark-theme');
-      document.body.classList.add('light-theme');
-    }
-    set({ theme: next });
+    const next: ThemeMode = resolveMode(get().themeMode) === 'dark' ? 'light' : 'dark';
+    persistTheme(next, get().themePack);
+    applyTheme(next, get().themePack);
+    set({ themeMode: next, theme: next });
+  },
+  setThemeMode: (mode) => {
+    persistTheme(mode, get().themePack);
+    applyTheme(mode, get().themePack);
+    set({ themeMode: mode, theme: resolveMode(mode) });
+  },
+  setThemePack: (pack) => {
+    persistTheme(get().themeMode, pack);
+    applyTheme(get().themeMode, pack);
+    set({ themePack: pack });
   },
 
   activeSessionId: null,

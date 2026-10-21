@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { X, Send, Loader2, Wrench, CircleDot } from 'lucide-react';
+import { Bot, CircleDot, Loader2, Send, Wrench, X } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { sendPanelInstruction } from '../hooks/useAgentSocket';
 import { GrokAvatar } from './GrokAvatar';
 import { MarkdownView } from './MarkdownView';
-import { ToolExecutionCard } from './ToolExecutionCard';
+import { WorkLogList } from './agentui/WorkLog';
 import { SessionMessage } from '../types';
+import { IconButton } from './ui';
 
 // Side panel into a background sub-agent session (forge-ade style): shows the
 // live process (tool steps + streaming output) and accepts instructions sent
@@ -59,51 +60,43 @@ export const SubAgentPanel: React.FC = () => {
   };
 
   return (
-    <div className="hidden lg:flex w-[400px] xl:w-[440px] shrink-0 h-full flex-col bg-[#FFFFFF] dark:bg-[#121212] border-l border-[#E5E7EB] dark:border-[#27272A] animate-in slide-in-from-right-4 fade-in duration-150">
+    <div className="animate-in fade-in hidden h-full w-[380px] shrink-0 flex-col border-l border-border/70 bg-card lg:flex xl:w-[420px]">
       {/* Header */}
-      <div className="shrink-0 flex items-center gap-2.5 px-3.5 py-2.5 border-b border-[#E5E7EB] dark:border-[#27272A] bg-[#FFFFFF] dark:bg-[#141414] select-none">
+      <div className="flex shrink-0 select-none items-center gap-2.5 border-b border-border/60 px-3.5 py-2.5">
         <GrokAvatar id={agent?.avatar || subagentPanelSession?.agentId || 'purple-pebble'} size={30} />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className="text-[13px] font-bold text-[#000000] dark:text-white truncate">{agentName}</span>
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate text-ui-sm font-semibold text-foreground">{agentName}</span>
             {model && (
-              <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-black/5 dark:bg-white/10 text-[#6B7280] dark:text-[#A1A1AA] shrink-0">
+              <span className="shrink-0 rounded border border-border/60 bg-accent/60 px-1.5 font-mono text-3xs text-muted-foreground">
                 {model}
               </span>
             )}
           </div>
-          <div className="flex items-center gap-1.5 text-[10px] font-mono mt-0.5">
+          <div className="mt-0.5 flex items-center gap-1.5 font-mono text-3xs">
             {isWorking ? (
-              <span className="flex items-center gap-1 text-[#007AFF] font-bold">
-                <Loader2 size={9} className="animate-spin" /> RUNNING
+              <span className="flex items-center gap-1 font-semibold text-primary">
+                <Loader2 size={9} className="animate-spin-slow" /> RUNNING
               </span>
             ) : (
-              <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold">
+              <span className="flex items-center gap-1 font-semibold text-success">
                 <CircleDot size={9} /> IDLE
               </span>
             )}
             {totalSteps > 0 && (
-              <span className="text-[#8A8A85] flex items-center gap-1">
+              <span className="flex items-center gap-1 text-subtle-fg">
                 <Wrench size={8} /> {totalSteps} steps
               </span>
             )}
           </div>
         </div>
-        <button
-          onClick={closeSubAgentPanel}
-          className="p-1.5 text-[#8A8A85] hover:text-[#000000] dark:hover:text-white rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
-          title="Close panel"
-        >
-          <X size={16} />
-        </button>
+        <IconButton icon={X} size={15} tooltip="Close panel" onClick={closeSubAgentPanel} />
       </div>
 
       {/* Process tail */}
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-3 py-3 space-y-3">
+      <div ref={scrollRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3">
         {subagentPanelMessages.length === 0 && (
-          <div className="text-[11px] text-[#8A8A85] text-center py-8 font-geist">
-            Loading sub-agent worklog…
-          </div>
+          <div className="py-8 text-center text-ui-xs text-muted-foreground">Loading sub-agent worklog…</div>
         )}
         {subagentPanelMessages.map((msg) => (
           <PanelMessage key={msg.id} msg={msg} senderName={agentName} isWorking={isWorking} />
@@ -111,8 +104,8 @@ export const SubAgentPanel: React.FC = () => {
       </div>
 
       {/* Direct instruction input */}
-      <div className="shrink-0 px-3 py-2.5 border-t border-[#E5E7EB] dark:border-[#27272A] bg-[#FFFFFF] dark:bg-[#141414]">
-        <div className="flex items-end gap-1.5 bg-[#F7F7F5] dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[14px] px-2.5 py-1.5 focus-within:border-[#007AFF] transition-all">
+      <div className="shrink-0 border-t border-border/60 px-3 py-2.5">
+        <div className="flex items-end gap-1.5 rounded-2xl border border-border/70 bg-accent/50 px-2.5 py-1.5 transition-colors focus-within:border-primary/50">
           <textarea
             rows={1}
             value={input}
@@ -128,22 +121,20 @@ export const SubAgentPanel: React.FC = () => {
               }
             }}
             placeholder={`Instruct ${agentName}…`}
-            className="flex-1 bg-transparent text-[12px] text-[#000000] dark:text-white placeholder:text-[#8A8A85] resize-none outline-none py-1 max-h-28 custom-scrollbar"
+            className="max-h-28 flex-1 resize-none bg-transparent py-1 text-ui-sm text-foreground outline-none placeholder:text-muted-foreground/70"
           />
           <button
             onClick={handleSend}
             disabled={!input.trim()}
-            className={`p-1.5 rounded-full transition-all shrink-0 ${
-              input.trim()
-                ? 'text-[#007AFF] hover:bg-blue-50 dark:hover:bg-blue-950/30 cursor-pointer'
-                : 'text-[#C4C4C0] dark:text-[#3F3F46] cursor-not-allowed'
+            className={`shrink-0 rounded-full p-1.5 transition-all ${
+              input.trim() ? 'cursor-pointer bg-message text-message-foreground hover:scale-105' : 'cursor-not-allowed text-subtle-fg'
             }`}
             title="Send instruction to sub-agent"
           >
-            <Send size={14} />
+            <Send size={13} />
           </button>
         </div>
-        <div className="text-[9px] text-[#8A8A85] mt-1 px-1 font-mono select-none">
+        <div className="mt-1 px-1 font-mono text-3xs select-none text-subtle-fg">
           goes straight to the sub-agent session · Enter to send
         </div>
       </div>
@@ -159,7 +150,10 @@ const PanelMessage: React.FC<{ msg: SessionMessage; senderName: string; isWorkin
   if (msg.role === 'user') {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[88%] p-[9px_13px] bg-[#0F0F0F] dark:bg-[#1C1C1E] text-white rounded-[13px] rounded-tr-[4px] text-[12px]/[19px] font-geist whitespace-pre-wrap break-words">
+        <div
+          className="max-w-[88%] whitespace-pre-wrap break-words rounded-2xl bg-foreground px-3 py-2 text-ui-sm leading-relaxed text-background"
+          style={{ borderRadius: '1rem 1rem 0.25rem 1rem' }}
+        >
           {msg.content}
         </div>
       </div>
@@ -171,37 +165,33 @@ const PanelMessage: React.FC<{ msg: SessionMessage; senderName: string; isWorkin
   return (
     <div className="flex flex-col gap-1.5">
       {msg.thought && (
-        <details className="text-[11px] text-[#8A8A85] group">
-          <summary className="cursor-pointer select-none font-mono flex items-center gap-1 hover:text-[#007AFF]">
+        <details className="group text-ui-xs text-muted-foreground">
+          <summary className="flex cursor-pointer select-none items-center gap-1 font-mono text-3xs transition-colors hover:text-primary">
             reasoning
           </summary>
-          <div className="whitespace-pre-wrap mt-1 p-2 bg-[#F7F7F5] dark:bg-[#1A1A1A] rounded-lg border border-[#E5E7EB] dark:border-[#27272A] max-h-40 overflow-y-auto custom-scrollbar">
+          <div className="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border/60 bg-muted/60 p-2 font-mono text-3xs leading-relaxed">
             {msg.thought}
           </div>
         </details>
       )}
 
-      {/* Process steps */}
-      {msg.toolCalls && msg.toolCalls.length > 0 && (
-        <div className="space-y-1.5">
-          {msg.toolCalls.map((tc) => (
-            <ToolExecutionCard key={tc.id} toolCall={tc} />
-          ))}
-        </div>
-      )}
+      {/* Process steps — t3 work-log rows */}
+      {msg.toolCalls && msg.toolCalls.length > 0 && <WorkLogList toolCalls={msg.toolCalls} />}
 
       {msg.content && (
-        <div className="p-[10px_13px] bg-[#F7F7F5] dark:bg-[#1A1A1A] rounded-[13px] rounded-tl-[4px] border border-[#E5E7EB] dark:border-[#27272A]">
+        <div className="rounded-2xl border border-border/60 bg-muted/60 px-3 py-2.5">
           <MarkdownView content={msg.content} isStreaming={msg.id.startsWith('panel-stream-')} />
         </div>
       )}
 
       {isEmptyStreaming && isWorking && (
-        <div className="flex items-center gap-2 text-[11px] text-[#8A8A85] font-geist px-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] animate-bounce" />
-          <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] animate-bounce [animation-delay:-0.15s]" />
-          <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] animate-bounce [animation-delay:-0.3s]" />
-          <span className="ml-1">{senderName} is working…</span>
+        <div className="flex items-center gap-2 px-1 text-ui-xs text-muted-foreground">
+          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary" />
+          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary [animation-delay:-0.15s]" />
+          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary [animation-delay:-0.3s]" />
+          <span className="ml-1 flex items-center gap-1">
+            <Bot size={11} /> {senderName} is working…
+          </span>
         </div>
       )}
     </div>

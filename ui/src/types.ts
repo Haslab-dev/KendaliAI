@@ -75,7 +75,30 @@ export interface SessionMetadata {
   workspace?: string;
   workspaceName?: string;
   kind?: string;
+  engine?: 'acp' | 'builtin';
+  acpAgent?: string;
+  acpSession?: string;
+  model?: string;
+  autoApprove?: boolean;
   [key: string]: any;
+}
+
+/** Safe metadata parse — session.metadata is a JSON string column. */
+export function parseSessionMetadata(sess?: Session | null): SessionMetadata {
+  if (!sess?.metadata) return {};
+  try {
+    return JSON.parse(sess.metadata) as SessionMetadata;
+  } catch {
+    return {};
+  }
+}
+
+/** True when the session is an agent task (agent workspace / ACP backed). */
+export function isAgentTaskSession(sess?: Session | null): boolean {
+  if (!sess) return false;
+  if (sess.id.startsWith('subtask_')) return false;
+  if (sess.type === 'agent') return true;
+  return parseSessionMetadata(sess).mode === 'agent';
 }
 
 export type AgentExecutionMode = 'ask' | 'code' | 'plan' | 'bypass';
@@ -134,6 +157,7 @@ export interface SessionMessage {
   model?: string;
   ragSources?: RagSource[];
   reactions?: MessageReaction[];
+  durationMs?: number;
   createdAt: number;
 }
 
@@ -295,6 +319,52 @@ export interface TelegramAuthStatus {
   authRequired: boolean;
   authorizedUsersCount: number;
   pendingRequestsCount: number;
+}
+
+/* ---- ACP (Agent Client Protocol) — external agent tasks ------------------ */
+
+export interface ACPAgentDescriptor {
+  id: string;
+  name: string;
+  description?: string;
+  command: string;
+  args?: string[];
+  defaultModel?: string;
+  supportedModels?: string[];
+  available: boolean;
+  acp: boolean;
+}
+
+export interface ACPSessionInfo {
+  id: string;
+  agentId: string;
+  agentName: string;
+  title: string;
+  cwd: string;
+  model?: string;
+  status: 'idle' | 'running' | 'awaiting_permission' | 'error' | 'closed';
+  autoApprove: boolean;
+  acpSessionId?: string;
+  promptCount: number;
+  createdAt: number;
+  updatedAt: number;
+  running: boolean;
+}
+
+export interface ACPPermissionOption {
+  optionId: string;
+  name: string;
+  kind: 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always';
+}
+
+export interface ACPPermissionRequest {
+  requestId: string;
+  sessionId: string;
+  toolCallId: string;
+  title: string;
+  kind: string;
+  options: ACPPermissionOption[];
+  createdAt: number;
 }
 
 

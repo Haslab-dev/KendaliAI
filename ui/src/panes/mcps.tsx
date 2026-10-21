@@ -189,7 +189,7 @@ export const McpsPane: React.FC = () => {
               setApiKeyTarget('all');
               setShowApiKeyModal(true);
             }}
-            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+            className="px-3 py-1.5 bg-blue-600 hover:bg-primary/100 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
           >
             <Key size={13} />
             <span>Configure API Keys</span>
@@ -246,7 +246,7 @@ export const McpsPane: React.FC = () => {
                 <div className="font-semibold text-sm text-hi flex items-center gap-1.5">
                   <Plug size={15} className={isEnabled ? 'text-hi' : 'text-lo'} />
                   <span>{m.name}</span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10 text-mid uppercase font-mono">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-foreground/10 text-mid uppercase font-mono">
                     {m.transport || 'stdio'}
                   </span>
                 </div>
@@ -443,7 +443,7 @@ export const McpsPane: React.FC = () => {
                 type="button"
                 onClick={() => handleFetchTools()}
                 disabled={isFetchingTools}
-                className="mt-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 cursor-pointer"
+                className="mt-2 px-3 py-1.5 bg-blue-600 hover:bg-primary/100 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 cursor-pointer"
               >
                 <RefreshCw size={12} className={isFetchingTools ? 'animate-spin' : ''} />
                 <span>Probe & Discover Tools</span>
@@ -474,7 +474,7 @@ export const McpsPane: React.FC = () => {
                         {isCopied ? <Check size={11} className="text-emerald-500" /> : <Copy size={11} />}
                       </button>
 
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10 text-mid uppercase font-mono">
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-foreground/10 text-mid uppercase font-mono">
                         {tool.serverName} · {tool.serverTransport}
                       </span>
 

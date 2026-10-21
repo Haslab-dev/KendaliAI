@@ -197,7 +197,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
       case 'sparkles':
         return <Sparkles size={18} className="text-purple-500" />;
       default:
-        return <Users size={18} className="text-[#007AFF]" />;
+        return <Users size={18} className="text-primary" />;
     }
   };
 
@@ -206,17 +206,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
       data-pencil-name="Sidebar"
       className={`box-border ${
         isMobile ? 'w-full' : 'w-[300px]'
-      } shrink-0 h-full flex flex-col justify-between bg-[#FFFFFF] border-r border-[#E5E7EB] dark:bg-[#141414] dark:border-[#27272A] select-none`}
+      } shrink-0 h-full flex flex-col justify-between bg-card border-r border-border/70 select-none`}
     >
       {/* Top Header */}
-      <div className="p-3.5 pb-2 flex flex-col gap-2.5 border-b border-[#E5E7EB] dark:border-[#27272A]">
+      <div className="p-3.5 pb-2 flex flex-col gap-2.5 border-b border-border/70">
         {/* macOS Traffic Lights + Actions */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-full bg-[#FF5F56] border border-[#E0443E]" />
             <span className="w-3 h-3 rounded-full bg-[#FFBD2E] border border-[#DEA123]" />
             <span className="w-3 h-3 rounded-full bg-[#27C93F] border border-[#1AAB29]" />
-            <span className="ml-2 text-xs font-bold text-[#000000] dark:text-white font-sans">
+            <span className="ml-2 text-xs font-bold text-foreground font-sans">
               Chats
             </span>
           </div>
@@ -225,7 +225,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
             {/* New Group Button */}
             <button
               onClick={() => setIsCreateGroupOpen(true)}
-              className="p-1 rounded-[6px] text-[#8A8A85] hover:text-[#007AFF] hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors cursor-pointer"
+              className="p-1 rounded-[6px] text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
               title="Create Group Chat"
             >
               <Users size={16} />
@@ -234,7 +234,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
             {/* New General Chat */}
             <button
               onClick={handleNewGeneralChat}
-              className="p-1 rounded-[6px] text-[#8A8A85] hover:text-[#000000] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
+              className="p-1 rounded-[6px] text-muted-foreground hover:text-foreground hover:bg-foreground/5 transition-colors cursor-pointer"
               title="New General Chat"
             >
               <Plus size={16} strokeWidth={2.2} />
@@ -243,7 +243,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
             {isMobile && onClose && (
               <button
                 onClick={onClose}
-                className="p-1 rounded-[6px] text-[#8A8A85] hover:text-[#000000] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer ml-1"
+                className="p-1 rounded-[6px] text-muted-foreground hover:text-foreground hover:bg-foreground/5 transition-colors cursor-pointer ml-1"
                 title="Close Drawer"
               >
                 <X size={16} />
@@ -253,17 +253,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
         </div>
 
         {/* Search Bar */}
-        <div className="w-full h-[32px] flex items-center gap-2 px-2.5 bg-[#F7F7F5] dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[8px]">
-          <Search size={13} className="text-[#8A8A85] shrink-0" />
+        <div className="w-full h-[32px] flex items-center gap-2 px-2.5 bg-accent/60 border border-border rounded-[8px]">
+          <Search size={13} className="text-muted-foreground shrink-0" />
           <input
             type="text"
             value={sessionSearch}
             onChange={(e) => setSessionSearch(e.target.value)}
             placeholder="Search agents, groups, messages..."
-            className="text-[12px] bg-transparent text-[#000000] dark:text-white placeholder:text-[#8A8A85] outline-none w-full font-sans"
+            className="text-[12px] bg-transparent text-foreground placeholder:text-muted-foreground outline-none w-full font-sans"
           />
           {sessionSearch && (
-            <button onClick={() => setSessionSearch('')} className="text-[#8A8A85] hover:text-black dark:hover:text-white cursor-pointer">
+            <button onClick={() => setSessionSearch('')} className="text-muted-foreground hover:text-black dark:hover:text-white cursor-pointer">
               <X size={12} />
             </button>
           )}
@@ -286,8 +286,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
                 onClick={() => setActiveTab(tab)}
                 className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold transition-colors cursor-pointer ${
                   isActive
-                    ? 'bg-[#007AFF] text-white'
-                    : 'bg-[#F3F4F6] dark:bg-[#27272A] text-[#6B7280] dark:text-[#A1A1AA] hover:bg-[#E5E7EB] dark:hover:bg-[#3F3F46]'
+                    ? 'bg-primary text-white'
+                    : 'bg-accent text-muted-foreground hover:bg-foreground/10'
                 }`}
               >
                 {labels[tab]}
@@ -302,13 +302,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
         {/* SECTION 1: DIRECT CHATS (Agent Persons) */}
         {(activeTab === 'all' || activeTab === 'direct') && (
           <div>
-            <div className="flex items-center justify-between px-2 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-[#8A8A85]">
+            <div className="flex items-center justify-between px-2 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
               <span>Direct Chats ({filteredContacts.length})</span>
             </div>
 
             <div className="space-y-1">
               {filteredContacts.length === 0 ? (
-                <div className="text-center py-4 text-xs text-[#8A8A85]">
+                <div className="text-center py-4 text-xs text-muted-foreground">
                   No matching agent contacts.
                 </div>
               ) : (
@@ -323,8 +323,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
                       onClick={() => handleSelectAgentContact(agent.id)}
                       className={`group flex items-center justify-between p-2 rounded-[10px] cursor-pointer transition-all ${
                         isActive
-                          ? 'bg-[#EBF5FF] dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/50 shadow-2xs'
-                          : 'hover:bg-black/5 dark:hover:bg-white/5 border border-transparent'
+                          ? 'bg-primary/10 border border-primary/30 shadow-2xs'
+                          : 'hover:bg-foreground/5 border border-transparent'
                       }`}
                     >
                       <div className="flex items-center gap-2.5 min-w-0 flex-1">
@@ -341,28 +341,28 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
                         <div className="flex flex-col min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-1">
                             <div className="flex items-center gap-1.5 min-w-0">
-                              <span className="text-[13px] font-bold text-[#000000] dark:text-white font-sans truncate">
+                              <span className="text-[13px] font-bold text-foreground font-sans truncate">
                                 {agent.name}
                               </span>
                               {telegramConnected && (
                                 <span
-                                  className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded text-[8px] font-bold bg-[#E1F2FB] dark:bg-[#0E3550] text-[#0088cc] shrink-0 font-mono"
+                                  className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded text-[8px] font-bold bg-info/10 text-info shrink-0 font-mono"
                                   title="Telegram Bot Linked"
                                 >
                                   <Send size={7} /> TG
                                 </span>
                               )}
                             </div>
-                            <span className="text-[10px] text-[#8A8A85] shrink-0 font-mono">
+                            <span className="text-[10px] text-muted-foreground shrink-0 font-mono">
                               {formatTime(lastMessageTime)}
                             </span>
                           </div>
 
                           <div className="flex items-center justify-between gap-1 mt-0.5">
-                            <span className="text-[11px] text-[#6B7280] dark:text-[#9CA3AF] truncate font-sans">
+                            <span className="text-[11px] text-muted-foreground truncate font-sans">
                               {lastMessageSnippet}
                             </span>
-                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-gray-100 dark:bg-[#27272A] text-[#8A8A85] shrink-0">
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-accent text-muted-foreground shrink-0">
                               {agent.role?.split(' ')[0] || agent.department || 'Staff'}
                             </span>
                           </div>
@@ -379,12 +379,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
         {/* SECTION 2: GROUP CHATS */}
         {(activeTab === 'all' || activeTab === 'groups') && (
           <div>
-            <div className="flex items-center justify-between px-2 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-[#8A8A85]">
+            <div className="flex items-center justify-between px-2 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
               <span>Group Chats ({filteredGroups.length})</span>
               <button
                 type="button"
                 onClick={() => setIsCreateGroupOpen(true)}
-                className="text-[10px] font-bold text-[#007AFF] hover:underline flex items-center gap-0.5 cursor-pointer lowercase"
+                className="text-[10px] font-bold text-primary hover:underline flex items-center gap-0.5 cursor-pointer lowercase"
               >
                 <Plus size={11} />
                 <span>new group</span>
@@ -396,7 +396,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
                 <button
                   type="button"
                   onClick={() => setIsCreateGroupOpen(true)}
-                  className="w-full text-center py-3 text-xs text-[#8A8A85] hover:text-[#007AFF] border border-dashed border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[8px] transition-colors cursor-pointer"
+                  className="w-full text-center py-3 text-xs text-muted-foreground hover:text-primary border border-dashed border-border rounded-[8px] transition-colors cursor-pointer"
                 >
                   + Create your first Group Chat
                 </button>
@@ -413,8 +413,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
                       onClick={() => handleSelectGroup(group.id)}
                       className={`group flex items-center justify-between p-2 rounded-[10px] cursor-pointer transition-all ${
                         isActive
-                          ? 'bg-[#EBF5FF] dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/50 shadow-2xs'
-                          : 'hover:bg-black/5 dark:hover:bg-white/5 border border-transparent'
+                          ? 'bg-primary/10 border border-primary/30 shadow-2xs'
+                          : 'hover:bg-foreground/5 border border-transparent'
                       }`}
                     >
                       <div className="flex items-center gap-2.5 min-w-0 flex-1">
@@ -426,19 +426,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
                         {/* Group Details */}
                         <div className="flex flex-col min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-1">
-                            <span className="text-[13px] font-bold text-[#000000] dark:text-white font-sans truncate">
+                            <span className="text-[13px] font-bold text-foreground font-sans truncate">
                               {group.title}
                             </span>
-                            <span className="text-[10px] text-[#8A8A85] shrink-0 font-mono">
+                            <span className="text-[10px] text-muted-foreground shrink-0 font-mono">
                               {formatTime(lastTime)}
                             </span>
                           </div>
 
                           <div className="flex items-center justify-between gap-1 mt-0.5">
-                            <span className="text-[11px] text-[#6B7280] dark:text-[#9CA3AF] truncate font-sans">
+                            <span className="text-[11px] text-muted-foreground truncate font-sans">
                               {lastSnippet}
                             </span>
-                            <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-blue-50 dark:bg-blue-900/40 text-[#007AFF] font-bold shrink-0">
+                            <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-blue-50 dark:bg-blue-900/40 text-primary font-bold shrink-0">
                               {memberCount} agents
                             </span>
                           </div>
@@ -454,7 +454,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
                             deleteSession(group.id);
                           }
                         }}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-[#8A8A85] hover:text-red-500 rounded transition-opacity ml-1 cursor-pointer"
+                        className="opacity-0 group-hover:opacity-100 p-1 text-muted-foreground hover:text-red-500 rounded transition-opacity ml-1 cursor-pointer"
                         title="Delete group"
                       >
                         <Trash2 size={12} />
@@ -471,7 +471,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
         {(activeTab === 'all' || activeTab === 'general') && (
           <div>
             <div
-              className="flex items-center justify-between px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] cursor-pointer hover:text-black dark:hover:text-white transition-colors"
+              className="flex items-center justify-between px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground cursor-pointer hover:text-black dark:hover:text-white transition-colors"
               onClick={() => setIsGeneralCollapsed(!isGeneralCollapsed)}
             >
               <div className="flex items-center gap-1">
@@ -484,7 +484,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
                   e.stopPropagation();
                   handleNewGeneralChat();
                 }}
-                className="text-[10px] font-bold text-[#007AFF] hover:underline flex items-center gap-0.5 cursor-pointer lowercase"
+                className="text-[10px] font-bold text-primary hover:underline flex items-center gap-0.5 cursor-pointer lowercase"
                 title="Create General Chat"
               >
                 <Plus size={11} />
@@ -498,7 +498,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
                   <button
                     type="button"
                     onClick={handleNewGeneralChat}
-                    className="w-full text-left py-1.5 px-2 text-[11px] text-[#8A8A85] hover:text-[#007AFF] transition-colors flex items-center gap-1.5 cursor-pointer"
+                    className="w-full text-left py-1.5 px-2 text-[11px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-1.5 cursor-pointer"
                   >
                     <Plus size={12} />
                     <span>Start a general chat</span>
@@ -515,19 +515,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
                         onClick={() => handleSelectGeneral(sess.id)}
                         className={`group/general flex items-center justify-between px-2.5 py-1.5 rounded-[8px] cursor-pointer transition-colors text-left ${
                           isActive
-                            ? 'bg-[#FFF5EB] dark:bg-[#2C2218] text-[#000000] dark:text-white font-semibold'
-                            : 'text-[#4B5563] dark:text-[#A1A1AA] hover:bg-black/5 dark:hover:bg-white/5'
+                            ? 'bg-warning/10 text-foreground font-semibold'
+                            : 'text-muted-foreground hover:bg-foreground/5'
                         }`}
                       >
                         <div className="flex items-center gap-2 min-w-0 flex-1">
-                          <MessageSquare size={12} className="text-[#8A8A85] shrink-0 opacity-70" />
+                          <MessageSquare size={12} className="text-muted-foreground shrink-0 opacity-70" />
                           <span className="text-[11px] truncate font-sans">
                             {sess.title || 'General Chat'}
                           </span>
                         </div>
 
                         <div className="flex items-center gap-1 shrink-0">
-                          <span className="text-[9px] text-[#8A8A85] font-mono">
+                          <span className="text-[9px] text-muted-foreground font-mono">
                             {formatTime(lastTime)}
                           </span>
                           <button
@@ -536,7 +536,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
                               e.stopPropagation();
                               deleteSession(sess.id);
                             }}
-                            className="opacity-0 group-hover/general:opacity-100 p-0.5 text-[#8A8A85] hover:text-red-500 transition-opacity cursor-pointer"
+                            className="opacity-0 group-hover/general:opacity-100 p-0.5 text-muted-foreground hover:text-red-500 transition-opacity cursor-pointer"
                             title="Delete session"
                           >
                             <Trash2 size={11} />
@@ -553,16 +553,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
       </div>
 
       {/* Bottom Shortcuts */}
-      <div className="p-3 border-t border-[#E5E7EB] dark:border-[#27272A] flex flex-col gap-1.5">
+      <div className="p-3 border-t border-border/70 flex flex-col gap-1.5">
         {/* Routines & Automations shortcut */}
         <button
           onClick={() => {
             onClose?.();
             navigate('scheduler');
           }}
-          className="flex items-center gap-2 px-2 py-1.5 text-xs text-[#4B5563] dark:text-[#A1A1AA] hover:text-black dark:hover:text-white rounded-[6px] hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
+          className="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground hover:text-black dark:hover:text-white rounded-[6px] hover:bg-foreground/5 transition-colors cursor-pointer"
         >
-          <Clock size={14} className="text-[#D97706]" />
+          <Clock size={14} className="text-warning" />
           <span>Routines &amp; Automations</span>
         </button>
 
@@ -572,9 +572,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
             onClose?.();
             navigate('agents');
           }}
-          className="flex items-center gap-2 px-2 py-1.5 text-xs text-[#4B5563] dark:text-[#A1A1AA] hover:text-black dark:hover:text-white rounded-[6px] hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
+          className="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground hover:text-black dark:hover:text-white rounded-[6px] hover:bg-foreground/5 transition-colors cursor-pointer"
         >
-          <Bot size={14} className="text-[#007AFF]" />
+          <Bot size={14} className="text-primary" />
           <span>Agent Persons</span>
         </button>
 
@@ -584,22 +584,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
             onClose?.();
             navigate('settings');
           }}
-          className="flex items-center justify-between p-2 rounded-[6px] hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer transition-colors"
+          className="flex items-center justify-between p-2 rounded-[6px] hover:bg-foreground/5 cursor-pointer transition-colors"
         >
           <div className="flex items-center gap-2 min-w-0">
-            <div className="w-6 h-6 rounded-full bg-[#007AFF] text-white font-bold text-[10px] flex items-center justify-center shrink-0">
+            <div className="w-6 h-6 rounded-full bg-primary text-white font-bold text-[10px] flex items-center justify-center shrink-0">
               AC
             </div>
             <div className="flex flex-col min-w-0">
-              <span className="text-[11px] font-bold text-[#000000] dark:text-white truncate">
+              <span className="text-[11px] font-bold text-foreground truncate">
                 Alex Chen
               </span>
-              <span className="text-[9px] text-[#8A8A85] truncate">
+              <span className="text-[9px] text-muted-foreground truncate">
                 Pro Workspace
               </span>
             </div>
           </div>
-          <Settings size={13} className="text-[#8A8A85]" />
+          <Settings size={13} className="text-muted-foreground" />
         </div>
       </div>
 

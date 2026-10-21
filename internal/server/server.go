@@ -19,6 +19,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/Haslab-dev/RakitKode/decisions"
+	"github.com/kendaliai/app/internal/acp"
 	"github.com/kendaliai/app/internal/agent"
 	"github.com/kendaliai/app/internal/agentengine"
 	"github.com/kendaliai/app/internal/channels"
@@ -43,6 +44,9 @@ type Server struct {
 	tg       *channels.TelegramAdapter
 	explorer *workspace.Explorer
 	upgrader websocket.Upgrader
+	// acp manages external Agent Client Protocol agents (claude-code-acp,
+	// gemini, ...) as first-class task sessions.
+	acp *acp.Manager
 
 	// engine is the embedded RakitKode harness; nil unless engine.kind=rakit.
 	engine       *agentengine.Engine
@@ -161,6 +165,7 @@ func NewServer(db *sql.DB) *Server {
 		bus:      bus,
 		tg:       tg,
 		explorer: exp,
+		acp:      acp.NewManager(store, bus, cwd, config.Cfg),
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
 				return true // allow web clients
@@ -263,6 +268,11 @@ func (s *Server) routes() {
 
 	// WebSocket Gateway
 	s.router.HandleFunc("/ws", s.handleWebSocket())
+
+	// ACP agents (Agent Client Protocol) — external agent tasks
+	s.router.HandleFunc("/api/acp/agents", s.handleACPAgents())
+	s.router.HandleFunc("/api/acp/sessions", s.handleACPSessions())
+	s.router.HandleFunc("/api/acp/sessions/", s.handleACPSessionAction())
 
 	// Embedded RakitKode engine (active when config engine.kind=rakit)
 	s.router.HandleFunc("/api/engine/status", s.handleEngineStatus())

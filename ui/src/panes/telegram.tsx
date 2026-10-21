@@ -545,34 +545,34 @@ export const TelegramPane: React.FC = () => {
   }, [logs]);
 
   return (
-    <div className="w-full min-h-screen bg-[#F7F7F5] dark:bg-[#121212] flex flex-col font-sans select-none text-[#000000] dark:text-white transition-colors">
+    <div className="w-full min-h-screen bg-accent/60 dark:bg-background flex flex-col font-sans select-none text-foreground transition-colors">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-5 right-5 z-50 flex items-center gap-2 px-4 py-2.5 bg-[#0F0F0F] text-[#FFFFFF] text-xs font-semibold rounded-[8px] shadow-lg border border-white/10 animate-fade-in">
-          <CheckCircle2 size={14} className="text-[#16A34A]" />
+        <div className="fixed top-5 right-5 z-50 flex items-center gap-2 px-4 py-2.5 bg-foreground text-background text-xs font-semibold rounded-[8px] shadow-lg border border-white/10 animate-fade-in">
+          <CheckCircle2 size={14} className="text-success" />
           <span>{toastMessage}</span>
         </div>
       )}
 
       {/* Page Header */}
-      <div className="w-full bg-[#FFFFFF] dark:bg-[#18181A] border-b border-[#E5E7EB] dark:border-[#27272A] px-4 sm:px-8 py-4 sm:py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+      <div className="w-full bg-card dark:bg-card border-b border-border/70 px-4 sm:px-8 py-4 sm:py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
         <div className="flex flex-col gap-[2px]">
           <div className="flex items-center gap-2">
-            <Send size={20} className="text-[#007AFF]" />
-            <h1 className="text-[18px] sm:text-[20px] font-bold text-[#000000] dark:text-white font-sans tracking-tight">
+            <Send size={20} className="text-primary" />
+            <h1 className="text-[18px] sm:text-[20px] font-bold text-foreground font-sans tracking-tight">
               Telegram Gateway &amp; Security
             </h1>
             <span
               className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
                 authRequired
-                  ? 'bg-blue-100 dark:bg-blue-950/40 text-[#007AFF]'
+                  ? 'bg-blue-100 dark:bg-blue-950/40 text-primary'
                   : 'bg-amber-100 dark:bg-amber-950/40 text-amber-600'
               }`}
             >
               {authRequired ? '🔒 Restricted Auth' : '🔓 Public Mode'}
             </span>
           </div>
-          <p className="text-[12px] text-[#8A8A85]">
+          <p className="text-[12px] text-muted-foreground">
             Multi-bot routing, forum topic supergroups, live chat synchronization &amp; OTP authorization whitelist
           </p>
         </div>
@@ -587,14 +587,14 @@ export const TelegramPane: React.FC = () => {
               triggerToast('Refreshed Telegram status & bots');
             }}
             title="Refresh bots & auth status"
-            className="flex items-center gap-1.5 px-3 py-2 rounded-[8px] border border-[#E5E7EB] dark:border-[#2C2C2E] text-[#8A8A85] hover:text-[#000000] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 text-xs transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-[8px] border border-border text-muted-foreground hover:text-foreground hover:bg-foreground/5 text-xs transition-colors cursor-pointer"
           >
-            <RefreshCw size={13} className={isLoadingBots ? 'animate-spin text-[#007AFF]' : ''} />
+            <RefreshCw size={13} className={isLoadingBots ? 'animate-spin text-primary' : ''} />
             <span className="hidden sm:inline">Refresh</span>
           </button>
           <button
             onClick={openAddBotModal}
-            className="flex items-center gap-1.5 px-3.5 sm:px-4 py-2 bg-[#007AFF] hover:bg-[#0066D6] text-[#FFFFFF] text-xs font-bold rounded-[8px] transition-all shadow-sm cursor-pointer active:scale-95"
+            className="flex items-center gap-1.5 px-3.5 sm:px-4 py-2 bg-primary hover:bg-primary/85 text-white text-xs font-bold rounded-[8px] transition-all shadow-sm cursor-pointer active:scale-95"
           >
             <Plus size={14} />
             <span>Add Telegram Bot</span>
@@ -603,19 +603,19 @@ export const TelegramPane: React.FC = () => {
       </div>
 
       {/* Sub-Navigation Tabs */}
-      <div className="w-full bg-[#FFFFFF] dark:bg-[#18181A] border-b border-[#E5E7EB] dark:border-[#27272A] px-4 sm:px-8 flex items-center gap-6 text-xs font-bold font-sans overflow-x-auto no-scrollbar">
+      <div className="w-full bg-card dark:bg-card border-b border-border/70 px-4 sm:px-8 flex items-center gap-6 text-xs font-bold font-sans overflow-x-auto no-scrollbar">
         <button
           onClick={() => setActiveMainTab('bots')}
           className={`py-3 border-b-2 transition-colors cursor-pointer flex items-center gap-2 shrink-0 ${
             activeMainTab === 'bots'
-              ? 'border-[#007AFF] text-[#007AFF]'
-              : 'border-transparent text-[#8A8A85] hover:text-[#000000] dark:hover:text-white'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
           }`}
         >
           <Bot size={15} />
           <span>Connected Bots ({bots.length})</span>
           {telegramSessions.length > 0 && (
-            <span className="px-1.5 py-0.2 text-[10px] rounded-full bg-blue-100 dark:bg-blue-950/60 text-[#007AFF] font-bold">
+            <span className="px-1.5 py-0.2 text-[10px] rounded-full bg-blue-100 dark:bg-blue-950/60 text-primary font-bold">
               {telegramSessions.length} Chats
             </span>
           )}
@@ -625,8 +625,8 @@ export const TelegramPane: React.FC = () => {
           onClick={() => setActiveMainTab('access')}
           className={`py-3 border-b-2 transition-colors cursor-pointer flex items-center gap-2 relative shrink-0 ${
             activeMainTab === 'access'
-              ? 'border-[#007AFF] text-[#007AFF]'
-              : 'border-transparent text-[#8A8A85] hover:text-[#000000] dark:hover:text-white'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
           }`}
         >
           <Shield size={15} />
@@ -637,7 +637,7 @@ export const TelegramPane: React.FC = () => {
             </span>
           )}
           {authorizedUsers.length > 0 && (
-            <span className="text-[10px] text-[#8A8A85]">
+            <span className="text-[10px] text-muted-foreground">
               ({authorizedUsers.length} users)
             </span>
           )}
@@ -651,30 +651,30 @@ export const TelegramPane: React.FC = () => {
         <div className="flex-1 w-full px-4 sm:px-8 py-5 sm:py-6 flex flex-col lg:flex-row gap-5 items-start">
           {/* Left Column: Registered Bots */}
           <div className="flex-1 w-full flex flex-col gap-4">
-            <div className="w-full bg-[#FFFFFF] dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[10px] p-4 sm:p-5 shadow-2xs flex flex-col gap-3">
-              <div className="flex items-center justify-between pb-2 border-b border-[#E5E7EB] dark:border-[#2C2C2E]">
+            <div className="w-full bg-card border border-border rounded-[10px] p-4 sm:p-5 shadow-2xs flex flex-col gap-3">
+              <div className="flex items-center justify-between pb-2 border-b border-border">
                 <div className="flex items-center gap-2">
-                  <Bot size={16} className="text-[#007AFF]" />
-                  <h2 className="text-sm font-bold text-[#000000] dark:text-white">
+                  <Bot size={16} className="text-primary" />
+                  <h2 className="text-sm font-bold text-foreground">
                     Registered Telegram Bots ({bots.length})
                   </h2>
                 </div>
-                <span className="text-[11px] text-[#8A8A85]">
+                <span className="text-[11px] text-muted-foreground">
                   Each worker agent pairs with a dedicated bot token or forum topic
                 </span>
               </div>
 
               {/* Bots Grid */}
               {bots.length === 0 ? (
-                <div className="py-8 text-center flex flex-col items-center justify-center gap-2 border border-dashed border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[8px]">
-                  <Bot size={28} className="text-[#8A8A85] opacity-50" />
-                  <span className="text-xs font-bold text-[#000000] dark:text-white">No Telegram Bots Registered</span>
-                  <p className="text-[11px] text-[#8A8A85] max-w-sm">
+                <div className="py-8 text-center flex flex-col items-center justify-center gap-2 border border-dashed border-border rounded-[8px]">
+                  <Bot size={28} className="text-muted-foreground opacity-50" />
+                  <span className="text-xs font-bold text-foreground">No Telegram Bots Registered</span>
+                  <p className="text-[11px] text-muted-foreground max-w-sm">
                     Connect your Telegram bot token from @BotFather to let your agents chat and execute actions via Telegram.
                   </p>
                   <button
                     onClick={openAddBotModal}
-                    className="mt-1 px-3 py-1.5 bg-[#007AFF] text-white text-xs font-bold rounded-[6px] hover:bg-[#0066D6] transition-colors"
+                    className="mt-1 px-3 py-1.5 bg-primary text-white text-xs font-bold rounded-[6px] hover:bg-primary/85 transition-colors"
                   >
                     Add Your First Bot
                   </button>
@@ -688,27 +688,27 @@ export const TelegramPane: React.FC = () => {
                     return (
                       <div
                         key={bot.id}
-                        className={`p-3.5 bg-[#F9FAFB] dark:bg-[#161618] border rounded-[8px] flex flex-col justify-between gap-3 transition-colors shadow-2xs ${
+                        className={`p-3.5 bg-[#F9FAFB] dark:bg-card border rounded-[8px] flex flex-col justify-between gap-3 transition-colors shadow-2xs ${
                           isError
                             ? 'border-red-300 dark:border-red-900/60'
-                            : 'border-[#E5E7EB] dark:border-[#2C2C2E] hover:border-[#007AFF]/40'
+                            : 'border-border hover:border-primary/60/40'
                         }`}
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex items-start gap-2.5 min-w-0">
                             <GrokAvatar id={bot.agentId} size={32} className="shrink-0 mt-0.5" />
                             <div className="flex flex-col min-w-0">
-                              <span className="text-xs font-bold text-[#000000] dark:text-white font-sans truncate">
+                              <span className="text-xs font-bold text-foreground font-sans truncate">
                                 {bot.name}
                               </span>
-                              <span className="text-[10px] text-[#8A8A85] truncate">
+                              <span className="text-[10px] text-muted-foreground truncate">
                                 Worker:{' '}
-                                <strong className="text-[#000000] dark:text-white font-medium">
+                                <strong className="text-foreground font-medium">
                                   {bot.agentId}
                                 </strong>
                               </span>
                               {bot.model && (
-                                <span className="text-[9px] text-[#007AFF] font-mono truncate">
+                                <span className="text-[9px] text-primary font-mono truncate">
                                   {bot.model}
                                 </span>
                               )}
@@ -718,7 +718,7 @@ export const TelegramPane: React.FC = () => {
                           <span
                             className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider shrink-0 ${
                               isRunning
-                                ? 'bg-[#DCFCE7] dark:bg-emerald-950/40 text-[#16A34A]'
+                                ? 'bg-success/15 dark:bg-emerald-950/40 text-success'
                                 : isError
                                 ? 'bg-red-100 dark:bg-red-950/40 text-red-600'
                                 : 'bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
@@ -727,7 +727,7 @@ export const TelegramPane: React.FC = () => {
                             <span
                               className={`w-1.5 h-1.5 rounded-full ${
                                 isRunning
-                                  ? 'bg-[#16A34A] animate-pulse'
+                                  ? 'bg-success animate-pulse'
                                   : isError
                                   ? 'bg-red-500'
                                   : 'bg-gray-400'
@@ -744,18 +744,18 @@ export const TelegramPane: React.FC = () => {
                           </div>
                         )}
 
-                        <div className="flex items-center justify-between text-[11px] text-[#6B7280]">
-                          <span className="inline-flex items-center gap-1 font-mono text-[10px] px-2 py-0.5 rounded bg-white dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] text-[#8A8A85]">
+                        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                          <span className="inline-flex items-center gap-1 font-mono text-[10px] px-2 py-0.5 rounded bg-card border border-border text-muted-foreground">
                             {bot.mode === 'topic_group' ? '🔵 Forum Topics' : '🟢 Dedicated Bot'}
                           </span>
                           {bot.topicName && (
-                            <span className="text-[10px] text-[#007AFF] font-medium">
+                            <span className="text-[10px] text-primary font-medium">
                               Topic: #{bot.topicName}
                             </span>
                           )}
                         </div>
 
-                        <div className="flex items-center justify-between pt-2 border-t border-[#E5E7EB] dark:border-[#2C2C2E]">
+                        <div className="flex items-center justify-between pt-2 border-t border-border">
                           <div className="flex items-center gap-1.5">
                             <button
                               onClick={() => handleToggleBot(bot)}
@@ -771,7 +771,7 @@ export const TelegramPane: React.FC = () => {
 
                             <button
                               onClick={() => handleTestExistingBot(bot)}
-                              className="px-2 py-1 text-[10px] font-semibold border border-[#E5E7EB] dark:border-[#2C2C2E] rounded hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
+                              className="px-2 py-1 text-[10px] font-semibold border border-border rounded hover:bg-foreground/5 transition-colors cursor-pointer"
                               title="Test API token connection"
                             >
                               Test
@@ -781,7 +781,7 @@ export const TelegramPane: React.FC = () => {
                           <div className="flex items-center gap-1">
                             <button
                               onClick={() => openEditBotModal(bot)}
-                              className="p-1 text-[#8A8A85] hover:text-[#007AFF] rounded transition-colors cursor-pointer"
+                              className="p-1 text-muted-foreground hover:text-primary rounded transition-colors cursor-pointer"
                               title="Edit Bot Settings"
                             >
                               <Edit2 size={13} />
@@ -789,7 +789,7 @@ export const TelegramPane: React.FC = () => {
 
                             <button
                               onClick={() => handleDeleteBot(bot.id)}
-                              className="p-1 text-[#8A8A85] hover:text-red-500 rounded transition-colors cursor-pointer"
+                              className="p-1 text-muted-foreground hover:text-red-500 rounded transition-colors cursor-pointer"
                               title="Remove Bot"
                             >
                               <Trash2 size={13} />
@@ -804,29 +804,29 @@ export const TelegramPane: React.FC = () => {
             </div>
 
             {/* Architecture Explainer */}
-            <div className="w-full bg-[#EBF5FF] dark:bg-blue-950/20 border border-[#BFDBFE] dark:border-blue-900/40 rounded-[10px] p-4 sm:p-5 flex flex-col gap-3">
+            <div className="w-full bg-info/10 dark:bg-blue-950/20 border border-[#BFDBFE] dark:border-blue-900/40 rounded-[10px] p-4 sm:p-5 flex flex-col gap-3">
               <div className="flex items-center gap-2">
-                <HelpCircle size={16} className="text-[#007AFF]" />
-                <h3 className="text-sm font-bold text-[#000000] dark:text-white">
+                <HelpCircle size={16} className="text-primary" />
+                <h3 className="text-sm font-bold text-foreground">
                   Multi-Bot Architecture vs Forum Topics
                 </h3>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs leading-relaxed">
-                <div className="p-3 bg-white/80 dark:bg-[#1C1C1E] rounded-[8px] border border-blue-200 dark:border-blue-900/30 space-y-1">
-                  <div className="font-bold text-[#000000] dark:text-white flex items-center gap-1">
+                <div className="p-3 bg-white/80 dark:bg-card rounded-[8px] border border-blue-200 dark:border-blue-900/30 space-y-1">
+                  <div className="font-bold text-foreground flex items-center gap-1">
                     <span>🟢 Dedicated 1:1 Bots</span>
                   </div>
-                  <p className="text-[11px] text-[#4B5563] dark:text-gray-300">
+                  <p className="text-[11px] text-muted-foreground dark:text-gray-300">
                     Create separate bots in @BotFather for each agent role (e.g. Legal, Frontend, Architect). Chat directly with each bot in 1:1 Telegram private chats.
                   </p>
                 </div>
 
-                <div className="p-3 bg-white/80 dark:bg-[#1C1C1E] rounded-[8px] border border-blue-200 dark:border-blue-900/30 space-y-1">
-                  <div className="font-bold text-[#000000] dark:text-white flex items-center gap-1">
+                <div className="p-3 bg-white/80 dark:bg-card rounded-[8px] border border-blue-200 dark:border-blue-900/30 space-y-1">
+                  <div className="font-bold text-foreground flex items-center gap-1">
                     <span>🔵 Forum Topic Supergroups</span>
                   </div>
-                  <p className="text-[11px] text-[#4B5563] dark:text-gray-300">
+                  <p className="text-[11px] text-muted-foreground dark:text-gray-300">
                     Add 1 bot to a Telegram Supergroup with <strong>Topics</strong> enabled. Assign topics like <code>#frontend</code> or <code>#backend</code> to auto-route messages to the corresponding agent.
                   </p>
                 </div>
@@ -834,26 +834,26 @@ export const TelegramPane: React.FC = () => {
             </div>
 
             {/* Live Gateway Event Stream */}
-            <div className="w-full bg-[#0F0F0F] rounded-[10px] p-4 flex flex-col gap-2.5 text-white shadow-sm">
+            <div className="w-full bg-card rounded-[10px] p-4 flex flex-col gap-2.5 text-foreground border border-border shadow-sm">
               <div className="flex items-center justify-between">
-                <div className="text-[10px] font-bold text-[#A3A3A0] tracking-wider uppercase font-sans flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-[#16A34A] animate-pulse" />
+                <div className="text-[10px] font-bold text-muted-foreground tracking-wider uppercase font-sans flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
                   <span>LIVE GATEWAY EVENT STREAM</span>
                 </div>
-                <span className="text-[10px] text-[#8A8A85] font-mono">
+                <span className="text-[10px] text-muted-foreground font-mono">
                   {realTelegramLogs.length} events logged
                 </span>
               </div>
               <div className="flex flex-col gap-2 w-full pt-1">
                 {realTelegramLogs.length === 0 ? (
-                  <div className="py-4 text-center text-xs text-[#8A8A85] font-mono">
+                  <div className="py-4 text-center text-xs text-muted-foreground font-mono">
                     Waiting for incoming Telegram webhook or agent execution events...
                   </div>
                 ) : (
                   realTelegramLogs.map((ev) => (
                     <div key={ev.id} className="w-full flex items-center gap-2 text-[10px] font-mono">
-                      <div className="w-[5px] h-[5px] rounded-full bg-[#007AFF] shrink-0" />
-                      <span className="text-[#A3A3A0] flex-1 truncate">
+                      <div className="w-[5px] h-[5px] rounded-full bg-primary shrink-0" />
+                      <span className="text-muted-foreground flex-1 truncate">
                         {ev.type} {ev.agentId ? `[${ev.agentId}]` : ''} · {typeof ev.timestamp === 'number' ? new Date(ev.timestamp * 1000).toLocaleTimeString() : ev.timestamp}
                       </span>
                     </div>
@@ -864,15 +864,15 @@ export const TelegramPane: React.FC = () => {
           </div>
 
           {/* Right Column: Real Synced Telegram Sessions & Chat Viewer */}
-          <div className="w-full lg:w-[380px] shrink-0 bg-[#FFFFFF] dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[10px] shadow-sm flex flex-col overflow-hidden">
-            <div className="w-full bg-[#0F0F0F] p-[12px_16px] flex items-center justify-between text-[#FFFFFF]">
+          <div className="w-full lg:w-[380px] shrink-0 bg-card border border-border rounded-[10px] shadow-sm flex flex-col overflow-hidden">
+            <div className="w-full bg-card p-[12px_16px] flex items-center justify-between text-foreground border border-border rounded-t-[10px]">
               <div className="flex items-center gap-2.5">
-                <Send size={15} className="text-[#007AFF]" />
+                <Send size={15} className="text-primary" />
                 <div className="flex flex-col">
                   <span className="text-[13px] font-bold font-sans">
                     {activeTgSession ? activeTgSession.title || activeTgSession.id : 'Telegram Live Sync'}
                   </span>
-                  <span className="text-[10px] text-[#16A34A]">
+                  <span className="text-[10px] text-success">
                     {activeTgSession ? `Agent: ${activeTgSession.agentId}` : 'No active telegram session'}
                   </span>
                 </div>
@@ -894,24 +894,24 @@ export const TelegramPane: React.FC = () => {
             </div>
 
             {/* Chat Body */}
-            <div className="flex-1 min-h-[380px] max-h-[460px] overflow-y-auto p-4 flex flex-col gap-3.5 bg-[#F7F7F5] dark:bg-[#141414] custom-scrollbar">
+            <div className="flex-1 min-h-[380px] max-h-[460px] overflow-y-auto p-4 flex flex-col gap-3.5 bg-accent/60 dark:bg-background custom-scrollbar">
               {!activeTgSession ? (
-                <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-2.5 my-auto text-[#8A8A85]">
-                  <MessageSquare size={32} className="opacity-40 text-[#007AFF]" />
-                  <span className="text-xs font-bold text-[#000000] dark:text-white">
+                <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-2.5 my-auto text-muted-foreground">
+                  <MessageSquare size={32} className="opacity-40 text-primary" />
+                  <span className="text-xs font-bold text-foreground">
                     No Telegram Sessions Yet
                   </span>
                   <p className="text-[11px] leading-relaxed">
-                    Start your bot above and send a message or run <code className="text-[#007AFF]">/auth</code> on Telegram. Conversations will synchronize live right here!
+                    Start your bot above and send a message or run <code className="text-primary">/auth</code> on Telegram. Conversations will synchronize live right here!
                   </p>
                 </div>
               ) : isLoadingMessages ? (
-                <div className="h-full flex items-center justify-center text-xs text-[#8A8A85] my-auto">
-                  <RefreshCw size={14} className="animate-spin text-[#007AFF] mr-2" />
+                <div className="h-full flex items-center justify-center text-xs text-muted-foreground my-auto">
+                  <RefreshCw size={14} className="animate-spin text-primary mr-2" />
                   Loading synced messages...
                 </div>
               ) : tgMessages.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-center p-6 text-xs text-[#8A8A85] my-auto">
+                <div className="h-full flex flex-col items-center justify-center text-center p-6 text-xs text-muted-foreground my-auto">
                   <span>Session ready. Send a message on Telegram to chat with {activeTgSession.agentId}.</span>
                 </div>
               ) : (
@@ -927,13 +927,13 @@ export const TelegramPane: React.FC = () => {
                       <div
                         className={`p-[10px_14px] rounded-[12px] text-[12px] leading-relaxed whitespace-pre-wrap ${
                           isUser
-                            ? 'bg-[#007AFF] text-white rounded-br-[2px]'
-                            : 'bg-[#FFFFFF] dark:bg-[#1C1C1E] text-[#000000] dark:text-white border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-bl-[2px] shadow-2xs'
+                            ? 'bg-primary text-white rounded-br-[2px]'
+                            : 'bg-card text-foreground border border-border rounded-bl-[2px] shadow-2xs'
                         }`}
                       >
                         {m.content}
                       </div>
-                      <div className="flex items-center gap-1.5 text-[9px] text-[#8A8A85] px-1 font-mono">
+                      <div className="flex items-center gap-1.5 text-[9px] text-muted-foreground px-1 font-mono">
                         <span>{isUser ? 'Telegram User' : `@${activeTgSession.agentId}`}</span>
                         <span>·</span>
                         <span>
@@ -949,19 +949,19 @@ export const TelegramPane: React.FC = () => {
             </div>
 
             {/* Input Form */}
-            <form onSubmit={handleSendRealMessage} className="p-3 bg-[#FFFFFF] dark:bg-[#1C1C1E] border-t border-[#E5E7EB] dark:border-[#2C2C2E] flex items-center gap-2">
+            <form onSubmit={handleSendRealMessage} className="p-3 bg-card border-t border-border flex items-center gap-2">
               <input
                 type="text"
                 placeholder={activeTgSession ? `Message ${activeTgSession.agentId}...` : 'Start a Telegram chat first'}
                 disabled={!activeTgSession || isSendingMessage}
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
-                className="flex-1 px-3 py-2 bg-[#F7F7F5] dark:bg-[#141414] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[6px] text-xs text-[#000000] dark:text-white outline-none focus:border-[#007AFF] disabled:opacity-50"
+                className="flex-1 px-3 py-2 bg-accent/60 dark:bg-background border border-border rounded-[6px] text-xs text-foreground outline-none focus:border-primary/60 disabled:opacity-50"
               />
               <button
                 type="submit"
                 disabled={!activeTgSession || !inputText.trim() || isSendingMessage}
-                className="p-2 bg-[#007AFF] text-white rounded-[6px] hover:bg-[#0066D6] transition-colors cursor-pointer disabled:opacity-50"
+                className="p-2 bg-primary text-white rounded-[6px] hover:bg-primary/85 transition-colors cursor-pointer disabled:opacity-50"
               >
                 <Send size={13} />
               </button>
@@ -976,31 +976,31 @@ export const TelegramPane: React.FC = () => {
       {activeMainTab === 'access' && (
         <div className="flex-1 w-full px-4 sm:px-8 py-5 sm:py-6 flex flex-col gap-6">
           {/* Security Policy Card */}
-          <div className="w-full bg-[#FFFFFF] dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[10px] p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="w-full bg-card border border-border rounded-[10px] p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-start sm:items-center gap-3.5">
               <div
                 className={`w-11 h-11 rounded-[10px] flex items-center justify-center shrink-0 ${
-                  authRequired ? 'bg-blue-50 dark:bg-blue-950/40 text-[#007AFF]' : 'bg-amber-50 dark:bg-amber-950/40 text-amber-600'
+                  authRequired ? 'bg-blue-50 dark:bg-blue-950/40 text-primary' : 'bg-amber-50 dark:bg-amber-950/40 text-amber-600'
                 }`}
               >
                 {authRequired ? <Lock size={22} /> : <Unlock size={22} />}
               </div>
               <div className="flex flex-col">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-[15px] font-bold text-[#000000] dark:text-white font-sans">
+                  <h3 className="text-[15px] font-bold text-foreground font-sans">
                     Telegram Bot Access Control
                   </h3>
                   <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
                       authRequired
-                        ? 'bg-blue-100 dark:bg-blue-950/60 text-[#007AFF]'
+                        ? 'bg-blue-100 dark:bg-blue-950/60 text-primary'
                         : 'bg-amber-100 dark:bg-amber-950/60 text-amber-600'
                     }`}
                   >
                     {authRequired ? 'Restricted Mode' : 'Public Open Mode'}
                   </span>
                 </div>
-                <p className="text-[12px] text-[#8A8A85] mt-0.5">
+                <p className="text-[12px] text-muted-foreground mt-0.5">
                   {authRequired
                     ? 'Only authorized Telegram users can chat or trigger tool calls. Unknown users are blocked and must pair via OTP or admin approval.'
                     : 'Warning: Public mode is enabled. Anyone discovering your bot username can send messages and trigger agent turns.'}
@@ -1013,8 +1013,8 @@ export const TelegramPane: React.FC = () => {
                 onClick={handleToggleAuthRequired}
                 className={`px-4 py-2 rounded-[8px] font-bold text-xs transition-all cursor-pointer shadow-sm active:scale-95 ${
                   authRequired
-                    ? 'bg-gray-100 dark:bg-[#2C2C2E] text-[#000000] dark:text-white hover:bg-gray-200'
-                    : 'bg-[#007AFF] hover:bg-[#0066D6] text-white'
+                    ? 'bg-gray-100 dark:bg-accent text-foreground hover:bg-gray-200'
+                    : 'bg-primary hover:bg-primary/85 text-white'
                 }`}
               >
                 {authRequired ? 'Disable Auth (Public)' : 'Enable Auth (Restricted)'}
@@ -1025,14 +1025,14 @@ export const TelegramPane: React.FC = () => {
           {/* OTP Pairing Code Generator Box */}
           <div className="w-full bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-[#172033] dark:to-[#161a29] border border-blue-200 dark:border-blue-900/60 rounded-[12px] p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-5 shadow-sm">
             <div className="flex items-start gap-3.5 max-w-xl">
-              <div className="w-11 h-11 rounded-[10px] bg-[#007AFF] text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5">
+              <div className="w-11 h-11 rounded-[10px] bg-primary text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5">
                 <Ticket size={22} />
               </div>
               <div className="space-y-1">
-                <h4 className="text-[15px] font-bold text-[#000000] dark:text-white">
+                <h4 className="text-[15px] font-bold text-foreground">
                   Telegram OTP Pairing Code
                 </h4>
-                <p className="text-[12px] text-[#4B5563] dark:text-gray-300 leading-relaxed">
+                <p className="text-[12px] text-muted-foreground dark:text-gray-300 leading-relaxed">
                   Generate a temporary 6-digit numeric OTP code. Send this code to your Telegram bot using{' '}
                   <code className="bg-white/80 dark:bg-black/40 px-1.5 py-0.5 rounded text-blue-700 dark:text-blue-300 font-mono text-[11px] font-bold">
                     /auth &lt;code&gt;
@@ -1045,23 +1045,23 @@ export const TelegramPane: React.FC = () => {
             <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0">
               {activePairingCode ? (
                 <div className="flex flex-col items-center sm:items-end gap-1.5 w-full sm:w-auto">
-                  <div className="flex items-center gap-2 bg-white dark:bg-[#1C1C1E] border-2 border-[#007AFF] px-4 py-2 rounded-[10px] shadow-sm">
-                    <span className="font-mono text-2xl font-black tracking-widest text-[#007AFF]">
+                  <div className="flex items-center gap-2 bg-card border-2 border-primary px-4 py-2 rounded-[10px] shadow-sm">
+                    <span className="font-mono text-2xl font-black tracking-widest text-primary">
                       {activePairingCode.slice(0, 3)} {activePairingCode.slice(3)}
                     </span>
                     <button
                       onClick={handleCopyCode}
-                      className="p-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded-md text-[#8A8A85] hover:text-[#007AFF] transition-colors cursor-pointer"
+                      className="p-1.5 hover:bg-foreground/5 rounded-md text-muted-foreground hover:text-primary transition-colors cursor-pointer"
                       title="Copy command"
                     >
                       {copiedCode ? <Check size={16} className="text-emerald-500" /> : <Copy size={16} />}
                     </button>
                   </div>
-                  <div className="flex items-center gap-1.5 text-[11px] text-[#8A8A85] font-sans">
-                    <Clock size={12} className="text-[#007AFF]" />
+                  <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-sans">
+                    <Clock size={12} className="text-primary" />
                     <span>
                       Expires in{' '}
-                      <strong className="text-[#000000] dark:text-white font-mono">
+                      <strong className="text-foreground font-mono">
                         {Math.floor(codeCountdown / 60)}m {codeCountdown % 60}s
                       </strong>
                     </span>
@@ -1072,7 +1072,7 @@ export const TelegramPane: React.FC = () => {
               <button
                 onClick={handleGeneratePairingCode}
                 disabled={isGeneratingCode}
-                className="w-full sm:w-auto px-5 py-2.5 bg-[#007AFF] hover:bg-[#0066D6] text-white text-xs font-bold rounded-[8px] transition-all shadow-sm cursor-pointer flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
+                className="w-full sm:w-auto px-5 py-2.5 bg-primary hover:bg-primary/85 text-white text-xs font-bold rounded-[8px] transition-all shadow-sm cursor-pointer flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
               >
                 <RefreshCw size={13} className={isGeneratingCode ? 'animate-spin' : ''} />
                 <span>{activePairingCode ? 'Regenerate Code' : 'Generate Pairing Code'}</span>
@@ -1081,11 +1081,11 @@ export const TelegramPane: React.FC = () => {
           </div>
 
           {/* Pending Access Requests (Approval Queue) */}
-          <div className="w-full bg-[#FFFFFF] dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[10px] p-5 shadow-2xs space-y-3">
-            <div className="flex items-center justify-between pb-2 border-b border-[#E5E7EB] dark:border-[#2C2C2E]">
+          <div className="w-full bg-card border border-border rounded-[10px] p-5 shadow-2xs space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-border">
               <div className="flex items-center gap-2">
-                <Users2 size={16} className="text-[#007AFF]" />
-                <h4 className="text-sm font-bold text-[#000000] dark:text-white">
+                <Users2 size={16} className="text-primary" />
+                <h4 className="text-sm font-bold text-foreground">
                   Pending Authorization Requests ({pendingRequests.length})
                 </h4>
                 {pendingRequests.length > 0 && (
@@ -1094,13 +1094,13 @@ export const TelegramPane: React.FC = () => {
                   </span>
                 )}
               </div>
-              <span className="text-[11px] text-[#8A8A85]">
+              <span className="text-[11px] text-muted-foreground">
                 Unauthorized users messaging your bot appear here for 1-click approval
               </span>
             </div>
 
             {pendingRequests.length === 0 ? (
-              <div className="py-6 text-center text-xs text-[#8A8A85] flex flex-col items-center justify-center gap-1.5">
+              <div className="py-6 text-center text-xs text-muted-foreground flex flex-col items-center justify-center gap-1.5">
                 <UserCheck size={24} className="text-emerald-500 opacity-60" />
                 <span>No pending requests. All recent users have been processed.</span>
               </div>
@@ -1112,29 +1112,29 @@ export const TelegramPane: React.FC = () => {
                     className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                   >
                     <div className="flex items-start gap-3 min-w-0">
-                      <div className="w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-950/60 text-[#007AFF] font-bold flex items-center justify-center shrink-0 text-xs">
+                      <div className="w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-950/60 text-primary font-bold flex items-center justify-center shrink-0 text-xs">
                         {(req.firstName || req.username || 'U').slice(0, 2).toUpperCase()}
                       </div>
                       <div className="flex flex-col min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs font-bold text-[#000000] dark:text-white">
+                          <span className="text-xs font-bold text-foreground">
                             {req.firstName} {req.lastName}
                           </span>
                           {req.username && (
-                            <span className="text-xs text-[#007AFF] font-mono">
+                            <span className="text-xs text-primary font-mono">
                               @{req.username}
                             </span>
                           )}
-                          <span className="text-[10px] font-mono text-[#8A8A85] bg-gray-100 dark:bg-[#2C2C2E] px-1.5 py-0.2 rounded">
+                          <span className="text-[10px] font-mono text-muted-foreground bg-gray-100 dark:bg-accent px-1.5 py-0.2 rounded">
                             ID: {req.userId}
                           </span>
                         </div>
                         {req.lastMessage && (
-                          <span className="text-[11px] text-[#8A8A85] truncate mt-0.5 italic">
+                          <span className="text-[11px] text-muted-foreground truncate mt-0.5 italic">
                             "{req.lastMessage}"
                           </span>
                         )}
-                        <span className="text-[9px] text-[#8A8A85] mt-0.5">
+                        <span className="text-[9px] text-muted-foreground mt-0.5">
                           Requested: {new Date(req.createdAt * 1000).toLocaleString()}
                         </span>
                       </div>
@@ -1143,13 +1143,13 @@ export const TelegramPane: React.FC = () => {
                     <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
                       <button
                         onClick={() => handleDenyRequest(req.userId)}
-                        className="px-3 py-1.5 border border-[#E5E7EB] dark:border-[#2C2C2E] text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-[6px] font-semibold transition-colors cursor-pointer"
+                        className="px-3 py-1.5 border border-border text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-[6px] font-semibold transition-colors cursor-pointer"
                       >
                         Dismiss
                       </button>
                       <button
                         onClick={() => handleApproveRequest(req)}
-                        className="px-3.5 py-1.5 bg-[#007AFF] hover:bg-[#0066D6] text-white text-xs font-bold rounded-[6px] transition-colors cursor-pointer shadow-sm flex items-center gap-1.5"
+                        className="px-3.5 py-1.5 bg-primary hover:bg-primary/85 text-white text-xs font-bold rounded-[6px] transition-colors cursor-pointer shadow-sm flex items-center gap-1.5"
                       >
                         <UserCheck size={14} />
                         <span>Approve Access</span>
@@ -1162,29 +1162,29 @@ export const TelegramPane: React.FC = () => {
           </div>
 
           {/* Authorized Users Table */}
-          <div className="w-full bg-[#FFFFFF] dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[10px] p-5 shadow-2xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#E5E7EB] dark:border-[#2C2C2E]">
+          <div className="w-full bg-card border border-border rounded-[10px] p-5 shadow-2xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border">
               <div className="flex items-center gap-2">
                 <UserCheck size={16} className="text-emerald-500" />
-                <h4 className="text-sm font-bold text-[#000000] dark:text-white">
+                <h4 className="text-sm font-bold text-foreground">
                   Authorized Whitelist ({authorizedUsers.length})
                 </h4>
               </div>
 
               <div className="flex items-center gap-2">
                 <div className="relative">
-                  <Search size={13} className="absolute left-2.5 top-2.5 text-[#8A8A85]" />
+                  <Search size={13} className="absolute left-2.5 top-2.5 text-muted-foreground" />
                   <input
                     type="text"
                     placeholder="Search users or IDs..."
                     value={userSearch}
                     onChange={(e) => setUserSearch(e.target.value)}
-                    className="pl-7 pr-3 py-1.5 text-xs bg-[#F7F7F5] dark:bg-[#141414] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[6px] text-[#000000] dark:text-white outline-none focus:border-[#007AFF] w-48"
+                    className="pl-7 pr-3 py-1.5 text-xs bg-accent/60 dark:bg-background border border-border rounded-[6px] text-foreground outline-none focus:border-primary/60 w-48"
                   />
                 </div>
                 <button
                   onClick={() => setShowManualAddModal(true)}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-[#007AFF] hover:bg-[#0066D6] text-white text-xs font-bold rounded-[6px] transition-colors cursor-pointer shrink-0"
+                  className="flex items-center gap-1 px-3 py-1.5 bg-primary hover:bg-primary/85 text-white text-xs font-bold rounded-[6px] transition-colors cursor-pointer shrink-0"
                 >
                   <Plus size={13} />
                   <span>Add User</span>
@@ -1193,15 +1193,15 @@ export const TelegramPane: React.FC = () => {
             </div>
 
             {filteredUsers.length === 0 ? (
-              <div className="py-8 text-center text-xs text-[#8A8A85] flex flex-col items-center justify-center gap-2">
-                <Shield size={24} className="opacity-40 text-[#8A8A85]" />
+              <div className="py-8 text-center text-xs text-muted-foreground flex flex-col items-center justify-center gap-2">
+                <Shield size={24} className="opacity-40 text-muted-foreground" />
                 <span>No authorized users found matching your search.</span>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead>
-                    <tr className="border-b border-[#E5E7EB] dark:border-[#2C2C2E] text-[#8A8A85] font-semibold text-[11px]">
+                    <tr className="border-b border-border text-muted-foreground font-semibold text-[11px]">
                       <th className="pb-2 font-medium">User</th>
                       <th className="pb-2 font-medium">Telegram ID</th>
                       <th className="pb-2 font-medium">Auth Method</th>
@@ -1214,32 +1214,32 @@ export const TelegramPane: React.FC = () => {
                       <tr key={u.userId} className="hover:bg-black/2 dark:hover:bg-white/2 transition-colors">
                         <td className="py-3 pr-2">
                           <div className="flex items-center gap-2">
-                            <div className="w-7 h-7 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-[#16A34A] font-bold flex items-center justify-center text-[10px]">
+                            <div className="w-7 h-7 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-success font-bold flex items-center justify-center text-[10px]">
                               {(u.firstName || u.username || 'U').slice(0, 2).toUpperCase()}
                             </div>
                             <div className="flex flex-col">
-                              <span className="font-bold text-[#000000] dark:text-white">
+                              <span className="font-bold text-foreground">
                                 {u.firstName} {u.lastName}
                               </span>
                               {u.username && (
-                                <span className="text-[11px] text-[#007AFF] font-mono">
+                                <span className="text-[11px] text-primary font-mono">
                                   @{u.username}
                                 </span>
                               )}
                             </div>
                           </div>
                         </td>
-                        <td className="py-3 px-2 font-mono text-[11px] text-[#8A8A85]">
+                        <td className="py-3 px-2 font-mono text-[11px] text-muted-foreground">
                           {u.userId}
                         </td>
                         <td className="py-3 px-2">
                           <span
                             className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
                               u.authMethod === 'otp'
-                                ? 'bg-blue-100 dark:bg-blue-950/40 text-[#007AFF]'
+                                ? 'bg-blue-100 dark:bg-blue-950/40 text-primary'
                                 : u.authMethod === 'admin_approval'
                                 ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600'
-                                : 'bg-gray-100 dark:bg-[#2C2C2E] text-[#8A8A85]'
+                                : 'bg-gray-100 dark:bg-accent text-muted-foreground'
                             }`}
                           >
                             {u.authMethod === 'otp'
@@ -1249,7 +1249,7 @@ export const TelegramPane: React.FC = () => {
                               : 'Manual'}
                           </span>
                         </td>
-                        <td className="py-3 px-2 text-[11px] text-[#8A8A85]">
+                        <td className="py-3 px-2 text-[11px] text-muted-foreground">
                           {new Date(u.createdAt * 1000).toLocaleDateString([], {
                             month: 'short',
                             day: 'numeric',
@@ -1259,7 +1259,7 @@ export const TelegramPane: React.FC = () => {
                         <td className="py-3 pl-2 text-right">
                           <button
                             onClick={() => handleRevokeUser(u.userId)}
-                            className="p-1.5 text-[#8A8A85] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded transition-colors cursor-pointer"
+                            className="p-1.5 text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded transition-colors cursor-pointer"
                             title="Revoke Access"
                           >
                             <Trash2 size={14} />
@@ -1280,17 +1280,17 @@ export const TelegramPane: React.FC = () => {
       {/* ------------------------------------------------------------- */}
       {showBotModal && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-[#FFFFFF] dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[12px] w-full max-w-lg shadow-2xl flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E7EB] dark:border-[#2C2C2E]">
+          <div className="bg-card border border-border rounded-[12px] w-full max-w-lg shadow-2xl flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
               <div className="flex items-center gap-2">
-                <Bot size={18} className="text-[#007AFF]" />
-                <h3 className="text-sm font-bold text-[#000000] dark:text-white">
+                <Bot size={18} className="text-primary" />
+                <h3 className="text-sm font-bold text-foreground">
                   {editingBotId ? 'Edit Telegram Bot Configuration' : 'Connect New Telegram Bot'}
                 </h3>
               </div>
               <button
                 onClick={() => setShowBotModal(false)}
-                className="p-1 text-[#8A8A85] hover:text-[#000000] dark:hover:text-white rounded-md cursor-pointer"
+                className="p-1 text-muted-foreground hover:text-foreground rounded-md cursor-pointer"
               >
                 <X size={16} />
               </button>
@@ -1298,7 +1298,7 @@ export const TelegramPane: React.FC = () => {
 
             <form onSubmit={handleSaveBot} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto custom-scrollbar">
               <div>
-                <label className="text-xs font-bold uppercase tracking-wider text-[#333333] dark:text-gray-200">
+                <label className="text-xs font-bold uppercase tracking-wider text-foreground/85 dark:text-gray-200">
                   Bot Display Name *
                 </label>
                 <input
@@ -1307,20 +1307,20 @@ export const TelegramPane: React.FC = () => {
                   placeholder="e.g. HasLab Frontend Bot"
                   value={formBotName}
                   onChange={(e) => setFormBotName(e.target.value)}
-                  className="w-full mt-1 px-3 py-2 bg-[#F7F7F5] dark:bg-[#141414] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[6px] text-xs text-[#000000] dark:text-white outline-none focus:border-[#007AFF]"
+                  className="w-full mt-1 px-3 py-2 bg-accent/60 dark:bg-background border border-border rounded-[6px] text-xs text-foreground outline-none focus:border-primary/60"
                 />
               </div>
 
               <div>
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold uppercase tracking-wider text-[#333333] dark:text-gray-200">
+                  <label className="text-xs font-bold uppercase tracking-wider text-foreground/85 dark:text-gray-200">
                     Bot Token (@BotFather) *
                   </label>
                   <button
                     type="button"
                     onClick={handleTestToken}
                     disabled={isTestingToken || !formBotToken.trim()}
-                    className="text-[11px] text-[#007AFF] font-bold hover:underline flex items-center gap-1 disabled:opacity-50 cursor-pointer"
+                    className="text-[11px] text-primary font-bold hover:underline flex items-center gap-1 disabled:opacity-50 cursor-pointer"
                   >
                     <Zap size={11} className={isTestingToken ? 'animate-spin' : ''} />
                     <span>{isTestingToken ? 'Verifying...' : 'Test Token'}</span>
@@ -1335,7 +1335,7 @@ export const TelegramPane: React.FC = () => {
                     setFormBotToken(e.target.value);
                     setTokenTestResult(null);
                   }}
-                  className="w-full mt-1 px-3 py-2 bg-[#F7F7F5] dark:bg-[#141414] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[6px] text-xs font-mono text-[#000000] dark:text-white outline-none focus:border-[#007AFF]"
+                  className="w-full mt-1 px-3 py-2 bg-accent/60 dark:bg-background border border-border rounded-[6px] text-xs font-mono text-foreground outline-none focus:border-primary/60"
                 />
 
                 {/* Token Test Feedback Banner */}
@@ -1364,13 +1364,13 @@ export const TelegramPane: React.FC = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-bold uppercase tracking-wider text-[#333333] dark:text-gray-200">
+                  <label className="text-xs font-bold uppercase tracking-wider text-foreground/85 dark:text-gray-200">
                     Assigned Agent Worker
                   </label>
                   <select
                     value={formAgentId}
                     onChange={(e) => setFormAgentId(e.target.value)}
-                    className="w-full mt-1 px-3 py-2 bg-[#F7F7F5] dark:bg-[#141414] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[6px] text-xs text-[#000000] dark:text-white outline-none focus:border-[#007AFF]"
+                    className="w-full mt-1 px-3 py-2 bg-accent/60 dark:bg-background border border-border rounded-[6px] text-xs text-foreground outline-none focus:border-primary/60"
                   >
                     {agents.map((a) => (
                       <option key={a.id} value={a.id}>
@@ -1381,13 +1381,13 @@ export const TelegramPane: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold uppercase tracking-wider text-[#333333] dark:text-gray-200">
+                  <label className="text-xs font-bold uppercase tracking-wider text-foreground/85 dark:text-gray-200">
                     LLM Model Override
                   </label>
                   <select
                     value={formModel}
                     onChange={(e) => setFormModel(e.target.value)}
-                    className="w-full mt-1 px-3 py-2 bg-[#F7F7F5] dark:bg-[#141414] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[6px] text-xs text-[#000000] dark:text-white outline-none focus:border-[#007AFF]"
+                    className="w-full mt-1 px-3 py-2 bg-accent/60 dark:bg-background border border-border rounded-[6px] text-xs text-foreground outline-none focus:border-primary/60"
                   >
                     <option value="">Default Model ({defaultModel || 'System Default'})</option>
                     {availableModels.map((m) => (
@@ -1400,7 +1400,7 @@ export const TelegramPane: React.FC = () => {
               </div>
 
               <div>
-                <label className="text-xs font-bold uppercase tracking-wider text-[#333333] dark:text-gray-200">
+                <label className="text-xs font-bold uppercase tracking-wider text-foreground/85 dark:text-gray-200">
                   Bot Architecture Mode
                 </label>
                 <div className="grid grid-cols-2 gap-2 mt-1">
@@ -1409,8 +1409,8 @@ export const TelegramPane: React.FC = () => {
                     onClick={() => setFormMode('direct')}
                     className={`p-2.5 rounded-[6px] border text-left flex flex-col gap-1 transition-all cursor-pointer ${
                       formMode === 'direct'
-                        ? 'border-[#007AFF] bg-blue-50/50 dark:bg-blue-950/30 text-[#007AFF]'
-                        : 'border-[#E5E7EB] dark:border-[#2C2C2E] text-[#8A8A85]'
+                        ? 'border-primary bg-blue-50/50 dark:bg-blue-950/30 text-primary'
+                        : 'border-border text-muted-foreground'
                     }`}
                   >
                     <span className="text-xs font-bold">🟢 Dedicated Bot</span>
@@ -1424,8 +1424,8 @@ export const TelegramPane: React.FC = () => {
                     onClick={() => setFormMode('topic_group')}
                     className={`p-2.5 rounded-[6px] border text-left flex flex-col gap-1 transition-all cursor-pointer ${
                       formMode === 'topic_group'
-                        ? 'border-[#007AFF] bg-blue-50/50 dark:bg-blue-950/30 text-[#007AFF]'
-                        : 'border-[#E5E7EB] dark:border-[#2C2C2E] text-[#8A8A85]'
+                        ? 'border-primary bg-blue-50/50 dark:bg-blue-950/30 text-primary'
+                        : 'border-border text-muted-foreground'
                     }`}
                   >
                     <span className="text-xs font-bold">🔵 Forum Topic Group</span>
@@ -1447,7 +1447,7 @@ export const TelegramPane: React.FC = () => {
                       placeholder="e.g. Frontend Dev"
                       value={formTopicName}
                       onChange={(e) => setFormTopicName(e.target.value)}
-                      className="w-full mt-1 px-2.5 py-1.5 bg-white dark:bg-[#1C1C1E] border border-blue-200 dark:border-blue-900 rounded text-xs text-[#000000] dark:text-white"
+                      className="w-full mt-1 px-2.5 py-1.5 bg-card border border-blue-200 dark:border-blue-900 rounded text-xs text-foreground"
                     />
                   </div>
                   <div>
@@ -1459,24 +1459,24 @@ export const TelegramPane: React.FC = () => {
                       placeholder="-1001234567890"
                       value={formChatId}
                       onChange={(e) => setFormChatId(e.target.value)}
-                      className="w-full mt-1 px-2.5 py-1.5 bg-white dark:bg-[#1C1C1E] border border-blue-200 dark:border-blue-900 rounded text-xs font-mono text-[#000000] dark:text-white"
+                      className="w-full mt-1 px-2.5 py-1.5 bg-card border border-blue-200 dark:border-blue-900 rounded text-xs font-mono text-foreground"
                     />
                   </div>
                 </div>
               )}
 
-              <div className="pt-2 border-t border-[#E5E7EB] dark:border-[#2C2C2E] flex items-center justify-end gap-2">
+              <div className="pt-2 border-t border-border flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setShowBotModal(false)}
-                  className="px-4 py-2 border border-[#E5E7EB] dark:border-[#2C2C2E] text-xs font-semibold rounded-[6px] hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer"
+                  className="px-4 py-2 border border-border text-xs font-semibold rounded-[6px] hover:bg-foreground/5 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmittingBot}
-                  className="flex items-center gap-1.5 px-5 py-2 bg-[#007AFF] hover:bg-[#0066D6] text-white text-xs font-bold rounded-[6px] disabled:opacity-50 cursor-pointer shadow-sm"
+                  className="flex items-center gap-1.5 px-5 py-2 bg-primary hover:bg-primary/85 text-white text-xs font-bold rounded-[6px] disabled:opacity-50 cursor-pointer shadow-sm"
                 >
                   {isSubmittingBot ? <RefreshCw size={13} className="animate-spin" /> : <Plus size={13} />}
                   <span>{editingBotId ? 'Update Bot' : 'Register Bot'}</span>
@@ -1492,17 +1492,17 @@ export const TelegramPane: React.FC = () => {
       {/* ------------------------------------------------------------- */}
       {showManualAddModal && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-[#FFFFFF] dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[12px] w-full max-w-md shadow-2xl flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E7EB] dark:border-[#2C2C2E]">
+          <div className="bg-card border border-border rounded-[12px] w-full max-w-md shadow-2xl flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
               <div className="flex items-center gap-2">
-                <Shield size={18} className="text-[#007AFF]" />
-                <h3 className="text-sm font-bold text-[#000000] dark:text-white">
+                <Shield size={18} className="text-primary" />
+                <h3 className="text-sm font-bold text-foreground">
                   Add User to Whitelist
                 </h3>
               </div>
               <button
                 onClick={() => setShowManualAddModal(false)}
-                className="p-1 text-[#8A8A85] hover:text-[#000000] dark:hover:text-white rounded-md cursor-pointer"
+                className="p-1 text-muted-foreground hover:text-foreground rounded-md cursor-pointer"
               >
                 <X size={16} />
               </button>
@@ -1510,7 +1510,7 @@ export const TelegramPane: React.FC = () => {
 
             <form onSubmit={handleSaveManualUser} className="p-6 space-y-3.5">
               <div>
-                <label className="text-xs font-bold uppercase tracking-wider text-[#333333] dark:text-gray-200">
+                <label className="text-xs font-bold uppercase tracking-wider text-foreground/85 dark:text-gray-200">
                   Telegram User ID *
                 </label>
                 <input
@@ -1519,12 +1519,12 @@ export const TelegramPane: React.FC = () => {
                   placeholder="e.g. 123456789"
                   value={manualUserId}
                   onChange={(e) => setManualUserId(e.target.value)}
-                  className="w-full mt-1 px-3 py-2 bg-[#F7F7F5] dark:bg-[#141414] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[6px] text-xs font-mono text-[#000000] dark:text-white outline-none focus:border-[#007AFF]"
+                  className="w-full mt-1 px-3 py-2 bg-accent/60 dark:bg-background border border-border rounded-[6px] text-xs font-mono text-foreground outline-none focus:border-primary/60"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-bold uppercase tracking-wider text-[#333333] dark:text-gray-200">
+                <label className="text-xs font-bold uppercase tracking-wider text-foreground/85 dark:text-gray-200">
                   Telegram Username (Optional)
                 </label>
                 <input
@@ -1532,12 +1532,12 @@ export const TelegramPane: React.FC = () => {
                   placeholder="e.g. lutfiikbalmajid"
                   value={manualUsername}
                   onChange={(e) => setManualUsername(e.target.value)}
-                  className="w-full mt-1 px-3 py-2 bg-[#F7F7F5] dark:bg-[#141414] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[6px] text-xs text-[#000000] dark:text-white outline-none focus:border-[#007AFF]"
+                  className="w-full mt-1 px-3 py-2 bg-accent/60 dark:bg-background border border-border rounded-[6px] text-xs text-foreground outline-none focus:border-primary/60"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-bold uppercase tracking-wider text-[#333333] dark:text-gray-200">
+                <label className="text-xs font-bold uppercase tracking-wider text-foreground/85 dark:text-gray-200">
                   Display Name (Optional)
                 </label>
                 <input
@@ -1545,21 +1545,21 @@ export const TelegramPane: React.FC = () => {
                   placeholder="e.g. Lutfi Ikbal"
                   value={manualName}
                   onChange={(e) => setManualName(e.target.value)}
-                  className="w-full mt-1 px-3 py-2 bg-[#F7F7F5] dark:bg-[#141414] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[6px] text-xs text-[#000000] dark:text-white outline-none focus:border-[#007AFF]"
+                  className="w-full mt-1 px-3 py-2 bg-accent/60 dark:bg-background border border-border rounded-[6px] text-xs text-foreground outline-none focus:border-primary/60"
                 />
               </div>
 
-              <div className="pt-2 border-t border-[#E5E7EB] dark:border-[#2C2C2E] flex items-center justify-end gap-2">
+              <div className="pt-2 border-t border-border flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setShowManualAddModal(false)}
-                  className="px-3.5 py-1.5 border border-[#E5E7EB] dark:border-[#2C2C2E] text-xs font-semibold rounded-[6px]"
+                  className="px-3.5 py-1.5 border border-border text-xs font-semibold rounded-[6px]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-[#007AFF] hover:bg-[#0066D6] text-white text-xs font-bold rounded-[6px] cursor-pointer"
+                  className="px-4 py-1.5 bg-primary hover:bg-primary/85 text-white text-xs font-bold rounded-[6px] cursor-pointer"
                 >
                   Authorize User
                 </button>

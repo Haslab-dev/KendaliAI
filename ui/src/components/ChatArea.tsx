@@ -8,7 +8,7 @@ import {
   Square, Smile, CheckSquare
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
-import { navigate } from '../router';
+import { navigate, navigateSettings } from '../router';
 import { useAgentSocket } from '../hooks/useAgentSocket';
 import { ToolExecutionCard } from './ToolExecutionCard';
 import { InstallPromptModal } from './InstallPromptModal';
@@ -707,18 +707,18 @@ export const ChatArea: React.FC = () => {
   };
 
   return (
-    <main className="flex-1 h-full flex flex-col bg-[#F7F7F5] dark:bg-[#121212] overflow-hidden relative">
+    <main className="flex-1 h-full flex flex-col bg-accent/60 dark:bg-background overflow-hidden relative">
       {/* Reminder high-priority banner */}
       {activeReminder && (
-        <div className="bg-[#FFF5EB] border-b border-[#F5E3CF] px-4 py-2 z-30 select-none">
+        <div className="bg-warning/10 border-b border-warning/25 px-4 py-2 z-30 select-none">
           <div className="max-w-5xl mx-auto flex items-center justify-between gap-3 text-xs">
             <div className="flex items-center gap-2">
-              <Bell size={14} className="text-[#D97706] animate-bounce" />
+              <Bell size={14} className="text-warning animate-bounce" />
               <div className="flex items-center gap-1.5 font-funnel">
-                <span className="font-bold text-[#D97706]">Reminder Alert:</span>
-                <span className="text-[#333333] font-medium">{activeReminder.title}</span>
+                <span className="font-bold text-warning">Reminder Alert:</span>
+                <span className="text-foreground/85 font-medium">{activeReminder.title}</span>
                 {activeReminder.time && (
-                  <span className="text-[10px] bg-[#FFFFFF] border border-[#E5E7EB] px-1.5 py-0.5 rounded text-[#8A8A85] font-mono">
+                  <span className="text-[10px] bg-card border border-border px-1.5 py-0.5 rounded text-muted-foreground font-mono">
                     {activeReminder.time}
                   </span>
                 )}
@@ -726,7 +726,7 @@ export const ChatArea: React.FC = () => {
             </div>
             <button
               onClick={() => setActiveReminder(null)}
-              className="text-[#8A8A85] hover:text-[#000000] p-1 rounded hover:bg-[#FFFFFF] transition-colors"
+              className="text-muted-foreground hover:text-foreground p-1 rounded hover:bg-card transition-colors"
               title="Dismiss reminder"
             >
               <X size={13} />
@@ -736,11 +736,11 @@ export const ChatArea: React.FC = () => {
       )}
 
       {/* WhatsApp-Style Responsive Chat Header */}
-      <div className="w-full min-h-[60px] shrink-0 flex flex-row gap-2.5 sm:gap-3 px-3 sm:px-6 items-center bg-[#FFFFFF] dark:bg-[#141414] border-b border-[#E5E7EB] dark:border-[#27272A] z-20 select-none py-2">
+      <div className="w-full min-h-[60px] shrink-0 flex flex-row gap-2.5 sm:gap-3 px-3 sm:px-6 items-center bg-card border-b border-border/70 z-20 select-none py-2">
         {/* Mobile menu trigger */}
         <button
           onClick={() => setIsMobileDrawerOpen(true)}
-          className="p-1.5 text-[#333333] dark:text-[#E5E7EB] hover:text-[#000000] md:hidden rounded-lg hover:bg-[#F7F7F5] dark:hover:bg-[#1F1F1F] cursor-pointer shrink-0"
+          className="p-1.5 text-foreground/85 hover:text-foreground md:hidden rounded-lg hover:bg-accent/60 dark:hover:bg-popover cursor-pointer shrink-0"
           title="Open Chats Drawer"
         >
           <Menu size={20} />
@@ -759,7 +759,7 @@ export const ChatArea: React.FC = () => {
                 size={40}
                 className="drop-shadow-xs transition-transform group-hover:scale-105"
               />
-              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#16A34A] border-2 border-white dark:border-black" title="Online" />
+              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-success border-2 border-white dark:border-black" title="Online" />
             </div>
 
             <div
@@ -768,16 +768,16 @@ export const ChatArea: React.FC = () => {
               title="Click to switch specialist agent worker"
             >
               <div className="flex items-center gap-1.5 min-w-0">
-                <span className="text-[14px] sm:text-[16px] leading-tight text-[#000000] dark:text-white font-sans font-bold tracking-tight truncate group-hover/agent-title:text-[#007AFF] transition-colors">
+                <span className="text-[14px] sm:text-[16px] leading-tight text-foreground font-sans font-bold tracking-tight truncate group-hover/agent-title:text-primary transition-colors">
                   {partnerAgent?.name || 'Specialist Agent'}
                 </span>
-                <ChevronDown size={13} className="text-[#8A8A85] group-hover/agent-title:text-[#007AFF] transition-colors shrink-0" />
-                <span className="hidden xs:inline-block text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.2 rounded-full font-bold font-sans uppercase tracking-wider bg-blue-50 dark:bg-blue-950/40 text-[#007AFF] border border-blue-100 dark:border-blue-900/40 shrink-0">
+                <ChevronDown size={13} className="text-muted-foreground group-hover/agent-title:text-primary transition-colors shrink-0" />
+                <span className="hidden xs:inline-block text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.2 rounded-full font-bold font-sans uppercase tracking-wider bg-blue-50 dark:bg-blue-950/40 text-primary border border-blue-100 dark:border-blue-900/40 shrink-0">
                   {partnerAgent?.role || partnerAgent?.department || 'Specialist'}
                 </span>
                 {isTgConnected && (
                   <span
-                    className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-[#E1F2FB] dark:bg-[#0E3550] text-[#0088cc] shrink-0 font-mono"
+                    className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-info/10 text-info shrink-0 font-mono"
                     title="Telegram Bot Linked"
                   >
                     <Send size={8} /> TG Bot
@@ -786,22 +786,22 @@ export const ChatArea: React.FC = () => {
               </div>
               <div className="text-[11px] leading-tight font-sans truncate flex items-center gap-1 mt-0.5">
                 {isGenerating ? (
-                  <span className="text-[#007AFF] dark:text-[#3B82F6] font-medium flex items-center gap-1.5 animate-pulse">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF]" />
+                  <span className="text-primary font-medium flex items-center gap-1.5 animate-pulse">
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary" />
                     <span>{partnerAgent?.name || 'Agent'} is typing...</span>
                   </span>
                 ) : (
                   <>
                     <span className="text-emerald-600 dark:text-emerald-400 font-medium">● Online</span>
-                    <span className="hidden sm:inline text-[#8A8A85]">· {partnerAgent?.description || 'Autonomous specialist agent'}</span>
+                    <span className="hidden sm:inline text-muted-foreground">· {partnerAgent?.description || 'Autonomous specialist agent'}</span>
                   </>
                 )}
               </div>
             </div>
 
             {/* Read-only Model Pill (NO model selection dropdown - Agent Person owns AI configuration) */}
-            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-black/5 dark:bg-white/5 border border-[#E5E7EB] dark:border-[#27272A] rounded-[6px] text-[11px] font-mono text-[#6B7280] dark:text-[#A1A1AA] shrink-0" title={`Configured Model: ${partnerAgent?.model || 'gpt-4o'}`}>
-              <Cpu size={12} className="text-[#007AFF]" />
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-black/5 dark:bg-white/5 border border-border/70 rounded-[6px] text-[11px] font-mono text-muted-foreground shrink-0" title={`Configured Model: ${partnerAgent?.model || 'gpt-4o'}`}>
+              <Cpu size={12} className="text-primary" />
               <span>{partnerAgent?.model || 'gpt-4o'}</span>
             </div>
           </>
@@ -815,7 +815,7 @@ export const ChatArea: React.FC = () => {
               className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900/40 flex items-center justify-center shrink-0 cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/60 transition-colors"
               title="Click to manage group members"
             >
-              <Users size={18} className="text-[#007AFF]" />
+              <Users size={18} className="text-primary" />
             </div>
 
             <div
@@ -824,21 +824,21 @@ export const ChatArea: React.FC = () => {
               title="Click to manage group members"
             >
               <div className="flex items-center gap-1.5 min-w-0">
-                <span className="text-[14px] sm:text-[16px] leading-tight text-[#000000] dark:text-white font-sans font-bold tracking-tight truncate group-hover/group-title:text-[#007AFF] transition-colors">
+                <span className="text-[14px] sm:text-[16px] leading-tight text-foreground font-sans font-bold tracking-tight truncate group-hover/group-title:text-primary transition-colors">
                   {currentSession?.title || 'Group Chat'}
                 </span>
-                <span className="text-[9px] sm:text-[10px] px-2 py-0.2 rounded-full font-bold font-sans uppercase tracking-wider bg-blue-50 dark:bg-blue-950/40 text-[#007AFF] border border-blue-100 dark:border-blue-900/40 shrink-0">
+                <span className="text-[9px] sm:text-[10px] px-2 py-0.2 rounded-full font-bold font-sans uppercase tracking-wider bg-blue-50 dark:bg-blue-950/40 text-primary border border-blue-100 dark:border-blue-900/40 shrink-0">
                   Group
                 </span>
               </div>
               <div className="text-[11px] leading-tight font-sans truncate flex items-center gap-1 mt-0.5">
                 {isGenerating ? (
-                  <span className="text-[#007AFF] dark:text-[#3B82F6] font-medium flex items-center gap-1.5 animate-pulse">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF]" />
+                  <span className="text-primary font-medium flex items-center gap-1.5 animate-pulse">
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary" />
                     <span>{typingAgent?.name ? `${typingAgent.name} is typing...` : 'Team is replying...'}</span>
                   </span>
                 ) : (
-                  <div className="text-[#007AFF] hover:underline flex items-center gap-1">
+                  <div className="text-primary hover:underline flex items-center gap-1">
                     <Users size={11} />
                     <span>{currentSession?.participants?.length || 0} Agent Persons + You · Manage Members</span>
                   </div>
@@ -850,7 +850,7 @@ export const ChatArea: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsGroupMembersModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-[#007AFF] border border-blue-200 dark:border-blue-900/60 rounded-[6px] text-[11px] font-bold transition-colors cursor-pointer shrink-0"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-primary border border-blue-200 dark:border-blue-900/60 rounded-[6px] text-[11px] font-bold transition-colors cursor-pointer shrink-0"
               title="Add or remove agent persons"
             >
               <Users size={13} />
@@ -863,19 +863,19 @@ export const ChatArea: React.FC = () => {
         {isGeneral && (
           <>
             <div className="w-10 h-10 rounded-full bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/40 flex items-center justify-center shrink-0">
-              <Bot size={18} className="text-[#D97706]" />
+              <Bot size={18} className="text-warning" />
             </div>
 
             <div className="flex flex-col justify-center min-w-0 flex-1 overflow-hidden">
               <div className="flex items-center gap-1.5 min-w-0">
-                <span className="text-[14px] sm:text-[16px] leading-tight text-[#000000] dark:text-white font-sans font-bold tracking-tight truncate">
+                <span className="text-[14px] sm:text-[16px] leading-tight text-foreground font-sans font-bold tracking-tight truncate">
                   {currentSession?.title || 'General Chat'}
                 </span>
-                <span className="text-[9px] sm:text-[10px] px-2 py-0.2 rounded-full font-bold font-sans uppercase tracking-wider bg-amber-50 dark:bg-amber-950/40 text-[#D97706] border border-amber-200 dark:border-amber-900/40 shrink-0">
+                <span className="text-[9px] sm:text-[10px] px-2 py-0.2 rounded-full font-bold font-sans uppercase tracking-wider bg-amber-50 dark:bg-amber-950/40 text-warning border border-amber-200 dark:border-amber-900/40 shrink-0">
                   General
                 </span>
               </div>
-              <span className="text-[11px] text-[#8A8A85] truncate font-sans mt-0.5">
+              <span className="text-[11px] text-muted-foreground truncate font-sans mt-0.5">
                 Traditional multi-model chat
               </span>
             </div>
@@ -884,7 +884,7 @@ export const ChatArea: React.FC = () => {
             <button
               type="button"
               onClick={() => createGeneralChat()}
-              className="flex items-center gap-1 px-2.5 py-1.5 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 rounded-[6px] text-[11px] font-semibold text-[#333333] dark:text-[#E5E7EB] transition-colors cursor-pointer shrink-0"
+              className="flex items-center gap-1 px-2.5 py-1.5 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 rounded-[6px] text-[11px] font-semibold text-foreground/85 transition-colors cursor-pointer shrink-0"
               title="Start fresh general chat"
             >
               <Plus size={13} />
@@ -895,23 +895,23 @@ export const ChatArea: React.FC = () => {
             <div className="relative shrink-0" ref={modelDropdownRef}>
               <button
                 onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
-                className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 bg-[#FFFFFF] dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] hover:border-[#333333] rounded-[6px] text-[11px] font-sans text-[#333333] dark:text-[#E5E7EB] transition-all shadow-2xs cursor-pointer"
+                className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 bg-card border border-border hover:border-border-strong rounded-[6px] text-[11px] font-sans text-foreground/85 transition-all shadow-2xs cursor-pointer"
                 title={`Active Model: ${effectiveModel} (Click to change)`}
               >
-                <Cpu size={13} className="text-[#007AFF] shrink-0" />
+                <Cpu size={13} className="text-primary shrink-0" />
                 <span className="font-mono font-semibold max-w-[70px] xs:max-w-[90px] sm:max-w-[130px] truncate">
                   {effectiveModel}
                 </span>
-                <ChevronDown size={11} className={`text-[#8A8A85] shrink-0 transition-transform ${isModelDropdownOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown size={11} className={`text-muted-foreground shrink-0 transition-transform ${isModelDropdownOpen ? 'rotate-180' : ''}`} />
               </button>
 
               {isModelDropdownOpen && (
-                <div className="fixed sm:absolute inset-x-3 sm:inset-auto top-[62px] sm:top-auto sm:right-0 sm:mt-1 sm:w-80 bg-[#FFFFFF] dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[10px] shadow-2xl p-2.5 z-50 animate-in fade-in duration-100 flex flex-col gap-2 max-w-sm mx-auto sm:max-w-none">
+                <div className="fixed sm:absolute inset-x-3 sm:inset-auto top-[62px] sm:top-auto sm:right-0 sm:mt-1 sm:w-80 bg-card border border-border rounded-[10px] shadow-2xl p-2.5 z-50 animate-in fade-in duration-100 flex flex-col gap-2 max-w-sm mx-auto sm:max-w-none">
                   {/* Header with Refresh */}
-                  <div className="flex items-center justify-between px-1 pb-1.5 border-b border-[#E5E7EB] dark:border-[#2C2C2E]">
+                  <div className="flex items-center justify-between px-1 pb-1.5 border-b border-border">
                     <div className="flex items-center gap-1.5">
-                      <Cpu size={14} className="text-[#007AFF]" />
-                      <span className="text-xs font-bold text-[#000000] dark:text-white font-sans">
+                      <Cpu size={14} className="text-primary" />
+                      <span className="text-xs font-bold text-foreground font-sans">
                         Select LLM Model
                       </span>
                     </div>
@@ -922,7 +922,7 @@ export const ChatArea: React.FC = () => {
                         loadModels(true);
                       }}
                       disabled={isLoadingModels}
-                      className="flex items-center gap-1 text-[10px] font-bold text-[#007AFF] hover:underline cursor-pointer p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
+                      className="flex items-center gap-1 text-[10px] font-bold text-primary hover:underline cursor-pointer p-1 rounded hover:bg-primary/10 transition-colors"
                       title="Probe connected providers for latest models"
                     >
                       <RefreshCw size={11} className={isLoadingModels ? 'animate-spin' : ''} />
@@ -932,20 +932,20 @@ export const ChatArea: React.FC = () => {
 
                   {/* Model Search */}
                   <div className="relative">
-                    <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#8A8A85]" />
+                    <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                     <input
                       type="text"
                       placeholder="Search model (e.g. gpt-4o, qwen, claude)..."
                       value={modelSearch}
                       onChange={(e) => setModelSearch(e.target.value)}
-                      className="w-full pl-7 pr-2.5 py-1 bg-[#F7F7F5] dark:bg-[#141414] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[6px] text-xs text-[#000000] dark:text-white outline-none focus:border-[#0F0F0F]"
+                      className="w-full pl-7 pr-2.5 py-1 bg-accent/60 dark:bg-card border border-border rounded-[6px] text-xs text-foreground outline-none focus:border-foreground/60"
                     />
                   </div>
 
                   {/* Models List Grouped by Provider */}
                   <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-1 pr-1">
                     {filteredModels.length === 0 ? (
-                      <div className="p-4 text-center text-xs text-[#8A8A85]">
+                      <div className="p-4 text-center text-xs text-muted-foreground">
                         No matching models found. Try fetching or enter custom ID below.
                       </div>
                     ) : (
@@ -967,10 +967,10 @@ export const ChatArea: React.FC = () => {
                             }`}
                           >
                             <div className="flex items-center gap-2 min-w-0 flex-1">
-                              <Cpu size={13} className={isSelected ? 'text-[#007AFF]' : 'text-[#8A8A85]'} />
+                              <Cpu size={13} className={isSelected ? 'text-primary' : 'text-muted-foreground'} />
                               <div className="flex flex-col min-w-0">
                                 <div className="flex items-center gap-1.5">
-                                  <span className={`text-xs font-mono font-semibold truncate ${isSelected ? 'text-[#007AFF]' : 'text-[#000000] dark:text-white'}`}>
+                                  <span className={`text-xs font-mono font-semibold truncate ${isSelected ? 'text-primary' : 'text-foreground'}`}>
                                     {m.name}
                                   </span>
                                   {isSysDefault && (
@@ -979,7 +979,7 @@ export const ChatArea: React.FC = () => {
                                     </span>
                                   )}
                                 </div>
-                                <span className="text-[10px] text-[#8A8A85] truncate font-sans">
+                                <span className="text-[10px] text-muted-foreground truncate font-sans">
                                   {m.providerName || m.providerType}
                                 </span>
                               </div>
@@ -993,13 +993,13 @@ export const ChatArea: React.FC = () => {
                                     e.stopPropagation();
                                     setDefaultModel(m.id, m.providerId);
                                   }}
-                                  className="text-[9px] px-1.5 py-0.5 rounded border border-[#E5E7EB] dark:border-[#2C2C2E] hover:bg-gray-100 dark:hover:bg-gray-800 text-[#8A8A85] hover:text-[#000000] dark:hover:text-white font-semibold transition-colors"
+                                  className="text-[9px] px-1.5 py-0.5 rounded border border-border hover:bg-gray-100 dark:hover:bg-gray-800 text-muted-foreground hover:text-foreground font-semibold transition-colors"
                                   title="Set as system default model"
                                 >
                                   Set Default
                                 </button>
                               )}
-                              {isSelected && <Check size={14} className="text-[#007AFF]" />}
+                              {isSelected && <Check size={14} className="text-primary" />}
                             </div>
                           </div>
                         );
@@ -1016,18 +1016,18 @@ export const ChatArea: React.FC = () => {
                       setCustomModelInput('');
                       setIsModelDropdownOpen(false);
                     }}
-                    className="pt-2 border-t border-[#E5E7EB] dark:border-[#2C2C2E] flex items-center gap-1.5"
+                    className="pt-2 border-t border-border flex items-center gap-1.5"
                   >
                     <input
                       type="text"
                       placeholder="Enter custom model ID..."
                       value={customModelInput}
                       onChange={(e) => setCustomModelInput(e.target.value)}
-                      className="flex-1 px-2.5 py-1 bg-[#F7F7F5] dark:bg-[#141414] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[6px] text-xs font-mono text-[#000000] dark:text-white outline-none focus:border-[#0F0F0F]"
+                      className="flex-1 px-2.5 py-1 bg-accent/60 dark:bg-card border border-border rounded-[6px] text-xs font-mono text-foreground outline-none focus:border-foreground/60"
                     />
                     <button
                       type="submit"
-                      className="px-2.5 py-1 bg-[#0F0F0F] dark:bg-white text-white dark:text-black text-xs font-bold rounded-[6px] hover:bg-black/90 cursor-pointer"
+                      className="px-2.5 py-1 bg-foreground text-background text-xs font-bold rounded-[6px] hover:bg-black/90 cursor-pointer"
                     >
                       Apply
                     </button>
@@ -1039,7 +1039,7 @@ export const ChatArea: React.FC = () => {
                       setIsModelDropdownOpen(false);
                       navigate('providers');
                     }}
-                    className="border-t border-[#E5E7EB] dark:border-[#2C2C2E] pt-1.5 px-1 text-[11px] text-[#007AFF] hover:underline cursor-pointer flex items-center justify-between font-sans"
+                    className="border-t border-border pt-1.5 px-1 text-[11px] text-primary hover:underline cursor-pointer flex items-center justify-between font-sans"
                   >
                     <span>Manage Providers &amp; API Keys...</span>
                     <ExternalLink size={11} />
@@ -1053,20 +1053,32 @@ export const ChatArea: React.FC = () => {
         {/* Universal Action Chips */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <button
+            onClick={() => {
+              useAppStore.getState().setMode('agent');
+              navigate('agent');
+            }}
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-md border border-border-default bg-toolbar-control text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
+            title="Switch to Agent workspace (forge tasks)"
+          >
+            <Sparkles size={13} className="text-primary" />
+            <span className="hidden sm:inline">Agent Mode</span>
+          </button>
+
+          <button
             onClick={handleQuickReview}
-            className="hidden sm:flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-[#FFF5EB] border border-[#E5E7EB] hover:border-[#D97706] rounded-[6px] text-[11px] font-sans text-[#333333] transition-colors shadow-2xs cursor-pointer"
+            className="hidden sm:flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-warning/10 border border-border hover:border-warning/60 rounded-[6px] text-[11px] font-sans text-foreground/85 transition-colors shadow-2xs cursor-pointer"
             title="Run code & security review on workspace diff"
           >
-            <ShieldCheck size={13} className="text-[#D97706]" />
+            <ShieldCheck size={13} className="text-warning" />
             <span>Review Diff</span>
           </button>
 
           <button
-            onClick={() => navigate('worktrees')}
-            className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-[#FFFFFF] border border-[#E5E7EB] hover:border-[#333333] rounded-[6px] text-[11px] font-sans text-[#333333] transition-colors shadow-2xs cursor-pointer"
+            onClick={() => navigateSettings('worktrees')}
+            className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-card border border-border hover:border-border-strong rounded-[6px] text-[11px] font-sans text-foreground/85 transition-colors shadow-2xs cursor-pointer"
             title="Git Worktrees & Branch Isolation"
           >
-            <GitFork size={13} className="text-[#333333]" />
+            <GitFork size={13} className="text-foreground/85" />
             <span>Worktrees</span>
           </button>
         </div>
@@ -1074,20 +1086,20 @@ export const ChatArea: React.FC = () => {
 
       {/* WhatsApp-style selection action bar */}
       {selectionMode && (
-        <div className="w-full shrink-0 flex items-center gap-2 px-3 sm:px-6 py-2 bg-[#EBF5FF] dark:bg-[#0E2A3F] border-b border-[#BFDBFE] dark:border-[#0B2A40] z-30 animate-in fade-in slide-in-from-top-1 duration-100">
+        <div className="w-full shrink-0 flex items-center gap-2 px-3 sm:px-6 py-2 bg-info/10 border-b border-info/30 z-30 animate-in fade-in slide-in-from-top-1 duration-100">
           <button
             onClick={exitSelection}
             className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
             title="Batalkan seleksi"
           >
-            <X size={17} className="text-[#333333] dark:text-white" />
+            <X size={17} className="text-foreground/85 dark:text-white" />
           </button>
-          <span className="text-xs font-bold text-[#000000] dark:text-white flex-1 font-sans">
+          <span className="text-xs font-bold text-foreground flex-1 font-sans">
             {selectedIds.size} pesan dipilih
           </span>
           <button
             onClick={selectAllMessages}
-            className="text-[11px] font-bold text-[#007AFF] px-2 py-1 rounded hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors cursor-pointer"
+            className="text-[11px] font-bold text-primary px-2 py-1 rounded hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors cursor-pointer"
           >
             Pilih Semua
           </button>
@@ -1097,7 +1109,7 @@ export const ChatArea: React.FC = () => {
             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-[6px] text-[11px] font-bold transition-colors ${
               selectedIds.size > 0
                 ? 'bg-red-500 text-white hover:bg-red-600 cursor-pointer'
-                : 'bg-black/10 dark:bg-white/10 text-[#8A8A85] cursor-not-allowed'
+                : 'bg-black/10 dark:bg-white/10 text-muted-foreground cursor-not-allowed'
             }`}
           >
             <Trash2 size={13} />
@@ -1115,26 +1127,26 @@ export const ChatArea: React.FC = () => {
         >
           {/* Parallel Running Background Tasks Banner */}
           {runningTasks.length > 0 && (
-            <div className="w-full shrink-0 flex flex-row gap-2.5 p-[10px_14px] items-center bg-[#EBF5FF] border border-[#BFDBFE] rounded-[8px] shadow-2xs">
-              <RefreshCw size={14} className="animate-spin text-[#007AFF] shrink-0" />
-              <div className="text-[12px] text-[#333333] font-geist flex-1 truncate">
+            <div className="w-full shrink-0 flex flex-row gap-2.5 p-[10px_14px] items-center bg-info/10 border border-info/30 rounded-[8px] shadow-2xs">
+              <RefreshCw size={14} className="animate-spin text-primary shrink-0" />
+              <div className="text-[12px] text-foreground/85 font-geist flex-1 truncate">
                 {runningTasks[0].title} — running {Math.max(1, Math.round((Date.now() - runningTasks[0].startedAt) / 1000))}s
                 {runningTasks.length > 1 && (
-                  <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#007AFF] text-white align-middle">
+                  <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-primary text-white align-middle">
                     +{runningTasks.length - 1} background
                   </span>
                 )}
               </div>
               <button
                 onClick={() => openSubAgentPanel(runningTasks[0].sessionId)}
-                className="px-2.5 py-1 bg-[#007AFF] text-white text-[11px] font-funnel font-bold rounded-[4px] hover:bg-[#0066D6] transition-colors"
+                className="px-2.5 py-1 bg-primary text-white text-[11px] font-funnel font-bold rounded-[4px] hover:bg-primary/85 transition-colors"
                 title="Step into the sub-agent: live process + direct instructions"
               >
                 Enter
               </button>
               <button
                 onClick={() => cancelTask(runningTasks[0].id)}
-                className="px-2.5 py-1 bg-[#FFFFFF] border border-[#E5E7EB] text-[#333333] text-[11px] font-funnel rounded-[4px] hover:bg-[#F7F7F5] transition-colors"
+                className="px-2.5 py-1 bg-card border border-border text-foreground/85 text-[11px] font-funnel rounded-[4px] hover:bg-accent/60 transition-colors"
               >
                 Cancel
               </button>
@@ -1152,12 +1164,12 @@ export const ChatArea: React.FC = () => {
                       size={96}
                       className="drop-shadow-xl transition-all duration-300 group-hover:scale-108"
                     />
-                    <span className="absolute bottom-1 right-1 w-5 h-5 rounded-full bg-[#16A34A] border-3 border-white ring-2 ring-emerald-500/20" title="Online" />
+                    <span className="absolute bottom-1 right-1 w-5 h-5 rounded-full bg-success border-3 border-white ring-2 ring-emerald-500/20" title="Online" />
                   </div>
-                  <h1 className="text-2xl font-bold font-sans text-[#000000] dark:text-white mb-1.5 tracking-tight flex items-center justify-center gap-2">
+                  <h1 className="text-2xl font-bold font-sans text-foreground mb-1.5 tracking-tight flex items-center justify-center gap-2">
                     <span>{partnerAgent?.name || 'Agent Person'}</span>
                   </h1>
-                  <p className="text-xs text-[#8A8A85] font-sans mb-7 max-w-md leading-relaxed">
+                  <p className="text-xs text-muted-foreground font-sans mb-7 max-w-md leading-relaxed">
                     {partnerAgent?.description || 'Autonomous specialist agent equipped with dedicated skills, tools, and continuous memory.'}
                   </p>
                 </>
@@ -1168,18 +1180,18 @@ export const ChatArea: React.FC = () => {
                     onClick={() => setIsGroupMembersModalOpen(true)}
                     title="Manage group members"
                   >
-                    <Users size={44} className="text-[#007AFF]" />
+                    <Users size={44} className="text-primary" />
                   </div>
-                  <h1 className="text-2xl font-bold font-sans text-[#000000] dark:text-white mb-1.5 tracking-tight">
+                  <h1 className="text-2xl font-bold font-sans text-foreground mb-1.5 tracking-tight">
                     {currentSession?.title || 'Group Chat Room'}
                   </h1>
-                  <p className="text-xs text-[#8A8A85] font-sans mb-4 max-w-md leading-relaxed">
-                    This group includes {currentSession?.participants?.length || 0} Agent Persons and you. Mention an agent using <span className="font-mono font-bold text-[#007AFF]">@AgentName</span> to address them directly, or ask open questions to the room.
+                  <p className="text-xs text-muted-foreground font-sans mb-4 max-w-md leading-relaxed">
+                    This group includes {currentSession?.participants?.length || 0} Agent Persons and you. Mention an agent using <span className="font-mono font-bold text-primary">@AgentName</span> to address them directly, or ask open questions to the room.
                   </p>
                   <button
                     type="button"
                     onClick={() => setIsGroupMembersModalOpen(true)}
-                    className="mb-7 px-3.5 py-1.5 bg-blue-50 dark:bg-blue-950/40 text-[#007AFF] border border-blue-200 dark:border-blue-900/60 rounded-[8px] text-xs font-bold hover:bg-blue-100 transition-colors cursor-pointer"
+                    className="mb-7 px-3.5 py-1.5 bg-blue-50 dark:bg-blue-950/40 text-primary border border-blue-200 dark:border-blue-900/60 rounded-[8px] text-xs font-bold hover:bg-blue-100 transition-colors cursor-pointer"
                   >
                     + View &amp; Manage Members
                   </button>
@@ -1187,12 +1199,12 @@ export const ChatArea: React.FC = () => {
               ) : (
                 <>
                   <div className="w-20 h-20 rounded-full bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-200 dark:border-amber-900 flex items-center justify-center mb-5 shadow-lg">
-                    <Bot size={40} className="text-[#D97706]" />
+                    <Bot size={40} className="text-warning" />
                   </div>
-                  <h1 className="text-2xl font-bold font-sans text-[#000000] dark:text-white mb-1.5 tracking-tight">
+                  <h1 className="text-2xl font-bold font-sans text-foreground mb-1.5 tracking-tight">
                     General Chat
                   </h1>
-                  <p className="text-xs text-[#8A8A85] font-sans mb-7 max-w-md leading-relaxed">
+                  <p className="text-xs text-muted-foreground font-sans mb-7 max-w-md leading-relaxed">
                     Traditional ad-hoc session. You can switch models freely using the model selector dropdown in the header.
                   </p>
                 </>
@@ -1205,37 +1217,37 @@ export const ChatArea: React.FC = () => {
                     title: 'Review Workspace Security',
                     desc: 'Run security scan and check for secrets in diff',
                     prompt: 'Please review the workspace and git diff for security vulnerabilities and code quality using review_code.',
-                    icon: <ShieldCheck size={14} className="text-[#16A34A]" />,
+                    icon: <ShieldCheck size={14} className="text-success" />,
                   },
                   {
                     title: 'Build UI Component',
                     desc: 'Scaffold responsive layout with clean CSS',
                     prompt: 'Let\'s build a responsive modern interface component with clean design tokens.',
-                    icon: <Code2 size={14} className="text-[#007AFF]" />,
+                    icon: <Code2 size={14} className="text-primary" />,
                   },
                   {
                     title: 'Create Automated Routine',
                     desc: 'Schedule recurring automation task',
                     prompt: 'Please set up an automated routine to monitor workspace health every 30 minutes.',
-                    icon: <Clock size={14} className="text-[#D97706]" />,
+                    icon: <Clock size={14} className="text-warning" />,
                   },
                   {
                     title: 'Git Worktree Branch',
                     desc: 'Create isolated worktree for development',
                     prompt: 'Create a new git worktree for feature development and report its status.',
-                    icon: <GitFork size={14} className="text-[#8A8A85]" />,
+                    icon: <GitFork size={14} className="text-muted-foreground" />,
                   },
                 ].map((item) => (
                   <div
                     key={item.title}
                     onClick={() => sendMessage(item.prompt)}
-                    className="p-3 bg-[#FFFFFF] dark:bg-[#1C1C1E] hover:bg-[#FFF5EB] dark:hover:bg-[#2C2218] border border-[#E5E7EB] dark:border-[#2C2C2E] hover:border-[#D97706] rounded-[8px] text-left cursor-pointer transition-all shadow-2xs group"
+                    className="p-3 bg-card hover:bg-warning/10 dark:hover:bg-warning/10 border border-border hover:border-warning/60 rounded-[8px] text-left cursor-pointer transition-all shadow-2xs group"
                   >
                     <div className="flex items-center gap-2 mb-1">
                       <span>{item.icon}</span>
-                      <span className="text-xs font-bold font-funnel text-[#000000] dark:text-white">{item.title}</span>
+                      <span className="text-xs font-bold font-funnel text-foreground">{item.title}</span>
                     </div>
-                    <div className="text-[11px] text-[#8A8A85] font-geist">{item.desc}</div>
+                    <div className="text-[11px] text-muted-foreground font-geist">{item.desc}</div>
                   </div>
                 ))}
               </div>
@@ -1276,18 +1288,18 @@ export const ChatArea: React.FC = () => {
               </div>
               <div className="flex flex-col gap-1 min-w-0">
                 <div className="flex items-center gap-2 px-1">
-                  <span className="text-[13px] font-bold text-[#007AFF] dark:text-[#3B82F6] font-sans">
+                  <span className="text-[13px] font-bold text-primary font-sans">
                     {typingAgent?.name || activeAgent?.name || 'Agent'}
                   </span>
                 </div>
-                <div className="p-[10px_16px] bg-[#FFFFFF] dark:bg-[#1A1A1A] rounded-[16px] rounded-tl-[4px] border border-[#E5E7EB] dark:border-[#2C2C2E] shadow-2xs flex items-center gap-2.5">
-                  <span className="text-[12px] text-[#8A8A85] font-geist">
+                <div className="p-[10px_16px] bg-card dark:bg-card rounded-[16px] rounded-tl-[4px] border border-border shadow-2xs flex items-center gap-2.5">
+                  <span className="text-[12px] text-muted-foreground font-geist">
                     {thinkingStatus || `${typingAgent?.name || 'Agent'} is typing...`}
                   </span>
                   <span className="inline-flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] animate-bounce [animation-delay:-0.3s]" />
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] animate-bounce [animation-delay:-0.15s]" />
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] animate-bounce" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.3s]" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.15s]" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" />
                   </span>
                 </div>
               </div>
@@ -1313,7 +1325,7 @@ export const ChatArea: React.FC = () => {
                 }, 400);
               }
             }}
-            className="absolute bottom-4 left-1/2 -translate-x-1/2 px-3.5 py-1.5 bg-[#0F0F0F] dark:bg-white text-white dark:text-black rounded-full shadow-lg border border-black/10 dark:border-white/20 text-xs font-semibold flex items-center gap-1.5 transition-all animate-in fade-in slide-in-from-bottom-2 z-20 hover:scale-105 cursor-pointer select-none"
+            className="absolute bottom-4 left-1/2 -translate-x-1/2 px-3.5 py-1.5 bg-foreground text-background rounded-full shadow-lg border border-black/10 dark:border-white/20 text-xs font-semibold flex items-center gap-1.5 transition-all animate-in fade-in slide-in-from-bottom-2 z-20 hover:scale-105 cursor-pointer select-none"
           >
             <ArrowDown size={13} />
             <span>Jump to bottom</span>
@@ -1325,7 +1337,7 @@ export const ChatArea: React.FC = () => {
       </div>
 
       {/* WhatsApp-Style Clean Floating Input Bar */}
-      <div className="w-full shrink-0 px-3 sm:px-14 py-2 sm:py-3 bg-[#FFFFFF] dark:bg-[#141414] border-t border-[#E5E7EB] dark:border-[#27272A] relative select-none pb-[calc(env(safe-area-inset-bottom,0px)+8px)]">
+      <div className="w-full shrink-0 px-3 sm:px-14 py-2 sm:py-3 bg-card border-t border-border/70 relative select-none pb-[calc(env(safe-area-inset-bottom,0px)+8px)]">
         {/* Mention Autocomplete Popover Modal */}
         {isTypingMention && mentionSuggestions.length > 0 && (
           <MentionAutocompleteModal
@@ -1346,12 +1358,12 @@ export const ChatArea: React.FC = () => {
 
         {/* Ingest Notification */}
         {ragNotice && (
-          <div className="max-w-4xl mx-auto mb-2 p-2.5 bg-[#F7F7F5] dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[12px] text-xs flex items-center justify-between shadow-2xs">
-            <div className="flex items-center gap-2 text-[#333333] dark:text-[#E5E7EB] font-sans">
-              {isUploadingDoc ? <RefreshCw size={14} className="animate-spin text-[#007AFF]" /> : <Database size={14} className="text-[#007AFF]" />}
+          <div className="max-w-4xl mx-auto mb-2 p-2.5 bg-accent/60 border border-border rounded-[12px] text-xs flex items-center justify-between shadow-2xs">
+            <div className="flex items-center gap-2 text-foreground/85 font-sans">
+              {isUploadingDoc ? <RefreshCw size={14} className="animate-spin text-primary" /> : <Database size={14} className="text-primary" />}
               <span className="truncate">{ragNotice.text}</span>
             </div>
-            <button onClick={() => setRagNotice(null)} className="text-[#8A8A85] hover:text-[#000000] dark:hover:text-white cursor-pointer ml-2">
+            <button onClick={() => setRagNotice(null)} className="text-muted-foreground hover:text-foreground cursor-pointer ml-2">
               <X size={13} />
             </button>
           </div>
@@ -1369,16 +1381,16 @@ export const ChatArea: React.FC = () => {
         {/* WhatsApp-Style Row */}
         <div className="w-full max-w-4xl mx-auto flex items-end gap-2">
           {/* Main Input Pill Container */}
-          <div className="flex-1 min-w-0 bg-[#F7F7F5] dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[24px] px-3.5 py-1.5 shadow-2xs flex items-end gap-2 focus-within:border-[#007AFF] focus-within:bg-[#FFFFFF] dark:focus-within:bg-[#141414] focus-within:ring-2 focus-within:ring-[#007AFF]/15 transition-all">
+          <div className="flex-1 min-w-0 bg-accent/60 border border-border rounded-[24px] px-3.5 py-1.5 shadow-2xs flex items-end gap-2 focus-within:border-primary/60 focus-within:bg-card dark:focus-within:bg-background focus-within:ring-2 focus-within:ring-primary/15 transition-all">
             {/* Attachment Button */}
             <button
               type="button"
               disabled={isUploadingDoc}
               onClick={() => fileInputRef.current?.click()}
-              className="p-1.5 text-[#8A8A85] hover:text-[#000000] dark:hover:text-white rounded-full hover:bg-black/5 dark:hover:bg-white/5 transition-colors shrink-0 mb-0.5 cursor-pointer"
+              className="p-1.5 text-muted-foreground hover:text-foreground rounded-full hover:bg-foreground/5 transition-colors shrink-0 mb-0.5 cursor-pointer"
               title="Upload document to Vector RAG"
             >
-              {isUploadingDoc ? <RefreshCw size={18} className="animate-spin text-[#007AFF]" /> : <Paperclip size={18} />}
+              {isUploadingDoc ? <RefreshCw size={18} className="animate-spin text-primary" /> : <Paperclip size={18} />}
             </button>
 
             {/* Auto-growing Textarea */}
@@ -1395,7 +1407,7 @@ export const ChatArea: React.FC = () => {
                   ? `Message ${partnerAgent?.name || 'agent'}…`
                   : 'Type a message, slash command (/), or discuss…'
               }
-              className="flex-1 min-w-0 bg-transparent text-[14px] text-[#000000] dark:text-white placeholder:text-[#8A8A85] font-sans resize-none outline-none py-1.5 max-h-36 custom-scrollbar leading-relaxed"
+              className="flex-1 min-w-0 bg-transparent text-[14px] text-foreground placeholder:text-muted-foreground font-sans resize-none outline-none py-1.5 max-h-36 custom-scrollbar leading-relaxed"
               style={{ minHeight: '26px' }}
             />
 
@@ -1406,7 +1418,7 @@ export const ChatArea: React.FC = () => {
                 setInputText((prev) => prev + '@');
                 textareaRef.current?.focus();
               }}
-              className="p-1.5 text-[#8A8A85] hover:text-[#007AFF] rounded-full hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors shrink-0 mb-0.5 cursor-pointer"
+              className="p-1.5 text-muted-foreground hover:text-primary rounded-full hover:bg-primary/10 transition-colors shrink-0 mb-0.5 cursor-pointer"
               title="Mention an agent person (@)"
             >
               <AtSign size={16} />
@@ -1421,7 +1433,7 @@ export const ChatArea: React.FC = () => {
                   textareaRef.current?.focus();
                 }
               }}
-              className="p-1.5 text-[#8A8A85] hover:text-[#007AFF] rounded-full hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors shrink-0 mb-0.5 cursor-pointer"
+              className="p-1.5 text-muted-foreground hover:text-primary rounded-full hover:bg-primary/10 transition-colors shrink-0 mb-0.5 cursor-pointer"
               title="Slash commands & skills (/)"
             >
               <Command size={16} />
@@ -1443,8 +1455,8 @@ export const ChatArea: React.FC = () => {
               disabled={!inputText.trim()}
               className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 shadow-sm transition-all ${
                 inputText.trim()
-                  ? 'bg-[#007AFF] hover:bg-[#0066D6] text-white scale-100 active:scale-95 cursor-pointer shadow-blue-500/20'
-                  : 'bg-[#E5E7EB] dark:bg-[#2C2C2E] text-[#9CA3AF] cursor-not-allowed opacity-70'
+                  ? 'bg-primary hover:bg-primary/85 text-white scale-100 active:scale-95 cursor-pointer shadow-blue-500/20'
+                  : 'bg-accent text-subtle-fg cursor-not-allowed opacity-70'
               }`}
               title="Send Message"
             >
@@ -1466,7 +1478,7 @@ export const ChatArea: React.FC = () => {
           />
 
           {/* Drawer Container */}
-          <div className="relative w-[85vw] max-w-[320px] h-full bg-[#FFFFFF] dark:bg-[#141414] shadow-2xl z-10 flex flex-col transform transition-transform duration-200">
+          <div className="relative w-[85vw] max-w-[320px] h-full bg-card shadow-2xl z-10 flex flex-col transform transition-transform duration-200">
             <Sidebar isMobile onClose={() => setIsMobileDrawerOpen(false)} />
           </div>
         </div>
@@ -1484,20 +1496,20 @@ export const ChatArea: React.FC = () => {
           />
 
           {/* Sheet Modal */}
-          <div className="relative w-full sm:max-w-lg bg-[#FFFFFF] dark:bg-[#1C1C1E] rounded-t-[18px] sm:rounded-[14px] shadow-2xl border border-[#E5E7EB] dark:border-[#2C2C2E] max-h-[85vh] flex flex-col z-10 overflow-hidden">
+          <div className="relative w-full sm:max-w-lg bg-card rounded-t-[18px] sm:rounded-[14px] shadow-2xl border border-border max-h-[85vh] flex flex-col z-10 overflow-hidden">
             {/* Sheet Header */}
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#E5E7EB] dark:border-[#2C2C2E]">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
               <div>
-                <h3 className="text-sm font-bold text-[#000000] dark:text-white font-sans">
+                <h3 className="text-sm font-bold text-foreground font-sans">
                   Switch Specialist Agent Worker
                 </h3>
-                <p className="text-[11px] text-[#8A8A85]">
+                <p className="text-[11px] text-muted-foreground">
                   Each worker operates with dedicated specialty skills, model &amp; Telegram bot
                 </p>
               </div>
               <button
                 onClick={() => setIsAgentPickerOpen(false)}
-                className="p-1.5 text-[#8A8A85] hover:text-[#000000] dark:hover:text-white rounded-md hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer"
+                className="p-1.5 text-muted-foreground hover:text-foreground rounded-md hover:bg-foreground/5 cursor-pointer"
               >
                 <X size={16} />
               </button>
@@ -1516,8 +1528,8 @@ export const ChatArea: React.FC = () => {
                     onClick={() => handleSwitchWorker(worker)}
                     className={`flex items-center justify-between p-3 rounded-[10px] border cursor-pointer transition-all ${
                       isCurrent
-                        ? 'border-[#007AFF] bg-blue-50/70 dark:bg-blue-950/30 shadow-xs ring-1 ring-[#007AFF]/30'
-                        : 'border-[#E5E7EB] dark:border-[#2C2C2E] bg-[#FFFFFF] dark:bg-[#18181B] hover:border-gray-300'
+                        ? 'border-primary bg-blue-50/70 dark:bg-blue-950/30 shadow-xs ring-1 ring-primary/30'
+                        : 'border-border bg-card dark:bg-card hover:border-gray-300'
                     }`}
                   >
                     <div className="flex items-center gap-3 min-w-0">
@@ -1528,22 +1540,22 @@ export const ChatArea: React.FC = () => {
 
                       <div className="flex flex-col min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-[#000000] dark:text-white font-sans truncate">
+                          <span className="text-xs font-bold text-foreground font-sans truncate">
                             {worker.role || worker.name}
                           </span>
                           <span className="text-[9px] px-1.5 py-0.2 rounded font-semibold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
                             {worker.department}
                           </span>
                         </div>
-                        <span className="text-[11px] text-[#8A8A85] truncate font-sans">
+                        <span className="text-[11px] text-muted-foreground truncate font-sans">
                           {worker.fullName ? `${worker.fullName} · ` : ''}{worker.description}
                         </span>
                         <div className="flex items-center gap-2 mt-1">
-                          <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-blue-50 dark:bg-blue-900/30 text-[#007AFF] font-bold">
+                          <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-blue-50 dark:bg-blue-900/30 text-primary font-bold">
                             ⚡ {worker.model || defaultModel || 'gpt-4o'}
                           </span>
                           {isBotConnected && (
-                            <span className="text-[9px] font-mono text-[#16A34A] flex items-center gap-0.5">
+                            <span className="text-[9px] font-mono text-success flex items-center gap-0.5">
                               <Send size={9} />
                               {botUsername || 'Bot Linked'}
                             </span>
@@ -1554,13 +1566,13 @@ export const ChatArea: React.FC = () => {
 
                     <div className="shrink-0 pl-2">
                       {isCurrent ? (
-                        <div className="w-6 h-6 rounded-full bg-[#007AFF] text-white flex items-center justify-center">
+                        <div className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center">
                           <Check size={14} strokeWidth={2.5} />
                         </div>
                       ) : (
                         <button
                           type="button"
-                          className="px-2.5 py-1 text-[11px] font-bold rounded-[6px] border border-[#E5E7EB] dark:border-[#2C2C2E] text-[#333333] dark:text-white hover:bg-black/5 dark:hover:bg-white/5"
+                          className="px-2.5 py-1 text-[11px] font-bold rounded-[6px] border border-border text-foreground/85 dark:text-white hover:bg-foreground/5"
                         >
                           Chat
                         </button>
@@ -1572,21 +1584,21 @@ export const ChatArea: React.FC = () => {
             </div>
 
             {/* Bottom Actions */}
-            <div className="p-3 bg-[#F9FAFB] dark:bg-[#141414] border-t border-[#E5E7EB] dark:border-[#2C2C2E] flex items-center justify-between">
+            <div className="p-3 bg-accent/40 border-t border-border flex items-center justify-between">
               <button
                 type="button"
                 onClick={() => {
                   setIsAgentPickerOpen(false);
                   navigate('agents');
                 }}
-                className="text-xs font-bold text-[#007AFF] hover:underline flex items-center gap-1 cursor-pointer"
+                className="text-xs font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
               >
                 <span>Manage Agent Persons →</span>
               </button>
               <button
                 type="button"
                 onClick={() => setIsAgentPickerOpen(false)}
-                className="px-4 py-1.5 text-xs font-semibold rounded-[6px] border border-[#E5E7EB] dark:border-[#2C2C2E] bg-white dark:bg-[#18181B] text-[#333333] dark:text-white hover:bg-gray-100"
+                className="px-4 py-1.5 text-xs font-semibold rounded-[6px] border border-border bg-card text-foreground/85 dark:text-white hover:bg-gray-100"
               >
                 Close
               </button>
@@ -1614,10 +1626,10 @@ const MentionAutocompleteModal: React.FC<{
   if (agents.length === 0) return null;
 
   return (
-    <div className="absolute bottom-full left-4 right-4 sm:left-14 sm:right-14 mb-2 bg-[#FFFFFF] dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[10px] shadow-2xl overflow-hidden z-40 animate-in fade-in duration-100 max-h-60 overflow-y-auto custom-scrollbar p-1">
-      <div className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] border-b border-[#E5E7EB] dark:border-[#2C2C2E] flex items-center justify-between">
+    <div className="absolute bottom-full left-4 right-4 sm:left-14 sm:right-14 mb-2 bg-card border border-border rounded-[10px] shadow-2xl overflow-hidden z-40 animate-in fade-in duration-100 max-h-60 overflow-y-auto custom-scrollbar p-1">
+      <div className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-1.5">
-          <AtSign size={12} className="text-[#007AFF]" />
+          <AtSign size={12} className="text-primary" />
           <span>Mention Agent Person</span>
         </div>
         <span className="font-mono text-[9px]">↑↓ Navigate · Tab / Enter Select</span>
@@ -1632,21 +1644,21 @@ const MentionAutocompleteModal: React.FC<{
               onClick={() => onSelect(agent)}
               className={`flex items-center justify-between px-2.5 py-2 rounded-[6px] cursor-pointer transition-colors ${
                 isSelected
-                  ? 'bg-blue-50 dark:bg-blue-950/40 text-[#007AFF]'
-                  : 'hover:bg-black/5 dark:hover:bg-white/5 text-[#000000] dark:text-white'
+                  ? 'bg-blue-50 dark:bg-blue-950/40 text-primary'
+                  : 'hover:bg-foreground/5 text-foreground'
               }`}
             >
               <div className="flex items-center gap-2.5 min-w-0">
                 <GrokAvatar id={agent.avatar || agent.id} size={28} />
                 <div className="flex items-center gap-1.5 min-w-0">
                   <span className="text-xs font-bold font-sans truncate">@{agent.name}</span>
-                  <span className="text-[10px] text-[#8A8A85] truncate font-sans">
+                  <span className="text-[10px] text-muted-foreground truncate font-sans">
                     ({agent.role || agent.department || 'Specialist'})
                   </span>
                 </div>
               </div>
 
-              <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-gray-100 dark:bg-[#27272A] text-[#8A8A85] shrink-0 ml-2">
+              <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-accent text-muted-foreground shrink-0 ml-2">
                 {agent.model || 'gpt-4o'}
               </span>
             </div>
@@ -1666,13 +1678,13 @@ const SlashAutocompleteModal: React.FC<{
   if (suggestions.length === 0) return null;
 
   return (
-    <div className="absolute bottom-full left-4 right-4 sm:left-14 sm:right-14 mb-2 bg-[#FFFFFF] border border-[#E5E7EB] rounded-[8px] shadow-2xl overflow-hidden z-40 animate-in fade-in duration-100">
-      <div className="p-2 border-b border-[#E5E7EB] flex items-center justify-between text-[11px] text-[#8A8A85] font-funnel px-3 bg-[#F7F7F5]">
-        <div className="flex items-center gap-1.5 font-funnel font-bold text-[#000000]">
-          <Command size={12} className="text-[#007AFF]" />
+    <div className="absolute bottom-full left-4 right-4 sm:left-14 sm:right-14 mb-2 bg-card border border-border rounded-[8px] shadow-2xl overflow-hidden z-40 animate-in fade-in duration-100">
+      <div className="p-2 border-b border-border flex items-center justify-between text-[11px] text-muted-foreground font-funnel px-3 bg-accent/60">
+        <div className="flex items-center gap-1.5 font-funnel font-bold text-foreground">
+          <Command size={12} className="text-primary" />
           <span>Slash Commands & Agent Skills</span>
         </div>
-        <div className="flex items-center gap-2 text-[10px] text-[#8A8A85] font-funnel">
+        <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-funnel">
           <span>↑↓ Navigate</span>
           <span>•</span>
           <span>Tab / Enter Select</span>
@@ -1690,29 +1702,29 @@ const SlashAutocompleteModal: React.FC<{
               onClick={() => onSelect(item)}
               className={`flex items-center justify-between px-3 py-2 rounded-[6px] cursor-pointer transition-colors select-none ${
                 isSelected
-                  ? 'bg-[#FFF5EB] border border-[#F5E3CF]'
-                  : 'hover:bg-[#F7F7F5] border border-transparent'
+                  ? 'bg-warning/10 border border-warning/25'
+                  : 'hover:bg-accent/60 border border-transparent'
               }`}
             >
               <div className="flex items-center gap-2.5 truncate">
                 <span className="text-sm flex-shrink-0">{item.icon}</span>
                 <div className="truncate">
                   <div className="flex items-center gap-1.5 font-mono text-xs">
-                    <span className="font-bold text-[#000000]">{item.prefix}</span>
-                    <span className="text-[#8A8A85] font-sans font-normal">— {item.label}</span>
+                    <span className="font-bold text-foreground">{item.prefix}</span>
+                    <span className="text-muted-foreground font-sans font-normal">— {item.label}</span>
                   </div>
-                  <div className="text-[11px] text-[#8A8A85] font-geist truncate mt-0.5">
+                  <div className="text-[11px] text-muted-foreground font-geist truncate mt-0.5">
                     {item.desc}
                   </div>
                 </div>
               </div>
 
               <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                <span className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider font-funnel bg-[#F7F7F5] text-[#8A8A85] border border-[#E5E7EB]">
+                <span className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider font-funnel bg-accent/60 text-muted-foreground border border-border">
                   {item.category}
                 </span>
                 {isSelected && (
-                  <CornerDownLeft size={13} className="text-[#D97706]" />
+                  <CornerDownLeft size={13} className="text-warning" />
                 )}
               </div>
             </div>
@@ -1762,32 +1774,32 @@ const ThoughtProcessAccordion: React.FC<{ thought: string; isStreaming?: boolean
   }
 
   return (
-    <div className="w-full bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[8px] overflow-hidden my-1 shadow-2xs">
+    <div className="w-full bg-card dark:bg-card border border-border rounded-[8px] overflow-hidden my-1 shadow-2xs">
       <div
         onClick={() => setIsOpen(!isOpen)}
         className="w-full flex flex-row gap-2 p-[10px_14px] items-center cursor-pointer select-none"
       >
-        <Brain size={14} className={`text-[#007AFF] ${isStreaming ? 'animate-pulse' : ''}`} />
-        <div className="text-[12px] text-[#333333] dark:text-[#E5E7EB] font-funnel font-bold">
+        <Brain size={14} className={`text-primary ${isStreaming ? 'animate-pulse' : ''}`} />
+        <div className="text-[12px] text-foreground/85 font-funnel font-bold">
           Thought process
         </div>
-        <div className="text-[11px] text-[#007AFF] font-funnel">
+        <div className="text-[11px] text-primary font-funnel">
           {isStreaming ? 'streaming · ' : ''}{wordCount} words
         </div>
         <div className="flex-1" />
         {isOpen ? (
-          <ChevronUp size={14} className="text-[#8A8A85]" />
+          <ChevronUp size={14} className="text-muted-foreground" />
         ) : (
-          <ChevronDown size={14} className="text-[#8A8A85]" />
+          <ChevronDown size={14} className="text-muted-foreground" />
         )}
       </div>
 
       {isOpen && (
         <div className="w-full p-[0px_14px_12px_14px]">
-          <div className="text-[12px]/[19px] text-[#8A8A85] dark:text-[#A1A1AA] font-geist whitespace-pre-wrap">
+          <div className="text-[12px]/[19px] text-muted-foreground dark:text-muted-foreground font-geist whitespace-pre-wrap">
             {cleanedThought}
             {isStreaming && (
-              <span className="inline-block w-1.5 h-3 bg-[#007AFF] animate-pulse ml-1 align-middle" />
+              <span className="inline-block w-1.5 h-3 bg-primary animate-pulse ml-1 align-middle" />
             )}
           </div>
         </div>
@@ -1826,8 +1838,8 @@ const SelectCheckbox: React.FC<{
     }}
     className={`absolute ${side === 'left' ? 'left-2' : 'right-2'} top-1/2 -translate-y-1/2 z-20 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer ${
       isSelected
-        ? 'bg-[#007AFF] border-[#007AFF]'
-        : 'border-[#9CA3AF] bg-white/90 dark:bg-black/50 hover:border-[#007AFF]'
+        ? 'bg-primary border-primary'
+        : 'border-border-strong bg-white/90 dark:bg-black/50 hover:border-primary/60'
     }`}
     title={isSelected ? 'Batalkan pilihan' : 'Pilih pesan'}
   >
@@ -1845,7 +1857,7 @@ const MessageHoverBar: React.FC<{
 }> = ({ msg, onReact, onDelete, onStartSelect }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   return (
-    <div className="select-none pointer-events-auto opacity-0 group-hover/msg:opacity-100 transition-opacity absolute -top-3.5 right-2 z-10 flex items-center gap-0.5 bg-white dark:bg-[#2C2C2E] border border-gray-200 dark:border-neutral-700 rounded-full px-1.5 py-0.5 shadow-md">
+    <div className="select-none pointer-events-auto opacity-0 group-hover/msg:opacity-100 transition-opacity absolute -top-3.5 right-2 z-10 flex items-center gap-0.5 bg-white dark:bg-accent border border-gray-200 dark:border-neutral-700 rounded-full px-1.5 py-0.5 shadow-md">
       {['😂', '👍', '❤️', '🔥', '🤔', '🎉'].map((emo) => (
         <button
           key={emo}
@@ -1865,21 +1877,21 @@ const MessageHoverBar: React.FC<{
           className="p-1 rounded-full hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
           title="Menu pesan"
         >
-          <ChevronDown size={13} className="text-[#8A8A85]" />
+          <ChevronDown size={13} className="text-muted-foreground" />
         </button>
         {menuOpen && (
           <>
             <div className="fixed inset-0 z-30" onClick={() => setMenuOpen(false)} />
-            <div className="absolute right-0 top-full mt-1.5 w-36 bg-white dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[10px] shadow-2xl z-40 py-1 animate-in fade-in zoom-in-95 duration-100">
+            <div className="absolute right-0 top-full mt-1.5 w-36 bg-card border border-border rounded-[10px] shadow-2xl z-40 py-1 animate-in fade-in zoom-in-95 duration-100">
               <button
                 type="button"
                 onClick={() => {
                   setMenuOpen(false);
                   onStartSelect(msg.id);
                 }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-[#333333] dark:text-[#E5E7EB] hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer text-left"
+                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground/85 hover:bg-foreground/5 cursor-pointer text-left"
               >
-                <CheckSquare size={13} className="text-[#007AFF]" />
+                <CheckSquare size={13} className="text-primary" />
                 Pilih pesan
               </button>
               <button
@@ -1928,7 +1940,7 @@ const ChatMessageItem = React.memo<ChatMessageItemProps>(({
           )}
           <div
             onClick={selectionMode && deletable ? () => onToggleSelect?.(msg.id) : undefined}
-            className={`w-full p-[12px_16px] bg-[#0F0F0F] dark:bg-[#1C1C1E] text-[#FFFFFF] rounded-[16px] rounded-tr-[4px] shadow-sm border border-transparent dark:border-[#2C2C2E] ${
+            className={`w-full p-[12px_16px] bg-foreground text-white rounded-[16px] rounded-tr-[4px] shadow-sm border border-transparent dark:border-border ${
               selectionMode && deletable ? 'cursor-pointer' : ''
             }`}
           >
@@ -1947,7 +1959,7 @@ const ChatMessageItem = React.memo<ChatMessageItemProps>(({
                 key={idx}
                 onClick={() => onReact && onReact(msg.id, r.emoji)}
                 title={r.senderName ? `Reacted by ${r.senderName} (click to react)` : undefined}
-                className="inline-flex items-center gap-1 text-[12px] px-2 py-0.5 rounded-full bg-[#1C1C1E] text-white border border-neutral-700/60 select-none shadow-2xs hover:scale-105 cursor-pointer transition-transform"
+                className="inline-flex items-center gap-1 text-[12px] px-2 py-0.5 rounded-full bg-accent text-foreground border border-neutral-700/60 select-none shadow-2xs hover:scale-105 cursor-pointer transition-transform"
               >
                 <span>{r.emoji}</span>
                 {r.senderName && <span className="text-[9px] text-neutral-400">{r.senderName.split(' ')[0]}</span>}
@@ -1988,11 +2000,11 @@ const ChatMessageItem = React.memo<ChatMessageItemProps>(({
       <div className="flex-1 flex flex-col gap-1 min-w-0 max-w-[720px]">
         {/* Sender Name & Role Pill Header */}
         <div className="flex items-center gap-2 px-1">
-          <span className="text-[13px] font-bold text-[#007AFF] dark:text-[#3B82F6] font-sans">
+          <span className="text-[13px] font-bold text-primary font-sans">
             {senderName}
           </span>
           {senderRole && (
-            <span className="text-[9px] px-1.5 py-0.2 rounded-full font-bold uppercase tracking-wider bg-gray-100 dark:bg-[#27272A] text-[#6B7280] dark:text-[#9CA3AF]">
+            <span className="text-[9px] px-1.5 py-0.2 rounded-full font-bold uppercase tracking-wider bg-accent text-muted-foreground">
               {senderRole}
             </span>
           )}
@@ -2012,7 +2024,7 @@ const ChatMessageItem = React.memo<ChatMessageItemProps>(({
           {/* Message Card */}
           <div
             onClick={selectionMode && deletable ? () => onToggleSelect?.(msg.id) : undefined}
-            className={`w-full p-[12px_16px] bg-[#FFFFFF] dark:bg-[#1A1A1A] rounded-[16px] rounded-tl-[4px] border border-[#E5E7EB] dark:border-[#2C2C2E] shadow-2xs ${
+            className={`w-full p-[12px_16px] bg-card dark:bg-card rounded-[16px] rounded-tl-[4px] border border-border shadow-2xs ${
               selectionMode && deletable ? 'cursor-pointer' : ''
             }`}
           >
@@ -2034,18 +2046,18 @@ const ChatMessageItem = React.memo<ChatMessageItemProps>(({
             )}
 
             {/* Message Content with Markdown */}
-            <div className="text-[13px]/[21px] text-[#000000] dark:text-[#E5E7EB] font-geist leading-relaxed break-words">
+            <div className="text-[13px]/[21px] text-foreground dark:text-foreground font-geist leading-relaxed break-words">
               <MarkdownView content={msg.content} isStreaming={isCurrentStreaming} />
               {isCurrentStreaming && msg.content && (
-                <span className="inline-block w-1.5 h-3.5 bg-[#007AFF] animate-pulse ml-1 align-middle rounded-[1px]" />
+                <span className="inline-block w-1.5 h-3.5 bg-primary animate-pulse ml-1 align-middle rounded-[1px]" />
               )}
               {isCurrentStreaming && !msg.content && !msg.thought && (!msg.toolCalls || msg.toolCalls.length === 0) && (
-                <div className="flex items-center gap-2.5 text-xs text-[#8A8A85] py-1 font-geist">
+                <div className="flex items-center gap-2.5 text-xs text-muted-foreground py-1 font-geist">
                   <span>{thinkingStatus || `${senderName} is typing...`}</span>
                   <span className="inline-flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] animate-bounce [animation-delay:-0.3s]" />
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] animate-bounce [animation-delay:-0.15s]" />
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] animate-bounce" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.3s]" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.15s]" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" />
                   </span>
                 </div>
               )}
@@ -2060,7 +2072,7 @@ const ChatMessageItem = React.memo<ChatMessageItemProps>(({
                   <button
                     type="button"
                     onClick={() => useAppStore.getState().openSubAgentPanel(m[0])}
-                    className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-[#007AFF] border border-blue-200 dark:border-blue-900/60 rounded-[6px] text-[10px] font-bold transition-colors cursor-pointer"
+                    className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-primary border border-blue-200 dark:border-blue-900/60 rounded-[6px] text-[10px] font-bold transition-colors cursor-pointer"
                     title="Step into the sub-agent: live process + direct instructions"
                   >
                     <Bot size={11} />
@@ -2075,10 +2087,10 @@ const ChatMessageItem = React.memo<ChatMessageItemProps>(({
                 {msg.ragSources.map((rs, idx) => (
                   <div
                     key={`${rs.title}-${idx}`}
-                    className="flex items-center gap-1 px-2 py-0.5 bg-[#FFF5EB] dark:bg-amber-950/30 rounded-[4px] text-[10px] text-[#F97316] font-funnel border border-amber-500/10"
+                    className="flex items-center gap-1 px-2 py-0.5 bg-warning/10 dark:bg-amber-950/30 rounded-[4px] text-[10px] text-agentorange font-funnel border border-amber-500/10"
                     title={`RAG grounded: ${rs.title} (score: ${rs.score.toFixed(2)})`}
                   >
-                    <BookOpen size={10} className="text-[#F97316]" />
+                    <BookOpen size={10} className="text-agentorange" />
                     <span>doc:{rs.title}</span>
                   </div>
                 ))}
@@ -2086,7 +2098,7 @@ const ChatMessageItem = React.memo<ChatMessageItemProps>(({
             )}
 
             {/* Token Count & Time Footer */}
-            <div className="text-[10px] text-[#8A8A85] font-mono flex items-center justify-between pt-2 border-t border-[#F3F4F6] dark:border-[#27272A] mt-2">
+            <div className="text-[10px] text-muted-foreground font-mono flex items-center justify-between pt-2 border-t border-border mt-2">
               <span>{msg.model || senderAgent?.model || 'gpt-4o'}</span>
               <span>
                 {new Date(msg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -2103,7 +2115,7 @@ const ChatMessageItem = React.memo<ChatMessageItemProps>(({
                 key={idx}
                 onClick={() => onReact && onReact(msg.id, r.emoji)}
                 title={r.senderName ? `Reacted by ${r.senderName} (click to react)` : undefined}
-                className="inline-flex items-center gap-1 text-[12px] px-2 py-0.5 rounded-full bg-white dark:bg-[#1E1E1E] text-neutral-800 dark:text-neutral-200 border border-neutral-200 dark:border-[#2C2C2E] select-none shadow-2xs hover:scale-105 cursor-pointer transition-transform"
+                className="inline-flex items-center gap-1 text-[12px] px-2 py-0.5 rounded-full bg-card text-neutral-800 dark:text-neutral-200 border border-neutral-200 dark:border-border select-none shadow-2xs hover:scale-105 cursor-pointer transition-transform"
               >
                 <span>{r.emoji}</span>
                 {r.senderName && <span className="text-[9px] text-neutral-500 dark:text-neutral-400">{r.senderName.split(' ')[0]}</span>}

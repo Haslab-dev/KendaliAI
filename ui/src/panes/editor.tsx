@@ -356,14 +356,14 @@ export const EditorPane: React.FC = () => {
   const getFileIcon = (name: string, isDir: boolean, isExpanded: boolean) => {
     if (isDir) {
       return isExpanded ? (
-        <FolderOpen size={14} className="text-[#007AFF] flex-shrink-0" />
+        <FolderOpen size={14} className="text-primary flex-shrink-0" />
       ) : (
-        <Folder size={14} className="text-[#8A8A85] flex-shrink-0" />
+        <Folder size={14} className="text-muted-foreground flex-shrink-0" />
       );
     }
     const lower = name.toLowerCase();
     if (lower.includes('deck') || lower.includes('slide') || lower.endsWith('.pptx')) {
-      return <Presentation size={14} className="text-[#007AFF] flex-shrink-0" />;
+      return <Presentation size={14} className="text-primary flex-shrink-0" />;
     }
     if (lower.includes('motion') || lower.includes('hyperframe') || lower.endsWith('.mp4') || lower.endsWith('.webm')) {
       return <Video size={14} className="text-[#3898FF] flex-shrink-0" />;
@@ -379,17 +379,17 @@ export const EditorPane: React.FC = () => {
       case 'py':
       case 'rs':
       case 'sh':
-        return <FileCode size={14} className="text-[#007AFF] flex-shrink-0" />;
+        return <FileCode size={14} className="text-primary flex-shrink-0" />;
       case 'json':
       case 'yaml':
       case 'yml':
       case 'toml':
-        return <FileJson size={14} className="text-[#8A8A85] flex-shrink-0" />;
+        return <FileJson size={14} className="text-muted-foreground flex-shrink-0" />;
       case 'md':
       case 'txt':
-        return <FileText size={14} className="text-[#8A8A85] flex-shrink-0" />;
+        return <FileText size={14} className="text-muted-foreground flex-shrink-0" />;
       default:
-        return <File size={14} className="text-[#8A8A85] flex-shrink-0" />;
+        return <File size={14} className="text-muted-foreground flex-shrink-0" />;
     }
   };
 
@@ -407,8 +407,8 @@ export const EditorPane: React.FC = () => {
               style={{ paddingLeft: `${level * 12 + 8}px` }}
               className={`flex items-center gap-1.5 py-1.5 pr-2 rounded-[4px] cursor-pointer group text-xs transition-colors ${
                 isSelected
-                  ? 'bg-[#FFF5EB] text-[#000000] font-medium'
-                  : 'text-[#333333] hover:text-[#000000] hover:bg-[#F7F7F5]'
+                  ? 'bg-warning/10 text-foreground font-medium'
+                  : 'text-foreground/85 hover:text-foreground hover:bg-accent/60'
               }`}
             >
               {item.isDir ? (
@@ -417,7 +417,7 @@ export const EditorPane: React.FC = () => {
                     e.stopPropagation();
                     toggleFolder(item.path);
                   }}
-                  className="w-3 text-[9px] text-[#8A8A85] hover:text-[#000000] flex items-center justify-center font-geist"
+                  className="w-3 text-[9px] text-muted-foreground hover:text-foreground flex items-center justify-center font-geist"
                 >
                   {isExpanded ? '▾' : '▸'}
                 </span>
@@ -432,9 +432,9 @@ export const EditorPane: React.FC = () => {
                 <span
                   className={`text-[9px] font-mono font-bold px-1 rounded-[2px] ${
                     item.gitStatus === 'M'
-                      ? 'text-[#D97706] bg-[#FFF5EB]'
+                      ? 'text-warning bg-warning/10'
                       : item.gitStatus === 'U' || item.gitStatus === '?'
-                      ? 'text-[#16A34A] bg-[#E8F8EE]'
+                      ? 'text-success bg-success/10'
                       : 'text-red-500 bg-red-50'
                   }`}
                 >
@@ -451,7 +451,7 @@ export const EditorPane: React.FC = () => {
                       setShowNewModal('file');
                     }}
                     title="New File inside folder"
-                    className="p-1 hover:text-[#000000] text-[#8A8A85]"
+                    className="p-1 hover:text-foreground text-muted-foreground"
                   >
                     <Plus size={12} />
                   </button>
@@ -459,7 +459,7 @@ export const EditorPane: React.FC = () => {
                 <button
                   onClick={(e) => handleDeleteItem(item, e)}
                   title="Delete"
-                  className="p-1 hover:text-red-500 text-[#8A8A85]"
+                  className="p-1 hover:text-red-500 text-muted-foreground"
                 >
                   <Trash2 size={12} />
                 </button>
@@ -478,15 +478,15 @@ export const EditorPane: React.FC = () => {
   const lineNumbers = Array.from({ length: Math.max(1, lineCount) }, (_, i) => i + 1);
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#F7F7F5] overflow-hidden">
+    <div className="flex flex-col h-full w-full bg-accent/60 overflow-hidden">
       {/* Top Page Header */}
-      <div className="w-full shrink-0 h-[64px] sm:h-[70px] flex flex-row gap-2 sm:gap-3.5 px-3 sm:px-6 md:px-9 items-center bg-[#FFFFFF] border-b border-[#E5E7EB] z-10 select-none">
+      <div className="w-full shrink-0 h-[64px] sm:h-[70px] flex flex-row gap-2 sm:gap-3.5 px-3 sm:px-6 md:px-9 items-center bg-card border-b border-border z-10 select-none">
         <div className="flex-1 flex flex-col gap-0.5 justify-start items-start min-w-0">
           <div className="flex items-center gap-1.5 sm:gap-2 max-w-full">
-            <span className="text-[15px] sm:text-[18px] text-[#000000] font-inter font-bold truncate">Workspace</span>
+            <span className="text-[15px] sm:text-[18px] text-foreground font-inter font-bold truncate">Workspace</span>
             <button
               onClick={() => setShowPickerModal(true)}
-              className="flex items-center gap-1 sm:gap-1.5 px-2 py-0.5 bg-[#F7F7F5] hover:bg-[#EBF5FF] text-[#007AFF] text-[10px] sm:text-[11px] font-mono rounded border border-[#E5E7EB] hover:border-[#BFDBFE] transition-colors cursor-pointer truncate max-w-[130px] sm:max-w-[220px]"
+              className="flex items-center gap-1 sm:gap-1.5 px-2 py-0.5 bg-accent/60 hover:bg-info/10 text-primary text-[10px] sm:text-[11px] font-mono rounded border border-border hover:border-[#BFDBFE] transition-colors cursor-pointer truncate max-w-[130px] sm:max-w-[220px]"
               title="Click to switch root folder"
             >
               <FolderOpen size={11} className="shrink-0" />
@@ -494,18 +494,18 @@ export const EditorPane: React.FC = () => {
               <ChevronDown size={11} className="shrink-0" />
             </button>
           </div>
-          <div className="text-[10px] sm:text-[11px] text-[#8A8A85] font-funnel font-normal truncate max-w-xs sm:max-w-lg hidden xs:block">
-            Active: <span className="font-mono text-[#333333]">{currentRoot}</span>
+          <div className="text-[10px] sm:text-[11px] text-muted-foreground font-funnel font-normal truncate max-w-xs sm:max-w-lg hidden xs:block">
+            Active: <span className="font-mono text-foreground/85">{currentRoot}</span>
           </div>
         </div>
 
         {/* Mobile View Toggle if tabs open */}
         {openTabs.length > 0 && (
-          <div className="flex md:hidden items-center bg-[#F7F7F5] p-0.5 rounded-[6px] border border-[#E5E7EB]">
+          <div className="flex md:hidden items-center bg-accent/60 p-0.5 rounded-[6px] border border-border">
             <button
               onClick={() => setMobileView('tree')}
               className={`px-2 py-1 text-[10px] font-funnel rounded-[4px] transition-colors ${
-                mobileView === 'tree' ? 'bg-[#FFFFFF] text-[#007AFF] font-bold shadow-2xs' : 'text-[#8A8A85]'
+                mobileView === 'tree' ? 'bg-card text-primary font-bold shadow-2xs' : 'text-muted-foreground'
               }`}
             >
               Files
@@ -513,7 +513,7 @@ export const EditorPane: React.FC = () => {
             <button
               onClick={() => setMobileView('editor')}
               className={`px-2 py-1 text-[10px] font-funnel rounded-[4px] transition-colors ${
-                mobileView === 'editor' ? 'bg-[#FFFFFF] text-[#007AFF] font-bold shadow-2xs' : 'text-[#8A8A85]'
+                mobileView === 'editor' ? 'bg-card text-primary font-bold shadow-2xs' : 'text-muted-foreground'
               }`}
             >
               Code {openTabs.some((t) => t.isDirty) && '●'}
@@ -525,10 +525,10 @@ export const EditorPane: React.FC = () => {
           {/* Dedicated Shell Terminal Nav Button */}
           <button
             onClick={() => navigate('terminal')}
-            className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 bg-[#FFFFFF] border border-[#E5E7EB] hover:border-[#333333] rounded-[4px] text-[11px] font-funnel text-[#333333] transition-colors shadow-2xs cursor-pointer"
+            className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 bg-card border border-border hover:border-[#333333] rounded-[4px] text-[11px] font-funnel text-foreground/85 transition-colors shadow-2xs cursor-pointer"
             title="Open Dedicated Shell Terminal"
           >
-            <TerminalIcon size={13} className="text-[#16A34A]" />
+            <TerminalIcon size={13} className="text-success" />
             <span className="hidden sm:inline">Shell</span>
           </button>
 
@@ -537,7 +537,7 @@ export const EditorPane: React.FC = () => {
               setSelectedFolderForNew('');
               setShowNewModal('file');
             }}
-            className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 bg-[#FFFFFF] border border-[#E5E7EB] hover:border-[#333333] rounded-[4px] text-[11px] font-funnel text-[#333333] transition-colors shadow-2xs cursor-pointer"
+            className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 bg-card border border-border hover:border-[#333333] rounded-[4px] text-[11px] font-funnel text-foreground/85 transition-colors shadow-2xs cursor-pointer"
             title="Create New File"
           >
             <Plus size={13} />
@@ -548,7 +548,7 @@ export const EditorPane: React.FC = () => {
               setSelectedFolderForNew('');
               setShowNewModal('folder');
             }}
-            className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 bg-[#FFFFFF] border border-[#E5E7EB] hover:border-[#333333] rounded-[4px] text-[11px] font-funnel text-[#333333] transition-colors shadow-2xs cursor-pointer"
+            className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 bg-card border border-border hover:border-[#333333] rounded-[4px] text-[11px] font-funnel text-foreground/85 transition-colors shadow-2xs cursor-pointer"
             title="Create New Folder"
           >
             <FolderPlus size={13} />
@@ -556,7 +556,7 @@ export const EditorPane: React.FC = () => {
           </button>
           <button
             onClick={loadTree}
-            className="p-1.5 sm:p-2 bg-[#FFFFFF] border border-[#E5E7EB] hover:border-[#333333] rounded-[4px] text-[#333333] transition-colors shadow-2xs cursor-pointer"
+            className="p-1.5 sm:p-2 bg-card border border-border hover:border-[#333333] rounded-[4px] text-foreground/85 transition-colors shadow-2xs cursor-pointer"
             title="Refresh Explorer"
           >
             <RefreshCw size={13} className={isLoadingTree ? 'animate-spin' : ''} />
@@ -567,39 +567,39 @@ export const EditorPane: React.FC = () => {
       {/* Split Container */}
       <div className="w-full flex-1 flex flex-row overflow-hidden min-h-0">
         {/* Left File Tree Sidebar - on mobile, full width when in 'tree' mode, hidden when in 'editor' mode */}
-        <div className={`w-full md:w-[280px] shrink-0 h-full flex flex-col gap-1 p-[10px_8px] sm:p-[14px_10px] bg-[#FFFFFF] border-r border-[#E5E7EB] ${
+        <div className={`w-full md:w-[280px] shrink-0 h-full flex flex-col gap-1 p-[10px_8px] sm:p-[14px_10px] bg-card border-r border-border ${
           mobileView === 'editor' ? 'hidden md:flex' : 'flex'
         }`}>
           {/* Quick Root Folder Display */}
           <div
             onClick={() => setShowPickerModal(true)}
-            className="w-full flex items-center justify-between p-2 mb-1 bg-[#F7F7F5] hover:bg-[#EBF5FF] border border-[#E5E7EB] rounded-[4px] cursor-pointer transition-colors"
+            className="w-full flex items-center justify-between p-2 mb-1 bg-accent/60 hover:bg-info/10 border border-border rounded-[4px] cursor-pointer transition-colors"
           >
             <div className="flex items-center gap-1.5 min-w-0">
-              <Folder size={13} className="text-[#007AFF] shrink-0" />
+              <Folder size={13} className="text-primary shrink-0" />
               <span className="text-[11px] font-mono font-medium text-black truncate" title={currentRoot}>
                 {currentRoot.split('/').pop() || '~'}
               </span>
             </div>
-            <span className="text-[10px] text-[#007AFF] font-funnel shrink-0 font-medium">Switch</span>
+            <span className="text-[10px] text-primary font-funnel shrink-0 font-medium">Switch</span>
           </div>
 
           {/* Tree Search */}
-          <div className="w-full shrink-0 flex flex-row gap-2 p-[7px_10px] items-center bg-[#F7F7F5] border border-[#E5E7EB] rounded-[4px] mb-1">
-            <Search size={13} className="text-[#8A8A85] shrink-0" />
+          <div className="w-full shrink-0 flex flex-row gap-2 p-[7px_10px] items-center bg-accent/60 border border-border rounded-[4px] mb-1">
+            <Search size={13} className="text-muted-foreground shrink-0" />
             <input
               type="text"
               placeholder="Filter files…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-transparent text-[11px] text-[#000000] placeholder:text-[#8A8A85] font-geist outline-none w-full"
+              className="bg-transparent text-[11px] text-foreground placeholder:text-muted-foreground font-geist outline-none w-full"
             />
           </div>
 
           {/* Tree list */}
           <div className="flex-1 overflow-y-auto custom-scrollbar space-y-0.5 pr-1">
             {tree.length === 0 ? (
-              <div className="text-center text-[#8A8A85] py-8 text-xs font-funnel">
+              <div className="text-center text-muted-foreground py-8 text-xs font-funnel">
                 {isLoadingTree ? 'Loading workspace...' : 'Directory is empty.'}
               </div>
             ) : (
@@ -609,15 +609,15 @@ export const EditorPane: React.FC = () => {
         </div>
 
         {/* Right Editor Pane - on mobile, full width when in 'editor' mode, hidden when in 'tree' mode */}
-        <div className={`flex-1 h-full flex flex-col bg-[#FFFFFF] overflow-hidden ${
+        <div className={`flex-1 h-full flex flex-col bg-card overflow-hidden ${
           mobileView === 'tree' ? 'hidden md:flex' : 'flex'
         }`}>
           {/* Tabs Bar */}
-          <div className="w-full h-[38px] shrink-0 flex flex-row items-center gap-0.5 px-2 sm:px-3 border-b border-[#E5E7EB] bg-[#FFFFFF] overflow-x-auto select-none">
+          <div className="w-full h-[38px] shrink-0 flex flex-row items-center gap-0.5 px-2 sm:px-3 border-b border-border bg-card overflow-x-auto select-none">
             {/* Mobile Back to Tree button */}
             <button
               onClick={() => setMobileView('tree')}
-              className="md:hidden flex items-center gap-1 px-2 py-1 bg-[#F7F7F5] hover:bg-[#E5E7EB] border border-[#E5E7EB] rounded text-[11px] font-funnel text-[#333333] shrink-0 mr-1 cursor-pointer"
+              className="md:hidden flex items-center gap-1 px-2 py-1 bg-accent/60 hover:bg-[#E5E7EB] border border-border rounded text-[11px] font-funnel text-foreground/85 shrink-0 mr-1 cursor-pointer"
               title="Back to file list"
             >
               <ArrowLeft size={12} />
@@ -632,18 +632,18 @@ export const EditorPane: React.FC = () => {
                   onClick={() => setActiveTabPath(tab.path)}
                   className={`shrink-0 flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-t-[4px] cursor-pointer text-[11px] font-mono transition-all ${
                     isActive
-                      ? 'bg-[#FFFFFF] border border-b-0 border-[#E5E7EB] text-[#000000] font-bold'
-                      : 'bg-[#F7F7F5] text-[#8A8A85] hover:text-[#000000]'
+                      ? 'bg-card border border-b-0 border-border text-foreground font-bold'
+                      : 'bg-accent/60 text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  <FileCode size={12} className={isActive ? 'text-[#007AFF]' : 'text-[#8A8A85]'} />
+                  <FileCode size={12} className={isActive ? 'text-primary' : 'text-muted-foreground'} />
                   <span className="truncate max-w-[110px] sm:max-w-[140px]">{tab.name}</span>
                   {tab.isDirty && (
                     <div className="w-[6px] h-[6px] bg-[#D97706] rounded-full shrink-0" title="Unsaved changes" />
                   )}
                   <button
                     onClick={(e) => closeTab(tab.path, e)}
-                    className="p-0.5 text-[#8A8A85] hover:text-[#000000] rounded"
+                    className="p-0.5 text-muted-foreground hover:text-foreground rounded"
                   >
                     <X size={11} />
                   </button>
@@ -652,19 +652,19 @@ export const EditorPane: React.FC = () => {
             })}
 
             {openTabs.length === 0 && (
-              <div className="text-[#8A8A85] text-[11px] font-funnel italic px-2">
+              <div className="text-muted-foreground text-[11px] font-funnel italic px-2">
                 No file open — select a file from explorer
               </div>
             )}
 
             {/* Code / Preview Switcher for Slides & Motion */}
             {activeTab && (activeTab.name.endsWith('.html') || activeTab.content.includes('deck-stage') || activeTab.content.includes('__timelines') || activeTab.name.includes('deck') || activeTab.name.includes('motion')) && (
-              <div className="ml-auto flex items-center bg-[#F7F7F5] border border-[#E5E7EB] rounded-[4px] p-0.5 shrink-0 select-none">
+              <div className="ml-auto flex items-center bg-accent/60 border border-border rounded-[4px] p-0.5 shrink-0 select-none">
                 <button
                   type="button"
                   onClick={() => setViewMode('code')}
                   className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-funnel transition-colors cursor-pointer ${
-                    viewMode === 'code' ? 'bg-[#FFFFFF] text-[#007AFF] font-bold shadow-2xs' : 'text-[#8A8A85] hover:text-[#333333]'
+                    viewMode === 'code' ? 'bg-card text-primary font-bold shadow-2xs' : 'text-muted-foreground hover:text-foreground/85'
                   }`}
                 >
                   <Code2 size={11} />
@@ -674,7 +674,7 @@ export const EditorPane: React.FC = () => {
                   type="button"
                   onClick={() => setViewMode('preview')}
                   className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-funnel transition-colors cursor-pointer ${
-                    viewMode === 'preview' ? 'bg-[#FFFFFF] text-[#007AFF] font-bold shadow-2xs' : 'text-[#8A8A85] hover:text-[#333333]'
+                    viewMode === 'preview' ? 'bg-card text-primary font-bold shadow-2xs' : 'text-muted-foreground hover:text-foreground/85'
                   }`}
                 >
                   <Presentation size={11} />
@@ -696,7 +696,7 @@ export const EditorPane: React.FC = () => {
                 />
               ) : (
                 <>
-                  <div className="flex-1 flex flex-row overflow-hidden bg-[#0F0F0F]">
+                  <div className="flex-1 flex flex-row overflow-hidden bg-foreground">
                   <div
                     ref={lineNumbersRef}
                     className="w-10 sm:w-12 py-3 bg-[#0A0A0A] border-r border-[#222222] text-[#555555] text-right pr-2 sm:pr-3 select-none overflow-hidden font-mono text-[11px] sm:text-[12px] leading-5 shrink-0"
@@ -713,56 +713,56 @@ export const EditorPane: React.FC = () => {
                     onScroll={handleScroll}
                     onKeyDown={handleKeyDown}
                     spellCheck={false}
-                    className="flex-1 p-2 sm:p-3 bg-[#0F0F0F] text-[#E5E7EB] resize-none focus:outline-none font-mono text-[11px] sm:text-[12px] leading-5 overflow-auto custom-scrollbar whitespace-pre tab-2"
+                    className="flex-1 p-2 sm:p-3 bg-foreground text-[#E5E7EB] resize-none focus:outline-none font-mono text-[11px] sm:text-[12px] leading-5 overflow-auto custom-scrollbar whitespace-pre tab-2"
                   />
                 </div>
 
-                <div className="w-full h-[36px] shrink-0 flex flex-row gap-2 px-3 sm:px-4 items-center bg-[#FFFFFF] border-t border-[#E5E7EB]">
+                <div className="w-full h-[36px] shrink-0 flex flex-row gap-2 px-3 sm:px-4 items-center bg-card border-t border-border">
                   {activeTab.isDirty ? (
-                    <div className="text-[10px] text-[#D97706] font-funnel font-normal">
+                    <div className="text-[10px] text-warning font-funnel font-normal">
                       ● Unsaved changes
                     </div>
                   ) : (
-                    <div className="text-[10px] text-[#16A34A] font-funnel font-normal flex items-center gap-1">
+                    <div className="text-[10px] text-success font-funnel font-normal flex items-center gap-1">
                       <Check size={11} /> Saved
                     </div>
                   )}
 
                   <div className="flex-1" />
 
-                  <div className="text-[10px] text-[#8A8A85] font-funnel hidden sm:block">
+                  <div className="text-[10px] text-muted-foreground font-funnel hidden sm:block">
                     ⌘S save · UTF-8 · {activeTab.name.split('.').pop()?.toUpperCase() || 'PLAIN'} · {lineCount} lines
                   </div>
 
                   <button
                     onClick={saveActiveFile}
                     disabled={!activeTab.isDirty || isSaving}
-                    className="px-3 py-1 bg-[#007AFF] hover:bg-[#0066D6] disabled:opacity-40 text-white text-[10px] font-funnel font-bold rounded-[4px] transition-colors shadow-2xs cursor-pointer"
+                    className="px-3 py-1 bg-primary hover:bg-primary/85 disabled:opacity-40 text-white text-[10px] font-funnel font-bold rounded-[4px] transition-colors shadow-2xs cursor-pointer"
                   >
                     {isSaving ? 'Saving...' : 'Save'}
                   </button>
                 </div>
               </>
             )) : (
-              <div className="flex-1 flex flex-col items-center justify-center text-center p-6 sm:p-8 bg-[#F7F7F5]">
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-[#FFFFFF] border border-[#E5E7EB] text-[#8A8A85] mb-3 shadow-2xs">
+              <div className="flex-1 flex flex-col items-center justify-center text-center p-6 sm:p-8 bg-accent/60">
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-card border border-border text-muted-foreground mb-3 shadow-2xs">
                   <Code2 size={24} />
                 </div>
-                <h2 className="text-sm font-bold font-inter text-[#000000] mb-1">No File Open</h2>
-                <p className="text-xs text-[#8A8A85] font-funnel max-w-sm mb-4">
+                <h2 className="text-sm font-bold font-inter text-foreground mb-1">No File Open</h2>
+                <p className="text-xs text-muted-foreground font-funnel max-w-sm mb-4">
                   Select a file from the workspace explorer to view or edit code.
                 </p>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setMobileView('tree')}
-                    className="md:hidden flex items-center gap-1.5 px-3 py-1.5 bg-[#007AFF] text-white text-xs font-bold rounded-[6px] cursor-pointer"
+                    className="md:hidden flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-xs font-bold rounded-[6px] cursor-pointer"
                   >
                     <Folder size={13} />
                     <span>Browse Files</span>
                   </button>
                   <button
                     onClick={() => navigate('terminal')}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0F0F0F] text-white text-xs font-bold rounded-[6px] cursor-pointer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-foreground text-white text-xs font-bold rounded-[6px] cursor-pointer"
                   >
                     <TerminalIcon size={13} />
                     <span>Open Shell Terminal</span>
@@ -777,50 +777,50 @@ export const EditorPane: React.FC = () => {
       {/* 📁 Folder Picker Modal (Switch Root Directory) */}
       {showPickerModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-[#161616] border border-[#E5E7EB] dark:border-[#27272A] rounded-[10px] p-6 w-full max-w-md shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white dark:bg-card border border-border/70 rounded-[10px] p-6 w-full max-w-md shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <FolderOpen size={18} className="text-[#007AFF]" />
+                <FolderOpen size={18} className="text-primary" />
                 <h3 className="text-sm font-bold font-inter text-black dark:text-white">
                   Pick Workspace Root Directory
                 </h3>
               </div>
-              <button onClick={() => setShowPickerModal(false)} className="text-[#8A8A85] hover:text-black dark:hover:text-white">
+              <button onClick={() => setShowPickerModal(false)} className="text-muted-foreground hover:text-black dark:hover:text-white">
                 <X size={15} />
               </button>
             </div>
 
-            <p className="text-xs text-[#8A8A85] font-funnel">
+            <p className="text-xs text-muted-foreground font-funnel">
               Select a quick preset or enter any absolute/relative directory on disk to explore and edit.
             </p>
 
             {/* Quick Presets */}
             <div className="space-y-2">
-              <div className="text-[11px] font-bold text-[#8A8A85] uppercase tracking-wider">Presets</div>
+              <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Presets</div>
               <div className="grid grid-cols-1 gap-1.5">
                 {presets.map((preset) => (
                   <button
                     key={preset.path}
                     onClick={() => switchRoot(preset.path)}
-                    className="w-full p-2.5 bg-[#F7F7F5] dark:bg-[#1C1C1E] hover:bg-[#EBF5FF] dark:hover:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[6px] text-left flex items-center justify-between transition-colors group cursor-pointer"
+                    className="w-full p-2.5 bg-accent/60 hover:bg-info/10 dark:hover:bg-[#1E293B] border border-border rounded-[6px] text-left flex items-center justify-between transition-colors group cursor-pointer"
                   >
                     <div className="flex flex-col">
                       <span className="text-[12px] font-medium text-black dark:text-white font-sans">
                         {preset.label}
                       </span>
-                      <span className="text-[10px] text-[#8A8A85] font-mono truncate max-w-xs">
+                      <span className="text-[10px] text-muted-foreground font-mono truncate max-w-xs">
                         {preset.path}
                       </span>
                     </div>
-                    <ChevronRight size={14} className="text-[#8A8A85] group-hover:text-[#007AFF] transition-colors" />
+                    <ChevronRight size={14} className="text-muted-foreground group-hover:text-primary transition-colors" />
                   </button>
                 ))}
               </div>
             </div>
 
             {/* Manual Path Input */}
-            <div className="space-y-2 pt-2 border-t border-[#E5E7EB] dark:border-[#27272A]">
-              <label className="text-[11px] font-bold text-[#8A8A85] uppercase tracking-wider">
+            <div className="space-y-2 pt-2 border-t border-border/70">
+              <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                 Or Enter Custom Directory Path
               </label>
               <div className="flex items-center gap-2">
@@ -832,12 +832,12 @@ export const EditorPane: React.FC = () => {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') switchRoot(manualPathInput);
                   }}
-                  className="flex-1 bg-[#F7F7F5] dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[6px] px-3 py-2 text-xs font-mono text-black dark:text-white outline-none focus:border-[#007AFF]"
+                  className="flex-1 bg-accent/60 border border-border rounded-[6px] px-3 py-2 text-xs font-mono text-black dark:text-white outline-none focus:border-primary/60"
                 />
                 <button
                   onClick={() => switchRoot(manualPathInput)}
                   disabled={isSwitchingRoot || !manualPathInput.trim()}
-                  className="px-4 py-2 bg-[#007AFF] hover:bg-[#0066D6] disabled:opacity-40 text-white text-xs font-bold font-funnel rounded-[6px] transition-colors"
+                  className="px-4 py-2 bg-primary hover:bg-primary/85 disabled:opacity-40 text-white text-xs font-bold font-funnel rounded-[6px] transition-colors"
                 >
                   {isSwitchingRoot ? 'Opening...' : 'Open'}
                 </button>
@@ -850,13 +850,13 @@ export const EditorPane: React.FC = () => {
       {/* New File / Folder Modal */}
       {showNewModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-[#FFFFFF] border border-[#E5E7EB] rounded-[8px] p-5 w-full max-w-sm shadow-2xl space-y-3">
-            <h3 className="text-sm font-bold font-inter text-[#000000]">
+          <div className="bg-card border border-border rounded-[8px] p-5 w-full max-w-sm shadow-2xl space-y-3">
+            <h3 className="text-sm font-bold font-inter text-foreground">
               New {showNewModal === 'file' ? 'File' : 'Folder'}
             </h3>
             {selectedFolderForNew && (
-              <p className="text-xs text-[#8A8A85] font-funnel">
-                Location: <span className="font-mono text-[#000000]">{selectedFolderForNew}/</span>
+              <p className="text-xs text-muted-foreground font-funnel">
+                Location: <span className="font-mono text-foreground">{selectedFolderForNew}/</span>
               </p>
             )}
             <input
@@ -869,19 +869,19 @@ export const EditorPane: React.FC = () => {
                 if (e.key === 'Enter') handleCreateNew();
                 if (e.key === 'Escape') setShowNewModal(null);
               }}
-              className="w-full bg-[#F7F7F5] border border-[#E5E7EB] rounded-[4px] px-3 py-2 text-xs text-[#000000] focus:outline-none focus:border-[#007AFF] font-geist"
+              className="w-full bg-accent/60 border border-border rounded-[4px] px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary/60 font-geist"
             />
             <div className="flex justify-end gap-2 pt-2">
               <button
                 onClick={() => setShowNewModal(null)}
-                className="px-3 py-1.5 rounded-[4px] border border-[#E5E7EB] text-xs text-[#8A8A85] hover:text-[#000000] font-funnel"
+                className="px-3 py-1.5 rounded-[4px] border border-border text-xs text-muted-foreground hover:text-foreground font-funnel"
               >
                 Cancel
               </button>
               <button
                 onClick={handleCreateNew}
                 disabled={!newItemName.trim()}
-                className="px-4 py-1.5 rounded-[4px] bg-[#007AFF] text-white text-xs font-bold font-funnel hover:bg-[#0066D6] disabled:opacity-50"
+                className="px-4 py-1.5 rounded-[4px] bg-primary text-white text-xs font-bold font-funnel hover:bg-primary/85 disabled:opacity-50"
               >
                 Create
               </button>

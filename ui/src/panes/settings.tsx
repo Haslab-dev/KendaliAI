@@ -346,27 +346,27 @@ export const SettingsPane: React.FC = () => {
   );
 
   return (
-    <div className="w-full min-h-screen bg-[#F7F7F5] flex flex-col font-sans">
+    <div className="w-full min-h-full bg-accent/60 flex flex-col font-sans">
       {/* Toast Notification */}
       {toast && (
-        <div className="fixed top-5 right-5 z-50 flex items-center gap-2 px-4 py-2.5 bg-[#0F0F0F] text-[#FFFFFF] text-xs font-semibold rounded-[8px] shadow-lg border border-white/10 animate-fade-in">
-          <Check size={14} className="text-[#16A34A]" />
+        <div className="fixed top-5 right-5 z-50 flex items-center gap-2 px-4 py-2.5 bg-foreground text-background text-xs font-semibold rounded-[8px] shadow-lg border border-white/10 animate-fade-in">
+          <Check size={14} className="text-success" />
           <span>{toast.message}</span>
         </div>
       )}
 
       {/* Page Header matching desktop settings.html */}
-      <div className="w-full bg-[#FFFFFF] border-b border-[#E5E7EB] px-6 lg:px-9 py-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="w-full bg-card border-b border-border px-6 lg:px-9 py-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex flex-col gap-[2px]">
           <div className="flex items-center gap-2">
-            <h1 className="text-[20px] font-bold text-[#000000] font-sans tracking-tight">
+            <h1 className="text-[20px] font-bold text-foreground font-sans tracking-tight">
               Policy Guardrails
             </h1>
-            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-[#DCFCE7] text-[#16A34A]">
+            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-success/15 text-success">
               Active
             </span>
           </div>
-          <p className="text-[12px] text-[#8A8A85] font-['Funnel_Sans',sans-serif]">
+          <p className="text-[12px] text-muted-foreground font-['Funnel_Sans',sans-serif]">
             Tool execution permissions per persona or tool · workspace sandboxing against path traversal
           </p>
         </div>
@@ -375,7 +375,7 @@ export const SettingsPane: React.FC = () => {
           <button
             onClick={() => loadPolicies(activePersona)}
             title="Refresh policies"
-            className="flex items-center gap-1.5 px-3 py-2 rounded-[8px] border border-[#E5E7EB] text-[#8A8A85] hover:text-[#000000] hover:bg-[#F7F7F5] text-xs transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-[8px] border border-border text-muted-foreground hover:text-foreground hover:bg-accent/60 text-xs transition-colors"
           >
             <RefreshCw size={13} className={isLoadingPolicies ? 'animate-spin' : ''} />
             <span className="hidden sm:inline">Refresh</span>
@@ -383,7 +383,7 @@ export const SettingsPane: React.FC = () => {
           <button
             onClick={handleRunSandboxAudit}
             disabled={sandboxStatus === 'auditing'}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-[8px] border border-[#E5E7EB] bg-[#FFFFFF] text-[#007AFF] hover:bg-blue-50 text-xs font-medium transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-[8px] border border-border bg-card text-primary hover:bg-primary/10 text-xs font-medium transition-colors"
           >
             <Box size={13} />
             <span>{sandboxStatus === 'auditing' ? 'Auditing...' : 'Audit Sandbox'}</span>
@@ -392,7 +392,7 @@ export const SettingsPane: React.FC = () => {
       </div>
 
       {/* Main Grid: Policy Column (Left) & Settings Cards (Right) */}
-      <div className="w-full flex-1 flex flex-col lg:flex-row gap-5 p-6 lg:p-9 items-start">
+      <div className="w-full flex-1 flex flex-col xl:flex-row gap-5 p-6 lg:p-9 items-start min-w-0">
         {/* Left Column: Policy Col */}
         <div className="flex-1 w-full flex flex-col gap-[14px]">
           {/* Persona Segments */}
@@ -405,8 +405,8 @@ export const SettingsPane: React.FC = () => {
                   onClick={() => setActivePersona(seg.id)}
                   className={`flex items-center gap-1.5 px-3.5 py-2 text-[12px] font-['Funnel_Sans',sans-serif] rounded-[4px] transition-all cursor-pointer ${
                     isActive
-                      ? 'bg-[#0F0F0F] text-[#FFFFFF] font-bold shadow-sm'
-                      : 'bg-[#FFFFFF] text-[#333333] border border-[#E5E7EB] hover:bg-gray-50'
+                      ? 'bg-foreground text-background font-bold shadow-sm'
+                      : 'bg-card text-foreground/85 border border-border hover:bg-accent'
                   }`}
                 >
                   <span>{seg.icon}</span>
@@ -417,13 +417,13 @@ export const SettingsPane: React.FC = () => {
           </div>
 
           {/* Policy Table Container */}
-          <div className="w-full bg-[#FFFFFF] border border-[#E5E7EB] rounded-[8px] p-[18px] flex flex-col gap-3 shadow-xs">
-            <div className="flex items-center justify-between gap-3 pb-2 border-b border-[#E5E7EB]">
+          <div className="w-full bg-card border border-border rounded-[8px] p-[18px] flex flex-col gap-3 shadow-xs">
+            <div className="flex items-center justify-between gap-3 pb-2 border-b border-border">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-[#8A8A85]">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                   Persona Permissions:
                 </span>
-                <span className="text-xs font-bold text-[#000000]">
+                <span className="text-xs font-bold text-foreground">
                   {PERSONA_SEGMENTS.find((p) => p.id === activePersona)?.icon}{' '}
                   {PERSONA_SEGMENTS.find((p) => p.id === activePersona)?.label}
                 </span>
@@ -431,34 +431,34 @@ export const SettingsPane: React.FC = () => {
 
               {/* Search tool filter */}
               <div className="relative w-48 sm:w-60">
-                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#8A8A85]" />
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <input
                   type="text"
                   placeholder="Filter tools..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1 bg-[#F7F7F5] border border-[#E5E7EB] rounded-[6px] text-xs text-[#000000] placeholder:text-[#8A8A85] outline-none focus:border-[#0F0F0F] transition-colors"
+                  className="w-full pl-8 pr-3 py-1 bg-accent/60 border border-border rounded-[6px] text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-foreground/60 transition-colors"
                 />
               </div>
             </div>
 
             {/* Table Header */}
-            <div className="w-full flex items-center gap-3 py-1.5 border-b border-[#E5E7EB] text-[10px] font-bold text-[#8A8A85] font-['Funnel_Sans',sans-serif]">
+            <div className="w-full flex items-center gap-3 py-1.5 border-b border-border text-[10px] font-bold text-muted-foreground font-['Funnel_Sans',sans-serif]">
               <div className="w-48 sm:w-64 shrink-0 uppercase tracking-wider">TOOL</div>
               <div className="w-28 sm:w-36 shrink-0 uppercase tracking-wider">PERMISSION</div>
               <div className="flex-1 uppercase tracking-wider">NOTES &amp; GUARDRAILS</div>
             </div>
 
             {/* Rows */}
-            <div className="w-full flex flex-col divide-y divide-[#E5E7EB]">
+            <div className="w-full flex flex-col divide-y divide-border">
               {filteredPolicies.map((row) => (
                 <div
                   key={row.tool}
-                  className="w-full flex items-center gap-3 py-2.5 hover:bg-[#FAFAFA] transition-colors"
+                  className="w-full flex items-center gap-3 py-2.5 hover:bg-background transition-colors"
                 >
                   {/* Tool name */}
                   <div className="w-48 sm:w-64 shrink-0 flex items-center gap-2">
-                    <span className="text-[12px] font-mono text-[#000000]">{row.tool}</span>
+                    <span className="text-[12px] font-mono text-foreground">{row.tool}</span>
                   </div>
 
                   {/* Permission Badge (Clickable to cycle) */}
@@ -468,10 +468,10 @@ export const SettingsPane: React.FC = () => {
                       title={`Click to toggle permission: ${row.effect}`}
                       className={`px-2.5 py-1 rounded-[4px] text-[10px] font-bold font-['Funnel_Sans',sans-serif] tracking-wider transition-all cursor-pointer hover:opacity-80 active:scale-95 ${
                         row.effect === 'ALLOW'
-                          ? 'bg-[#DCFCE7] text-[#16A34A]'
+                          ? 'bg-success/15 text-success'
                           : row.effect === 'APPROVAL'
-                          ? 'bg-[#FEF3C7] text-[#D97706]'
-                          : 'bg-[#FEE2E2] text-[#DC2626]'
+                          ? 'bg-[#FEF3C7] text-warning'
+                          : 'bg-destructive/10 text-destructive'
                       }`}
                     >
                       {row.effect}
@@ -479,21 +479,21 @@ export const SettingsPane: React.FC = () => {
                   </div>
 
                   {/* Notes */}
-                  <div className="flex-1 text-[11px] text-[#8A8A85] font-sans truncate">
+                  <div className="flex-1 text-[11px] text-muted-foreground font-sans truncate">
                     {row.note}
                   </div>
                 </div>
               ))}
 
               {filteredPolicies.length === 0 && (
-                <div className="py-8 text-center text-xs text-[#8A8A85]">
+                <div className="py-8 text-center text-xs text-muted-foreground">
                   No tool matches "{searchQuery}"
                 </div>
               )}
             </div>
 
             {/* Helper explanation */}
-            <div className="pt-2 border-t border-[#E5E7EB] flex items-center justify-between text-[11px] text-[#8A8A85]">
+            <div className="pt-2 border-t border-border flex items-center justify-between text-[11px] text-muted-foreground">
               <span>💡 Click any permission badge to cycle between ALLOW, APPROVAL, and DENY</span>
               <span className="font-mono text-[10px]">{filteredPolicies.length} tools configured</span>
             </div>
@@ -501,24 +501,24 @@ export const SettingsPane: React.FC = () => {
         </div>
 
         {/* Right Column: Cards */}
-        <div className="w-full lg:w-[380px] shrink-0 flex flex-col gap-4">
+        <div className="w-full xl:w-[380px] shrink-0 flex flex-col gap-4">
           {/* Workspace Sandbox Card matching desktop settings.html */}
-          <div className="w-full bg-[#EBF5FF] border border-[#BFDBFE] rounded-[8px] p-[18px] flex flex-col gap-[10px]">
+          <div className="w-full bg-info/10 border border-[#BFDBFE] rounded-[8px] p-[18px] flex flex-col gap-[10px]">
             <div className="w-full flex items-center gap-2">
-              <Box size={16} className="text-[#007AFF] shrink-0" />
-              <h3 className="text-[14px] font-bold text-[#000000] font-sans">
+              <Box size={16} className="text-primary shrink-0" />
+              <h3 className="text-[14px] font-bold text-foreground font-sans">
                 Workspace sandbox
               </h3>
             </div>
-            <p className="text-[12px] leading-[19px] text-[#333333]">
+            <p className="text-[12px] leading-[19px] text-foreground/85">
               All file operations are jailed to the workspace root. Path traversal attempts (../, symlink escapes) are blocked and logged.
             </p>
-            <div className="w-full p-[9px_12px] bg-[#FFFFFF] border border-[#E5E7EB] rounded-[4px] font-mono text-[11px] text-[#000000] space-y-1">
+            <div className="w-full p-[9px_12px] bg-card border border-border rounded-[4px] font-mono text-[11px] text-foreground space-y-1">
               <div className="flex items-center gap-1.5 text-emerald-700">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                 <span>jailroot: ~/projects/kendaliai</span>
               </div>
-              <div className="text-[#8A8A85]">
+              <div className="text-muted-foreground">
                 status: active enforcement
               </div>
               <div className="text-amber-700">
@@ -534,14 +534,14 @@ export const SettingsPane: React.FC = () => {
           </div>
 
           {/* Global Switches Card */}
-          <div className="w-full bg-[#FFFFFF] border border-[#E5E7EB] rounded-[8px] p-[18px] flex flex-col gap-3 shadow-xs">
-            <h3 className="text-[14px] font-bold text-[#000000] font-sans pb-1 border-b border-[#E5E7EB]">
+          <div className="w-full bg-card border border-border rounded-[8px] p-[18px] flex flex-col gap-3 shadow-xs">
+            <h3 className="text-[14px] font-bold text-foreground font-sans pb-1 border-b border-border">
               Global switches
             </h3>
 
             {/* Switch 1 */}
             <div className="w-full flex items-center justify-between gap-3">
-              <span className="text-[12px] text-[#000000]">
+              <span className="text-[12px] text-foreground">
                 Require approval for background turns
               </span>
               <button
@@ -549,17 +549,17 @@ export const SettingsPane: React.FC = () => {
                 onClick={() => handleToggleSwitch('requireApprovalBackgroundTurns')}
                 className={`w-[34px] h-[19px] p-[2px] flex items-center rounded-[10px] transition-colors cursor-pointer ${
                   switches.requireApprovalBackgroundTurns
-                    ? 'bg-[#16A34A] justify-end'
+                    ? 'bg-success justify-end'
                     : 'bg-[#D4D4D0] justify-start'
                 }`}
               >
-                <div className="w-[15px] h-[15px] bg-[#FFFFFF] rounded-full shadow-xs" />
+                <div className="w-[15px] h-[15px] bg-card rounded-full shadow-xs" />
               </button>
             </div>
 
             {/* Switch 2 */}
             <div className="w-full flex items-center justify-between gap-3">
-              <span className="text-[12px] text-[#000000]">
+              <span className="text-[12px] text-foreground">
                 Auto-scan diffs for secrets
               </span>
               <button
@@ -567,17 +567,17 @@ export const SettingsPane: React.FC = () => {
                 onClick={() => handleToggleSwitch('autoScanDiffsForSecrets')}
                 className={`w-[34px] h-[19px] p-[2px] flex items-center rounded-[10px] transition-colors cursor-pointer ${
                   switches.autoScanDiffsForSecrets
-                    ? 'bg-[#16A34A] justify-end'
+                    ? 'bg-success justify-end'
                     : 'bg-[#D4D4D0] justify-start'
                 }`}
               >
-                <div className="w-[15px] h-[15px] bg-[#FFFFFF] rounded-full shadow-xs" />
+                <div className="w-[15px] h-[15px] bg-card rounded-full shadow-xs" />
               </button>
             </div>
 
             {/* Switch 3 */}
             <div className="w-full flex items-center justify-between gap-3">
-              <span className="text-[12px] text-[#000000]">
+              <span className="text-[12px] text-foreground">
                 Broadcast reminders to Telegram
               </span>
               <button
@@ -585,17 +585,17 @@ export const SettingsPane: React.FC = () => {
                 onClick={() => handleToggleSwitch('broadcastRemindersToTelegram')}
                 className={`w-[34px] h-[19px] p-[2px] flex items-center rounded-[10px] transition-colors cursor-pointer ${
                   switches.broadcastRemindersToTelegram
-                    ? 'bg-[#16A34A] justify-end'
+                    ? 'bg-success justify-end'
                     : 'bg-[#D4D4D0] justify-start'
                 }`}
               >
-                <div className="w-[15px] h-[15px] bg-[#FFFFFF] rounded-full shadow-xs" />
+                <div className="w-[15px] h-[15px] bg-card rounded-full shadow-xs" />
               </button>
             </div>
 
             {/* Switch 4 */}
             <div className="w-full flex items-center justify-between gap-3">
-              <span className="text-[12px] text-[#000000]">
+              <span className="text-[12px] text-foreground">
                 Allow agents to create plugins
               </span>
               <button
@@ -603,17 +603,17 @@ export const SettingsPane: React.FC = () => {
                 onClick={() => handleToggleSwitch('allowAgentsToCreatePlugins')}
                 className={`w-[34px] h-[19px] p-[2px] flex items-center rounded-[10px] transition-colors cursor-pointer ${
                   switches.allowAgentsToCreatePlugins
-                    ? 'bg-[#16A34A] justify-end'
+                    ? 'bg-success justify-end'
                     : 'bg-[#D4D4D0] justify-start'
                 }`}
               >
-                <div className="w-[15px] h-[15px] bg-[#FFFFFF] rounded-full shadow-xs" />
+                <div className="w-[15px] h-[15px] bg-card rounded-full shadow-xs" />
               </button>
             </div>
 
             {/* Switch 5 */}
             <div className="w-full flex items-center justify-between gap-3">
-              <span className="text-[12px] text-[#000000]">
+              <span className="text-[12px] text-foreground">
                 Strict jailroot path enforcement
               </span>
               <button
@@ -621,36 +621,36 @@ export const SettingsPane: React.FC = () => {
                 onClick={() => handleToggleSwitch('strictSandboxRootEnforcement')}
                 className={`w-[34px] h-[19px] p-[2px] flex items-center rounded-[10px] transition-colors cursor-pointer ${
                   switches.strictSandboxRootEnforcement
-                    ? 'bg-[#16A34A] justify-end'
+                    ? 'bg-success justify-end'
                     : 'bg-[#D4D4D0] justify-start'
                 }`}
               >
-                <div className="w-[15px] h-[15px] bg-[#FFFFFF] rounded-full shadow-xs" />
+                <div className="w-[15px] h-[15px] bg-card rounded-full shadow-xs" />
               </button>
             </div>
           </div>
 
           {/* Security & Password Manager Card */}
-          <div className="w-full bg-[#FFFFFF] border border-[#E5E7EB] rounded-[8px] p-[18px] flex flex-col gap-3 shadow-xs">
-            <div className="flex items-center justify-between pb-1 border-b border-[#E5E7EB]">
+          <div className="w-full bg-card border border-border rounded-[8px] p-[18px] flex flex-col gap-3 shadow-xs">
+            <div className="flex items-center justify-between pb-1 border-b border-border">
               <div className="flex items-center gap-2">
-                <Lock size={15} className="text-[#000000]" />
-                <h3 className="text-[14px] font-bold text-[#000000] font-sans">
+                <Lock size={15} className="text-foreground" />
+                <h3 className="text-[14px] font-bold text-foreground font-sans">
                   Security &amp; Auth
                 </h3>
               </div>
               <span
                 className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
                   authRequired
-                    ? 'bg-[#DCFCE7] text-[#16A34A]'
-                    : 'bg-[#F3F4F6] text-[#6B7280]'
+                    ? 'bg-success/15 text-success'
+                    : 'bg-accent text-muted-foreground'
                 }`}
               >
                 {authRequired ? 'Password Set' : 'Open Access'}
               </span>
             </div>
 
-            <p className="text-[11px] text-[#8A8A85]">
+            <p className="text-[11px] text-muted-foreground">
               {authRequired
                 ? 'Password protection is active. New sessions must enter this password.'
                 : 'No password is set. Anyone with local network access can open the workspace.'}
@@ -659,14 +659,14 @@ export const SettingsPane: React.FC = () => {
             <form onSubmit={handlePasswordSubmit} className="space-y-2.5">
               {authRequired && (
                 <div>
-                  <label className="text-[10px] font-bold text-[#8A8A85] uppercase tracking-wider">
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                     Current Password
                   </label>
                   <input
                     type="password"
                     value={currentPassword}
                     onChange={(e) => setCurrentPassword(e.target.value)}
-                    className="w-full mt-1 px-3 py-1.5 bg-[#F7F7F5] border border-[#E5E7EB] rounded-[6px] text-xs text-[#000000] outline-none focus:border-[#0F0F0F]"
+                    className="w-full mt-1 px-3 py-1.5 bg-accent/60 border border-border rounded-[6px] text-xs text-foreground outline-none focus:border-foreground/60"
                     autoComplete="current-password"
                   />
                 </div>
@@ -674,26 +674,26 @@ export const SettingsPane: React.FC = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[10px] font-bold text-[#8A8A85] uppercase tracking-wider">
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                     {authRequired ? 'New Password' : 'Password'}
                   </label>
                   <input
                     type="password"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    className="w-full mt-1 px-3 py-1.5 bg-[#F7F7F5] border border-[#E5E7EB] rounded-[6px] text-xs text-[#000000] outline-none focus:border-[#0F0F0F]"
+                    className="w-full mt-1 px-3 py-1.5 bg-accent/60 border border-border rounded-[6px] text-xs text-foreground outline-none focus:border-foreground/60"
                     autoComplete="new-password"
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-[#8A8A85] uppercase tracking-wider">
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                     Confirm
                   </label>
                   <input
                     type="password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full mt-1 px-3 py-1.5 bg-[#F7F7F5] border border-[#E5E7EB] rounded-[6px] text-xs text-[#000000] outline-none focus:border-[#0F0F0F]"
+                    className="w-full mt-1 px-3 py-1.5 bg-accent/60 border border-border rounded-[6px] text-xs text-foreground outline-none focus:border-foreground/60"
                     autoComplete="new-password"
                   />
                 </div>
@@ -714,7 +714,7 @@ export const SettingsPane: React.FC = () => {
               <button
                 type="submit"
                 disabled={isSubmittingAuth || !newPassword}
-                className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-[#0F0F0F] text-[#FFFFFF] text-xs font-bold rounded-[6px] hover:bg-black/90 disabled:opacity-50 transition-all cursor-pointer"
+                className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-foreground text-background text-xs font-bold rounded-[6px] hover:bg-black/90 disabled:opacity-50 transition-all cursor-pointer"
               >
                 <RefreshCw size={12} className={isSubmittingAuth ? 'animate-spin' : ''} />
                 <span>
@@ -729,61 +729,61 @@ export const SettingsPane: React.FC = () => {
           </div>
 
           {/* Remote Access & Gateway Card (Hermes Clone Goal) */}
-          <div className="w-full bg-[#FFFFFF] border border-[#E5E7EB] rounded-[8px] p-[18px] flex flex-col gap-3 shadow-xs">
-            <div className="flex items-center gap-2 pb-1 border-b border-[#E5E7EB]">
-              <Globe size={15} className="text-[#007AFF]" />
-              <h3 className="text-[14px] font-bold text-[#000000] font-sans">
+          <div className="w-full bg-card border border-border rounded-[8px] p-[18px] flex flex-col gap-3 shadow-xs">
+            <div className="flex items-center gap-2 pb-1 border-b border-border">
+              <Globe size={15} className="text-primary" />
+              <h3 className="text-[14px] font-bold text-foreground font-sans">
                 Remote Access &amp; Gateway
               </h3>
             </div>
 
-            <p className="text-[11px] text-[#8A8A85]">
+            <p className="text-[11px] text-muted-foreground">
               Local server binds to <code>0.0.0.0:8080</code>. Accessible remotely via HTTP, Tailscale, Cloudflare Tunnel, or mobile browser.
             </p>
 
-            <div className="flex items-center justify-between p-2.5 bg-[#F7F7F5] border border-[#E5E7EB] rounded-[6px]">
-              <div className="font-mono text-xs text-[#000000] truncate">
+            <div className="flex items-center justify-between p-2.5 bg-accent/60 border border-border rounded-[6px]">
+              <div className="font-mono text-xs text-foreground truncate">
                 http://{window.location.host || 'localhost:8080'}
               </div>
               <button
                 type="button"
                 onClick={handleCopyRemoteUrl}
-                className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold bg-[#FFFFFF] border border-[#E5E7EB] rounded hover:bg-gray-50 text-[#000000] cursor-pointer"
+                className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold bg-card border border-border rounded hover:bg-accent text-foreground cursor-pointer"
               >
                 {copiedUrl ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
                 <span>{copiedUrl ? 'Copied' : 'Copy'}</span>
               </button>
             </div>
 
-            <div className="flex items-center justify-between text-[11px] text-[#8A8A85] font-mono">
+            <div className="flex items-center justify-between text-[11px] text-muted-foreground font-mono">
               <span>Status: Online Gateway</span>
               <span>LAN / Tailscale Ready</span>
             </div>
           </div>
 
           {/* Appearance & PWA Standalone Viewer */}
-          <div className="w-full bg-[#FFFFFF] border border-[#E5E7EB] rounded-[8px] p-[18px] flex flex-col gap-3 shadow-xs">
-            <div className="flex items-center gap-2 pb-1 border-b border-[#E5E7EB]">
-              <Sun size={15} className="text-[#000000]" />
-              <h3 className="text-[14px] font-bold text-[#000000] font-sans">
+          <div className="w-full bg-card border border-border rounded-[8px] p-[18px] flex flex-col gap-3 shadow-xs">
+            <div className="flex items-center gap-2 pb-1 border-b border-border">
+              <Sun size={15} className="text-foreground" />
+              <h3 className="text-[14px] font-bold text-foreground font-sans">
                 Appearance &amp; App Viewer
               </h3>
             </div>
 
             <div className="flex items-center justify-between">
-              <span className="text-xs text-[#000000]">Theme</span>
+              <span className="text-xs text-foreground">Theme</span>
               <button
                 onClick={toggleTheme}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] border border-[#E5E7EB] bg-[#F7F7F5] text-xs font-semibold text-[#000000] hover:bg-gray-100 transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] border border-border bg-accent/60 text-xs font-semibold text-foreground hover:bg-gray-100 transition-colors"
               >
                 {theme === 'dark' ? <Sun size={13} /> : <Moon size={13} />}
                 <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
               </button>
             </div>
 
-            <div className="pt-2 border-t border-[#E5E7EB] flex flex-col gap-2">
+            <div className="pt-2 border-t border-border flex flex-col gap-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-[#000000]">Standalone PWA</span>
+                <span className="text-xs text-foreground">Standalone PWA</span>
                 <button
                   type="button"
                   onClick={() => {
@@ -795,13 +795,13 @@ export const SettingsPane: React.FC = () => {
                       );
                     }
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0F0F0F] text-[#FFFFFF] text-xs font-semibold rounded-[6px] hover:bg-black/90 transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-foreground text-background text-xs font-semibold rounded-[6px] hover:bg-black/90 transition-colors"
                 >
                   <Download size={13} />
                   <span>Install App</span>
                 </button>
               </div>
-              <p className="text-[10px] text-[#8A8A85]">
+              <p className="text-[10px] text-muted-foreground">
                 Launch KendaliAI without browser chrome on desktop, iPad, or smartphone.
               </p>
             </div>

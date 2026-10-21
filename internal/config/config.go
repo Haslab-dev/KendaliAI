@@ -61,6 +61,26 @@ type Config struct {
 	// empty) keeps the gateway runtime + cognition loop; "rakit" routes web
 	// turns through the embedded RakitKode engine (internal/agentengine).
 	Engine EngineConfig `json:"engine,omitempty" yaml:"engine,omitempty"`
+	// ACP configures external Agent Client Protocol agents (claude-code-acp,
+	// gemini --experimental-acp, ...) that the UI drives as first-class
+	// tasks. Defaults live in internal/acp; entries here add or override.
+	ACP ACPConfig `json:"acp,omitempty" yaml:"acp,omitempty"`
+}
+
+// ACPConfig collects custom ACP agent launch definitions.
+type ACPConfig struct {
+	Agents []ACPAgentConfig `json:"agents,omitempty" yaml:"agents,omitempty"`
+}
+
+// ACPAgentConfig defines (or overrides) one ACP agent launcher.
+type ACPAgentConfig struct {
+	ID              string   `json:"id,omitempty" yaml:"id,omitempty"`
+	Name            string   `json:"name,omitempty" yaml:"name,omitempty"`
+	Description     string   `json:"description,omitempty" yaml:"description,omitempty"`
+	Command         string   `json:"command" yaml:"command"`
+	Args            []string `json:"args,omitempty" yaml:"args,omitempty"`
+	DefaultModel    string   `json:"defaultModel,omitempty" yaml:"defaultModel,omitempty"`
+	SupportedModels []string `json:"supportedModels,omitempty" yaml:"supportedModels,omitempty"`
 }
 
 // EngineConfig configures the embedded RakitKode engine harness.

@@ -495,28 +495,28 @@ export const AgentsPane: React.FC = () => {
   ];
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#FAFAFA] dark:bg-[#0A0A0A] overflow-y-auto">
+    <div className="flex-1 flex flex-col h-full bg-background dark:bg-[#0A0A0A] overflow-y-auto">
       {/* Toast */}
       {toast && (
-        <div className="fixed top-5 right-5 z-50 bg-[#007AFF] text-white px-4 py-2.5 rounded-[8px] text-xs font-bold shadow-xl animate-in fade-in slide-in-from-top-2 flex items-center gap-2">
+        <div className="fixed top-5 right-5 z-50 bg-primary text-white px-4 py-2.5 rounded-[8px] text-xs font-bold shadow-xl animate-in fade-in slide-in-from-top-2 flex items-center gap-2">
           <CheckCircle2 size={15} />
           <span>{toast}</span>
         </div>
       )}
 
       {/* Top Header */}
-      <div className="p-6 pb-4 border-b border-[#E5E7EB] dark:border-[#2C2C2E] bg-white dark:bg-[#121212]">
+      <div className="p-6 pb-4 border-b border-border bg-white dark:bg-background">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-[8px] bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-900/50 flex items-center justify-center text-[#007AFF]">
+              <div className="w-8 h-8 rounded-[8px] bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-900/50 flex items-center justify-center text-primary">
                 <Users2 size={18} />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-[#000000] dark:text-white font-sans">
+                <h1 className="text-xl font-bold text-foreground font-sans">
                   Agent Persons
                 </h1>
-                <p className="text-xs text-[#8A8A85] font-sans">
+                <p className="text-xs text-muted-foreground font-sans">
                   Autonomous office staff, coordinators & specialists with dedicated AI configurations
                 </p>
               </div>
@@ -525,7 +525,7 @@ export const AgentsPane: React.FC = () => {
 
           {/* Quick Metrics & Hire Button */}
           <div className="flex items-center gap-3">
-            <div className="hidden sm:flex items-center gap-3 px-3 py-1.5 rounded-[8px] bg-gray-50 dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] text-xs text-[#8A8A85]">
+            <div className="hidden sm:flex items-center gap-3 px-3 py-1.5 rounded-[8px] bg-gray-50 dark:bg-card border border-border text-xs text-muted-foreground">
               <span><strong>{stats.total}</strong> Staff</span>
               <span>·</span>
               <span><strong>{stats.depts}</strong> Depts</span>
@@ -537,7 +537,7 @@ export const AgentsPane: React.FC = () => {
 
             <button
               onClick={handleOpenCreateModal}
-              className="px-3.5 py-2 rounded-[8px] bg-[#007AFF] hover:bg-[#0066D6] text-white text-xs font-bold font-sans flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+              className="px-3.5 py-2 rounded-[8px] bg-primary hover:bg-primary/85 text-white text-xs font-bold font-sans flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
             >
               <Plus size={14} strokeWidth={2.5} />
               <span>Hire Agent Person</span>
@@ -558,7 +558,7 @@ export const AgentsPane: React.FC = () => {
                   className={`px-3 py-1 rounded-[6px] text-xs font-bold font-sans transition-all whitespace-nowrap cursor-pointer ${
                     isSelected
                       ? 'bg-black dark:bg-white text-white dark:text-black shadow-xs'
-                      : 'text-[#8A8A85] hover:text-[#000000] dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-gray-100 dark:hover:bg-white/5'
                   }`}
                 >
                   {dept}
@@ -569,13 +569,13 @@ export const AgentsPane: React.FC = () => {
 
           {/* Search Box */}
           <div className="relative w-full sm:w-64">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8A8A85]" />
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
               placeholder="Search agent, role, skill, model..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 rounded-[6px] bg-[#F7F7F5] dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] text-xs text-[#000000] dark:text-white outline-none focus:border-[#007AFF]"
+              className="w-full pl-8 pr-3 py-1.5 rounded-[6px] bg-accent/60 border border-border text-xs text-foreground outline-none focus:border-primary/60"
             />
           </div>
         </div>
@@ -584,15 +584,15 @@ export const AgentsPane: React.FC = () => {
       {/* Agents Grid */}
       <div className="p-6">
         {filteredAgents.length === 0 ? (
-          <div className="text-center py-16 bg-white dark:bg-[#141414] rounded-[12px] border border-[#E5E7EB] dark:border-[#2C2C2E]">
-            <Users2 size={36} className="mx-auto text-[#8A8A85] opacity-50 mb-3" />
-            <div className="text-sm font-bold text-[#000000] dark:text-white">No Agent Persons Found</div>
-            <p className="text-xs text-[#8A8A85] mt-1 max-w-sm mx-auto">
+          <div className="text-center py-16 bg-card rounded-[12px] border border-border">
+            <Users2 size={36} className="mx-auto text-muted-foreground opacity-50 mb-3" />
+            <div className="text-sm font-bold text-foreground">No Agent Persons Found</div>
+            <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
               No staff members match the selected filters. Hire a new agent person or clear your search.
             </p>
             <button
               onClick={handleOpenCreateModal}
-              className="mt-4 px-3.5 py-1.5 bg-[#007AFF] text-white text-xs font-bold rounded-[6px] cursor-pointer"
+              className="mt-4 px-3.5 py-1.5 bg-primary text-white text-xs font-bold rounded-[6px] cursor-pointer"
             >
               Hire Agent Person
             </button>
@@ -610,7 +610,7 @@ export const AgentsPane: React.FC = () => {
               return (
                 <div
                   key={p.id}
-                  className="bg-white dark:bg-[#161618] rounded-[12px] border border-[#E5E7EB] dark:border-[#2C2C2E] hover:border-gray-300 dark:hover:border-gray-700 p-4 transition-all shadow-xs hover:shadow-sm flex flex-col justify-between"
+                  className="bg-white dark:bg-card rounded-[12px] border border-border hover:border-gray-300 dark:hover:border-gray-700 p-4 transition-all shadow-xs hover:shadow-sm flex flex-col justify-between"
                 >
                   {/* Top: Avatar & Identification */}
                   <div>
@@ -622,7 +622,7 @@ export const AgentsPane: React.FC = () => {
                         </div>
                         <div className="flex flex-col min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="text-sm font-bold text-[#000000] dark:text-white font-sans truncate">
+                            <span className="text-sm font-bold text-foreground font-sans truncate">
                               {p.name}
                             </span>
                             {p.department && (
@@ -631,7 +631,7 @@ export const AgentsPane: React.FC = () => {
                               </span>
                             )}
                           </div>
-                          <span className="text-xs text-[#007AFF] font-medium truncate font-sans">
+                          <span className="text-xs text-primary font-medium truncate font-sans">
                             {p.role || p.name}
                           </span>
                         </div>
@@ -641,7 +641,7 @@ export const AgentsPane: React.FC = () => {
                       <div className="flex items-center gap-1 shrink-0">
                         <button
                           onClick={() => handleOpenEditModal(p)}
-                          className="p-1 text-[#8A8A85] hover:text-[#000000] dark:hover:text-white rounded hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer"
+                          className="p-1 text-muted-foreground hover:text-foreground rounded hover:bg-foreground/5 cursor-pointer"
                           title="Edit Agent Person"
                         >
                           <Edit3 size={13} />
@@ -649,7 +649,7 @@ export const AgentsPane: React.FC = () => {
                         {p.id !== 'personal-assistant' && (
                           <button
                             onClick={() => handleDelete(p)}
-                            className="p-1 text-[#8A8A85] hover:text-red-500 rounded hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer"
+                            className="p-1 text-muted-foreground hover:text-red-500 rounded hover:bg-foreground/5 cursor-pointer"
                             title="Dismiss Agent Person"
                           >
                             <Trash2 size={13} />
@@ -659,13 +659,13 @@ export const AgentsPane: React.FC = () => {
                     </div>
 
                     {/* Description */}
-                    <p className="text-xs text-[#8A8A85] mt-2.5 line-clamp-2 font-sans leading-relaxed">
+                    <p className="text-xs text-muted-foreground mt-2.5 line-clamp-2 font-sans leading-relaxed">
                       {p.description || 'No description provided.'}
                     </p>
 
                     {/* Model Pill & Telegram Bot */}
                     <div className="flex items-center gap-2 mt-3 flex-wrap">
-                      <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[5px] bg-blue-50 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900/50 text-[#007AFF] text-[10px] font-mono font-semibold">
+                      <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[5px] bg-blue-50 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900/50 text-primary text-[10px] font-mono font-semibold">
                         <Cpu size={11} />
                         <span className="truncate max-w-[140px]">{modelName}</span>
                         <span className="text-[9px] px-1 rounded bg-blue-200/60 dark:bg-blue-800/60 text-blue-900 dark:text-blue-200">
@@ -686,7 +686,7 @@ export const AgentsPane: React.FC = () => {
                       ) : (
                         <button
                           onClick={() => handleOpenTgModal(p)}
-                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[5px] border border-dashed border-gray-300 dark:border-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-[10px] font-sans cursor-pointer hover:bg-black/5 dark:hover:bg-white/5"
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[5px] border border-dashed border-gray-300 dark:border-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-[10px] font-sans cursor-pointer hover:bg-foreground/5"
                           title="Link a configured Telegram Bot"
                         >
                           <Send size={10} />
@@ -701,7 +701,7 @@ export const AgentsPane: React.FC = () => {
                         {p.skills.slice(0, 4).map((sk) => (
                           <span
                             key={sk}
-                            className="text-[9px] px-1.5 py-0.2 rounded bg-gray-100 dark:bg-[#202022] text-[#6B7280] dark:text-[#9CA3AF] font-mono"
+                            className="text-[9px] px-1.5 py-0.2 rounded bg-gray-100 dark:bg-[#202022] text-muted-foreground font-mono"
                           >
                             #{sk}
                           </span>
@@ -714,14 +714,14 @@ export const AgentsPane: React.FC = () => {
                   </div>
 
                   {/* Bottom Action: Chat */}
-                  <div className="mt-4 pt-3 border-t border-[#F3F4F6] dark:border-[#242426] flex items-center justify-between">
+                  <div className="mt-4 pt-3 border-t border-[#F3F4F6] dark:border-border flex items-center justify-between">
                     <span className="text-[10px] text-gray-400 font-sans">
                       {p.tools?.length || 0} Tools Enabled
                     </span>
 
                     <button
                       onClick={() => handleChat(p)}
-                      className="px-3 py-1.5 rounded-[6px] bg-[#0F0F0F] dark:bg-white hover:bg-black/80 dark:hover:bg-white/90 text-white dark:text-black text-xs font-bold font-sans flex items-center gap-1.5 transition-colors cursor-pointer"
+                      className="px-3 py-1.5 rounded-[6px] bg-foreground dark:bg-white hover:bg-black/80 dark:hover:bg-white/90 text-white dark:text-black text-xs font-bold font-sans flex items-center gap-1.5 transition-colors cursor-pointer"
                     >
                       <MessageSquare size={12} />
                       <span>Chat</span>
@@ -737,18 +737,18 @@ export const AgentsPane: React.FC = () => {
       {/* CREATE / EDIT AGENT PERSON MODAL */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-100">
-          <div className="bg-white dark:bg-[#18181B] rounded-[16px] border border-[#E5E7EB] dark:border-[#2C2C2E] shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+          <div className="bg-white dark:bg-[#18181B] rounded-[16px] border border-border shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
             {/* Modal Header */}
-            <div className="p-4 border-b border-[#E5E7EB] dark:border-[#2C2C2E] flex items-center justify-between">
+            <div className="p-4 border-b border-border flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Users2 size={18} className="text-[#007AFF]" />
-                <h2 className="text-sm font-bold text-[#000000] dark:text-white font-sans">
+                <Users2 size={18} className="text-primary" />
+                <h2 className="text-sm font-bold text-foreground font-sans">
                   {editingAgent ? `Edit Agent Person: ${editingAgent.name}` : 'Hire New Agent Person'}
                 </h2>
               </div>
               <button
                 onClick={() => setShowModal(false)}
-                className="p-1 rounded text-[#8A8A85] hover:text-[#000000] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer"
+                className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-foreground/5 cursor-pointer"
               >
                 <X size={16} />
               </button>
@@ -759,7 +759,7 @@ export const AgentsPane: React.FC = () => {
               {/* Name & Role */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[11px] font-bold text-[#333333] dark:text-gray-300 font-sans">
+                  <label className="text-[11px] font-bold text-foreground/85 dark:text-gray-300 font-sans">
                     Full Name *
                   </label>
                   <input
@@ -768,12 +768,12 @@ export const AgentsPane: React.FC = () => {
                     placeholder="e.g. Alex Rivera, Personal Assistant"
                     value={formName}
                     onChange={(e) => setFormName(e.target.value)}
-                    className="w-full mt-1 px-3 py-1.5 rounded-[6px] bg-[#F7F7F5] dark:bg-[#242426] border border-[#E5E7EB] dark:border-[#2C2C2E] text-xs text-[#000000] dark:text-white outline-none focus:border-[#007AFF]"
+                    className="w-full mt-1 px-3 py-1.5 rounded-[6px] bg-accent/60 dark:bg-accent border border-border text-xs text-foreground outline-none focus:border-primary/60"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-bold text-[#333333] dark:text-gray-300 font-sans">
+                  <label className="text-[11px] font-bold text-foreground/85 dark:text-gray-300 font-sans">
                     Role / Title *
                   </label>
                   <input
@@ -782,7 +782,7 @@ export const AgentsPane: React.FC = () => {
                     placeholder="e.g. Lead Frontend Dev, Executive Coordinator"
                     value={formRole}
                     onChange={(e) => setFormRole(e.target.value)}
-                    className="w-full mt-1 px-3 py-1.5 rounded-[6px] bg-[#F7F7F5] dark:bg-[#242426] border border-[#E5E7EB] dark:border-[#2C2C2E] text-xs text-[#000000] dark:text-white outline-none focus:border-[#007AFF]"
+                    className="w-full mt-1 px-3 py-1.5 rounded-[6px] bg-accent/60 dark:bg-accent border border-border text-xs text-foreground outline-none focus:border-primary/60"
                   />
                 </div>
               </div>
@@ -790,13 +790,13 @@ export const AgentsPane: React.FC = () => {
               {/* Department & ID */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[11px] font-bold text-[#333333] dark:text-gray-300 font-sans">
+                  <label className="text-[11px] font-bold text-foreground/85 dark:text-gray-300 font-sans">
                     Department
                   </label>
                   <select
                     value={formDepartment}
                     onChange={(e) => setFormDepartment(e.target.value)}
-                    className="w-full mt-1 px-3 py-1.5 rounded-[6px] bg-[#F7F7F5] dark:bg-[#242426] border border-[#E5E7EB] dark:border-[#2C2C2E] text-xs text-[#000000] dark:text-white outline-none focus:border-[#007AFF]"
+                    className="w-full mt-1 px-3 py-1.5 rounded-[6px] bg-accent/60 dark:bg-accent border border-border text-xs text-foreground outline-none focus:border-primary/60"
                   >
                     {DEPARTMENTS.filter((d) => d !== 'All').map((d) => (
                       <option key={d} value={d}>
@@ -807,7 +807,7 @@ export const AgentsPane: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-bold text-[#333333] dark:text-gray-300 font-sans">
+                  <label className="text-[11px] font-bold text-foreground/85 dark:text-gray-300 font-sans">
                     Agent ID (Slug) *
                   </label>
                   <input
@@ -817,14 +817,14 @@ export const AgentsPane: React.FC = () => {
                     placeholder="e.g. lead-frontend, personal-assistant"
                     value={formId}
                     onChange={(e) => setFormId(e.target.value)}
-                    className="w-full mt-1 px-3 py-1.5 rounded-[6px] bg-[#F7F7F5] dark:bg-[#242426] border border-[#E5E7EB] dark:border-[#2C2C2E] text-xs font-mono text-[#000000] dark:text-white outline-none focus:border-[#007AFF] disabled:opacity-60"
+                    className="w-full mt-1 px-3 py-1.5 rounded-[6px] bg-accent/60 dark:bg-accent border border-border text-xs font-mono text-foreground outline-none focus:border-primary/60 disabled:opacity-60"
                   />
                 </div>
               </div>
 
               {/* Visual Grok Avatar Selector (NO EMOJIS!) */}
               <div>
-                <label className="text-[11px] font-bold text-[#333333] dark:text-gray-300 font-sans flex items-center justify-between">
+                <label className="text-[11px] font-bold text-foreground/85 dark:text-gray-300 font-sans flex items-center justify-between">
                   <span>Visual Persona Avatar</span>
                   <span className="text-[10px] text-gray-400 font-normal">Clean SVG Grok Avatars</span>
                 </label>
@@ -837,8 +837,8 @@ export const AgentsPane: React.FC = () => {
                         onClick={() => setFormAvatar(av.id)}
                         className={`p-1.5 rounded-[8px] flex flex-col items-center justify-center cursor-pointer transition-all border ${
                           isSelected
-                            ? 'border-[#007AFF] bg-blue-50/80 dark:bg-blue-950/40 shadow-xs ring-2 ring-[#007AFF]/40'
-                            : 'border-[#E5E7EB] dark:border-[#2C2C2E] hover:border-gray-400 bg-[#F7F7F5] dark:bg-[#242426]'
+                            ? 'border-primary bg-blue-50/80 dark:bg-blue-950/40 shadow-xs ring-2 ring-[#007AFF]/40'
+                            : 'border-border hover:border-gray-400 bg-accent/60 dark:bg-accent'
                         }`}
                         title={`${av.name} (${av.role})`}
                       >
@@ -852,13 +852,13 @@ export const AgentsPane: React.FC = () => {
               {/* Provider & Model Selector (DYNAMIC POPULATION FROM CONNECTED PROVIDERS) */}
               <div>
                 <div className="flex items-center justify-between">
-                  <label className="text-[11px] font-bold text-[#333333] dark:text-gray-300 font-sans">
+                  <label className="text-[11px] font-bold text-foreground/85 dark:text-gray-300 font-sans">
                     Assigned AI Model (From Configured Providers) *
                   </label>
                   <button
                     type="button"
                     onClick={() => setIsCustomModel(!isCustomModel)}
-                    className="text-[10px] text-[#007AFF] hover:underline cursor-pointer"
+                    className="text-[10px] text-primary hover:underline cursor-pointer"
                   >
                     {isCustomModel ? 'Select from provider models' : 'Type custom model ID'}
                   </button>
@@ -870,13 +870,13 @@ export const AgentsPane: React.FC = () => {
                     placeholder="Enter custom model ID (e.g. gpt-6-astra, deepseek-v4-flash)..."
                     value={formModel}
                     onChange={(e) => setFormModel(e.target.value)}
-                    className="w-full mt-1.5 px-3 py-1.5 rounded-[6px] bg-[#F7F7F5] dark:bg-[#242426] border border-[#E5E7EB] dark:border-[#2C2C2E] text-xs font-mono text-[#000000] dark:text-white outline-none focus:border-[#007AFF]"
+                    className="w-full mt-1.5 px-3 py-1.5 rounded-[6px] bg-accent/60 dark:bg-accent border border-border text-xs font-mono text-foreground outline-none focus:border-primary/60"
                   />
                 ) : (
                   <select
                     value={formModel}
                     onChange={(e) => setFormModel(e.target.value)}
-                    className="w-full mt-1.5 px-3 py-2 rounded-[6px] bg-[#F7F7F5] dark:bg-[#242426] border border-[#E5E7EB] dark:border-[#2C2C2E] text-xs font-mono text-[#000000] dark:text-white outline-none focus:border-[#007AFF]"
+                    className="w-full mt-1.5 px-3 py-2 rounded-[6px] bg-accent/60 dark:bg-accent border border-border text-xs font-mono text-foreground outline-none focus:border-primary/60"
                   >
                     {groupedModels.map((group) => (
                       <optgroup key={group.providerName} label={`── ${group.providerName} ──`}>
@@ -893,7 +893,7 @@ export const AgentsPane: React.FC = () => {
 
               {/* Description */}
               <div>
-                <label className="text-[11px] font-bold text-[#333333] dark:text-gray-300 font-sans">
+                <label className="text-[11px] font-bold text-foreground/85 dark:text-gray-300 font-sans">
                   Description
                 </label>
                 <input
@@ -901,13 +901,13 @@ export const AgentsPane: React.FC = () => {
                   placeholder="Brief summary of duties and responsibilities"
                   value={formDescription}
                   onChange={(e) => setFormDescription(e.target.value)}
-                  className="w-full mt-1 px-3 py-1.5 rounded-[6px] bg-[#F7F7F5] dark:bg-[#242426] border border-[#E5E7EB] dark:border-[#2C2C2E] text-xs text-[#000000] dark:text-white outline-none focus:border-[#007AFF]"
+                  className="w-full mt-1 px-3 py-1.5 rounded-[6px] bg-accent/60 dark:bg-accent border border-border text-xs text-foreground outline-none focus:border-primary/60"
                 />
               </div>
 
               {/* System Prompt Instructions */}
               <div>
-                <label className="text-[11px] font-bold text-[#333333] dark:text-gray-300 font-sans">
+                <label className="text-[11px] font-bold text-foreground/85 dark:text-gray-300 font-sans">
                   Persona & System Prompt Instructions
                 </label>
                 <textarea
@@ -915,13 +915,13 @@ export const AgentsPane: React.FC = () => {
                   placeholder="Define persona, expertise, behavioral rules, constraints, and standard operating procedures..."
                   value={formSystemPrompt}
                   onChange={(e) => setFormSystemPrompt(e.target.value)}
-                  className="w-full mt-1 px-3 py-2 rounded-[6px] bg-[#F7F7F5] dark:bg-[#242426] border border-[#E5E7EB] dark:border-[#2C2C2E] text-xs font-mono text-[#000000] dark:text-white outline-none focus:border-[#007AFF] resize-y leading-relaxed"
+                  className="w-full mt-1 px-3 py-2 rounded-[6px] bg-accent/60 dark:bg-accent border border-border text-xs font-mono text-foreground outline-none focus:border-primary/60 resize-y leading-relaxed"
                 />
               </div>
 
               {/* Skills */}
               <div>
-                <label className="text-[11px] font-bold text-[#333333] dark:text-gray-300 font-sans">
+                <label className="text-[11px] font-bold text-foreground/85 dark:text-gray-300 font-sans">
                   Skills & Responsibilities (Comma-separated)
                 </label>
                 <input
@@ -929,13 +929,13 @@ export const AgentsPane: React.FC = () => {
                   placeholder="e.g. react-19, typescript, code-review, system-design"
                   value={formSkillsInput}
                   onChange={(e) => setFormSkillsInput(e.target.value)}
-                  className="w-full mt-1 px-3 py-1.5 rounded-[6px] bg-[#F7F7F5] dark:bg-[#242426] border border-[#E5E7EB] dark:border-[#2C2C2E] text-xs font-mono text-[#000000] dark:text-white outline-none focus:border-[#007AFF]"
+                  className="w-full mt-1 px-3 py-1.5 rounded-[6px] bg-accent/60 dark:bg-accent border border-border text-xs font-mono text-foreground outline-none focus:border-primary/60"
                 />
               </div>
 
               {/* Capabilities & Tools */}
               <div>
-                <label className="text-[11px] font-bold text-[#333333] dark:text-gray-300 font-sans">
+                <label className="text-[11px] font-bold text-foreground/85 dark:text-gray-300 font-sans">
                   Enabled Tools & Capabilities
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1.5">
@@ -946,8 +946,8 @@ export const AgentsPane: React.FC = () => {
                         key={t.id}
                         className={`flex items-center gap-2 p-2 rounded-[6px] border text-xs cursor-pointer select-none transition-colors ${
                           isChecked
-                            ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-900 text-[#007AFF] font-bold'
-                            : 'bg-[#F7F7F5] dark:bg-[#242426] border-[#E5E7EB] dark:border-[#2C2C2E] text-gray-600 dark:text-gray-300'
+                            ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-900 text-primary font-bold'
+                            : 'bg-accent/60 dark:bg-accent border-border text-gray-600 dark:text-gray-300'
                         }`}
                       >
                         <input
@@ -960,7 +960,7 @@ export const AgentsPane: React.FC = () => {
                               setFormTools(formTools.filter((id) => id !== t.id));
                             }
                           }}
-                          className="rounded text-[#007AFF]"
+                          className="rounded text-primary"
                         />
                         <span className="text-[11px] truncate">{t.label}</span>
                       </label>
@@ -972,17 +972,17 @@ export const AgentsPane: React.FC = () => {
               {/* Telegram Bot (Select from configured bots) */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-[11px] font-bold text-[#333333] dark:text-gray-300 font-sans">
+                  <label className="text-[11px] font-bold text-foreground/85 dark:text-gray-300 font-sans">
                     Assigned Telegram Bot (Optional)
                   </label>
-                  <span className="text-[10px] text-[#8A8A85]">
+                  <span className="text-[10px] text-muted-foreground">
                     {configuredBots.length} {configuredBots.length === 1 ? 'bot' : 'bots'} configured
                   </span>
                 </div>
                 <select
                   value={formTelegramBot}
                   onChange={(e) => setFormTelegramBot(e.target.value)}
-                  className="w-full px-3 py-2 rounded-[6px] bg-[#F7F7F5] dark:bg-[#242426] border border-[#E5E7EB] dark:border-[#2C2C2E] text-xs font-mono text-[#000000] dark:text-white outline-none focus:border-[#007AFF]"
+                  className="w-full px-3 py-2 rounded-[6px] bg-accent/60 dark:bg-accent border border-border text-xs font-mono text-foreground outline-none focus:border-primary/60"
                 >
                   <option value="">-- No Telegram Bot Linked --</option>
                   {configuredBots.map((bot) => (
@@ -991,23 +991,23 @@ export const AgentsPane: React.FC = () => {
                     </option>
                   ))}
                 </select>
-                <p className="text-[10px] text-[#8A8A85] mt-1">
+                <p className="text-[10px] text-muted-foreground mt-1">
                   Select from existing Telegram bots to route messages directly to this agent person.
                 </p>
               </div>
 
               {/* Footer Buttons */}
-              <div className="pt-3 border-t border-[#E5E7EB] dark:border-[#2C2C2E] flex items-center justify-end gap-2">
+              <div className="pt-3 border-t border-border flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2 rounded-[6px] border border-[#E5E7EB] dark:border-[#2C2C2E] text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer"
+                  className="px-4 py-2 rounded-[6px] border border-border text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-foreground/5 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-[6px] bg-[#007AFF] hover:bg-[#0066D6] text-white text-xs font-bold font-sans cursor-pointer shadow-sm"
+                  className="px-4 py-2 rounded-[6px] bg-primary hover:bg-primary/85 text-white text-xs font-bold font-sans cursor-pointer shadow-sm"
                 >
                   {editingAgent ? 'Save Changes' : 'Hire Agent Person'}
                 </button>
@@ -1020,17 +1020,17 @@ export const AgentsPane: React.FC = () => {
       {/* TELEGRAM BOT PAIRING MODAL */}
       {showTgModal && selectedAgentForTg && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-100">
-          <div className="bg-white dark:bg-[#18181B] rounded-[16px] border border-[#E5E7EB] dark:border-[#2C2C2E] shadow-2xl w-full max-w-md flex flex-col overflow-hidden">
-            <div className="p-4 border-b border-[#E5E7EB] dark:border-[#2C2C2E] flex items-center justify-between">
+          <div className="bg-white dark:bg-[#18181B] rounded-[16px] border border-border shadow-2xl w-full max-w-md flex flex-col overflow-hidden">
+            <div className="p-4 border-b border-border flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Send size={16} className="text-[#007AFF]" />
-                <h2 className="text-sm font-bold text-[#000000] dark:text-white font-sans">
+                <Send size={16} className="text-primary" />
+                <h2 className="text-sm font-bold text-foreground font-sans">
                   Link Telegram Bot: {selectedAgentForTg.name}
                 </h2>
               </div>
               <button
                 onClick={() => setShowTgModal(false)}
-                className="p-1 rounded text-[#8A8A85] hover:text-[#000000] dark:hover:text-white cursor-pointer"
+                className="p-1 rounded text-muted-foreground hover:text-foreground cursor-pointer"
               >
                 <X size={16} />
               </button>
@@ -1040,13 +1040,13 @@ export const AgentsPane: React.FC = () => {
               {!isAddNewBotMode ? (
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-[11px] font-bold text-[#333333] dark:text-gray-300 font-sans">
+                    <label className="text-[11px] font-bold text-foreground/85 dark:text-gray-300 font-sans">
                       Select Configured Bot *
                     </label>
                     <button
                       type="button"
                       onClick={() => setIsAddNewBotMode(true)}
-                      className="text-[10px] text-[#007AFF] hover:underline cursor-pointer"
+                      className="text-[10px] text-primary hover:underline cursor-pointer"
                     >
                       + Connect New Bot Token
                     </button>
@@ -1061,7 +1061,7 @@ export const AgentsPane: React.FC = () => {
                       <select
                         value={selectedBotIdToLink}
                         onChange={(e) => setSelectedBotIdToLink(e.target.value)}
-                        className="w-full px-3 py-2 rounded-[6px] bg-[#F7F7F5] dark:bg-[#242426] border border-[#E5E7EB] dark:border-[#2C2C2E] text-xs font-mono text-[#000000] dark:text-white outline-none focus:border-[#007AFF]"
+                        className="w-full px-3 py-2 rounded-[6px] bg-accent/60 dark:bg-accent border border-border text-xs font-mono text-foreground outline-none focus:border-primary/60"
                       >
                         <option value="">-- No Bot (Unlink Bot) --</option>
                         {configuredBots.map((bot) => (
@@ -1070,7 +1070,7 @@ export const AgentsPane: React.FC = () => {
                           </option>
                         ))}
                       </select>
-                      <p className="text-[10px] text-[#8A8A85] mt-1.5 leading-relaxed">
+                      <p className="text-[10px] text-muted-foreground mt-1.5 leading-relaxed">
                         Choose an existing configured Telegram bot. No manual API token input required.
                       </p>
                     </>
@@ -1079,14 +1079,14 @@ export const AgentsPane: React.FC = () => {
               ) : (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <label className="text-[11px] font-bold text-[#333333] dark:text-gray-300 font-sans">
+                    <label className="text-[11px] font-bold text-foreground/85 dark:text-gray-300 font-sans">
                       Connect New Telegram Bot
                     </label>
                     {configuredBots.length > 0 && (
                       <button
                         type="button"
                         onClick={() => setIsAddNewBotMode(false)}
-                        className="text-[10px] text-[#007AFF] hover:underline cursor-pointer"
+                        className="text-[10px] text-primary hover:underline cursor-pointer"
                       >
                         ← Select from configured bots ({configuredBots.length})
                       </button>
@@ -1101,7 +1101,7 @@ export const AgentsPane: React.FC = () => {
                       placeholder="e.g. 7123456789:AAH..."
                       value={tgBotToken}
                       onChange={(e) => setTgBotToken(e.target.value)}
-                      className="w-full mt-1 px-3 py-1.5 rounded-[6px] bg-[#F7F7F5] dark:bg-[#242426] border border-[#E5E7EB] dark:border-[#2C2C2E] text-xs font-mono text-[#000000] dark:text-white outline-none focus:border-[#007AFF]"
+                      className="w-full mt-1 px-3 py-1.5 rounded-[6px] bg-accent/60 dark:bg-accent border border-border text-xs font-mono text-foreground outline-none focus:border-primary/60"
                     />
                   </div>
 
@@ -1112,29 +1112,29 @@ export const AgentsPane: React.FC = () => {
                       placeholder="e.g. @MyStaffAgentBot"
                       value={tgBotUsername}
                       onChange={(e) => setTgBotUsername(e.target.value)}
-                      className="w-full mt-1 px-3 py-1.5 rounded-[6px] bg-[#F7F7F5] dark:bg-[#242426] border border-[#E5E7EB] dark:border-[#2C2C2E] text-xs font-mono text-[#000000] dark:text-white outline-none focus:border-[#007AFF]"
+                      className="w-full mt-1 px-3 py-1.5 rounded-[6px] bg-accent/60 dark:bg-accent border border-border text-xs font-mono text-foreground outline-none focus:border-primary/60"
                     />
                   </div>
                 </div>
               )}
 
-              <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-[8px] border border-blue-100 dark:border-blue-900/40 text-xs text-[#007AFF] leading-relaxed">
+              <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-[8px] border border-blue-100 dark:border-blue-900/40 text-xs text-primary leading-relaxed">
                 When linked, messages sent to this Telegram Bot will automatically route directly to{' '}
                 <strong>{selectedAgentForTg.name}</strong>, using their persona, rules, and assigned model.
               </div>
 
-              <div className="pt-3 border-t border-[#E5E7EB] dark:border-[#2C2C2E] flex items-center justify-end gap-2">
+              <div className="pt-3 border-t border-border flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setShowTgModal(false)}
-                  className="px-4 py-1.5 rounded-[6px] border border-[#E5E7EB] dark:border-[#2C2C2E] text-xs font-bold text-gray-600 dark:text-gray-300 cursor-pointer"
+                  className="px-4 py-1.5 rounded-[6px] border border-border text-xs font-bold text-gray-600 dark:text-gray-300 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSavingTg}
-                  className="px-4 py-1.5 rounded-[6px] bg-[#007AFF] hover:bg-[#0066D6] text-white text-xs font-bold font-sans cursor-pointer disabled:opacity-50"
+                  className="px-4 py-1.5 rounded-[6px] bg-primary hover:bg-primary/85 text-white text-xs font-bold font-sans cursor-pointer disabled:opacity-50"
                 >
                   {isSavingTg ? 'Saving...' : isAddNewBotMode ? 'Register & Link' : 'Save Bot Link'}
                 </button>

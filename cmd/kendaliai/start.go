@@ -23,6 +23,7 @@ import (
 )
 
 var daemonMode bool
+var listenPort string
 
 var startCmd = &cobra.Command{
 	Use:   "start",
@@ -32,6 +33,7 @@ var startCmd = &cobra.Command{
 
 func init() {
 	startCmd.Flags().BoolVarP(&daemonMode, "daemon", "d", false, "Start gateway in the background as a daemon")
+	startCmd.Flags().StringVar(&listenPort, "port", "8080", "HTTP port for the gateway")
 	rootCmd.AddCommand(startCmd)
 }
 
@@ -39,9 +41,9 @@ func runStart(cmd *cobra.Command, args []string) {
 	cfg := config.Cfg
 	pidFile := resolvePIDFile()
 
-	// Stop and clear any existing process holding port 8080 or recorded in PID file
-	if stopAndClearPort("8080", pidFile) {
-		fmt.Println("🔄 Existing process detected on port 8080. Stopped and cleared port.")
+	// Stop and clear any existing process holding the target port or recorded in the PID file.
+	if stopAndClearPort(listenPort, pidFile) {
+		fmt.Printf("🔄 Existing process detected on port %s. Stopped and cleared port.\n", listenPort)
 	}
 
 	if daemonMode {
@@ -133,7 +135,7 @@ func runStart(cmd *cobra.Command, args []string) {
 	_ = os.WriteFile(pidFile, []byte(fmt.Sprintf("%d", os.Getpid())), 0644)
 	defer os.Remove(pidFile)
 
-	if err := srv.Start("8080"); err != nil {
+	if err := srv.Start(listenPort); err != nil {
 		log.Fatalf("❌ Server error: %v", err)
 	}
 

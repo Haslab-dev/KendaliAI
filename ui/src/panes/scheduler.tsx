@@ -222,14 +222,14 @@ export const SchedulerPane: React.FC = () => {
   };
 
   return (
-    <div className="w-full min-h-screen bg-[#F7F7F5] flex flex-col">
+    <div className="w-full min-h-screen bg-accent/60 flex flex-col">
       {/* Page Header matching scheduler.html */}
-      <div className="w-full bg-[#FFFFFF] border-b border-[#E5E7EB] px-6 lg:px-9 py-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="w-full bg-card border-b border-border px-6 lg:px-9 py-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex flex-col gap-[2px]">
-          <h1 className="text-[20px] font-bold text-[#000000] font-sans tracking-tight">
+          <h1 className="text-[20px] font-bold text-foreground font-sans tracking-tight">
             Scheduler &amp; Reminders
           </h1>
-          <p className="text-[12px] text-[#8A8A85] font-['Funnel_Sans',sans-serif]">
+          <p className="text-[12px] text-muted-foreground font-['Funnel_Sans',sans-serif]">
             Natural language or cron — "every weekday at 9am" · "in 15 minutes" · 0 1 * * *
           </p>
         </div>
@@ -238,13 +238,13 @@ export const SchedulerPane: React.FC = () => {
           <button
             onClick={loadSchedules}
             title="Refresh schedules"
-            className="p-2 rounded-[8px] border border-[#E5E7EB] text-[#8A8A85] hover:text-[#000000] hover:bg-[#F7F7F5] transition-colors"
+            className="p-2 rounded-[8px] border border-border text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
           >
             <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
           </button>
           <button
             onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 px-4 py-[9px] bg-[#0F0F0F] text-[#FFFFFF] text-[12px] font-bold rounded-[8px] hover:bg-black/90 transition-all shadow-sm cursor-pointer"
+            className="flex items-center gap-2 px-4 py-[9px] bg-foreground text-background text-[12px] font-bold rounded-[8px] hover:bg-black/90 transition-all shadow-sm cursor-pointer"
           >
             <Plus size={14} />
             <span>New Schedule</span>
@@ -257,20 +257,20 @@ export const SchedulerPane: React.FC = () => {
         {/* Left Column: NL Parse Card + Schedules List */}
         <div className="flex-1 w-full flex flex-col gap-3">
           {/* NL Parse Card matching scheduler.html */}
-          <div className="w-full bg-[#EBF5FF] border border-[#BFDBFE] rounded-[8px] p-[18px] flex flex-col gap-2.5">
+          <div className="w-full bg-info/10 border border-[#BFDBFE] rounded-[8px] p-[18px] flex flex-col gap-2.5">
             <div className="w-full flex items-center gap-2.5">
-              <Sparkles size={15} className="text-[#007AFF] shrink-0" />
+              <Sparkles size={15} className="text-primary shrink-0" />
               <input
                 type="text"
                 value={nlInput}
                 onChange={(e) => handleParseNL(e.target.value)}
                 placeholder="Type in plain English e.g. remind me to stretch every 45 minutes"
-                className="w-full bg-transparent border-none text-[12px] font-['Geist_Mono',monospace] text-[#000000] focus:outline-none placeholder-[#8A8A85]"
+                className="w-full bg-transparent border-none text-[12px] font-['Geist_Mono',monospace] text-foreground focus:outline-none placeholder-[#8A8A85]"
               />
             </div>
 
             <div className="flex items-center gap-2 flex-wrap pt-1">
-              <div className="bg-[#007AFF] text-[#FFFFFF] rounded-[4px] px-2.5 py-1 text-[10px] font-['Geist_Mono',monospace]">
+              <div className="bg-primary text-primary-fg rounded-[4px] px-2.5 py-1 text-[10px] font-['Geist_Mono',monospace]">
                 cron: {parsedCron}
               </div>
               <button
@@ -280,7 +280,7 @@ export const SchedulerPane: React.FC = () => {
                   setFormSchedule(parsedCron);
                   setShowAddModal(true);
                 }}
-                className="bg-[#FFFFFF] border border-[#E5E7EB] text-[#333333] hover:text-[#000000] rounded-[4px] px-2.5 py-1 text-[10px] font-['Geist_Mono',monospace] transition-colors cursor-pointer"
+                className="bg-card border border-border text-foreground/85 hover:text-foreground rounded-[4px] px-2.5 py-1 text-[10px] font-['Geist_Mono',monospace] transition-colors cursor-pointer"
               >
                 Create from this prompt
               </button>
@@ -289,15 +289,15 @@ export const SchedulerPane: React.FC = () => {
 
           {/* Schedule List */}
           {schedules.length === 0 ? (
-            <div className="w-full p-8 text-center bg-white dark:bg-[#161616] border border-dashed border-[#E5E7EB] dark:border-[#27272A] rounded-[8px] flex flex-col items-center justify-center gap-2">
-              <AlarmClock size={28} className="text-[#8A8A85]" />
+            <div className="w-full p-8 text-center bg-white dark:bg-card border border-dashed border-border/70 rounded-[8px] flex flex-col items-center justify-center gap-2">
+              <AlarmClock size={28} className="text-muted-foreground" />
               <h3 className="text-[13px] font-bold text-black dark:text-white">No Scheduled Tasks</h3>
-              <p className="text-[11px] text-[#8A8A85] max-w-sm">
+              <p className="text-[11px] text-muted-foreground max-w-sm">
                 Create a recurring background reminder or job using natural language or cron format above.
               </p>
               <button
                 onClick={() => setShowAddModal(true)}
-                className="mt-2 flex items-center gap-1.5 px-3 py-1.5 bg-[#0F0F0F] dark:bg-white text-white dark:text-black text-[11px] font-bold rounded-[6px]"
+                className="mt-2 flex items-center gap-1.5 px-3 py-1.5 bg-foreground text-background text-[11px] font-bold rounded-[6px]"
               >
                 <Plus size={13} />
                 <span>New Schedule</span>
@@ -308,28 +308,28 @@ export const SchedulerPane: React.FC = () => {
               {schedules.map((s) => (
                 <div
                   key={s.id}
-                  className="w-full bg-[#FFFFFF] shadow-[0px_1px_2px_0px_#0000000a] border border-[#E5E7EB] rounded-[8px] p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5 transition-all hover:border-[#D4D4D0]"
+                  className="w-full bg-card shadow-[0px_1px_2px_0px_#0000000a] border border-border rounded-[8px] p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5 transition-all hover:border-border-strong"
                 >
                   {/* Left: Icon & Info */}
                   <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                    <div className="w-[38px] h-[38px] shrink-0 flex items-center justify-center bg-[#FFF5EB] rounded-[4px]">
-                      <AlarmClock size={17} className="text-[#F97316]" />
+                    <div className="w-[38px] h-[38px] shrink-0 flex items-center justify-center bg-warning/10 rounded-[4px]">
+                      <AlarmClock size={17} className="text-agentorange" />
                     </div>
 
                     <div className="min-w-0 flex-1 flex flex-col gap-[3px]">
                       {/* Row 1: Title & Status Badge */}
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[13px] font-bold text-[#000000] font-sans">
+                        <span className="text-[13px] font-bold text-foreground font-sans">
                           {s.title}
                         </span>
                         <div
                           className={`rounded-[4px] px-2 py-[2px] flex items-center ${
-                            s.status === 'running' ? 'bg-[#DCFCE7]' : 'bg-[#FEF3C7]'
+                            s.status === 'running' ? 'bg-success/15' : 'bg-[#FEF3C7]'
                           }`}
                         >
                           <span
                             className={`text-[10px] font-bold font-['Funnel_Sans',sans-serif] ${
-                              s.status === 'running' ? 'text-[#16A34A]' : 'text-[#D97706]'
+                              s.status === 'running' ? 'text-success' : 'text-warning'
                             }`}
                           >
                             {s.status}
@@ -348,19 +348,19 @@ export const SchedulerPane: React.FC = () => {
 
                       {/* Cron string, description & Owner */}
                       <div className="flex items-center gap-2 flex-wrap text-[11px] pt-0.5">
-                        <span className="text-[#333333] font-['Geist_Mono',monospace]">
+                        <span className="text-foreground/85 font-['Geist_Mono',monospace]">
                           {s.cron} · {s.humanSchedule}
                         </span>
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-[#F3F4F6] dark:bg-[#27272A] text-[#4B5563] dark:text-[#9CA3AF] text-[10px] font-['Geist_Mono',monospace]">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-accent dark:bg-[#27272A] text-muted-foreground dark:text-subtle-fg text-[10px] font-['Geist_Mono',monospace]">
                           <Bot size={11} className="text-[#3B82F6]" />
-                          Owner: <strong className="text-[#111827] dark:text-[#F3F4F6]">{s.owner || 'Personal Assistant'}</strong>
+                          Owner: <strong className="text-foreground dark:text-[#F3F4F6]">{s.owner || 'Personal Assistant'}</strong>
                         </span>
                       </div>
                     </div>
                   </div>
 
                   {/* Next run time */}
-                  <div className="text-[11px] text-[#8A8A85] font-['Funnel_Sans',sans-serif] shrink-0 sm:px-3">
+                  <div className="text-[11px] text-muted-foreground font-['Funnel_Sans',sans-serif] shrink-0 sm:px-3">
                     next {s.nextRun}
                   </div>
 
@@ -370,16 +370,16 @@ export const SchedulerPane: React.FC = () => {
                       type="button"
                       title="Run Now"
                       onClick={() => handleRunNow(s)}
-                      className="w-[30px] h-[30px] flex items-center justify-center bg-[#FFFFFF] border border-[#E5E7EB] rounded-[4px] text-[#333333] hover:bg-[#F7F7F5] transition-colors"
+                      className="w-[30px] h-[30px] flex items-center justify-center bg-card border border-border rounded-[4px] text-foreground/85 hover:bg-accent/60 transition-colors"
                     >
-                      <Play size={12} className="text-[#16A34A]" />
+                      <Play size={12} className="text-success" />
                     </button>
 
                     <button
                       type="button"
                       title={s.status === 'running' ? 'Pause' : 'Resume'}
                       onClick={() => handleToggleStatus(s.id, s.status)}
-                      className="w-[30px] h-[30px] flex items-center justify-center bg-[#FFFFFF] border border-[#E5E7EB] rounded-[4px] text-[#333333] hover:bg-[#F7F7F5] transition-colors"
+                      className="w-[30px] h-[30px] flex items-center justify-center bg-card border border-border rounded-[4px] text-foreground/85 hover:bg-accent/60 transition-colors"
                     >
                       {s.status === 'running' ? <Pause size={12} /> : <Play size={12} />}
                     </button>
@@ -388,7 +388,7 @@ export const SchedulerPane: React.FC = () => {
                       type="button"
                       title="Delete"
                       onClick={() => handleDelete(s.id)}
-                      className="w-[30px] h-[30px] flex items-center justify-center bg-[#FFFFFF] border border-[#E5E7EB] rounded-[4px] text-[#DC2626] hover:bg-red-50 hover:border-red-200 transition-colors"
+                      className="w-[30px] h-[30px] flex items-center justify-center bg-card border border-border rounded-[4px] text-destructive hover:bg-red-50 hover:border-red-200 transition-colors"
                     >
                       <Trash2 size={12} />
                     </button>
@@ -403,28 +403,28 @@ export const SchedulerPane: React.FC = () => {
         <div className="w-full lg:w-[340px] shrink-0 flex flex-col gap-4">
           {/* Reminder Triggered Toast */}
           {activeToast && (
-            <div className="w-full bg-[#0F0F0F] rounded-[8px] p-4 flex flex-col gap-2 text-[#FFFFFF] shadow-lg animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="w-full bg-foreground rounded-[8px] p-4 flex flex-col gap-2 text-background shadow-lg animate-in fade-in slide-in-from-top-2 duration-200">
               <div className="w-full flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <BellRing size={15} className="text-[#F97316]" />
-                  <span className="text-[11px] font-bold text-[#F97316] font-['Funnel_Sans',sans-serif] tracking-wider uppercase">
+                  <BellRing size={15} className="text-agentorange" />
+                  <span className="text-[11px] font-bold text-agentorange font-['Funnel_Sans',sans-serif] tracking-wider uppercase">
                     REMINDER TRIGGERED
                   </span>
                 </div>
                 <button
                   type="button"
                   onClick={() => setActiveToast(false)}
-                  className="text-[#8A8A85] hover:text-white"
+                  className="text-muted-foreground hover:text-white"
                 >
                   <X size={13} />
                 </button>
               </div>
 
-              <div className="text-[15px] font-bold text-[#FFFFFF] font-sans">
+              <div className="text-[15px] font-bold text-white font-sans">
                 {toastMessage}
               </div>
 
-              <p className="text-[12px] leading-[18px] text-[#A3A3A0] font-['Geist',sans-serif]">
+              <p className="text-[12px] leading-[18px] text-muted-foreground font-['Geist',sans-serif]">
                 Fired from "Stretch reminder" · also broadcast to Telegram and any open session.
               </p>
 
@@ -432,14 +432,14 @@ export const SchedulerPane: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setActiveToast(false)}
-                  className="flex-1 py-1.5 border border-[#3F3F3C] rounded-[4px] text-[11px] text-[#FFFFFF] font-['Funnel_Sans',sans-serif] hover:bg-white/10 transition-colors text-center cursor-pointer"
+                  className="flex-1 py-1.5 border border-[#3F3F3C] rounded-[4px] text-[11px] text-white font-['Funnel_Sans',sans-serif] hover:bg-white/10 transition-colors text-center cursor-pointer"
                 >
                   Snooze 10m
                 </button>
                 <button
                   type="button"
                   onClick={() => setActiveToast(false)}
-                  className="flex-1 py-1.5 bg-[#007AFF] rounded-[4px] text-[11px] text-[#FFFFFF] font-bold font-['Funnel_Sans',sans-serif] hover:bg-[#007AFF]/90 transition-colors text-center cursor-pointer"
+                  className="flex-1 py-1.5 bg-primary rounded-[4px] text-[11px] text-white font-bold font-['Funnel_Sans',sans-serif] hover:bg-primary/90 transition-colors text-center cursor-pointer"
                 >
                   Done
                 </button>
@@ -448,39 +448,39 @@ export const SchedulerPane: React.FC = () => {
           )}
 
           {/* Scheduler Daemon Status Card */}
-          <div className="w-full bg-[#FFFFFF] border border-[#E5E7EB] rounded-[8px] p-[18px] flex flex-col gap-2.5">
+          <div className="w-full bg-card border border-border rounded-[8px] p-[18px] flex flex-col gap-2.5">
             <div className="w-full flex items-center justify-between pb-1 border-b border-[#F7F7F5]">
               <div className="flex items-center gap-2">
-                <Server size={14} className="text-[#16A34A]" />
-                <span className="text-[13px] font-bold text-[#000000] font-sans">
+                <Server size={14} className="text-success" />
+                <span className="text-[13px] font-bold text-foreground font-sans">
                   Scheduler daemon
                 </span>
               </div>
-              <div className="w-[7px] h-[7px] bg-[#16A34A] rounded-full" />
+              <div className="w-[7px] h-[7px] bg-success rounded-full" />
             </div>
 
             <div className="w-full flex items-center justify-between py-1.5">
-              <span className="text-[11px] text-[#8A8A85] font-['Funnel_Sans',sans-serif]">Uptime</span>
-              <span className="flex-1 mx-2 border-b border-[#E5E7EB]" />
-              <span className="text-[11px] font-['Geist_Mono',monospace] text-[#000000]">14d 6h</span>
+              <span className="text-[11px] text-muted-foreground font-['Funnel_Sans',sans-serif]">Uptime</span>
+              <span className="flex-1 mx-2 border-b border-border" />
+              <span className="text-[11px] font-['Geist_Mono',monospace] text-foreground">14d 6h</span>
             </div>
 
             <div className="w-full flex items-center justify-between py-1.5">
-              <span className="text-[11px] text-[#8A8A85] font-['Funnel_Sans',sans-serif]">Fired today</span>
-              <span className="flex-1 mx-2 border-b border-[#E5E7EB]" />
-              <span className="text-[11px] font-['Geist_Mono',monospace] text-[#000000]">9</span>
+              <span className="text-[11px] text-muted-foreground font-['Funnel_Sans',sans-serif]">Fired today</span>
+              <span className="flex-1 mx-2 border-b border-border" />
+              <span className="text-[11px] font-['Geist_Mono',monospace] text-foreground">9</span>
             </div>
 
             <div className="w-full flex items-center justify-between py-1.5">
-              <span className="text-[11px] text-[#8A8A85] font-['Funnel_Sans',sans-serif]">Active</span>
-              <span className="flex-1 mx-2 border-b border-[#E5E7EB]" />
-              <span className="text-[11px] font-['Geist_Mono',monospace] text-[#000000]">{schedules.filter(s => s.status === 'running').length}</span>
+              <span className="text-[11px] text-muted-foreground font-['Funnel_Sans',sans-serif]">Active</span>
+              <span className="flex-1 mx-2 border-b border-border" />
+              <span className="text-[11px] font-['Geist_Mono',monospace] text-foreground">{schedules.filter(s => s.status === 'running').length}</span>
             </div>
 
             <div className="w-full flex items-center justify-between py-1.5">
-              <span className="text-[11px] text-[#8A8A85] font-['Funnel_Sans',sans-serif]">Paused</span>
-              <span className="flex-1 mx-2 border-b border-[#E5E7EB]" />
-              <span className="text-[11px] font-['Geist_Mono',monospace] text-[#000000]">{schedules.filter(s => s.status === 'paused').length}</span>
+              <span className="text-[11px] text-muted-foreground font-['Funnel_Sans',sans-serif]">Paused</span>
+              <span className="flex-1 mx-2 border-b border-border" />
+              <span className="text-[11px] font-['Geist_Mono',monospace] text-foreground">{schedules.filter(s => s.status === 'paused').length}</span>
             </div>
           </div>
         </div>
@@ -489,20 +489,20 @@ export const SchedulerPane: React.FC = () => {
       {/* New Schedule Modal Dialog */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-[#FFFFFF] rounded-[10px] border border-[#E5E7EB] shadow-xl w-full max-w-lg p-6 flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-[#E5E7EB] pb-3">
+          <div className="bg-card rounded-[10px] border border-border shadow-xl w-full max-w-lg p-6 flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-border pb-3">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-[4px] bg-[#FFF5EB] flex items-center justify-center text-[#F97316]">
+                <div className="w-8 h-8 rounded-[4px] bg-warning/10 flex items-center justify-center text-agentorange">
                   <AlarmClock size={16} />
                 </div>
                 <div>
-                  <h3 className="text-[15px] font-bold text-[#000000]">Create Scheduled Job</h3>
-                  <p className="text-[11px] text-[#8A8A85]">Natural language recurrence or 5-part cron syntax</p>
+                  <h3 className="text-[15px] font-bold text-foreground">Create Scheduled Job</h3>
+                  <p className="text-[11px] text-muted-foreground">Natural language recurrence or 5-part cron syntax</p>
                 </div>
               </div>
               <button
                 onClick={() => setShowAddModal(false)}
-                className="text-[#8A8A85] hover:text-[#000000] p-1 rounded transition-colors"
+                className="text-muted-foreground hover:text-foreground p-1 rounded transition-colors"
               >
                 <X size={16} />
               </button>
@@ -511,7 +511,7 @@ export const SchedulerPane: React.FC = () => {
             <form onSubmit={handleCreateSchedule} className="flex flex-col gap-3.5">
               {/* Job Type Selector: Notification vs Task */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-bold text-[#000000]">Job Type</label>
+                <label className="text-[11px] font-bold text-foreground">Job Type</label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
@@ -521,15 +521,15 @@ export const SchedulerPane: React.FC = () => {
                     }}
                     className={`p-2.5 rounded-[8px] text-left border transition-all cursor-pointer flex flex-col gap-1 ${
                       formJobType === 'notification'
-                        ? 'bg-blue-50/90 border-[#007AFF] text-black shadow-xs ring-1 ring-[#007AFF]/20'
-                        : 'bg-white border-[#E5E7EB] text-[#8A8A85] hover:border-gray-300'
+                        ? 'bg-blue-50/90 border-primary text-black shadow-xs ring-1 ring-[#007AFF]/20'
+                        : 'bg-white border-border text-muted-foreground hover:border-gray-300'
                     }`}
                   >
-                    <div className="flex items-center gap-1.5 font-bold text-[12px] text-[#007AFF]">
+                    <div className="flex items-center gap-1.5 font-bold text-[12px] text-primary">
                       <BellRing size={13} />
                       <span>Notification Job</span>
                     </div>
-                    <p className="text-[10px] text-[#6B7280] leading-tight">
+                    <p className="text-[10px] text-muted-foreground leading-tight">
                       Direct notice without AI. Broadcasts directly to chat and Telegram bot.
                     </p>
                   </button>
@@ -540,14 +540,14 @@ export const SchedulerPane: React.FC = () => {
                     className={`p-2.5 rounded-[8px] text-left border transition-all cursor-pointer flex flex-col gap-1 ${
                       formJobType === 'task'
                         ? 'bg-purple-50/90 border-[#8B5CF6] text-black shadow-xs ring-1 ring-[#8B5CF6]/20'
-                        : 'bg-white border-[#E5E7EB] text-[#8A8A85] hover:border-gray-300'
+                        : 'bg-white border-border text-muted-foreground hover:border-gray-300'
                     }`}
                   >
                     <div className="flex items-center gap-1.5 font-bold text-[12px] text-[#8B5CF6]">
                       <Sparkles size={13} />
                       <span>Task Job (AI Agent)</span>
                     </div>
-                    <p className="text-[10px] text-[#6B7280] leading-tight">
+                    <p className="text-[10px] text-muted-foreground leading-tight">
                       AI agent execution. Agent uses LLM and workspace tools to perform task.
                     </p>
                   </button>
@@ -557,7 +557,7 @@ export const SchedulerPane: React.FC = () => {
               {/* Informational Banner according to Job Type */}
               {formJobType === 'notification' ? (
                 <div className="p-2.5 rounded-[6px] bg-blue-50/80 border border-blue-200 text-[11px] text-[#1E40AF] flex items-start gap-2">
-                  <BellRing size={14} className="shrink-0 mt-0.5 text-[#007AFF]" />
+                  <BellRing size={14} className="shrink-0 mt-0.5 text-primary" />
                   <div className="leading-snug">
                     <strong>Direct Notification (No AI):</strong> This cron job delivers the notice directly to the chat conversation and Telegram bot at scheduled times without invoking LLM tokens or simulating user chats.
                   </div>
@@ -572,19 +572,19 @@ export const SchedulerPane: React.FC = () => {
               )}
 
               <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-bold text-[#000000]">Task Title / Label</label>
+                <label className="text-[11px] font-bold text-foreground">Task Title / Label</label>
                 <input
                   type="text"
                   required
                   placeholder={formJobType === 'notification' ? 'e.g. Daily Standup Alert' : 'e.g. Code Review & QA Routine'}
                   value={formTitle}
                   onChange={(e) => setFormTitle(e.target.value)}
-                  className="border border-[#E5E7EB] rounded-[6px] px-3 py-1.5 text-[12px] focus:outline-none focus:border-[#0F0F0F]"
+                  className="border border-border rounded-[6px] px-3 py-1.5 text-[12px] focus:outline-none focus:border-foreground/60"
                 />
               </div>
 
               <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-bold text-[#000000]">Recurrence / Cron Expression</label>
+                <label className="text-[11px] font-bold text-foreground">Recurrence / Cron Expression</label>
                 <input
                   type="text"
                   required
@@ -594,13 +594,13 @@ export const SchedulerPane: React.FC = () => {
                     setFormSchedule(e.target.value);
                     handleParseNL(e.target.value);
                   }}
-                  className="border border-[#E5E7EB] rounded-[6px] px-3 py-1.5 text-[12px] font-mono focus:outline-none focus:border-[#0F0F0F]"
+                  className="border border-border rounded-[6px] px-3 py-1.5 text-[12px] font-mono focus:outline-none focus:border-foreground/60"
                 />
-                <span className="text-[10px] text-[#007AFF] font-mono">Parsed cron: {parsedCron}</span>
+                <span className="text-[10px] text-primary font-mono">Parsed cron: {parsedCron}</span>
               </div>
 
               <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-bold text-[#000000]">
+                <label className="text-[11px] font-bold text-foreground">
                   {formJobType === 'notification' ? 'Notification Message' : 'Agent Instruction / Task Prompt'}
                 </label>
                 <textarea
@@ -613,18 +613,18 @@ export const SchedulerPane: React.FC = () => {
                   }
                   value={formPrompt}
                   onChange={(e) => setFormPrompt(e.target.value)}
-                  className="border border-[#E5E7EB] rounded-[6px] px-3 py-1.5 text-[12px] focus:outline-none focus:border-[#0F0F0F] resize-none"
+                  className="border border-border rounded-[6px] px-3 py-1.5 text-[12px] focus:outline-none focus:border-foreground/60 resize-none"
                 />
               </div>
 
               <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-bold text-[#000000]">
+                <label className="text-[11px] font-bold text-foreground">
                   {formJobType === 'notification' ? 'Sender Persona / Identity' : 'Executing Worker Agent (AI)'}
                 </label>
                 <select
                   value={formOwner}
                   onChange={(e) => setFormOwner(e.target.value)}
-                  className="border border-[#E5E7EB] rounded-[6px] px-3 py-1.5 text-[12px] focus:outline-none focus:border-[#0F0F0F] bg-white"
+                  className="border border-border rounded-[6px] px-3 py-1.5 text-[12px] focus:outline-none focus:border-foreground/60 bg-white"
                 >
                   <option value="Personal Assistant">Personal Assistant (Default)</option>
                   <option value="User">User (Manual / Self)</option>
@@ -637,7 +637,7 @@ export const SchedulerPane: React.FC = () => {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-bold text-[#000000]">Automation Target</label>
+                <label className="text-[11px] font-bold text-foreground">Automation Target</label>
                 <div className="grid grid-cols-2 gap-2 mb-2">
                   <button
                     type="button"
@@ -647,8 +647,8 @@ export const SchedulerPane: React.FC = () => {
                     }}
                     className={`py-1.5 px-3 rounded-[6px] text-[12px] font-bold border transition-colors flex items-center justify-center gap-1.5 ${
                       formTargetType === 'agent'
-                        ? 'bg-[#0F0F0F] text-[#FFFFFF] border-[#0F0F0F]'
-                        : 'bg-[#FFFFFF] text-[#8A8A85] border-[#E5E7EB]'
+                        ? 'bg-foreground text-background border-[#0F0F0F]'
+                        : 'bg-card text-muted-foreground border-border'
                     }`}
                   >
                     <Bot size={13} />
@@ -662,8 +662,8 @@ export const SchedulerPane: React.FC = () => {
                     }}
                     className={`py-1.5 px-3 rounded-[6px] text-[12px] font-bold border transition-colors flex items-center justify-center gap-1.5 ${
                       formTargetType === 'group'
-                        ? 'bg-[#0F0F0F] text-[#FFFFFF] border-[#0F0F0F]'
-                        : 'bg-[#FFFFFF] text-[#8A8A85] border-[#E5E7EB]'
+                        ? 'bg-foreground text-background border-[#0F0F0F]'
+                        : 'bg-card text-muted-foreground border-border'
                     }`}
                   >
                     <Users size={13} />
@@ -679,7 +679,7 @@ export const SchedulerPane: React.FC = () => {
                       const isTg = !!telegramAgents[e.target.value]?.connected;
                       if (isTg) setFormDeliverTelegram(true);
                     }}
-                    className="border border-[#E5E7EB] rounded-[6px] px-3 py-1.5 text-[12px] focus:outline-none focus:border-[#0F0F0F] bg-white"
+                    className="border border-border rounded-[6px] px-3 py-1.5 text-[12px] focus:outline-none focus:border-foreground/60 bg-white"
                   >
                     {agents.map((a) => {
                       const isTg = !!telegramAgents[a.id]?.connected || a.telegramConnected;
@@ -694,7 +694,7 @@ export const SchedulerPane: React.FC = () => {
                   <select
                     value={formTargetId}
                     onChange={(e) => setFormTargetId(e.target.value)}
-                    className="border border-[#E5E7EB] rounded-[6px] px-3 py-1.5 text-[12px] focus:outline-none focus:border-[#0F0F0F] bg-white"
+                    className="border border-border rounded-[6px] px-3 py-1.5 text-[12px] focus:outline-none focus:border-foreground/60 bg-white"
                   >
                     {groupSessions.length === 0 ? (
                       <option value="">No group chats created yet</option>
@@ -715,25 +715,25 @@ export const SchedulerPane: React.FC = () => {
                   type="checkbox"
                   checked={formDeliverTelegram}
                   onChange={(e) => setFormDeliverTelegram(e.target.checked)}
-                  className="rounded text-[#007AFF] focus:ring-0"
+                  className="rounded text-primary focus:ring-0"
                 />
-                <div className="flex items-center gap-1.5 text-xs text-[#007AFF] font-medium">
+                <div className="flex items-center gap-1.5 text-xs text-primary font-medium">
                   <Send size={12} />
                   <span>Deliver notification to Telegram when executed</span>
                 </div>
               </label>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E5E7EB]">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-3.5 py-1.5 text-[12px] font-medium text-[#8A8A85] hover:text-[#000000]"
+                  className="px-3.5 py-1.5 text-[12px] font-medium text-muted-foreground hover:text-foreground"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-[#0F0F0F] text-[#FFFFFF] text-[12px] font-bold rounded-[6px] hover:bg-black/90 cursor-pointer"
+                  className="px-4 py-1.5 bg-foreground text-background text-[12px] font-bold rounded-[6px] hover:bg-black/90 cursor-pointer"
                 >
                   Save Routine
                 </button>

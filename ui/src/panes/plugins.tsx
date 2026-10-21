@@ -411,22 +411,22 @@ export const PluginsPane: React.FC = () => {
   }, [pluginsList, skillsList]);
 
   return (
-    <div className="w-full min-h-screen bg-[#F7F7F5] dark:bg-[#121212] flex flex-col font-sans">
+    <div className="w-full min-h-screen bg-accent/60 dark:bg-background flex flex-col font-sans">
       {/* Top Header */}
-      <div className="w-full bg-[#FFFFFF] dark:bg-[#1C1C1E] border-b border-[#E5E7EB] dark:border-[#2C2C2E] px-6 lg:px-9 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="w-full bg-card border-b border-border px-6 lg:px-9 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-[6px] bg-[#FFF5EB] dark:bg-amber-950/40 flex items-center justify-center text-[#F97316]">
+            <div className="w-7 h-7 rounded-[6px] bg-warning/10 dark:bg-amber-950/40 flex items-center justify-center text-agentorange">
               <Puzzle size={16} />
             </div>
-            <h1 className="text-[18px] font-bold text-[#000000] dark:text-white font-sans tracking-tight">
+            <h1 className="text-[18px] font-bold text-foreground font-sans tracking-tight">
               Plugins &amp; Skills
             </h1>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
               Hot-Reload Active
             </span>
           </div>
-          <p className="text-[12px] text-[#8A8A85] dark:text-[#A1A1AA]">
+          <p className="text-[12px] text-muted-foreground dark:text-[#A1A1AA]">
             Extensible agent capabilities, shell tools, and modular USP/KSP skills loaded dynamically on demand.
           </p>
         </div>
@@ -437,7 +437,7 @@ export const PluginsPane: React.FC = () => {
             type="button"
             onClick={loadData}
             title="Scan & Discover capabilities from disk"
-            className="p-2 rounded-[8px] border border-[#E5E7EB] dark:border-[#2C2C2E] text-[#8A8A85] hover:text-[#000000] dark:hover:text-white bg-white dark:bg-[#252528] hover:bg-[#F7F7F5] transition-colors cursor-pointer"
+            className="p-2 rounded-[8px] border border-border text-muted-foreground hover:text-foreground bg-white dark:bg-[#252528] hover:bg-accent/60 transition-colors cursor-pointer"
           >
             <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
           </button>
@@ -445,7 +445,7 @@ export const PluginsPane: React.FC = () => {
           <button
             type="button"
             onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#0F0F0F] dark:bg-white text-white dark:text-black text-xs font-bold rounded-[8px] hover:bg-black/90 dark:hover:bg-neutral-200 transition-all shadow-xs cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-foreground text-background text-xs font-bold rounded-[8px] hover:bg-black/90 dark:hover:bg-neutral-200 transition-all shadow-xs cursor-pointer"
           >
             <Plus size={13} />
             <span>Create Plugin</span>
@@ -454,7 +454,7 @@ export const PluginsPane: React.FC = () => {
       </div>
 
       {/* Navigation Sub-Tabs & Global Counters */}
-      <div className="w-full bg-[#FFFFFF] dark:bg-[#18181A] border-b border-[#E5E7EB] dark:border-[#2C2C2E] px-6 lg:px-9 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="w-full bg-card dark:bg-card border-b border-border px-6 lg:px-9 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-1.5">
           <button
             type="button"
@@ -464,8 +464,8 @@ export const PluginsPane: React.FC = () => {
             }}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-[8px] text-xs font-bold transition-colors cursor-pointer ${
               activeTab === 'plugins'
-                ? 'bg-[#0F0F0F] text-white dark:bg-white dark:text-black'
-                : 'text-[#6B7280] dark:text-[#9CA3AF] hover:bg-black/5 dark:hover:bg-white/5'
+                ? 'bg-foreground text-white dark:bg-white dark:text-black'
+                : 'text-muted-foreground hover:bg-foreground/5'
             }`}
           >
             <Puzzle size={14} />
@@ -480,8 +480,8 @@ export const PluginsPane: React.FC = () => {
             }}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-[8px] text-xs font-bold transition-colors cursor-pointer ${
               activeTab === 'skills'
-                ? 'bg-[#0F0F0F] text-white dark:bg-white dark:text-black'
-                : 'text-[#6B7280] dark:text-[#9CA3AF] hover:bg-black/5 dark:hover:bg-white/5'
+                ? 'bg-foreground text-white dark:bg-white dark:text-black'
+                : 'text-muted-foreground hover:bg-foreground/5'
             }`}
           >
             <Brain size={14} />
@@ -493,8 +493,8 @@ export const PluginsPane: React.FC = () => {
             onClick={() => setActiveTab('discover')}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-[8px] text-xs font-bold transition-colors cursor-pointer ${
               activeTab === 'discover'
-                ? 'bg-[#0F0F0F] text-white dark:bg-white dark:text-black'
-                : 'text-[#6B7280] dark:text-[#9CA3AF] hover:bg-black/5 dark:hover:bg-white/5'
+                ? 'bg-foreground text-white dark:bg-white dark:text-black'
+                : 'text-muted-foreground hover:bg-foreground/5'
             }`}
           >
             <Globe size={14} />
@@ -503,9 +503,9 @@ export const PluginsPane: React.FC = () => {
         </div>
 
         {/* Capability Stats Chips */}
-        <div className="flex items-center gap-3 text-xs text-[#8A8A85] font-mono">
+        <div className="flex items-center gap-3 text-xs text-muted-foreground font-mono">
           <div className="flex items-center gap-1.5">
-            <Wrench size={13} className="text-[#007AFF]" />
+            <Wrench size={13} className="text-primary" />
             <span>{totalExportedTools} Exported Tools</span>
           </div>
           <span>•</span>
@@ -530,7 +530,7 @@ export const PluginsPane: React.FC = () => {
           {/* Search & Category Filter */}
           <div className="flex flex-col sm:flex-row gap-2 items-center justify-between">
             <div className="w-full relative">
-              <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#8A8A85]" />
+              <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <input
                 type="text"
                 placeholder={
@@ -542,7 +542,7 @@ export const PluginsPane: React.FC = () => {
                 }
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-white dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[8px] text-[13px] text-black dark:text-white placeholder-[#8A8A85] focus:outline-none focus:border-[#0F0F0F] dark:focus:border-white transition-all"
+                className="w-full pl-9 pr-4 py-2 bg-card border border-border rounded-[8px] text-[13px] text-black dark:text-white placeholder-[#8A8A85] focus:outline-none focus:border-foreground/60 dark:focus:border-white transition-all"
               />
             </div>
 
@@ -556,8 +556,8 @@ export const PluginsPane: React.FC = () => {
                       onClick={() => setSelectedCategory(cat)}
                       className={`text-[10px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap transition-colors cursor-pointer ${
                         selectedCategory === cat
-                          ? 'bg-[#007AFF] text-white'
-                          : 'bg-white dark:bg-[#1C1C1E] text-[#6B7280] dark:text-[#9CA3AF] border border-[#E5E7EB] dark:border-[#2C2C2E] hover:bg-gray-50 dark:hover:bg-[#252528]'
+                          ? 'bg-primary text-white'
+                          : 'bg-card text-muted-foreground border border-border hover:bg-accent dark:hover:bg-[#252528]'
                       }`}
                     >
                       {cat}
@@ -572,12 +572,12 @@ export const PluginsPane: React.FC = () => {
           {activeTab === 'plugins' && (
             <div className="space-y-2.5">
               {filteredPlugins.length === 0 ? (
-                <div className="w-full p-10 text-center bg-white dark:bg-[#1A1A1A] border border-dashed border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[10px] flex flex-col items-center justify-center gap-2">
-                  <Puzzle size={28} className="text-[#8A8A85]" />
+                <div className="w-full p-10 text-center bg-white dark:bg-card border border-dashed border-border rounded-[10px] flex flex-col items-center justify-center gap-2">
+                  <Puzzle size={28} className="text-muted-foreground" />
                   <h3 className="text-[13px] font-bold text-black dark:text-white">
                     {pluginsList.length === 0 ? 'No Custom Plugins Installed' : 'No plugins match your search'}
                   </h3>
-                  <p className="text-[11px] text-[#8A8A85] max-w-sm">
+                  <p className="text-[11px] text-muted-foreground max-w-sm">
                     {pluginsList.length === 0
                       ? 'Plugins extend KendaliAI with custom bash tools, CLI scripts, and hot-registered actions in .kendaliai/plugins.'
                       : 'Try clearing your search query or create a new plugin.'}
@@ -585,7 +585,7 @@ export const PluginsPane: React.FC = () => {
                   {pluginsList.length === 0 && (
                     <button
                       onClick={() => setShowAddModal(true)}
-                      className="mt-2 flex items-center gap-1.5 px-3 py-1.5 bg-[#0F0F0F] dark:bg-white text-white dark:text-black text-[11px] font-bold rounded-[6px] cursor-pointer"
+                      className="mt-2 flex items-center gap-1.5 px-3 py-1.5 bg-foreground text-background text-[11px] font-bold rounded-[6px] cursor-pointer"
                     >
                       <Plus size={13} />
                       <span>Create First Plugin</span>
@@ -608,17 +608,17 @@ export const PluginsPane: React.FC = () => {
                         setSelectedPlugin(plugin);
                         setSelectedSkill(null);
                       }}
-                      className={`w-full bg-white dark:bg-[#1A1A1A] border ${
+                      className={`w-full bg-white dark:bg-card border ${
                         isSelected
                           ? 'border-[#0F0F0F] dark:border-white ring-1 ring-[#0F0F0F] dark:ring-white shadow-sm'
-                          : 'border-[#E5E7EB] dark:border-[#2C2C2E]'
-                      } rounded-[10px] p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5 transition-all hover:border-[#D4D4D0] cursor-pointer`}
+                          : 'border-border'
+                      } rounded-[10px] p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5 transition-all hover:border-border-strong cursor-pointer`}
                     >
                       <div className="flex items-center gap-3 min-w-0 flex-1">
                         <div
                           className={`w-10 h-10 shrink-0 flex items-center justify-center rounded-[6px] ${
                             plugin.enabled
-                              ? 'bg-[#FFF5EB] dark:bg-amber-950/40 text-[#F97316]'
+                              ? 'bg-warning/10 dark:bg-amber-950/40 text-agentorange'
                               : 'bg-gray-100 dark:bg-gray-800 text-gray-400'
                           }`}
                         >
@@ -630,17 +630,17 @@ export const PluginsPane: React.FC = () => {
                             <span className="text-[13px] font-bold text-black dark:text-white truncate">
                               {plugin.name}
                             </span>
-                            <span className="text-[10px] text-[#8A8A85] font-mono">
+                            <span className="text-[10px] text-muted-foreground font-mono">
                               v{plugin.version}
                             </span>
                             <span className="text-[9px] px-1.5 py-0.2 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 uppercase font-mono">
                               {plugin.source || 'global'}
                             </span>
                           </div>
-                          <p className="text-[11px] text-[#6B7280] dark:text-[#9CA3AF] line-clamp-1">
+                          <p className="text-[11px] text-muted-foreground line-clamp-1">
                             {plugin.description}
                           </p>
-                          <div className="text-[10px] text-[#007AFF] font-mono truncate mt-0.5">
+                          <div className="text-[10px] text-primary font-mono truncate mt-0.5">
                             {toolsLine}
                           </div>
                         </div>
@@ -693,12 +693,12 @@ export const PluginsPane: React.FC = () => {
           {activeTab === 'skills' && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {filteredSkills.length === 0 ? (
-                <div className="col-span-full p-10 text-center bg-white dark:bg-[#1A1A1A] border border-dashed border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[10px] flex flex-col items-center justify-center gap-2">
-                  <Brain size={28} className="text-[#8A8A85]" />
+                <div className="col-span-full p-10 text-center bg-white dark:bg-card border border-dashed border-border rounded-[10px] flex flex-col items-center justify-center gap-2">
+                  <Brain size={28} className="text-muted-foreground" />
                   <h3 className="text-[13px] font-bold text-black dark:text-white">
                     No Skills Found
                   </h3>
-                  <p className="text-[11px] text-[#8A8A85] max-w-sm">
+                  <p className="text-[11px] text-muted-foreground max-w-sm">
                     Skills are modular folders in <code className="font-mono">skills/</code> with SKILL.md instructions and executable tools.
                   </p>
                 </div>
@@ -714,15 +714,15 @@ export const PluginsPane: React.FC = () => {
                         setSelectedSkill(skill);
                         setSelectedPlugin(null);
                       }}
-                      className={`p-3.5 bg-white dark:bg-[#1A1A1A] border ${
+                      className={`p-3.5 bg-white dark:bg-card border ${
                         isSelected
-                          ? 'border-[#007AFF] ring-1 ring-[#007AFF] shadow-xs'
-                          : 'border-[#E5E7EB] dark:border-[#2C2C2E] hover:border-gray-300 dark:hover:border-neutral-600'
+                          ? 'border-primary ring-1 ring-[#007AFF] shadow-xs'
+                          : 'border-border hover:border-gray-300 dark:hover:border-neutral-600'
                       } rounded-[10px] cursor-pointer space-y-2 transition-all`}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-2 min-w-0">
-                          <div className="w-7 h-7 rounded-[6px] bg-blue-50 dark:bg-blue-950/40 text-[#007AFF] flex items-center justify-center shrink-0">
+                          <div className="w-7 h-7 rounded-[6px] bg-blue-50 dark:bg-blue-950/40 text-primary flex items-center justify-center shrink-0">
                             <Brain size={15} />
                           </div>
                           <span className="font-bold text-[13px] text-black dark:text-white truncate">
@@ -737,14 +737,14 @@ export const PluginsPane: React.FC = () => {
                         )}
                       </div>
 
-                      <p className="text-[11px] text-[#6B7280] dark:text-[#9CA3AF] line-clamp-2 leading-relaxed">
+                      <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
                         {skill.description}
                       </p>
 
                       <div className="flex items-center justify-between pt-1 border-t border-gray-100 dark:border-neutral-800 text-[10px] font-mono text-gray-400">
                         <span className="truncate">{skill.path || `skills/${skill.id}`}</span>
                         {toolCount > 0 && (
-                          <span className="text-[#007AFF] font-bold shrink-0">
+                          <span className="text-primary font-bold shrink-0">
                             {toolCount} tool{toolCount > 1 ? 's' : ''}
                           </span>
                         )}
@@ -767,11 +767,11 @@ export const PluginsPane: React.FC = () => {
                 return (
                   <div
                     key={item.id}
-                    className="p-4 bg-white dark:bg-[#1A1A1A] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[10px] flex flex-col justify-between gap-3 shadow-2xs hover:shadow-xs transition-shadow"
+                    className="p-4 bg-white dark:bg-card border border-border rounded-[10px] flex flex-col justify-between gap-3 shadow-2xs hover:shadow-xs transition-shadow"
                   >
                     <div className="space-y-2">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/40 text-[#007AFF]">
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/40 text-primary">
                           {item.category}
                         </span>
                         {isInstalled ? (
@@ -787,7 +787,7 @@ export const PluginsPane: React.FC = () => {
                         <h3 className="text-sm font-bold text-black dark:text-white">
                           {item.name}
                         </h3>
-                        <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF] mt-1 line-clamp-2 leading-relaxed">
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2 leading-relaxed">
                           {item.description}
                         </p>
                       </div>
@@ -809,7 +809,7 @@ export const PluginsPane: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => handlePromptAgent(item.promptExample)}
-                        className="text-xs font-bold text-[#007AFF] hover:underline flex items-center gap-1 cursor-pointer"
+                        className="text-xs font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
                       >
                         <MessageSquare size={12} />
                         <span>Prompt in Chat</span>
@@ -839,13 +839,13 @@ export const PluginsPane: React.FC = () => {
         </div>
 
         {/* Right Column: Live Inspector & Detail Panel (NO DUMMY DATA!) */}
-        <div className="w-full lg:w-[400px] shrink-0 bg-white dark:bg-[#1A1A1A] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[10px] p-5 flex flex-col gap-4 shadow-sm sticky top-5">
+        <div className="w-full lg:w-[400px] shrink-0 bg-white dark:bg-card border border-border rounded-[10px] p-5 flex flex-col gap-4 shadow-sm sticky top-5">
           {selectedPlugin ? (
             <>
               {/* Plugin Inspector Header */}
               <div className="flex items-start justify-between gap-2 border-b border-gray-100 dark:border-neutral-800 pb-3">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-[6px] bg-[#FFF5EB] dark:bg-amber-950/40 text-[#F97316] flex items-center justify-center shrink-0">
+                  <div className="w-9 h-9 rounded-[6px] bg-warning/10 dark:bg-amber-950/40 text-agentorange flex items-center justify-center shrink-0">
                     <Puzzle size={18} />
                   </div>
                   <div>
@@ -869,14 +869,14 @@ export const PluginsPane: React.FC = () => {
                 </span>
               </div>
 
-              <p className="text-xs text-[#4B5563] dark:text-[#9CA3AF] leading-relaxed">
+              <p className="text-xs text-muted-foreground dark:text-subtle-fg leading-relaxed">
                 {selectedPlugin.description}
               </p>
 
               {/* Tools Exported */}
               <div className="space-y-2">
                 <span className="text-[11px] font-bold text-black dark:text-white flex items-center gap-1.5">
-                  <Terminal size={13} className="text-[#007AFF]" />
+                  <Terminal size={13} className="text-primary" />
                   Exported Tools ({selectedPlugin.tools?.length || 0})
                 </span>
                 <div className="space-y-1.5">
@@ -886,7 +886,7 @@ export const PluginsPane: React.FC = () => {
                       className="p-2 bg-gray-50 dark:bg-neutral-900 rounded-[6px] border border-gray-200/60 dark:border-neutral-800 space-y-1"
                     >
                       <div className="flex items-center justify-between">
-                        <span className="font-mono text-xs font-bold text-[#007AFF]">{t.name}</span>
+                        <span className="font-mono text-xs font-bold text-primary">{t.name}</span>
                         <span className="text-[9px] uppercase px-1.5 py-0.2 rounded bg-gray-200 dark:bg-neutral-800 text-gray-600 dark:text-gray-400 font-mono">
                           {t.handler_type}
                         </span>
@@ -921,7 +921,7 @@ export const PluginsPane: React.FC = () => {
                       `Gunakan tool dari plugin "${selectedPlugin.name}" (${selectedPlugin.id}) untuk membantu pekerjaan saya.`
                     )
                   }
-                  className="w-full py-2 px-3 bg-[#0F0F0F] dark:bg-white text-white dark:text-black text-xs font-bold rounded-[6px] hover:bg-black/90 flex items-center justify-center gap-2 cursor-pointer transition-colors"
+                  className="w-full py-2 px-3 bg-foreground text-background text-xs font-bold rounded-[6px] hover:bg-black/90 flex items-center justify-center gap-2 cursor-pointer transition-colors"
                 >
                   <MessageSquare size={13} />
                   <span>Prompt Agent with Plugin</span>
@@ -942,7 +942,7 @@ export const PluginsPane: React.FC = () => {
               {/* Skill Inspector Header */}
               <div className="flex items-start justify-between gap-2 border-b border-gray-100 dark:border-neutral-800 pb-3">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-[6px] bg-blue-50 dark:bg-blue-950/40 text-[#007AFF] flex items-center justify-center shrink-0">
+                  <div className="w-9 h-9 rounded-[6px] bg-blue-50 dark:bg-blue-950/40 text-primary flex items-center justify-center shrink-0">
                     <Brain size={18} />
                   </div>
                   <div>
@@ -956,13 +956,13 @@ export const PluginsPane: React.FC = () => {
                 </div>
 
                 {selectedSkill.category && (
-                  <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/40 text-[#007AFF]">
+                  <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/40 text-primary">
                     {selectedSkill.category}
                   </span>
                 )}
               </div>
 
-              <p className="text-xs text-[#4B5563] dark:text-[#9CA3AF] leading-relaxed">
+              <p className="text-xs text-muted-foreground dark:text-subtle-fg leading-relaxed">
                 {selectedSkill.description}
               </p>
 
@@ -970,7 +970,7 @@ export const PluginsPane: React.FC = () => {
               {selectedSkill.tools && selectedSkill.tools.length > 0 && (
                 <div className="space-y-1.5">
                   <span className="text-[11px] font-bold text-black dark:text-white flex items-center gap-1.5">
-                    <Terminal size={13} className="text-[#007AFF]" />
+                    <Terminal size={13} className="text-primary" />
                     Executable Scripts ({selectedSkill.tools.length})
                   </span>
                   <div className="flex flex-wrap gap-1">
@@ -989,7 +989,7 @@ export const PluginsPane: React.FC = () => {
               {/* Instructions Preview */}
               <div className="space-y-1.5">
                 <span className="text-[11px] font-bold text-black dark:text-white flex items-center gap-1.5">
-                  <FileText size={13} className="text-[#007AFF]" />
+                  <FileText size={13} className="text-primary" />
                   Skill Directive (SKILL.md)
                 </span>
                 <div className="bg-gray-50 dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800 rounded-[6px] p-2.5 text-[11px] font-mono text-gray-600 dark:text-gray-300 max-h-48 overflow-y-auto custom-scrollbar whitespace-pre-wrap">
@@ -1007,7 +1007,7 @@ export const PluginsPane: React.FC = () => {
                       `Gunakan skill "${selectedSkill.name}" (${selectedSkill.id}) untuk mengeksekusi instruksi.`
                     )
                   }
-                  className="w-full py-2 px-3 bg-[#0F0F0F] dark:bg-white text-white dark:text-black text-xs font-bold rounded-[6px] hover:bg-black/90 flex items-center justify-center gap-2 cursor-pointer transition-colors"
+                  className="w-full py-2 px-3 bg-foreground text-background text-xs font-bold rounded-[6px] hover:bg-black/90 flex items-center justify-center gap-2 cursor-pointer transition-colors"
                 >
                   <MessageSquare size={13} />
                   <span>Execute Skill in Chat</span>
@@ -1026,7 +1026,7 @@ export const PluginsPane: React.FC = () => {
           ) : (
             /* Empty selection state */
             <div className="py-8 px-2 text-center space-y-3">
-              <div className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-950/40 text-[#007AFF] mx-auto flex items-center justify-center">
+              <div className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-950/40 text-primary mx-auto flex items-center justify-center">
                 <Sparkles size={20} />
               </div>
               <h3 className="text-sm font-bold text-black dark:text-white">
@@ -1048,20 +1048,20 @@ export const PluginsPane: React.FC = () => {
       {/* Create Plugin Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#1C1C1E] rounded-[10px] border border-[#E5E7EB] dark:border-[#2C2C2E] shadow-xl w-full max-w-lg p-6 flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-[#E5E7EB] dark:border-[#2C2C2E] pb-3">
+          <div className="bg-card rounded-[10px] border border-border shadow-xl w-full max-w-lg p-6 flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-border pb-3">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-[4px] bg-[#FFF5EB] dark:bg-amber-950/40 flex items-center justify-center text-[#F97316]">
+                <div className="w-8 h-8 rounded-[4px] bg-warning/10 dark:bg-amber-950/40 flex items-center justify-center text-agentorange">
                   <Puzzle size={16} />
                 </div>
                 <div>
                   <h3 className="text-[15px] font-bold text-black dark:text-white">Create New Plugin</h3>
-                  <p className="text-[11px] text-[#8A8A85]">Hot-register tools to your local agent environment</p>
+                  <p className="text-[11px] text-muted-foreground">Hot-register tools to your local agent environment</p>
                 </div>
               </div>
               <button
                 onClick={() => setShowAddModal(false)}
-                className="text-[#8A8A85] hover:text-black dark:hover:text-white p-1 rounded transition-colors cursor-pointer"
+                className="text-muted-foreground hover:text-black dark:hover:text-white p-1 rounded transition-colors cursor-pointer"
               >
                 <X size={16} />
               </button>
@@ -1077,7 +1077,7 @@ export const PluginsPane: React.FC = () => {
                     placeholder="e.g. data-analyzer"
                     value={id}
                     onChange={(e) => setId(e.target.value)}
-                    className="border border-[#E5E7EB] dark:border-[#2C2C2E] bg-transparent rounded-[6px] px-3 py-1.5 text-[12px] text-black dark:text-white focus:outline-none focus:border-[#0F0F0F]"
+                    className="border border-border bg-transparent rounded-[6px] px-3 py-1.5 text-[12px] text-black dark:text-white focus:outline-none focus:border-foreground/60"
                   />
                 </div>
                 <div className="flex flex-col gap-1">
@@ -1088,7 +1088,7 @@ export const PluginsPane: React.FC = () => {
                     placeholder="e.g. Data Analyzer"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="border border-[#E5E7EB] dark:border-[#2C2C2E] bg-transparent rounded-[6px] px-3 py-1.5 text-[12px] text-black dark:text-white focus:outline-none focus:border-[#0F0F0F]"
+                    className="border border-border bg-transparent rounded-[6px] px-3 py-1.5 text-[12px] text-black dark:text-white focus:outline-none focus:border-foreground/60"
                   />
                 </div>
               </div>
@@ -1100,13 +1100,13 @@ export const PluginsPane: React.FC = () => {
                   placeholder="What does this plugin do?"
                   value={desc}
                   onChange={(e) => setDesc(e.target.value)}
-                  className="border border-[#E5E7EB] dark:border-[#2C2C2E] bg-transparent rounded-[6px] px-3 py-1.5 text-[12px] text-black dark:text-white focus:outline-none focus:border-[#0F0F0F]"
+                  className="border border-border bg-transparent rounded-[6px] px-3 py-1.5 text-[12px] text-black dark:text-white focus:outline-none focus:border-foreground/60"
                 />
               </div>
 
-              <div className="p-3 bg-[#F7F7F5] dark:bg-neutral-900 rounded-[6px] border border-[#E5E7EB] dark:border-[#2C2C2E] flex flex-col gap-2">
+              <div className="p-3 bg-accent/60 dark:bg-neutral-900 rounded-[6px] border border-border flex flex-col gap-2">
                 <span className="text-[11px] font-bold text-black dark:text-white flex items-center gap-1.5">
-                  <Terminal size={13} className="text-[#007AFF]" />
+                  <Terminal size={13} className="text-primary" />
                   Expose Primary Tool
                 </span>
                 <div className="grid grid-cols-2 gap-2">
@@ -1115,14 +1115,14 @@ export const PluginsPane: React.FC = () => {
                     placeholder="Tool Name (e.g. analyze)"
                     value={toolName}
                     onChange={(e) => setToolName(e.target.value)}
-                    className="bg-white dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[4px] px-2.5 py-1 text-[11px] text-black dark:text-white focus:outline-none"
+                    className="bg-card border border-border rounded-[4px] px-2.5 py-1 text-[11px] text-black dark:text-white focus:outline-none"
                   />
                   <input
                     type="text"
                     placeholder="Description"
                     value={toolDesc}
                     onChange={(e) => setToolDesc(e.target.value)}
-                    className="bg-white dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[4px] px-2.5 py-1 text-[11px] text-black dark:text-white focus:outline-none"
+                    className="bg-card border border-border rounded-[4px] px-2.5 py-1 text-[11px] text-black dark:text-white focus:outline-none"
                   />
                 </div>
                 <input
@@ -1130,22 +1130,22 @@ export const PluginsPane: React.FC = () => {
                   placeholder="Shell Command Template (e.g. python3 run.py --input $ARG)"
                   value={toolCmd}
                   onChange={(e) => setToolCmd(e.target.value)}
-                  className="bg-white dark:bg-[#1C1C1E] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[4px] px-2.5 py-1 text-[11px] font-mono text-black dark:text-white focus:outline-none"
+                  className="bg-card border border-border rounded-[4px] px-2.5 py-1 text-[11px] font-mono text-black dark:text-white focus:outline-none"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E5E7EB] dark:border-[#2C2C2E]">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-3.5 py-1.5 text-[12px] font-medium text-[#8A8A85] hover:text-black dark:hover:text-white cursor-pointer"
+                  className="px-3.5 py-1.5 text-[12px] font-medium text-muted-foreground hover:text-black dark:hover:text-white cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-4 py-1.5 bg-[#0F0F0F] dark:bg-white text-white dark:text-black text-[12px] font-bold rounded-[6px] hover:bg-black/90 cursor-pointer disabled:opacity-50"
+                  className="px-4 py-1.5 bg-foreground text-background text-[12px] font-bold rounded-[6px] hover:bg-black/90 cursor-pointer disabled:opacity-50"
                 >
                   {isSubmitting ? 'Registering...' : 'Register Plugin'}
                 </button>

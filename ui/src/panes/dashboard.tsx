@@ -164,7 +164,7 @@ export const DashboardPane: React.FC = () => {
   return (
     <div
       data-pencil-name="Desktop — Dashboard"
-      className="flex-1 h-full flex flex-col gap-[20px] p-[20px_24px] md:p-[28px_36px] overflow-y-auto custom-scrollbar bg-[#F7F7F5] dark:bg-[#0E0E0E]"
+      className="flex-1 h-full flex flex-col gap-[20px] p-[20px_24px] md:p-[28px_36px] overflow-y-auto custom-scrollbar bg-accent/60 dark:bg-[#0E0E0E]"
     >
       {/* Top Greeting Row */}
       <div
@@ -174,13 +174,13 @@ export const DashboardPane: React.FC = () => {
         <div data-pencil-name="Titles" className="flex flex-col gap-[2px]">
           <h1
             data-pencil-name="Greeting"
-            className="text-[22px] md:text-[24px] font-sans font-bold text-[#000000] dark:text-white"
+            className="text-[22px] md:text-[24px] font-sans font-bold text-foreground"
           >
             KendaliAI Control Center
           </h1>
           <p
             data-pencil-name="Sub"
-            className="text-[12px] text-[#8A8A85] font-funnel font-normal"
+            className="text-[12px] text-muted-foreground font-funnel font-normal"
           >
             {activeAgentsCount} agents registered · {activeTasksCount} active tasks running · Live telemetry active
           </p>
@@ -193,7 +193,7 @@ export const DashboardPane: React.FC = () => {
             navigate('chat');
           }}
           data-pencil-name="New Task Btn"
-          className="box-border w-fit shrink-0 h-fit flex flex-row gap-[8px] px-4 py-2 justify-start items-center bg-[#0F0F0F] hover:bg-black/80 text-white dark:bg-white dark:text-black dark:hover:bg-white/90 rounded-[8px] shadow-sm transition-all cursor-pointer"
+          className="box-border w-fit shrink-0 h-fit flex flex-row gap-[8px] px-4 py-2 justify-start items-center bg-foreground hover:bg-black/80 text-white dark:bg-white dark:text-black dark:hover:bg-white/90 rounded-[8px] shadow-sm transition-all cursor-pointer"
         >
           <Plus size={15} strokeWidth={2.2} />
           <span className="text-[12px] font-sans font-bold whitespace-nowrap">New Task</span>
@@ -201,83 +201,83 @@ export const DashboardPane: React.FC = () => {
       </div>
 
       {/* 🖥️ Server Resource Monitoring (Storage, Memory, CPU) */}
-      <div className="w-full flex flex-col gap-3 p-4 bg-white dark:bg-[#161616] border border-[#E5E7EB] dark:border-[#27272A] rounded-[8px] shadow-[0px_1px_2px_0px_#0000000a]">
+      <div className="w-full flex flex-col gap-3 p-4 bg-white dark:bg-card border border-border/70 rounded-[8px] shadow-[0px_1px_2px_0px_#0000000a]">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Activity size={15} className="text-[#007AFF]" />
+            <Activity size={15} className="text-primary" />
             <h2 className="text-[13px] font-sans font-bold text-black dark:text-white">
               Server Resource Monitoring
             </h2>
           </div>
-          <span className="text-[11px] text-[#8A8A85] font-funnel flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-[#16A34A] animate-pulse" />
+          <span className="text-[11px] text-muted-foreground font-funnel flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
             Live System Telemetry
           </span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {/* Storage */}
-          <div className="p-3 bg-[#F7F7F5] dark:bg-[#1C1C1E] rounded-[6px] border border-[#E5E7EB]/70 dark:border-[#2C2C2E] flex flex-col gap-2">
+          <div className="p-3 bg-accent/60 rounded-[6px] border border-border/70 dark:border-border flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
-                <HardDrive size={14} className="text-[#007AFF]" />
+                <HardDrive size={14} className="text-primary" />
                 <span className="text-[12px] font-medium font-sans text-black dark:text-white">Storage</span>
               </div>
               <span className="text-[13px] font-bold font-mono text-black dark:text-white">
                 {metrics ? `${metrics.storage.percent}%` : '24%'}
               </span>
             </div>
-            <div className="w-full bg-[#E5E7EB] dark:bg-[#2C2C2E] h-1.5 rounded-full overflow-hidden">
+            <div className="w-full bg-[#E5E7EB] dark:bg-accent h-1.5 rounded-full overflow-hidden">
               <div
-                className="bg-[#007AFF] h-full rounded-full transition-all duration-500"
+                className="bg-primary h-full rounded-full transition-all duration-500"
                 style={{ width: `${Math.min(100, metrics ? metrics.storage.percent : 24)}%` }}
               />
             </div>
-            <div className="text-[11px] text-[#8A8A85] font-mono">
+            <div className="text-[11px] text-muted-foreground font-mono">
               {metrics ? `${metrics.storage.usedFormatted} / ${metrics.storage.totalFormatted}` : '10.6 GB / 45.0 GB'}
             </div>
           </div>
 
           {/* Memory */}
-          <div className="p-3 bg-[#F7F7F5] dark:bg-[#1C1C1E] rounded-[6px] border border-[#E5E7EB]/70 dark:border-[#2C2C2E] flex flex-col gap-2">
+          <div className="p-3 bg-accent/60 rounded-[6px] border border-border/70 dark:border-border flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
-                <Activity size={14} className="text-[#16A34A]" />
+                <Activity size={14} className="text-success" />
                 <span className="text-[12px] font-medium font-sans text-black dark:text-white">Memory</span>
               </div>
               <span className="text-[13px] font-bold font-mono text-black dark:text-white">
                 {metrics ? `${metrics.memory.percent}%` : '33%'}
               </span>
             </div>
-            <div className="w-full bg-[#E5E7EB] dark:bg-[#2C2C2E] h-1.5 rounded-full overflow-hidden">
+            <div className="w-full bg-[#E5E7EB] dark:bg-accent h-1.5 rounded-full overflow-hidden">
               <div
-                className="bg-[#16A34A] h-full rounded-full transition-all duration-500"
+                className="bg-success h-full rounded-full transition-all duration-500"
                 style={{ width: `${Math.min(100, metrics ? metrics.memory.percent : 33)}%` }}
               />
             </div>
-            <div className="text-[11px] text-[#8A8A85] font-mono">
+            <div className="text-[11px] text-muted-foreground font-mono">
               {metrics ? `${metrics.memory.usedFormatted} / ${metrics.memory.totalFormatted}` : '319.5 MB / 956.6 MB'}
             </div>
           </div>
 
           {/* CPU */}
-          <div className="p-3 bg-[#F7F7F5] dark:bg-[#1C1C1E] rounded-[6px] border border-[#E5E7EB]/70 dark:border-[#2C2C2E] flex flex-col gap-2">
+          <div className="p-3 bg-accent/60 rounded-[6px] border border-border/70 dark:border-border flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
-                <Cpu size={14} className="text-[#F97316]" />
+                <Cpu size={14} className="text-agentorange" />
                 <span className="text-[12px] font-medium font-sans text-black dark:text-white">CPU</span>
               </div>
               <span className="text-[13px] font-bold font-mono text-black dark:text-white">
                 {metrics ? `${metrics.cpu.percent}%` : '0%'}
               </span>
             </div>
-            <div className="w-full bg-[#E5E7EB] dark:bg-[#2C2C2E] h-1.5 rounded-full overflow-hidden">
+            <div className="w-full bg-[#E5E7EB] dark:bg-accent h-1.5 rounded-full overflow-hidden">
               <div
-                className="bg-[#F97316] h-full rounded-full transition-all duration-500"
+                className="bg-agentorange h-full rounded-full transition-all duration-500"
                 style={{ width: `${Math.max(2, Math.min(100, metrics ? metrics.cpu.percent : 0))}%` }}
               />
             </div>
-            <div className="text-[11px] text-[#8A8A85] font-mono">
+            <div className="text-[11px] text-muted-foreground font-mono">
               {metrics ? `${metrics.cpu.cores} Cores available` : 'Active'}
             </div>
           </div>
@@ -293,16 +293,16 @@ export const DashboardPane: React.FC = () => {
         <div
           onClick={() => navigate('scheduler')}
           data-pencil-name="Stat Active Tasks"
-          className="box-border h-[110px] flex flex-col justify-between p-[16px] md:p-[18px] bg-[#FFFFFF] dark:bg-[#161616] border border-[#E5E7EB] dark:border-[#27272A] rounded-[8px] shadow-[0px_1px_2px_0px_#0000000a] cursor-pointer hover:border-[#007AFF]/40 transition-colors"
+          className="box-border h-[110px] flex flex-col justify-between p-[16px] md:p-[18px] bg-card dark:bg-card border border-border/70 rounded-[8px] shadow-[0px_1px_2px_0px_#0000000a] cursor-pointer hover:border-primary/60/40 transition-colors"
         >
           <div className="flex items-center gap-[8px]">
-            <Zap size={15} className="text-[#007AFF]" />
-            <span className="text-[12px] text-[#8A8A85] font-funnel">Active Tasks</span>
+            <Zap size={15} className="text-primary" />
+            <span className="text-[12px] text-muted-foreground font-funnel">Active Tasks</span>
           </div>
           <div className="text-[24px] md:text-[26px] font-sans font-bold text-black dark:text-white leading-none">
             {activeTasksCount}
           </div>
-          <div className="text-[11px] text-[#8A8A85] font-funnel">
+          <div className="text-[11px] text-muted-foreground font-funnel">
             {activeTasksCount > 0 ? `${activeTasksCount} running in background` : 'No tasks running'}
           </div>
         </div>
@@ -311,16 +311,16 @@ export const DashboardPane: React.FC = () => {
         <div
           onClick={() => navigate('agents')}
           data-pencil-name="Stat Agents"
-          className="box-border h-[110px] flex flex-col justify-between p-[16px] md:p-[18px] bg-[#FFFFFF] dark:bg-[#161616] border border-[#E5E7EB] dark:border-[#27272A] rounded-[8px] shadow-[0px_1px_2px_0px_#0000000a] cursor-pointer hover:border-[#F97316]/40 transition-colors"
+          className="box-border h-[110px] flex flex-col justify-between p-[16px] md:p-[18px] bg-card dark:bg-card border border-border/70 rounded-[8px] shadow-[0px_1px_2px_0px_#0000000a] cursor-pointer hover:border-[#F97316]/40 transition-colors"
         >
           <div className="flex items-center gap-[8px]">
-            <Bot size={15} className="text-[#F97316]" />
-            <span className="text-[12px] text-[#8A8A85] font-funnel">Agents</span>
+            <Bot size={15} className="text-agentorange" />
+            <span className="text-[12px] text-muted-foreground font-funnel">Agents</span>
           </div>
           <div className="text-[24px] md:text-[26px] font-sans font-bold text-black dark:text-white leading-none">
             {activeAgentsCount}
           </div>
-          <div className="text-[11px] text-[#8A8A85] font-funnel truncate">
+          <div className="text-[11px] text-muted-foreground font-funnel truncate">
             {agents && agents.length > 0 ? agents.slice(0, 2).map((a) => a.name).join(', ') : 'None configured'}
           </div>
         </div>
@@ -329,16 +329,16 @@ export const DashboardPane: React.FC = () => {
         <div
           onClick={() => navigate('scheduler')}
           data-pencil-name="Stat Schedules"
-          className="box-border h-[110px] flex flex-col justify-between p-[16px] md:p-[18px] bg-[#FFFFFF] dark:bg-[#161616] border border-[#E5E7EB] dark:border-[#27272A] rounded-[8px] shadow-[0px_1px_2px_0px_#0000000a] cursor-pointer hover:border-[#16A34A]/40 transition-colors"
+          className="box-border h-[110px] flex flex-col justify-between p-[16px] md:p-[18px] bg-card dark:bg-card border border-border/70 rounded-[8px] shadow-[0px_1px_2px_0px_#0000000a] cursor-pointer hover:border-[#16A34A]/40 transition-colors"
         >
           <div className="flex items-center gap-[8px]">
-            <Clock size={15} className="text-[#16A34A]" />
-            <span className="text-[12px] text-[#8A8A85] font-funnel">Schedules</span>
+            <Clock size={15} className="text-success" />
+            <span className="text-[12px] text-muted-foreground font-funnel">Schedules</span>
           </div>
           <div className="text-[24px] md:text-[26px] font-sans font-bold text-black dark:text-white leading-none">
             {schedulesCount}
           </div>
-          <div className="text-[11px] text-[#8A8A85] font-funnel">
+          <div className="text-[11px] text-muted-foreground font-funnel">
             {schedulesCount > 0 ? `${schedulesCount} scheduled tasks` : 'No active jobs'}
           </div>
         </div>
@@ -347,16 +347,16 @@ export const DashboardPane: React.FC = () => {
         <div
           onClick={() => navigate('settings')}
           data-pencil-name="Stat Flags This Week"
-          className="box-border h-[110px] flex flex-col justify-between p-[16px] md:p-[18px] bg-[#FFFFFF] dark:bg-[#161616] border border-[#E5E7EB] dark:border-[#27272A] rounded-[8px] shadow-[0px_1px_2px_0px_#0000000a] cursor-pointer hover:border-red-400 transition-colors"
+          className="box-border h-[110px] flex flex-col justify-between p-[16px] md:p-[18px] bg-card dark:bg-card border border-border/70 rounded-[8px] shadow-[0px_1px_2px_0px_#0000000a] cursor-pointer hover:border-red-400 transition-colors"
         >
           <div className="flex items-center gap-[8px]">
-            <Shield size={15} className="text-[#DC2626]" />
-            <span className="text-[12px] text-[#8A8A85] font-funnel">Policy Guard</span>
+            <Shield size={15} className="text-destructive" />
+            <span className="text-[12px] text-muted-foreground font-funnel">Policy Guard</span>
           </div>
           <div className="text-[24px] md:text-[26px] font-sans font-bold text-black dark:text-white leading-none">
             {policiesCount}
           </div>
-          <div className="text-[11px] text-[#16A34A] font-funnel font-medium">
+          <div className="text-[11px] text-success font-funnel font-medium">
             Sandbox 100% secure
           </div>
         </div>
@@ -367,17 +367,17 @@ export const DashboardPane: React.FC = () => {
         {/* Col 1 & 2: Background Tasks & Quick Actions */}
         <div className="lg:col-span-2 flex flex-col gap-[16px]">
           {/* Background Tasks Panel */}
-          <div className="w-full flex flex-col gap-[12px] p-[18px] bg-[#FFFFFF] dark:bg-[#161616] border border-[#E5E7EB] dark:border-[#27272A] rounded-[8px] shadow-[0px_1px_2px_0px_#0000000a]">
+          <div className="w-full flex flex-col gap-[12px] p-[18px] bg-card dark:bg-card border border-border/70 rounded-[8px] shadow-[0px_1px_2px_0px_#0000000a]">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Terminal size={15} className="text-[#007AFF]" />
+                <Terminal size={15} className="text-primary" />
                 <h2 className="text-[14px] font-sans font-bold text-black dark:text-white">
                   Active Background Agents &amp; Tasks
                 </h2>
               </div>
               <button
                 onClick={() => navigate('scheduler')}
-                className="text-[11px] text-[#8A8A85] hover:text-[#007AFF] font-funnel flex items-center gap-1"
+                className="text-[11px] text-muted-foreground hover:text-primary font-funnel flex items-center gap-1"
               >
                 View all <ArrowRight size={12} />
               </button>
@@ -389,14 +389,14 @@ export const DashboardPane: React.FC = () => {
                 tasks.slice(0, 4).map((t) => (
                   <div
                     key={t.id}
-                    className="p-3 bg-[#F7F7F5] dark:bg-[#1C1C1E] rounded-[6px] border border-[#E5E7EB]/70 dark:border-[#2C2C2E] flex flex-col gap-1.5"
+                    className="p-3 bg-accent/60 rounded-[6px] border border-border/70 dark:border-border flex flex-col gap-1.5"
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         {t.status === 'running' ? (
-                          <Loader2 size={13} className="text-[#007AFF] animate-spin shrink-0" />
+                          <Loader2 size={13} className="text-primary animate-spin shrink-0" />
                         ) : (
-                          <CheckCircle2 size={13} className="text-[#16A34A] shrink-0" />
+                          <CheckCircle2 size={13} className="text-success shrink-0" />
                         )}
                         <span className="text-[12px] font-medium font-sans text-black dark:text-white truncate">
                           {t.title || t.id}
@@ -405,20 +405,20 @@ export const DashboardPane: React.FC = () => {
                       <span
                         className={`px-2 py-0.5 text-[10px] font-funnel font-medium rounded ${
                           t.status === 'running'
-                            ? 'bg-[#EBF5FF] text-[#007AFF]'
-                            : 'bg-[#DCFCE7] text-[#16A34A]'
+                            ? 'bg-info/10 text-primary'
+                            : 'bg-success/15 text-success'
                         }`}
                       >
                         {t.status}
                       </span>
                     </div>
-                    <div className="text-[10px] text-[#8A8A85] font-funnel">
+                    <div className="text-[10px] text-muted-foreground font-funnel">
                       Task ID: <span className="font-mono text-black dark:text-white">{t.id}</span>
                     </div>
                   </div>
                 ))
               ) : (
-                <div className="p-4 text-center text-[12px] text-[#8A8A85] font-funnel bg-[#F7F7F5] dark:bg-[#1C1C1E] rounded-[6px] border border-dashed border-[#E5E7EB] dark:border-[#2C2C2E]">
+                <div className="p-4 text-center text-[12px] text-muted-foreground font-funnel bg-accent/60 rounded-[6px] border border-dashed border-border">
                   No background tasks currently running. Start a conversation or trigger a task above.
                 </div>
               )}
@@ -426,9 +426,9 @@ export const DashboardPane: React.FC = () => {
           </div>
 
           {/* Quick Actions / Prompt Templates */}
-          <div className="w-full flex flex-col gap-[12px] p-[18px] bg-[#FFFFFF] dark:bg-[#161616] border border-[#E5E7EB] dark:border-[#27272A] rounded-[8px] shadow-[0px_1px_2px_0px_#0000000a]">
+          <div className="w-full flex flex-col gap-[12px] p-[18px] bg-card dark:bg-card border border-border/70 rounded-[8px] shadow-[0px_1px_2px_0px_#0000000a]">
             <div className="flex items-center gap-2">
-              <Sparkles size={15} className="text-[#D97706]" />
+              <Sparkles size={15} className="text-warning" />
               <h2 className="text-[14px] font-sans font-bold text-black dark:text-white">
                 Quick Start Agent Workflows
               </h2>
@@ -438,19 +438,19 @@ export const DashboardPane: React.FC = () => {
                 <div
                   key={q.title}
                   onClick={q.action}
-                  className="p-3 bg-[#F7F7F5] hover:bg-[#FFF5EB] dark:bg-[#1C1C1E] dark:hover:bg-[#2A2016] border border-[#E5E7EB] hover:border-[#F5E3CF] dark:border-[#2C2C2E] dark:hover:border-[#4B3724] rounded-[6px] cursor-pointer transition-all flex flex-col justify-between gap-2 group"
+                  className="p-3 bg-accent/60 hover:bg-warning/10 dark:bg-card dark:hover:bg-[#2A2016] border border-border hover:border-[#F5E3CF] dark:border-border dark:hover:border-[#4B3724] rounded-[6px] cursor-pointer transition-all flex flex-col justify-between gap-2 group"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold text-[#D97706] font-funnel">
+                    <span className="text-[11px] font-bold text-warning font-funnel">
                       {q.tag}
                     </span>
-                    <ArrowRight size={13} className="text-[#8A8A85] group-hover:text-[#D97706] group-hover:translate-x-0.5 transition-all" />
+                    <ArrowRight size={13} className="text-muted-foreground group-hover:text-warning group-hover:translate-x-0.5 transition-all" />
                   </div>
                   <div>
                     <h3 className="text-[12px] font-bold font-sans text-black dark:text-white">
                       {q.title}
                     </h3>
-                    <p className="text-[10px] text-[#8A8A85] font-funnel mt-0.5 leading-relaxed">
+                    <p className="text-[10px] text-muted-foreground font-funnel mt-0.5 leading-relaxed">
                       {q.desc}
                     </p>
                   </div>
@@ -463,17 +463,17 @@ export const DashboardPane: React.FC = () => {
         {/* Col 3: Personas & Infrastructure Health */}
         <div className="flex flex-col gap-[16px]">
           {/* Agent Personas Panel */}
-          <div className="w-full flex flex-col gap-[12px] p-[18px] bg-[#FFF5EB] dark:bg-[#1D1711] border border-[#F5E3CF] dark:border-[#38281A] rounded-[8px] shadow-[0px_1px_2px_0px_#0000000a]">
+          <div className="w-full flex flex-col gap-[12px] p-[18px] bg-warning/10 dark:bg-[#1D1711] border border-[#F5E3CF] dark:border-[#38281A] rounded-[8px] shadow-[0px_1px_2px_0px_#0000000a]">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Bot size={15} className="text-[#D97706]" />
+                <Bot size={15} className="text-warning" />
                 <h2 className="text-[14px] font-sans font-bold text-black dark:text-white">
                   Agent Personas
                 </h2>
               </div>
               <button
                 onClick={() => navigate('agents')}
-                className="text-[11px] text-[#D97706] font-funnel flex items-center gap-1 hover:underline"
+                className="text-[11px] text-warning font-funnel flex items-center gap-1 hover:underline"
               >
                 Manage <ArrowRight size={11} />
               </button>
@@ -491,12 +491,12 @@ export const DashboardPane: React.FC = () => {
                     await selectSession(sid);
                     navigate('chat');
                   }}
-                  className="p-2.5 bg-white dark:bg-[#161616] border border-[#E5E7EB] dark:border-[#2C2C2E] rounded-[6px] text-left cursor-pointer hover:border-[#D97706]/40 transition-colors"
+                  className="p-2.5 bg-white dark:bg-card border border-border rounded-[6px] text-left cursor-pointer hover:border-[#D97706]/40 transition-colors"
                 >
                   <div className="text-[11px] font-sans font-bold text-black dark:text-white truncate">
                     {persona}
                   </div>
-                  <div className="text-[9px] text-[#8A8A85] font-funnel truncate mt-0.5">
+                  <div className="text-[9px] text-muted-foreground font-funnel truncate mt-0.5">
                     Click to launch
                   </div>
                 </div>
@@ -505,29 +505,29 @@ export const DashboardPane: React.FC = () => {
           </div>
 
           {/* System & Daemon Health Snapshot */}
-          <div className="w-full flex flex-col gap-[12px] p-[18px] bg-[#FFFFFF] dark:bg-[#161616] border border-[#E5E7EB] dark:border-[#27272A] rounded-[8px] shadow-[0px_1px_2px_0px_#0000000a]">
+          <div className="w-full flex flex-col gap-[12px] p-[18px] bg-card dark:bg-card border border-border/70 rounded-[8px] shadow-[0px_1px_2px_0px_#0000000a]">
             <div className="flex items-center gap-2">
-              <Cpu size={15} className="text-[#16A34A]" />
+              <Cpu size={15} className="text-success" />
               <h2 className="text-[14px] font-sans font-bold text-black dark:text-white">
                 Local Gateway Health
               </h2>
             </div>
 
             <div className="space-y-2 text-[11px] font-funnel">
-              <div className="flex items-center justify-between py-1 border-b border-[#E5E7EB] dark:border-[#27272A]">
-                <span className="text-[#8A8A85]">Local Server</span>
+              <div className="flex items-center justify-between py-1 border-b border-border/70">
+                <span className="text-muted-foreground">Local Server</span>
                 <span className="font-mono font-medium text-black dark:text-white">http://localhost:8080</span>
               </div>
-              <div className="flex items-center justify-between py-1 border-b border-[#E5E7EB] dark:border-[#27272A]">
-                <span className="text-[#8A8A85]">WebSocket Event Bus</span>
-                <span className="text-[#16A34A] font-bold">CONNECTED</span>
+              <div className="flex items-center justify-between py-1 border-b border-border/70">
+                <span className="text-muted-foreground">WebSocket Event Bus</span>
+                <span className="text-success font-bold">CONNECTED</span>
               </div>
-              <div className="flex items-center justify-between py-1 border-b border-[#E5E7EB] dark:border-[#27272A]">
-                <span className="text-[#8A8A85]">Telegram Bot</span>
-                <span className="text-[#007AFF] font-bold truncate max-w-[150px]">{telegramBotUser}</span>
+              <div className="flex items-center justify-between py-1 border-b border-border/70">
+                <span className="text-muted-foreground">Telegram Bot</span>
+                <span className="text-primary font-bold truncate max-w-[150px]">{telegramBotUser}</span>
               </div>
               <div className="flex items-center justify-between py-1">
-                <span className="text-[#8A8A85]">Sandbox Root</span>
+                <span className="text-muted-foreground">Sandbox Root</span>
                 <span className="font-mono text-[10px] text-black dark:text-white truncate max-w-[160px]" title={sandboxRoot}>
                   {sandboxRoot}
                 </span>
