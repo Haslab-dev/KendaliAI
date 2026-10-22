@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,7 +10,9 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
+	"github.com/kendaliai/app/internal/acp"
 	"github.com/kendaliai/app/internal/runtime"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -17,7 +20,7 @@ import (
 
 var agentCmd = &cobra.Command{
 	Use:   "agent",
-	Short: "Manage agent manifests (create, list, install, show, delete)",
+	Short: "Manage agent manifests (create, list, install, show, delete, find)",
 }
 
 var agentCreateCmd = &cobra.Command{
@@ -53,9 +56,33 @@ var agentDeleteCmd = &cobra.Command{
 	Run:   runAgentDelete,
 }
 
+var (
+	agentFindJson          bool
+	agentFindOnlyInstalled bool
+)
+
+var agentFindCmd = &cobra.Command{
+	Use:   "find",
+	Short: "Find and detect installed ACP & autonomous coding agents on the machine",
+	Run:   runAgentFind,
+}
+
+var findAgentCmd = &cobra.Command{
+	Use:   "find-agent",
+	Short: "Find and detect installed ACP & autonomous coding agents on the machine",
+	Run:   runAgentFind,
+}
+
 func init() {
-	agentCmd.AddCommand(agentCreateCmd, agentListCmd, agentShowCmd, agentInstallCmd, agentDeleteCmd)
+	agentFindCmd.Flags().BoolVarP(&agentFindJson, "json", "j", false, "Output results as JSON")
+	agentFindCmd.Flags().BoolVarP(&agentFindOnlyInstalled, "installed", "i", false, "Show only installed agents")
+
+	findAgentCmd.Flags().BoolVarP(&agentFindJson, "json", "j", false, "Output results as JSON")
+	findAgentCmd.Flags().BoolVarP(&agentFindOnlyInstalled, "installed", "i", false, "Show only installed agents")
+
+	agentCmd.AddCommand(agentCreateCmd, agentListCmd, agentShowCmd, agentInstallCmd, agentDeleteCmd, agentFindCmd)
 	rootCmd.AddCommand(agentCmd)
+	rootCmd.AddCommand(findAgentCmd)
 }
 
 func getAgentsDir() string {
@@ -272,4 +299,131 @@ func runAgentDelete(cmd *cobra.Command, args []string) {
 	}
 
 	fmt.Printf("  ✓ Deleted Agent manifest '%s'\n", id)
+}
+
+func runAgentFind(cmd *cobra.Command, args []string) {
+	reg := acp.NewRegistry(nil)
+	agents := reg.List()
+
+	// Query versions concurrently
+	var wg sync.WaitGroup
+	for i := range agents {
+		if agents[i].Available {
+			wg.Add(1)
+			go func(idx int) {
+				defer wg.Done()
+				agents[idx].Version = acp.DetectVersion(agents[idx].Command)
+			}(i)
+		}
+	}
+	wg.Wait()
+
+	total := len(agents)
+	installedCount := 0
+	for _, a := range agents {
+		if a.Available {
+			installedCount++
+		}
+	}
+
+	if agentFindJson {
+		var outputList []acp.AgentDescriptor
+		for _, a := range agents {
+			if agentFindOnlyInstalled && !a.Available {
+				continue
+			}
+			outputList = append(outputList, a)
+		}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		_ = enc.Encode(outputList)
+		return
+	}
+
+	bold := "\033[1m"
+	dim := "\033[2m"
+	green := "\033[32m"
+	red := "\033[31m"
+	cyan := "\033[36m"
+	reset := "\033[0m"
+
+	fmt.Println()
+	fmt.Printf("%s%s╔══════════════════════════════════════════════════════════════════════════════════════════╗%s\n", bold, cyan, reset)
+	fmt.Printf("%s%s║                              KendaliAI Agent Discovery                                   ║%s\n", bold, cyan, reset)
+	fmt.Printf("%s%s╚══════════════════════════════════════════════════════════════════════════════════════════╝%s\n", bold, cyan, reset)
+	fmt.Printf("%sScanning for installed ACP & autonomous coding agents on this machine...%s\n\n", dim, reset)
+
+	fmt.Printf("%-10s %-22s %-22s %-12s %s\n", "STATUS", "AGENT", "VERSION", "PROTOCOL", "BINARY LOCATION")
+	fmt.Printf("%s--------------------------------------------------------------------------------------------------%s\n", dim, reset)
+
+	homeDir, _ := os.UserHomeDir()
+	for _, a := range agents {
+		if agentFindOnlyInstalled && !a.Available {
+			continue
+		}
+
+		if a.Available {
+			ver := a.Version
+			if ver == "" {
+				ver = "detected"
+			}
+			if len(ver) > 21 {
+				ver = ver[:21]
+			}
+			dispPath := a.Command
+			if homeDir != "" && strings.HasPrefix(dispPath, homeDir) {
+				dispPath = "~" + strings.TrimPrefix(dispPath, homeDir)
+			}
+
+			proto := "acp"
+			if a.ID == "agy" {
+				proto = "stream-json"
+			} else if a.ID == "pi" {
+				proto = "rpc-json"
+			}
+
+			fmt.Printf("%s✔ FOUND%s   %s%-22s%s %-22s %s%-12s%s %s%s%s\n",
+				green, reset, bold, a.Name, reset, ver, cyan, proto, reset, dim, dispPath, reset)
+		} else {
+			proto := "acp"
+			if a.ID == "agy" {
+				proto = "stream-json"
+			} else if a.ID == "pi" {
+				proto = "rpc-json"
+			}
+
+			fmt.Printf("%s✖ MISSING%s %s%-22s%s %-22s %s%-12s%s %s%s%s\n",
+				red, reset, dim, a.Name, reset, "-", dim, proto, reset, dim, a.Command+" (not in PATH)", reset)
+		}
+	}
+
+	fmt.Printf("%s--------------------------------------------------------------------------------------------------%s\n\n", dim, reset)
+
+	pct := 0
+	if total > 0 {
+		pct = (installedCount * 100) / total
+	}
+
+	statusSummary := fmt.Sprintf("%d/%d INSTALLED (%d%%)", installedCount, total, pct)
+	if installedCount == total {
+		fmt.Printf("Summary: %s%sALL READY (%s)%s (%s%d installed%s, %s%d missing%s)\n",
+			bold, green, statusSummary, reset, green, installedCount, reset, red, total-installedCount, reset)
+	} else {
+		fmt.Printf("Summary: %s%s%s%s (%s%d installed%s, %s%d missing%s)\n",
+			bold, cyan, statusSummary, reset, green, installedCount, reset, red, total-installedCount, reset)
+	}
+
+	manifestsDir := getAgentsDir()
+	if entries, err := os.ReadDir(manifestsDir); err == nil && len(entries) > 0 {
+		mCount := 0
+		for _, e := range entries {
+			if strings.HasSuffix(e.Name(), ".yaml") || strings.HasSuffix(e.Name(), ".json") {
+				mCount++
+			}
+		}
+		if mCount > 0 {
+			fmt.Printf("\n%sLocal agent manifests found: %s%d%s %sin %s%s\n", dim, bold, mCount, reset, dim, manifestsDir, reset)
+		}
+	}
+	fmt.Println()
 }

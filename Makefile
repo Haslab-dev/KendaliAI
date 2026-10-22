@@ -8,7 +8,7 @@ VERSION   := $(shell cat VERSION 2>/dev/null || echo "0.2.0")
 PM  := $(shell command -v bun 2>/dev/null || echo "npm")
 AIR := $(shell command -v air 2>/dev/null || echo "$$(go env GOPATH)/bin/air")
 
-.PHONY: all build build-go build-ui dev dev-go dev-ui start start-daemon stop restart status desktop check-computer clean lint tidy install air-install bump-version ui-deps
+.PHONY: all build build-go build-ui dev dev-go dev-ui start start-daemon stop restart status desktop check-computer clean lint tidy install air-install bump-version ui-deps find-agent
 
 all: build
 
@@ -92,6 +92,10 @@ desktop: build
 # Verify the computer-use layer of this machine (bpclick, AX permission, capture)
 check-computer: build-go
 	go test ./internal/computer/ -run TestProbe -v -timeout 180s
+
+# Find and detect all installed ACP & external coding agents on this machine
+find-agent:
+	@./scripts/find-agent.sh
 
 # ── Maintenance & Code Quality ──
 

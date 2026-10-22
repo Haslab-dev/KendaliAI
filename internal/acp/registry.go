@@ -1,12 +1,14 @@
 package acp
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/kendaliai/app/internal/config"
 )
@@ -23,6 +25,7 @@ type AgentDescriptor struct {
 	SupportedModels []string `json:"supportedModels,omitempty"`
 	Available       bool     `json:"available"`
 	ACP             bool     `json:"acp"` // always true here; lets the UI badge uniformly
+	Version         string   `json:"version,omitempty"`
 }
 
 // findExecutableDirect checks candidate dirs and exec.LookPath without checking aliases.
@@ -77,10 +80,10 @@ func findExecutableDirect(cmdName string) (string, error) {
 	return "", fmt.Errorf("command %q not found", cmdName)
 }
 
-// resolveExecutablePath searches system PATH and standard user CLI install paths
+// ResolveExecutablePath searches system PATH and standard user CLI install paths
 // (e.g. ~/.local/bin, ~/.nvm/versions/node/*/bin, ~/.commandcode/bin, /opt/homebrew/bin)
 // so GUI apps and daemon processes find them reliably.
-func resolveExecutablePath(cmdName string) (string, error) {
+func ResolveExecutablePath(cmdName string) (string, error) {
 	if p, err := findExecutableDirect(cmdName); err == nil {
 		return p, nil
 	}
@@ -118,6 +121,30 @@ func resolveExecutablePath(cmdName string) (string, error) {
 	}
 
 	return "", fmt.Errorf("command %q not found on PATH or standard install directories", cmdName)
+}
+
+func resolveExecutablePath(cmdName string) (string, error) {
+	return ResolveExecutablePath(cmdName)
+}
+
+// DetectVersion executes cmdPath --version with a 2-second timeout and returns the first line of output.
+func DetectVersion(cmdPath string) string {
+	if cmdPath == "" {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2500*time.Millisecond)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, cmdPath, "--version")
+	out, err := cmd.CombinedOutput()
+	if err != nil && len(out) == 0 {
+		return ""
+	}
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if len(lines) > 0 {
+		return strings.TrimSpace(lines[0])
+	}
+	return ""
 }
 
 // enrichedEnv returns the environment with enriched PATH containing CLI tool directories.
@@ -318,14 +345,16 @@ func defaultAgents() []AgentDescriptor {
 	}
 }
 
-// registry merges defaults with config overrides and resolves availability
-// once at startup.
-type registry struct {
+// Registry merges defaults with config overrides and resolves availability.
+type Registry struct {
 	mu     sync.RWMutex
 	agents []AgentDescriptor
 }
 
-func newRegistry(cfg *config.Config) *registry {
+type registry = Registry
+
+// NewRegistry creates a new Registry with default ACP agents and configuration overrides.
+func NewRegistry(cfg *config.Config) *Registry {
 	agents := defaultAgents()
 	known := map[string]bool{}
 	for i := range agents {
@@ -370,20 +399,24 @@ func newRegistry(cfg *config.Config) *registry {
 	for i := range agents {
 		agents[i].Available = false
 		agents[i].ACP = true
-		if resolved, err := resolveExecutablePath(agents[i].Command); err == nil {
+		if resolved, err := ResolveExecutablePath(agents[i].Command); err == nil {
 			agents[i].Available = true
 			agents[i].Command = resolved
 		}
 	}
-	return &registry{agents: agents}
+	return &Registry{agents: agents}
 }
 
-func (r *registry) list() []AgentDescriptor {
+func newRegistry(cfg *config.Config) *Registry {
+	return NewRegistry(cfg)
+}
+
+func (r *Registry) List() []AgentDescriptor {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	// Refresh availability in case tools were installed or PATH updated
 	for i := range r.agents {
-		if resolved, err := resolveExecutablePath(r.agents[i].Command); err == nil {
+		if resolved, err := ResolveExecutablePath(r.agents[i].Command); err == nil {
 			r.agents[i].Available = true
 			r.agents[i].Command = resolved
 		} else {
@@ -395,7 +428,11 @@ func (r *registry) list() []AgentDescriptor {
 	return out
 }
 
-func (r *registry) get(id string) (AgentDescriptor, error) {
+func (r *Registry) list() []AgentDescriptor {
+	return r.List()
+}
+
+func (r *Registry) Get(id string) (AgentDescriptor, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for _, a := range r.agents {
@@ -404,4 +441,8 @@ func (r *registry) get(id string) (AgentDescriptor, error) {
 		}
 	}
 	return AgentDescriptor{}, fmt.Errorf("acp: unknown agent %q", id)
+}
+
+func (r *Registry) get(id string) (AgentDescriptor, error) {
+	return r.Get(id)
 }
