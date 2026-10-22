@@ -55,6 +55,16 @@ export interface AgentConfig {
   policy: Record<string, string>;
   avatar: string;
   isDefault: boolean;
+  isSuper?: boolean;
+  engine?: 'rakit' | 'acp';
+  acpAgent?: string;
+  reasoningEffort?: 'low' | 'medium' | 'high' | 'default';
+  soulStack?: {
+    soul?: string;
+    style?: string;
+    instructions?: string;
+    memory?: string;
+  };
   telegramConnected?: boolean;
   telegramBot?: TelegramBotConfig;
   createdAt?: number;
@@ -120,6 +130,25 @@ export interface Session {
   lastMessage?: SessionMessage;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface AgentGroup {
+  id: string;
+  name: string;
+  brief: string;
+  avatar?: string;
+  memberIds: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ComposioToolkit {
+  slug: string;
+  name: string;
+  description: string;
+  logoUrl?: string;
+  connected: boolean;
+  connectedAccountId?: string;
 }
 
 
