@@ -21,6 +21,7 @@ export type SettingsSection =
   | 'tools'
   | 'scheduler'
   | 'docs'
+  | 'channels'
   | 'telegram'
   | 'plugins'
   | 'worktrees'
@@ -39,7 +40,8 @@ const LEGACY_MAP: Record<string, { route: RouteName; settings?: SettingsSection 
   tools: { route: 'settings', settings: 'tools' },
   scheduler: { route: 'settings', settings: 'scheduler' },
   docs: { route: 'settings', settings: 'docs' },
-  telegram: { route: 'settings', settings: 'telegram' },
+  channels: { route: 'settings', settings: 'channels' },
+  telegram: { route: 'settings', settings: 'channels' },
   plugins: { route: 'settings', settings: 'plugins' },
   worktrees: { route: 'settings', settings: 'worktrees' },
   sessions: { route: 'settings', settings: 'sessions' },

@@ -63,6 +63,56 @@ export const TelegramIcon: React.FC<AssistantIconProps> = ({
 );
 
 /**
+ * Official Discord Brand Icon (Blurple circular badge)
+ * Discord Blurple: #5865F2
+ */
+export const DiscordIcon: React.FC<AssistantIconProps> = ({
+  size = 20,
+  className = '',
+  ...props
+}) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    className={className}
+    {...props}
+  >
+    <circle cx="12" cy="12" r="10" fill="#5865F2" />
+    <path
+      d="M16.5 7.8c-.8-.3-1.6-.6-2.5-.7-.1.2-.2.5-.3.7-1-.1-2-.1-3 0-.1-.2-.2-.5-.3-.7-.9.1-1.7.4-2.5.7-1.5 2.2-1.9 4.3-1.7 6.4 1 1 2 1.6 3 1.6.2-.3.5-.7.7-1-.7-.3-1-.7-1.1-1.1.1.1.2.1.3.2 1.2.6 2.5.9 3.8.9s2.6-.3 3.8-.9c.1-.1.2-.1.3-.2-.1.4-.4.8-1.1 1.1.2.3.5.7.7 1 1 0 2-.6 3-1.6.2-2.3-.4-4.4-1.8-6.3zm-5.7 5.1c-.6 0-1-.5-1-1.2s.5-1.2 1-1.2c.6 0 1 .5 1 1.2s-.4 1.2-1 1.2zm4.4 0c-.6 0-1-.5-1-1.2s.5-1.2 1-1.2c.6 0 1 .5 1 1.2s-.4 1.2-1 1.2z"
+      fill="#FFFFFF"
+    />
+  </svg>
+);
+
+/**
+ * Official Slack Brand Icon (Aubergine circular badge with multi-colored octothorpe)
+ * Slack Aubergine: #4A154B
+ */
+export const SlackIcon: React.FC<AssistantIconProps> = ({
+  size = 20,
+  className = '',
+  ...props
+}) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    className={className}
+    {...props}
+  >
+    <circle cx="12" cy="12" r="10" fill="#4A154B" />
+    <path d="M7.8 11.2a1.2 1.2 0 1 1-1.2-1.2h1.2v1.2zm.6 0a1.2 1.2 0 0 1 2.4 0v3a1.2 1.2 0 1 1-2.4 0v-3z" fill="#E01E5A" />
+    <path d="M12.8 7.8a1.2 1.2 0 1 1 1.2-1.2v1.2h-1.2zm0 .6a1.2 1.2 0 0 1 0 2.4h-3a1.2 1.2 0 1 1 0-2.4h3z" fill="#36C5F0" />
+    <path d="M16.2 12.8a1.2 1.2 0 1 1 1.2 1.2h-1.2v-1.2zm-.6 0a1.2 1.2 0 0 1-2.4 0v-3a1.2 1.2 0 1 1 2.4 0v3z" fill="#2EB67D" />
+    <path d="M11.2 16.2a1.2 1.2 0 1 1-1.2 1.2v-1.2h1.2zm0-.6a1.2 1.2 0 0 1 0-2.4h3a1.2 1.2 0 1 1 0 2.4h-3z" fill="#ECB22E" />
+  </svg>
+);
+
+/**
  * AssistantBrandIcon — Composite / default badge for Assistant Mode.
  * Renders the WhatsApp brand icon by default, or Telegram icon when specified.
  */

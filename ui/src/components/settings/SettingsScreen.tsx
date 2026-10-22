@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Cpu,
   Palette,
-  Send,
+  Radio,
   TerminalSquare,
   Shield,
   Layers,
@@ -11,13 +11,13 @@ import {
 } from 'lucide-react';
 import { ProvidersPane } from '../../panes/providers';
 import { AppearanceSettingsPane } from './AppearanceSettingsPane';
-import { TelegramPane } from '../../panes/telegram';
+import { ChannelsSettingsPane } from './ChannelsSettingsPane';
 import { LogsStreamingView } from '../LogsStreamingView';
 import { DashboardPane } from '../../panes/dashboard';
 import { useProfileStore } from '../../store/useProfileStore';
 import { navigate } from '../../router';
 
-type SettingsTab = 'providers' | 'general' | 'telegram' | 'logs';
+type SettingsTab = 'providers' | 'general' | 'channels' | 'logs';
 
 interface SettingsScreenProps {
   section?: string;
@@ -26,7 +26,7 @@ interface SettingsScreenProps {
 export const SettingsScreen: React.FC<SettingsScreenProps> = ({ section }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
     if (section === 'providers') return 'providers';
-    if (section === 'telegram') return 'telegram';
+    if (section === 'channels' || section === 'telegram') return 'channels';
     if (section === 'logs' || section === 'dashboard') return 'logs';
     return 'providers';
   });
@@ -60,10 +60,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ section }) => {
       description: 'Theme palettes, dark mode, and security',
     },
     {
-      id: 'telegram' as const,
-      label: 'Telegram Gateway',
-      icon: Send,
-      description: 'Bot tokens and channel synchronization',
+      id: 'channels' as const,
+      label: 'Channel -> Telegram',
+      icon: Radio,
+      description: 'External messaging: Telegram (live sync), Discord, and Slack',
     },
     {
       id: 'logs' as const,
@@ -81,7 +81,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ section }) => {
           <div>
             <h1 className="text-xl font-bold tracking-tight text-foreground">Settings</h1>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Workspace configuration, LLM model providers, channels, and system diagnostics.
+              Workspace configuration, LLM model providers, external channels, and system diagnostics.
             </p>
           </div>
 
@@ -124,7 +124,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ section }) => {
         <div className="max-w-6xl mx-auto">
           {activeTab === 'providers' && <ProvidersPane />}
           {activeTab === 'general' && <AppearanceSettingsPane />}
-          {activeTab === 'telegram' && <TelegramPane />}
+          {activeTab === 'channels' && <ChannelsSettingsPane defaultChannel="telegram" />}
           {activeTab === 'logs' && (
             <div className="space-y-6">
               <DashboardPane />

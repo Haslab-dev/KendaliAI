@@ -12,16 +12,17 @@ import {
   Plug,
   Puzzle,
   Bell,
+  Radio,
 } from 'lucide-react';
 import { useProfileStore } from '../../store/useProfileStore';
 import { useSessionStore } from '../../store/useSessionStore';
 import { ProvidersPane } from '../../panes/providers';
 import { AppearanceSettingsPane } from './AppearanceSettingsPane';
+import { ChannelsSettingsPane } from './ChannelsSettingsPane';
 import { McpsPane } from '../../panes/mcps';
 import { SkillsPane } from '../../panes/skills';
 import { ToolsPane } from '../../panes/tools';
 import { PluginsPane } from '../../panes/plugins';
-import { TelegramPane } from '../../panes/telegram';
 import { DashboardPane } from '../../panes/dashboard';
 import { WorktreesPane } from '../../panes/worktrees';
 import { SessionsPane } from '../../panes/sessions';
@@ -70,8 +71,9 @@ export const ControlCenterView: React.FC = () => {
           return <ToolsPane />;
         case 'plugins':
           return <PluginsPane />;
+        case 'channels':
         case 'telegram':
-          return <TelegramPane />;
+          return <ChannelsSettingsPane defaultChannel="telegram" />;
         case 'dashboard':
           return <DashboardPane />;
         case 'worktrees':
@@ -200,9 +202,14 @@ export const ControlCenterView: React.FC = () => {
             <h3 className="text-xs text-muted-foreground font-medium px-1">Integrations</h3>
             <div className="rounded-2xl bg-[#121216] border border-border/40 divide-y divide-border/25 overflow-hidden shadow-xs">
               <ControlCenterRow
+                icon={<Radio className="w-4 h-4" />}
+                label="Channel -> Telegram"
+                onClick={() => setSelectedPane('channels')}
+              />
+              <ControlCenterRow
                 icon={<Bell className="w-4 h-4" />}
                 label="Notifications"
-                onClick={() => setSelectedPane('telegram')}
+                onClick={() => setSelectedPane('channels')}
               />
             </div>
           </div>
