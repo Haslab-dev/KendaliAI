@@ -100,10 +100,36 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
             <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
               <span>{activeAgent?.name || 'Agent'}</span>
               <span>•</span>
-              <span className="font-mono text-[10px] bg-muted/60 px-1.5 py-0.5 rounded flex items-center gap-1">
-                <ProviderIcon provider={activeAgent?.acpAgent || activeAgent?.engine || 'rakit'} size={11} />
-                <span>{activeAgent?.acpAgent ? activeAgent.acpAgent.toUpperCase() : (activeAgent?.engine === 'acp' ? 'ACP' : 'RakitKode')}</span>
-              </span>
+              <div className="flex items-center gap-1 bg-muted/60 hover:bg-muted border border-border/40 rounded px-1.5 py-0.5 text-foreground transition-colors shadow-2xs">
+                <ProviderIcon provider={activeAgent?.acpAgent || activeAgent?.engine || 'rakit'} size={11} className="shrink-0" />
+                <select
+                  value={activeAgent?.acpAgent || (activeAgent?.engine === 'acp' ? 'claude-code' : 'rakit')}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (activeAgent) {
+                      if (val === 'rakit') {
+                        useProfileStore.getState().updateAgent({ id: activeAgent.id, engine: 'rakit', acpAgent: undefined });
+                      } else {
+                        useProfileStore.getState().updateAgent({ id: activeAgent.id, engine: 'acp', acpAgent: val });
+                      }
+                    }
+                  }}
+                  className="bg-transparent font-mono text-[10px] text-foreground focus:outline-none cursor-pointer"
+                  title="Switch coding agent engine"
+                >
+                  <option value="rakit">RakitKode (Native)</option>
+                  <optgroup label="External ACP Agents">
+                    <option value="agy">AGY (Google Antigravity)</option>
+                    <option value="commandcode">CommandCode (CMD)</option>
+                    <option value="opencode">OpenCode (ACP)</option>
+                    <option value="omp">Oh My Pi (OMP)</option>
+                    <option value="pi">Pi Coding Agent</option>
+                    <option value="claude-code">Claude Code (ACP)</option>
+                    <option value="codex">OpenAI Codex (ACP)</option>
+                    <option value="gemini">Gemini CLI (ACP)</option>
+                  </optgroup>
+                </select>
+              </div>
               <span>•</span>
               <span className="font-mono text-[10px] text-muted-foreground truncate max-w-[120px]">
                 {activeModel}

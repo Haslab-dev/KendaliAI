@@ -11,9 +11,10 @@ export const GroupList: React.FC = () => {
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
 
-  const filteredGroups = groups.filter((g) =>
-    g.name.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredGroups = (groups || []).filter((g) => {
+    const name = g?.name || g?.title || '';
+    return name.toLowerCase().includes((search || '').toLowerCase());
+  });
 
   const handleSelectGroup = async (groupId: string) => {
     selectGroup(groupId);
@@ -73,7 +74,9 @@ export const GroupList: React.FC = () => {
         ) : (
           <div className="space-y-3">
             {filteredGroups.map((group) => {
-              const memberAgents = agents.filter((a) => group.memberIds.includes(a.id));
+              const memberIds = group.memberIds || [];
+              const memberAgents = agents.filter((a) => memberIds.includes(a.id));
+              const displayName = group.name || group.title || 'Untitled Group';
 
               return (
                 <div
@@ -97,9 +100,9 @@ export const GroupList: React.FC = () => {
 
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-sm text-foreground truncate">{group.name}</h3>
+                        <h3 className="font-semibold text-sm text-foreground truncate">{displayName}</h3>
                         <span className="text-[11px] text-muted-foreground bg-muted/40 px-2 py-0.2 rounded-full">
-                          {group.memberIds.length} agents
+                          {memberIds.length} agents
                         </span>
                       </div>
                       {group.brief && (
@@ -112,7 +115,7 @@ export const GroupList: React.FC = () => {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (confirm(`Delete group "${group.name}"?`)) {
+                        if (confirm(`Delete group "${displayName}"?`)) {
                           deleteGroup(group.id);
                         }
                       }}

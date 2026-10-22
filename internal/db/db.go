@@ -69,9 +69,11 @@ func runMigrations(db *sql.DB) {
 	addColumnIfNotExists(db, "session_messages", "recipient_agent_id", "TEXT DEFAULT ''")
 	addColumnIfNotExists(db, "session_messages", "reactions", "TEXT DEFAULT '[]'")
 
-	// Add department and role columns to agents if missing
+	// Add department, role, engine, and acp_agent columns to agents if missing
 	addColumnIfNotExists(db, "agents", "role", "TEXT DEFAULT ''")
 	addColumnIfNotExists(db, "agents", "department", "TEXT DEFAULT ''")
+	addColumnIfNotExists(db, "agents", "engine", "TEXT DEFAULT 'rakit'")
+	addColumnIfNotExists(db, "agents", "acp_agent", "TEXT DEFAULT ''")
 }
 
 func addColumnIfNotExists(db *sql.DB, tableName, colName, colDef string) {

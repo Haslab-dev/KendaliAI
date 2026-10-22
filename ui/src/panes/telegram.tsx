@@ -681,13 +681,13 @@ export const TelegramPane: React.FC = () => {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                  {bots.map((bot) => {
+                  {bots.map((bot, i) => {
                     const isRunning = bot.status === 'running';
                     const isError = bot.status === 'error';
 
                     return (
                       <div
-                        key={bot.id}
+                        key={bot.id || `bot-${i}`}
                         className={`p-3.5 bg-[#F9FAFB] dark:bg-card border rounded-[8px] flex flex-col justify-between gap-3 transition-colors shadow-2xs ${
                           isError
                             ? 'border-red-300 dark:border-red-900/60'
@@ -850,8 +850,8 @@ export const TelegramPane: React.FC = () => {
                     Waiting for incoming Telegram webhook or agent execution events...
                   </div>
                 ) : (
-                  realTelegramLogs.map((ev) => (
-                    <div key={ev.id} className="w-full flex items-center gap-2 text-[10px] font-mono">
+                  realTelegramLogs.map((ev, i) => (
+                    <div key={ev.id || `tg-ev-${i}`} className="w-full flex items-center gap-2 text-[10px] font-mono">
                       <div className="w-[5px] h-[5px] rounded-full bg-primary shrink-0" />
                       <span className="text-muted-foreground flex-1 truncate">
                         {ev.type} {ev.agentId ? `[${ev.agentId}]` : ''} · {typeof ev.timestamp === 'number' ? new Date(ev.timestamp * 1000).toLocaleTimeString() : ev.timestamp}
@@ -884,8 +884,8 @@ export const TelegramPane: React.FC = () => {
                   onChange={(e) => setSelectedSessionId(e.target.value)}
                   className="bg-[#242426] text-white text-[10px] px-2 py-1 rounded border border-white/10 outline-none"
                 >
-                  {telegramSessions.map((s) => (
-                    <option key={s.id} value={s.id}>
+                  {telegramSessions.map((s, i) => (
+                    <option key={s.id || `sess-${i}`} value={s.id}>
                       {s.title || s.id}
                     </option>
                   ))}
@@ -915,11 +915,11 @@ export const TelegramPane: React.FC = () => {
                   <span>Session ready. Send a message on Telegram to chat with {activeTgSession.agentId}.</span>
                 </div>
               ) : (
-                tgMessages.map((m) => {
+                tgMessages.map((m, i) => {
                   const isUser = m.role === 'user';
                   return (
                     <div
-                      key={m.id}
+                      key={m.id || `tg-msg-${i}`}
                       className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} gap-1 max-w-[85%] ${
                         isUser ? 'self-end' : 'self-start'
                       }`}
@@ -1106,9 +1106,9 @@ export const TelegramPane: React.FC = () => {
               </div>
             ) : (
               <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                {pendingRequests.map((req) => (
+                {pendingRequests.map((req, i) => (
                   <div
-                    key={req.userId}
+                    key={req.userId || `req-${i}`}
                     className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                   >
                     <div className="flex items-start gap-3 min-w-0">
@@ -1210,8 +1210,8 @@ export const TelegramPane: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                    {filteredUsers.map((u) => (
-                      <tr key={u.userId} className="hover:bg-black/2 dark:hover:bg-white/2 transition-colors">
+                    {filteredUsers.map((u, i) => (
+                      <tr key={u.userId || `usr-${i}`} className="hover:bg-black/2 dark:hover:bg-white/2 transition-colors">
                         <td className="py-3 pr-2">
                           <div className="flex items-center gap-2">
                             <div className="w-7 h-7 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-success font-bold flex items-center justify-center text-[10px]">
@@ -1372,8 +1372,8 @@ export const TelegramPane: React.FC = () => {
                     onChange={(e) => setFormAgentId(e.target.value)}
                     className="w-full mt-1 px-3 py-2 bg-accent/60 dark:bg-background border border-border rounded-[6px] text-xs text-foreground outline-none focus:border-primary/60"
                   >
-                    {agents.map((a) => (
-                      <option key={a.id} value={a.id}>
+                    {agents.map((a, i) => (
+                      <option key={a.id || `agent-${i}`} value={a.id}>
                         {a.name} ({a.role})
                       </option>
                     ))}
@@ -1390,8 +1390,8 @@ export const TelegramPane: React.FC = () => {
                     className="w-full mt-1 px-3 py-2 bg-accent/60 dark:bg-background border border-border rounded-[6px] text-xs text-foreground outline-none focus:border-primary/60"
                   >
                     <option value="">Default Model ({defaultModel || 'System Default'})</option>
-                    {availableModels.map((m) => (
-                      <option key={m.id} value={m.id}>
+                    {availableModels.map((m, i) => (
+                      <option key={m.id || `m-${i}`} value={m.id}>
                         {m.name}
                       </option>
                     ))}

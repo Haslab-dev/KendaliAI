@@ -135,6 +135,7 @@ export interface Session {
 export interface AgentGroup {
   id: string;
   name: string;
+  title?: string;
   brief: string;
   avatar?: string;
   memberIds: string[];

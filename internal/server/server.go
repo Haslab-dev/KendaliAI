@@ -966,8 +966,30 @@ func (s *Server) handleAgents() http.HandlerFunc {
 			if a.ID == "" {
 				a.ID = strings.ToLower(strings.ReplaceAll(a.Name, " ", "-"))
 			}
+			if existing, _ := s.store.GetAgent(a.ID); existing != nil {
+				if a.Name == "" { a.Name = existing.Name }
+				if a.Role == "" { a.Role = existing.Role }
+				if a.Department == "" { a.Department = existing.Department }
+				if a.Description == "" { a.Description = existing.Description }
+				if a.ProviderID == "" { a.ProviderID = existing.ProviderID }
+				if a.Model == "" { a.Model = existing.Model }
+				if a.SystemPrompt == "" { a.SystemPrompt = existing.SystemPrompt }
+				if len(a.Skills) == 0 { a.Skills = existing.Skills }
+				if len(a.Tools) == 0 { a.Tools = existing.Tools }
+				if len(a.MCP) == 0 { a.MCP = existing.MCP }
+				if a.Avatar == "" { a.Avatar = existing.Avatar }
+				if a.Engine == "" && existing.Engine != "" { a.Engine = existing.Engine }
+				if a.Engine == "rakit" {
+					a.ACPAgent = ""
+				} else if a.ACPAgent == "" && existing.ACPAgent != "" {
+					a.ACPAgent = existing.ACPAgent
+				}
+			}
 			if a.Avatar == "" {
 				a.Avatar = "🤖"
+			}
+			if a.Engine == "" {
+				a.Engine = "rakit"
 			}
 			if err := s.store.SaveAgent(a); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -1169,7 +1191,21 @@ func (s *Server) handleSessionDetail() http.HandlerFunc {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 				defer cancel()
 
-				// If ACP session exists, prompt via ACP
+				// If agent is configured with an external ACP engine, dispatch to ACP
+				agent, _ := s.store.GetAgent(aid)
+				if agent != nil && (agent.Engine == "acp" || agent.ACPAgent != "") && s.acp != nil {
+					acpAgentID := agent.ACPAgent
+					if acpAgentID == "" {
+						acpAgentID = "claude-code"
+					}
+					cwd, _ := os.Getwd()
+					_ = s.acp.EnsureSession(sid, acpAgentID, cwd, mdl)
+					if err := s.acp.Prompt(sid, txt); err == nil {
+						return
+					}
+				}
+
+				// If ACP session exists by ID, prompt via ACP
 				if s.acp != nil {
 					for _, as := range s.acp.ListSessions() {
 						if as.ID == sid {

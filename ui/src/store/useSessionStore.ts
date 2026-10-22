@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { Session, SessionMessage, ToolCallRecord } from '../types';
+import { useProfileStore } from './useProfileStore';
 
 export interface SessionStoreState {
   sessions: Session[];
@@ -118,6 +119,13 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
 
     const session = get().sessions.find((s) => s.id === sessionId) || null;
     set({ activeSessionId: sessionId, activeSession: session, isLoadingMessages: true });
+
+    if (session?.agentId && session.type !== 'group') {
+      const { selectedAgentId, selectAgent } = useProfileStore.getState();
+      if (selectedAgentId !== session.agentId) {
+        selectAgent(session.agentId);
+      }
+    }
 
     try {
       const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/messages`);

@@ -89,6 +89,8 @@ type AgentConfig struct {
 	Policy             map[string]string `json:"policy"`
 	Avatar             string            `json:"avatar"`
 	IsDefault          bool              `json:"isDefault"`
+	Engine             string            `json:"engine,omitempty"`
+	ACPAgent           string            `json:"acpAgent,omitempty"`
 	TelegramConnected  bool              `json:"telegramConnected"`
 	TelegramBot        *TelegramBotConfig `json:"telegramBot,omitempty"`
 	CreatedAt          int64             `json:"createdAt"`
@@ -838,7 +840,7 @@ func (s *Store) populateTelegramForAgents(agents []AgentConfig) []AgentConfig {
 }
 
 func (s *Store) ListAgents() ([]AgentConfig, error) {
-	rows, err := s.db.Query("SELECT id, name, description, provider_id, model, system_prompt, skills, tools, mcp, memory_scopes, policy, avatar, is_default, COALESCE(role, ''), COALESCE(department, ''), created_at, updated_at FROM agents ORDER BY is_default DESC, name ASC")
+	rows, err := s.db.Query("SELECT id, name, description, provider_id, model, system_prompt, skills, tools, mcp, memory_scopes, policy, avatar, is_default, COALESCE(role, ''), COALESCE(department, ''), COALESCE(engine, 'rakit'), COALESCE(acp_agent, ''), created_at, updated_at FROM agents ORDER BY is_default DESC, name ASC")
 	if err != nil {
 		return nil, err
 	}
@@ -849,7 +851,7 @@ func (s *Store) ListAgents() ([]AgentConfig, error) {
 		var a AgentConfig
 		var skillsJSON, toolsJSON, mcpJSON, memoryJSON, policyJSON string
 		var isDef int
-		if err := rows.Scan(&a.ID, &a.Name, &a.Description, &a.ProviderID, &a.Model, &a.SystemPrompt, &skillsJSON, &toolsJSON, &mcpJSON, &memoryJSON, &policyJSON, &a.Avatar, &isDef, &a.Role, &a.Department, &a.CreatedAt, &a.UpdatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.Name, &a.Description, &a.ProviderID, &a.Model, &a.SystemPrompt, &skillsJSON, &toolsJSON, &mcpJSON, &memoryJSON, &policyJSON, &a.Avatar, &isDef, &a.Role, &a.Department, &a.Engine, &a.ACPAgent, &a.CreatedAt, &a.UpdatedAt); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal([]byte(skillsJSON), &a.Skills)
@@ -867,8 +869,8 @@ func (s *Store) GetAgent(id string) (*AgentConfig, error) {
 	var a AgentConfig
 	var skillsJSON, toolsJSON, mcpJSON, memoryJSON, policyJSON string
 	var isDef int
-	err := s.db.QueryRow("SELECT id, name, description, provider_id, model, system_prompt, skills, tools, mcp, memory_scopes, policy, avatar, is_default, COALESCE(role, ''), COALESCE(department, ''), created_at, updated_at FROM agents WHERE id = ?", id).
-		Scan(&a.ID, &a.Name, &a.Description, &a.ProviderID, &a.Model, &a.SystemPrompt, &skillsJSON, &toolsJSON, &mcpJSON, &memoryJSON, &policyJSON, &a.Avatar, &isDef, &a.Role, &a.Department, &a.CreatedAt, &a.UpdatedAt)
+	err := s.db.QueryRow("SELECT id, name, description, provider_id, model, system_prompt, skills, tools, mcp, memory_scopes, policy, avatar, is_default, COALESCE(role, ''), COALESCE(department, ''), COALESCE(engine, 'rakit'), COALESCE(acp_agent, ''), created_at, updated_at FROM agents WHERE id = ?", id).
+		Scan(&a.ID, &a.Name, &a.Description, &a.ProviderID, &a.Model, &a.SystemPrompt, &skillsJSON, &toolsJSON, &mcpJSON, &memoryJSON, &policyJSON, &a.Avatar, &isDef, &a.Role, &a.Department, &a.Engine, &a.ACPAgent, &a.CreatedAt, &a.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -911,10 +913,13 @@ func (s *Store) SaveAgent(a AgentConfig) error {
 		a.CreatedAt = time.Now().Unix()
 	}
 	a.UpdatedAt = time.Now().Unix()
+	if a.Engine == "" {
+		a.Engine = "rakit"
+	}
 
 	_, err := s.db.Exec(`
-		INSERT INTO agents (id, name, description, provider_id, model, system_prompt, skills, tools, mcp, memory_scopes, policy, avatar, is_default, role, department, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO agents (id, name, description, provider_id, model, system_prompt, skills, tools, mcp, memory_scopes, policy, avatar, is_default, role, department, engine, acp_agent, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			name = excluded.name,
 			description = excluded.description,
@@ -930,10 +935,12 @@ func (s *Store) SaveAgent(a AgentConfig) error {
 			is_default = excluded.is_default,
 			role = excluded.role,
 			department = excluded.department,
+			engine = excluded.engine,
+			acp_agent = excluded.acp_agent,
 			updated_at = excluded.updated_at`,
 		a.ID, a.Name, a.Description, a.ProviderID, a.Model, a.SystemPrompt,
 		string(skillsJSON), string(toolsJSON), string(mcpJSON), string(memJSON), string(polJSON),
-		a.Avatar, isDef, a.Role, a.Department, a.CreatedAt, a.UpdatedAt)
+		a.Avatar, isDef, a.Role, a.Department, a.Engine, a.ACPAgent, a.CreatedAt, a.UpdatedAt)
 	return err
 }
 

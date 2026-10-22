@@ -23,11 +23,17 @@ export const AgentRail: React.FC<AgentRailProps> = ({
     setActiveNavTab,
   } = useProfileStore();
 
-  const { selectSession, createSessionForAgent } = useSessionStore();
+  const { selectSession, createSessionForAgent, getAgentSessions } = useSessionStore();
 
   const handleAgentClick = (agentId: string) => {
     selectAgent(agentId);
     setActiveNavTab('chat');
+    const agentSessions = getAgentSessions(agentId);
+    if (agentSessions.length > 0) {
+      selectSession(agentSessions[0].id);
+    } else {
+      selectSession(null);
+    }
   };
 
   const handleNewAgentClick = () => {

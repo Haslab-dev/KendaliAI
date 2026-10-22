@@ -121,6 +121,19 @@ func (m *Manager) Agents() []AgentDescriptor {
 // StartSession spawns the agent process, performs the ACP handshake, and
 // persists a kendali session record so the transcript survives restarts.
 func (m *Manager) StartSession(agentID, cwd, model string, autoApprove bool) (*SessionInfo, error) {
+	return m.startSessionInternal("", agentID, cwd, model, autoApprove)
+}
+
+// EnsureSession ensures an ACP process is running for the given sessionID.
+func (m *Manager) EnsureSession(sessionID, agentID, cwd, model string) error {
+	if live := m.getLive(sessionID); live != nil {
+		return nil
+	}
+	_, err := m.startSessionInternal(sessionID, agentID, cwd, model, false)
+	return err
+}
+
+func (m *Manager) startSessionInternal(customID, agentID, cwd, model string, autoApprove bool) (*SessionInfo, error) {
 	agentDesc, err := m.registry.get(agentID)
 	if err != nil {
 		return nil, err
@@ -138,7 +151,10 @@ func (m *Manager) StartSession(agentID, cwd, model string, autoApprove bool) (*S
 		model = agentDesc.DefaultModel
 	}
 
-	kendaliID := SessionPrefix + uuid.New().String()[:8]
+	kendaliID := customID
+	if kendaliID == "" {
+		kendaliID = SessionPrefix + uuid.New().String()[:8]
+	}
 	protocol := "acp"
 	if strings.Contains(agentDesc.ID, "agy") || strings.Contains(agentDesc.ID, "antigravity") || strings.Contains(agentDesc.Command, "agy") {
 		protocol = "agy-stream"

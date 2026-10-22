@@ -195,6 +195,15 @@ export const useProfileStore = create<ProfileStoreState>((set, get) => ({
   },
 
   updateAgent: async (agentData) => {
+    // Optimistic local update so UI reflects changes immediately
+    set((state) => {
+      const merged = state.agents.map((a) => (a.id === agentData.id ? { ...a, ...agentData } : a));
+      const active = state.selectedAgentId === agentData.id
+        ? ({ ...(state.activeAgent || {}), ...agentData } as AgentConfig)
+        : state.activeAgent;
+      return { agents: merged, activeAgent: active };
+    });
+
     const res = await fetch('/api/agents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -205,8 +214,8 @@ export const useProfileStore = create<ProfileStoreState>((set, get) => ({
     const updated: AgentConfig = await res.json();
 
     set((state) => ({
-      agents: state.agents.map((a) => (a.id === updated.id ? updated : a)),
-      activeAgent: state.selectedAgentId === updated.id ? updated : state.activeAgent,
+      agents: state.agents.map((a) => (a.id === updated.id ? { ...a, ...updated } : a)),
+      activeAgent: state.selectedAgentId === updated.id ? { ...(state.activeAgent || {}), ...updated } as AgentConfig : state.activeAgent,
     }));
   },
 
@@ -253,7 +262,19 @@ export const useProfileStore = create<ProfileStoreState>((set, get) => ({
       const res = await fetch('/api/groups');
       if (res.ok) {
         const data = await res.json();
-        const groups: AgentGroup[] = Array.isArray(data) ? data : (data.groups || []);
+        const rawGroups: any[] = Array.isArray(data) ? data : (data.groups || []);
+        const groups: AgentGroup[] = rawGroups.map((g: any) => ({
+          id: g.id,
+          name: g.name || g.title || 'Untitled Group',
+          title: g.title || g.name || 'Untitled Group',
+          brief: g.brief || g.description || '',
+          avatar: g.avatar || 'users',
+          memberIds: Array.isArray(g.memberIds)
+            ? g.memberIds
+            : (Array.isArray(g.participants) ? g.participants.map((p: any) => p.participantId || p.id) : []),
+          createdAt: g.createdAt || Date.now(),
+          updatedAt: g.updatedAt || Date.now(),
+        }));
         const active = groups.find((g) => g.id === get().selectedGroupId) || groups[0] || null;
         set({
           groups,
