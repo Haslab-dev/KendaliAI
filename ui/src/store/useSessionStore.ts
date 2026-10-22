@@ -40,6 +40,7 @@ export interface SessionStoreState {
   stopSession: (sessionId?: string) => Promise<void>;
 
   // Streaming Reducers (fed by WebSocket in useAgentSocket)
+  appendMessage: (msg: SessionMessage) => void;
   startStreamingMessage: (id: string, agentId?: string, model?: string) => void;
   appendStreamingTextDelta: (delta: string) => void;
   appendStreamingThoughtDelta: (delta: string) => void;
@@ -328,7 +329,51 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     });
   },
 
+  appendMessage: (msg: SessionMessage) => {
+    set((state) => {
+      if (!msg) return {};
+
+      // 1. Exact ID check
+      if (state.messages.some((m) => m.id === msg.id)) {
+        return { messages: state.messages };
+      }
+
+      // 2. User optimistic message reconciliation
+      if (msg.role === 'user') {
+        const optIdx = state.messages.findIndex(
+          (m) =>
+            m.role === 'user' &&
+            m.id.startsWith('msg_u_') &&
+            m.content.trim() === (msg.content || '').trim()
+        );
+        if (optIdx !== -1) {
+          const copy = [...state.messages];
+          copy[optIdx] = msg;
+          return { messages: copy };
+        }
+      }
+
+      // 3. Exact role + content deduplication within 4 seconds
+      const lastMsg = state.messages.length > 0 ? state.messages[state.messages.length - 1] : null;
+      if (
+        lastMsg &&
+        lastMsg.role === msg.role &&
+        lastMsg.content.trim() === (msg.content || '').trim() &&
+        Math.abs((msg.createdAt || Date.now()) - (lastMsg.createdAt || 0)) < 4000
+      ) {
+        return { messages: state.messages };
+      }
+
+      return { messages: [...state.messages, msg] };
+    });
+  },
+
   finalizeStreamingMessage: (msg: any) => {
+    if (msg?.role === 'user') {
+      get().appendMessage(msg);
+      return;
+    }
+
     set((state) => {
       const activeId = state.activeSessionId;
       const id = msg.id || state.streamingMessageId || `asst-${Date.now()}`;

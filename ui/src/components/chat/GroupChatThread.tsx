@@ -29,6 +29,7 @@ export const GroupChatThread: React.FC = () => {
 
   const [input, setInput] = useState('');
   const [showMentionPopup, setShowMentionPopup] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Group members
@@ -65,11 +66,16 @@ export const GroupChatThread: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isStreaming) return;
+    if (!input.trim() || isStreaming || isSending) return;
     const text = input.trim();
     setInput('');
     setShowMentionPopup(false);
-    await sendMessage(text);
+    setIsSending(true);
+    try {
+      await sendMessage(text);
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

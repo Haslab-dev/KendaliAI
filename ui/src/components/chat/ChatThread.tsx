@@ -48,6 +48,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
 
   const [input, setInput] = useState('');
   const [showThinking, setShowThinking] = useState(true);
+  const [isSending, setIsSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom on new messages / stream
@@ -59,10 +60,15 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isStreaming) return;
+    if (!input.trim() || isStreaming || isSending) return;
     const text = input.trim();
     setInput('');
-    await sendMessage(text, { agentId: activeAgent?.id });
+    setIsSending(true);
+    try {
+      await sendMessage(text, { agentId: activeAgent?.id });
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

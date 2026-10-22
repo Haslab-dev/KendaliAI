@@ -147,7 +147,10 @@ function connectGlobalSocket() {
             sessionStore.loadSessions();
             if (isCurrentSession && ev.payload) {
               store.appendMessage(ev.payload);
-              sessionStore.finalizeStreamingMessage(ev.payload);
+              sessionStore.appendMessage(ev.payload);
+              if (ev.payload.role === 'assistant') {
+                sessionStore.finalizeStreamingMessage(ev.payload);
+              }
             }
             break;
 

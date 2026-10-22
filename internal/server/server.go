@@ -1163,29 +1163,8 @@ func (s *Server) handleSessionDetail() http.HandlerFunc {
 				targetAgentID = "personal-assistant"
 			}
 
-			userMsg := gateway.SessionMessage{
-				ID:         "msg_u_" + uuid.New().String()[:8],
-				SessionID:  sessionID,
-				AgentID:    targetAgentID,
-				Channel:    "web",
-				Role:       "user",
-				SenderType: "user",
-				Content:    req.Content,
-				CreatedAt:  time.Now().UnixMilli(),
-			}
-			_ = s.store.SaveMessage(userMsg)
-
-			s.bus.Publish(messaging.Event{
-				ID:        uuid.New().String(),
-				Type:      messaging.EventMessageCreated,
-				SessionID: sessionID,
-				AgentID:   targetAgentID,
-				Channel:   "web",
-				Payload:   userMsg,
-				Timestamp: time.Now(),
-			})
-
-			// Execute turn asynchronously
+			// Execute turn asynchronously. Each executor (acp.Prompt, runEngineTurn, ExecuteTurnWithModel)
+			// handles user message persistence and event publication once.
 			go func(sid, aid, txt, mdl string) {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 				defer cancel()
@@ -1211,7 +1190,7 @@ func (s *Server) handleSessionDetail() http.HandlerFunc {
 			}(sessionID, targetAgentID, req.Content, req.Model)
 
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "message": userMsg})
+			json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
 			return
 		}
 
