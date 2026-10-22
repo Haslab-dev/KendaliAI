@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Cloud,
   Layers,
@@ -68,6 +68,18 @@ export const ConnectionsView: React.FC = () => {
     },
   ]);
 
+  // Load connectors state from backend
+  useEffect(() => {
+    fetch('/api/connectors')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setToolkits(data);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const plugins = [
     {
       id: 'workflows',
@@ -92,17 +104,36 @@ export const ConnectionsView: React.FC = () => {
     },
   ];
 
-  const handleConnect = (slug: string) => {
-    // Open Composio OAuth window or trigger backend link
-    const width = 600;
-    const height = 700;
-    const left = window.screen.width / 2 - width / 2;
-    const top = window.screen.height / 2 - height / 2;
-    
-    // Toggle state for UI preview
+  const handleConnect = async (slug: string) => {
+    const current = toolkits.find((t) => t.slug === slug);
+    const action = current?.connected ? 'disconnect' : 'connect';
+
+    // Optimistic toggle
     setToolkits((prev) =>
       prev.map((t) => (t.slug === slug ? { ...t, connected: !t.connected } : t))
     );
+
+    try {
+      const res = await fetch(`/api/connectors/${encodeURIComponent(slug)}/${action}`, {
+        method: 'POST',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setToolkits((prev) =>
+          prev.map((t) =>
+            t.slug === slug
+              ? {
+                  ...t,
+                  connected: data.connected ?? !current?.connected,
+                  connectedAccountId: data.connectedAccountId || t.connectedAccountId,
+                }
+              : t
+          )
+        );
+      }
+    } catch (err) {
+      console.error('[ConnectionsView] connector action failed:', err);
+    }
   };
 
   const filteredToolkits = toolkits.filter((t) =>

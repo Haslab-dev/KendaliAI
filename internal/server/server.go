@@ -346,6 +346,10 @@ func (s *Server) routes() {
 	s.router.HandleFunc("/api/plugins", s.handlePlugins())
 	s.router.HandleFunc("/api/plugins/", s.handlePluginAction())
 
+	// Connectors (Composio / 3rd-party integrations)
+	s.router.HandleFunc("/api/connectors", s.handleConnectors())
+	s.router.HandleFunc("/api/connectors/", s.handleConnectorAction())
+
 	// Routines & Schedules (renamed from Scheduler)
 	s.router.HandleFunc("/api/routines", s.handleSchedules())
 	s.router.HandleFunc("/api/routines/", s.handleScheduleAction())
