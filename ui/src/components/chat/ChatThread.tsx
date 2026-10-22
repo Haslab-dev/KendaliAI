@@ -18,6 +18,8 @@ import {
   FileCode,
   SlidersHorizontal,
 } from 'lucide-react';
+import { AgentIcon } from '../shell/AgentIcon';
+import { ProviderIcon } from '../agent/ProviderIcon';
 
 interface ChatThreadProps {
   onToggleDrawer?: () => void;
@@ -78,9 +80,13 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
       {/* Top Header Bar */}
       <div className="h-14 px-4 border-b border-border/30 flex items-center justify-between shrink-0 bg-[#101014]/60 backdrop-blur-md z-10">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-sm font-semibold shrink-0">
-            {activeAgent?.avatar?.slice(0, 2) || '🤖'}
-          </div>
+          <AgentIcon
+            id={activeAgent?.id || ''}
+            name={activeAgent?.name}
+            avatar={activeAgent?.avatar}
+            isACP={activeAgent?.engine === 'acp'}
+            size={24}
+          />
           <div className="min-w-0">
             <h2 className="text-sm font-semibold text-foreground truncate">
               {activeSession?.title || 'Chat'}
@@ -88,7 +94,12 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
             <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
               <span>{activeAgent?.name || 'Agent'}</span>
               <span>•</span>
-              <span className="font-mono text-[10px] bg-muted/60 px-1.5 py-0.2 rounded">
+              <span className="font-mono text-[10px] bg-muted/60 px-1.5 py-0.5 rounded flex items-center gap-1">
+                <ProviderIcon provider={activeAgent?.acpAgent || activeAgent?.engine || 'rakit'} size={11} />
+                <span>{activeAgent?.acpAgent ? activeAgent.acpAgent.toUpperCase() : (activeAgent?.engine === 'acp' ? 'ACP' : 'RakitKode')}</span>
+              </span>
+              <span>•</span>
+              <span className="font-mono text-[10px] text-muted-foreground truncate max-w-[120px]">
                 {activeModel}
               </span>
             </div>

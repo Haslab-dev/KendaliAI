@@ -103,6 +103,12 @@ func resolveExecutablePath(cmdName string) (string, error) {
 		altName = "codex"
 	case "codex":
 		altName = "codex-acp"
+	case "omp":
+		altName = "ohmypi"
+	case "ohmypi":
+		altName = "omp"
+	case "pi":
+		altName = "pi-agent"
 	}
 
 	if altName != "" {
@@ -278,6 +284,35 @@ func defaultAgents() []AgentDescriptor {
 				"opencode/claude-sonnet-5-5",
 				"opencode/deepseek-v4.1-flash",
 				"opencode/gpt-6-astra",
+			},
+		},
+		{
+			ID:           "omp",
+			Name:         "Oh My Pi (OMP)",
+			Description:  "Oh My Pi autonomous coding agent CLI via ACP",
+			Command:      "omp",
+			Args:         []string{},
+			DefaultModel: "claude-sonnet-4-5",
+			SupportedModels: []string{
+				"claude-sonnet-4-5",
+				"claude-opus-4-6-thinking",
+				"gpt-5.6-luna",
+				"deepseek-v4-flash",
+				"gemini-2.5-pro",
+			},
+		},
+		{
+			ID:           "pi",
+			Name:         "Pi Coding Agent",
+			Description:  "Pi AI coding assistant via RPC/JSON protocol",
+			Command:      "pi",
+			Args:         []string{"--mode", "rpc"},
+			DefaultModel: "google/gemini-2.5-flash",
+			SupportedModels: []string{
+				"google/gemini-2.5-flash",
+				"google/gemini-2.5-pro",
+				"deepseek-v4-1-flash",
+				"claude-sonnet-5-5",
 			},
 		},
 	}

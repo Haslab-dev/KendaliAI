@@ -11,6 +11,7 @@ import {
   Bot,
   Sparkles,
 } from 'lucide-react';
+import { AgentIcon } from '../shell/AgentIcon';
 
 export const ChatHome: React.FC = () => {
   const { agents, activeAgent, selectAgent, setActiveNavTab } = useProfileStore();
@@ -67,8 +68,13 @@ export const ChatHome: React.FC = () => {
                 onClick={() => setAgentDropdownOpen(!agentDropdownOpen)}
                 className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-muted/60 hover:bg-muted border border-border text-foreground font-medium text-xs transition-colors shadow-xs"
               >
-                <span className="text-sm">{activeAgent?.avatar?.slice(0, 2) || '🤖'}</span>
-                <span>{activeAgent?.name || 'Default Bot'}</span>
+                <AgentIcon
+                  id={activeAgent?.id || ''}
+                  name={activeAgent?.name}
+                  avatar={activeAgent?.avatar}
+                  size={16}
+                />
+                <span>{activeAgent?.name || 'Personal Assistant'}</span>
                 <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
               </button>
             </div>
@@ -87,7 +93,12 @@ export const ChatHome: React.FC = () => {
                       activeAgent?.id === agent.id ? 'bg-muted/80 font-semibold text-primary' : 'text-foreground'
                     }`}
                   >
-                    <span className="text-base">{agent.avatar?.slice(0, 2) || '🤖'}</span>
+                    <AgentIcon
+                      id={agent.id}
+                      name={agent.name}
+                      avatar={agent.avatar}
+                      size={18}
+                    />
                     <div className="min-w-0 flex-1">
                       <p className="truncate">{agent.name}</p>
                       {agent.role && <p className="text-[10px] text-muted-foreground">{agent.role}</p>}

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useProfileStore } from '../../store/useProfileStore';
 import { useAppStore } from '../../store/useAppStore';
+import { useAgentStore } from '../../store/useAgentStore';
 import {
   Edit3,
   Copy,
@@ -17,10 +18,12 @@ import {
 } from 'lucide-react';
 import { AgentConfig } from '../../types';
 import { AgentIcon } from '../shell/AgentIcon';
+import { ProviderIcon } from './ProviderIcon';
 
 export const AgentProfileDetail: React.FC = () => {
   const { activeAgent, updateAgent, duplicateAgent, deleteAgent, setActiveNavTab } = useProfileStore();
   const { availableModels, defaultModel } = useAppStore();
+  const acpAgents = useAgentStore((s) => s.acpAgents);
 
   const [activeTab, setActiveTab] = useState<'prompt' | 'behavior' | 'tools' | 'mcp' | 'skills'>('prompt');
   
@@ -98,43 +101,71 @@ export const AgentProfileDetail: React.FC = () => {
           </div>
 
           {/* Engine, Model & Reasoning Selectors */}
-          <div className="flex flex-wrap items-center justify-center gap-2 pt-1 text-xs">
-            {/* Engine Selector */}
-            <select
-              value={activeAgent.engine || 'rakit'}
-              onChange={(e) => updateAgent({ id: activeAgent.id, engine: e.target.value as any })}
-              className="bg-muted/60 border border-border rounded-xl px-2.5 py-1 text-foreground focus:outline-none cursor-pointer"
-            >
-              <option value="rakit">RakitKode (Native)</option>
-              <option value="acp">Claude Code (ACP)</option>
-              <option value="codex">Codex (ACP)</option>
-            </select>
+          {(() => {
+            const currentEngineValue = activeAgent.acpAgent || (activeAgent.engine === 'acp' ? 'claude-code' : 'rakit');
+            const handleEngineChange = (val: string) => {
+              if (val === 'rakit') {
+                updateAgent({ id: activeAgent.id, engine: 'rakit', acpAgent: undefined });
+              } else {
+                updateAgent({ id: activeAgent.id, engine: 'acp', acpAgent: val });
+              }
+            };
+            const selectedAcpDesc = acpAgents.find((a) => a.id === currentEngineValue);
+            const engineModels = selectedAcpDesc && selectedAcpDesc.supportedModels && selectedAcpDesc.supportedModels.length > 0
+              ? selectedAcpDesc.supportedModels.map((sm) => ({ id: sm, name: sm }))
+              : availableModels;
 
-            <span>•</span>
+            return (
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-1 text-xs">
+                {/* Engine Selector */}
+                <div className="flex items-center gap-1.5 bg-muted/60 border border-border rounded-xl px-2.5 py-1 text-foreground shadow-xs">
+                  <ProviderIcon provider={currentEngineValue} size={13} className="shrink-0" />
+                  <select
+                    value={currentEngineValue}
+                    onChange={(e) => handleEngineChange(e.target.value)}
+                    className="bg-transparent text-foreground focus:outline-none cursor-pointer text-xs"
+                  >
+                    <option value="rakit">⚡ RakitKode (Native)</option>
+                    <optgroup label="External ACP Agents (CLI)">
+                      <option value="agy">✨ Google Antigravity (AGY)</option>
+                      <option value="commandcode">💻 Command Code (CMD)</option>
+                      <option value="opencode">🌐 OpenCode (ACP)</option>
+                      <option value="omp">⚡ Oh My Pi (OMP)</option>
+                      <option value="pi">🥧 Pi Coding Agent</option>
+                      <option value="claude-code">🧠 Claude Code (ACP)</option>
+                      <option value="codex">🛠️ OpenAI Codex (ACP)</option>
+                      <option value="gemini">♊ Google Gemini CLI</option>
+                    </optgroup>
+                  </select>
+                </div>
 
-            {/* Model Selector */}
-            <select
-              value={activeAgent.model || defaultModel || ''}
-              onChange={(e) => updateAgent({ id: activeAgent.id, model: e.target.value })}
-              className="bg-muted/60 border border-border rounded-xl px-2.5 py-1 text-foreground focus:outline-none cursor-pointer max-w-[180px] truncate"
-            >
-              {availableModels.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name || m.id}
-                </option>
-              ))}
-              {!availableModels.some((m) => m.id === activeAgent.model) && activeAgent.model && (
-                <option value={activeAgent.model}>{activeAgent.model}</option>
-              )}
-            </select>
+                <span>•</span>
 
-            {/* Super Agent Badge */}
-            {activeAgent.isSuper && (
-              <span className="px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-500 text-[10px] font-bold uppercase tracking-wider">
-                super
-              </span>
-            )}
-          </div>
+                {/* Model Selector */}
+                <select
+                  value={activeAgent.model || defaultModel || ''}
+                  onChange={(e) => updateAgent({ id: activeAgent.id, model: e.target.value })}
+                  className="bg-muted/60 border border-border rounded-xl px-2.5 py-1 text-foreground focus:outline-none cursor-pointer max-w-[180px] truncate"
+                >
+                  {engineModels.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name || m.id}
+                    </option>
+                  ))}
+                  {!engineModels.some((m) => m.id === activeAgent.model) && activeAgent.model && (
+                    <option value={activeAgent.model}>{activeAgent.model}</option>
+                  )}
+                </select>
+
+                {/* Super Agent Badge */}
+                {activeAgent.isSuper && (
+                  <span className="px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-500 text-[10px] font-bold uppercase tracking-wider">
+                    super
+                  </span>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Navigation Tabs */}
