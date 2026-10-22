@@ -15,7 +15,6 @@ import { GroupList } from './components/groups/GroupList';
 import { GroupChatThread } from './components/chat/GroupChatThread';
 import { ConnectionsView } from './components/connections/ConnectionsView';
 import { AutomationsView } from './components/automations/AutomationsView';
-import { ControlCenter } from './components/settings/ControlCenter';
 import { SettingsScreen } from './components/settings/SettingsScreen';
 import { LoginScreen } from './components/LoginScreen';
 import { TerminalDock } from './components/forge/TerminalDock';
@@ -145,7 +144,7 @@ export const App: React.FC = () => {
         return <AutomationsView />;
 
       case 'settings':
-        return <ControlCenter />;
+        return <SettingsScreen section={settingsSection} />;
 
       case 'chat':
       default:

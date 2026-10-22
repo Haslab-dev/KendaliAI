@@ -328,12 +328,28 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     });
   },
 
-  finalizeStreamingMessage: (msg: SessionMessage) => {
+  finalizeStreamingMessage: (msg: any) => {
     set((state) => {
-      const existingIdx = state.messages.findIndex((m) => m.id === msg.id);
+      const activeId = state.activeSessionId;
+      const id = msg.id || state.streamingMessageId || `asst-${Date.now()}`;
+      const content = msg.content !== undefined ? msg.content : state.streamingContent;
+      const thought = msg.thought !== undefined ? msg.thought : state.streamingThought;
+      const finalMsg: SessionMessage = {
+        id,
+        sessionId: msg.sessionId || activeId || '',
+        agentId: msg.agentId,
+        channel: msg.channel || 'web',
+        role: (msg.role || 'assistant') as any,
+        content,
+        thought,
+        toolCalls: state.streamingToolCalls.length > 0 ? state.streamingToolCalls : msg.toolCalls,
+        createdAt: msg.createdAt || Date.now(),
+      };
+
+      const existingIdx = state.messages.findIndex((m) => m.id === finalMsg.id);
       const updatedMessages = existingIdx >= 0
-        ? state.messages.map((m, i) => (i === existingIdx ? msg : m))
-        : [...state.messages, msg];
+        ? state.messages.map((m, i) => (i === existingIdx ? finalMsg : m))
+        : [...state.messages, finalMsg];
 
       return {
         messages: updatedMessages,

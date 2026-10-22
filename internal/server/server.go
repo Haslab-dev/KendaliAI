@@ -1126,6 +1126,95 @@ func (s *Server) handleSessionDetail() http.HandlerFunc {
 			return
 		}
 
+		// GET /api/sessions/{sid}/messages — get all messages for a session
+		if len(parts) == 2 && parts[1] == "messages" && r.Method == "GET" {
+			msgs, err := s.store.GetSessionMessages(sessionID)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			if msgs == nil {
+				msgs = []gateway.SessionMessage{}
+			}
+			json.NewEncoder(w).Encode(msgs)
+			return
+		}
+
+		// POST /api/sessions/{sid}/messages — user sends a message, executes turn
+		if len(parts) == 2 && parts[1] == "messages" && r.Method == "POST" {
+			var req struct {
+				Content string   `json:"content"`
+				AgentID string   `json:"agentId"`
+				Model   string   `json:"model"`
+				Images  []string `json:"images,omitempty"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Content) == "" {
+				http.Error(w, "content is required", http.StatusBadRequest)
+				return
+			}
+
+			// Ensure session exists
+			sess, _ := s.store.GetSession(sessionID)
+			targetAgentID := req.AgentID
+			if targetAgentID == "" && sess != nil {
+				targetAgentID = sess.AgentID
+			}
+			if targetAgentID == "" {
+				targetAgentID = "personal-assistant"
+			}
+
+			userMsg := gateway.SessionMessage{
+				ID:         "msg_u_" + uuid.New().String()[:8],
+				SessionID:  sessionID,
+				AgentID:    targetAgentID,
+				Channel:    "web",
+				Role:       "user",
+				SenderType: "user",
+				Content:    req.Content,
+				CreatedAt:  time.Now().UnixMilli(),
+			}
+			_ = s.store.SaveMessage(userMsg)
+
+			s.bus.Publish(messaging.Event{
+				ID:        uuid.New().String(),
+				Type:      messaging.EventMessageCreated,
+				SessionID: sessionID,
+				AgentID:   targetAgentID,
+				Channel:   "web",
+				Payload:   userMsg,
+				Timestamp: time.Now(),
+			})
+
+			// Execute turn asynchronously
+			go func(sid, aid, txt, mdl string) {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+				defer cancel()
+
+				// If ACP session exists, prompt via ACP
+				if s.acp != nil {
+					for _, as := range s.acp.ListSessions() {
+						if as.ID == sid {
+							_ = s.acp.Prompt(sid, txt)
+							return
+						}
+					}
+				}
+
+				if s.engine != nil {
+					s.runEngineTurn(sid, aid, txt, "web", mdl)
+					return
+				}
+				_, err := s.runtime.ExecuteTurnWithModel(ctx, sid, aid, txt, "web", mdl)
+				if err != nil {
+					log.Printf("Session %s turn error: %v", sid, err)
+				}
+			}(sessionID, targetAgentID, req.Content, req.Model)
+
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "message": userMsg})
+			return
+		}
+
 		// POST /api/sessions/{sid}/messages/delete  {"ids": [...]} — delete one
 		// or several messages (WhatsApp-style selection), broadcasting the
 		// removal so every open client drops them live.

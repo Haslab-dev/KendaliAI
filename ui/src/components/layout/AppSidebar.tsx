@@ -7,7 +7,7 @@ import {
   Users,
   Cloud,
   Clock,
-  Sliders,
+  Settings,
   Search,
   ChevronLeft,
   ChevronRight,
@@ -190,8 +190,8 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                 : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
             }`}
           >
-            <Sliders className="w-3.5 h-3.5 shrink-0" />
-            <span>Control center</span>
+            <Settings className="w-3.5 h-3.5 shrink-0" />
+            <span>Settings</span>
           </button>
         </div>
       </div>
