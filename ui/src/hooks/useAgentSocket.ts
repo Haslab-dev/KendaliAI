@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { useAgentStore } from '../store/useAgentStore';
+import { useSessionStore } from '../store/useSessionStore';
 import { parseSessionMetadata } from '../types';
 
 // Notify the agent workspace that a task turn began (for "Worked for Ns").
@@ -44,10 +45,11 @@ function scheduleFlush() {
 function flushDeltas() {
   if (!textBuf && !thinkBuf) return;
   const store = useAppStore.getState();
+  const sessionStore = useSessionStore.getState();
 
   // User switched session while deltas were in flight: drop them instead of
   // leaking the tail of one conversation into another.
-  if (bufSessionId && store.activeSessionId && bufSessionId !== store.activeSessionId) {
+  if (bufSessionId && store.activeSessionId && bufSessionId !== store.activeSessionId && sessionStore.activeSessionId && bufSessionId !== sessionStore.activeSessionId) {
     textBuf = '';
     thinkBuf = '';
     return;
@@ -55,6 +57,7 @@ function flushDeltas() {
 
   if (thinkBuf) {
     store.appendThinkingDelta(thinkBuf);
+    sessionStore.appendStreamingThoughtDelta(thinkBuf);
     store.appendLogEvent({
       id: `delta-flush-${++flushSeq}`,
       type: 'agent.thinking.delta',
@@ -65,6 +68,7 @@ function flushDeltas() {
   }
   if (textBuf) {
     store.appendTextDelta(textBuf);
+    sessionStore.appendStreamingTextDelta(textBuf);
     store.appendLogEvent({
       id: `delta-flush-${++flushSeq}`,
       type: 'agent.text.delta',
@@ -101,6 +105,7 @@ function connectGlobalSocket() {
 
         const store = useAppStore.getState();
         const agentStore = useAgentStore.getState();
+        const sessionStore = useSessionStore.getState();
         const isDelta = ev.type === 'agent.text.delta' || ev.type === 'agent.thinking.delta';
 
         // 1. Record in global streaming logs — except raw deltas, which are
@@ -127,19 +132,22 @@ function connectGlobalSocket() {
         }
 
         // 3. Handle active session chat updates if matching active session
-        const currentSid = store.activeSessionId;
+        const currentSid = sessionStore.activeSessionId || store.activeSessionId;
         const isCurrentSession = !currentSid || ev.sessionId === currentSid;
 
         switch (ev.type) {
           case 'session.created':
           case 'session.updated':
             store.loadSessions();
+            sessionStore.loadSessions();
             break;
 
           case 'message.created':
             store.loadSessions();
+            sessionStore.loadSessions();
             if (isCurrentSession && ev.payload) {
               store.appendMessage(ev.payload);
+              sessionStore.finalizeStreamingMessage(ev.payload);
             }
             break;
 
@@ -195,6 +203,11 @@ function connectGlobalSocket() {
                 startedAgentName,
                 startedAvatar
               );
+              sessionStore.startStreamingMessage(
+                'asst-stream-' + Date.now(),
+                startedAgentId,
+                startedModel
+              );
               beginTurnIfAgentTask(ev.sessionId);
             }
             break;
@@ -235,13 +248,15 @@ function connectGlobalSocket() {
             if (isCurrentSession && ev.payload) {
               store.setIsGenerating(true);
               store.setThinkingStatus(`Running ${ev.payload.tool}...`);
-              store.appendStreamingToolCall({
+              const tc = {
                 id: ev.payload.id || 'tc-' + Date.now(),
                 tool: ev.payload.tool,
                 arguments: ev.payload.arguments,
-                status: 'running',
+                status: 'running' as const,
                 output: 'Executing capability in workspace...',
-              });
+              };
+              store.appendStreamingToolCall(tc);
+              sessionStore.upsertStreamingToolCall(tc);
             }
             beginTurnIfAgentTask(ev.sessionId);
             break;
@@ -249,14 +264,16 @@ function connectGlobalSocket() {
           case 'agent.tool_result':
             if (isCurrentSession && ev.payload) {
               store.setThinkingStatus(`Finished ${ev.payload.tool}`);
-              store.updateStreamingToolResult({
+              const tcRes = {
                 id: ev.payload.id,
                 tool: ev.payload.tool,
                 arguments: {},
                 output: ev.payload.output,
-                status: ev.payload.status || 'success',
+                status: (ev.payload.status || 'success') as any,
                 durationMs: ev.payload.durationMs,
-              });
+              };
+              store.updateStreamingToolResult(tcRes);
+              sessionStore.upsertStreamingToolCall(tcRes);
             }
             break;
 
@@ -270,9 +287,11 @@ function connectGlobalSocket() {
               store.setTypingAgent(null);
               if (ev.payload) {
                 store.finalizeStreamingMessage(ev.payload);
+                sessionStore.finalizeStreamingMessage(ev.payload);
               }
             }
             store.loadSessions();
+            sessionStore.loadSessions();
             break;
 
           case 'agent.failed':
@@ -284,14 +303,16 @@ function connectGlobalSocket() {
               store.setTypingAgent(null);
               const errContent = `❌ Error: ${ev.payload || 'An unexpected execution error occurred.'}`;
               const errId = ev.id ? `err-${ev.id}` : `err-${ev.sessionId || currentSid || 'cur'}-${Date.now()}`;
-              store.appendMessage({
+              const failMsg = {
                 id: errId,
                 sessionId: ev.sessionId || currentSid || '',
-                channel: ev.channel || 'web',
-                role: 'assistant',
+                channel: (ev.channel || 'web') as any,
+                role: 'assistant' as const,
                 content: errContent,
                 createdAt: Date.now(),
-              });
+              };
+              store.appendMessage(failMsg);
+              sessionStore.finalizeStreamingMessage(failMsg);
             }
             break;
         }

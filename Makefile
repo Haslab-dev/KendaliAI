@@ -25,7 +25,7 @@ build: build-ui build-go
 
 build-go:
 	@mkdir -p $(BUILD_DIR)
-	go build -o $(BUILD_DIR)/$(BINARY) $(CMD)
+	GOWORK=off go build -o $(BUILD_DIR)/$(BINARY) $(CMD)
 
 build-ui: ui-deps
 	@echo "📦 Building React Vite UI with $(PM)..."

@@ -246,7 +246,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
                           : 'bg-muted hover:bg-muted/80 text-foreground'
                       }`}
                     >
-                      {opt.label || opt.name}
+                      {opt.name}
                     </button>
                   ))}
                 </div>
