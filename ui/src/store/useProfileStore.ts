@@ -4,6 +4,77 @@ import { AgentConfig, AgentGroup } from '../types';
 const SELECTED_AGENT_KEY = 'kendali:selected-agent-id';
 const SELECTED_GROUP_KEY = 'kendali:selected-group-id';
 
+export const DEFAULT_FALLBACK_AGENTS: AgentConfig[] = [
+  {
+    id: 'personal-assistant',
+    name: 'Personal Assistant',
+    role: 'Executive Coordinator',
+    avatar: 'purple-pebble',
+    description: 'Proactive daily coordinator, task manager, scheduling, and personal executive assistance.',
+    model: 'deepseek-v4-flash',
+    providerId: '',
+    isDefault: true,
+    engine: 'rakit',
+    skills: ['planning', 'task-management'],
+    tools: ['*'],
+    mcp: [],
+    memoryScopes: ['user', 'workspace'],
+    policy: {},
+    systemPrompt: 'You are Personal Assistant, a proactive executive coordinator. You organize schedules, manage tasks, coordinate with other specialized agents, and keep workflows structured and on track.',
+  },
+  {
+    id: 'coding-agent',
+    name: 'Coding Agent',
+    role: 'Senior Software Engineer',
+    avatar: 'blue-drop',
+    description: 'Senior software engineer for architectural planning, code authoring, debugging, refactoring, and test writing.',
+    model: 'deepseek-v4-flash',
+    providerId: '',
+    isDefault: false,
+    engine: 'rakit',
+    skills: ['coding', 'debugging'],
+    tools: ['bash', 'file.read', 'file.write'],
+    mcp: [],
+    memoryScopes: ['user', 'workspace'],
+    policy: {},
+    systemPrompt: 'You are Coding Agent, a world-class senior software engineer and architect. You write clean, idiomatic, robust code, inspect systems thoroughly, diagnose bugs, and execute commands safely.',
+  },
+  {
+    id: 'research-agent',
+    name: 'Research Agent',
+    role: 'Research & Synthesis',
+    avatar: 'emerald-spark',
+    description: 'In-depth research, web investigation, source synthesis, literature review, and factual verification.',
+    model: 'deepseek-v4-flash',
+    providerId: '',
+    isDefault: false,
+    engine: 'rakit',
+    skills: ['research', 'synthesis'],
+    tools: ['search', 'web.fetch'],
+    mcp: [],
+    memoryScopes: ['user', 'workspace'],
+    policy: {},
+    systemPrompt: 'You are Research Agent, an expert investigator and analyst. You gather facts, evaluate sources, synthesize complex multi-domain information, and provide clear, cited conclusions.',
+  },
+  {
+    id: 'lead-architecture',
+    name: 'Elena Rostova',
+    role: 'Lead Solution Architecture',
+    avatar: 'ruby-capsule',
+    description: 'System architect designing modular component boundaries, git worktree branching, and RFC specifications.',
+    model: 'deepseek-v4-flash',
+    providerId: '',
+    isDefault: false,
+    engine: 'rakit',
+    skills: ['architecture', 'git-worktree'],
+    tools: ['file.read', 'review_code'],
+    mcp: [],
+    memoryScopes: ['user', 'workspace'],
+    policy: {},
+    systemPrompt: 'You are Elena Rostova, Lead Solution Architect of KendaliAI. You define architectural blueprints, evaluate trade-offs between speed and modularity, specify RFCs, and inspect code diffs.',
+  },
+];
+
 export interface ProfileStoreState {
   agents: AgentConfig[];
   selectedAgentId: string | null;
@@ -36,9 +107,9 @@ export interface ProfileStoreState {
 }
 
 export const useProfileStore = create<ProfileStoreState>((set, get) => ({
-  agents: [],
-  selectedAgentId: localStorage.getItem(SELECTED_AGENT_KEY) || null,
-  activeAgent: null,
+  agents: DEFAULT_FALLBACK_AGENTS,
+  selectedAgentId: localStorage.getItem(SELECTED_AGENT_KEY) || DEFAULT_FALLBACK_AGENTS[0].id,
+  activeAgent: DEFAULT_FALLBACK_AGENTS[0],
   isLoadingAgents: false,
 
   groups: [],
@@ -55,7 +126,8 @@ export const useProfileStore = create<ProfileStoreState>((set, get) => ({
       const res = await fetch('/api/agents');
       if (!res.ok) throw new Error('Failed to fetch agents');
       const data = await res.json();
-      const agents: AgentConfig[] = Array.isArray(data) ? data : (data.agents || []);
+      const rawAgents: AgentConfig[] = Array.isArray(data) ? data : (data.agents || []);
+      const agents = rawAgents.length > 0 ? rawAgents : DEFAULT_FALLBACK_AGENTS;
       
       const savedId = get().selectedAgentId;
       let active = agents.find((a) => a.id === savedId) || agents.find((a) => a.isDefault) || agents[0] || null;

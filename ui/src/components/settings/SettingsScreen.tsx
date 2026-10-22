@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Cpu,
   Palette,
@@ -6,12 +6,16 @@ import {
   TerminalSquare,
   Shield,
   Layers,
+  X,
+  ArrowLeft,
 } from 'lucide-react';
 import { ProvidersPane } from '../../panes/providers';
 import { AppearanceSettingsPane } from './AppearanceSettingsPane';
 import { TelegramPane } from '../../panes/telegram';
 import { LogsStreamingView } from '../LogsStreamingView';
 import { DashboardPane } from '../../panes/dashboard';
+import { useProfileStore } from '../../store/useProfileStore';
+import { navigate } from '../../router';
 
 type SettingsTab = 'providers' | 'general' | 'telegram' | 'logs';
 
@@ -26,6 +30,21 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ section }) => {
     if (section === 'logs' || section === 'dashboard') return 'logs';
     return 'providers';
   });
+
+  const handleClose = () => {
+    useProfileStore.getState().setActiveNavTab('chat');
+    navigate('agent');
+  };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleClose();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const tabs = [
     {
@@ -66,26 +85,36 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ section }) => {
             </p>
           </div>
 
-          {/* Clean Top Tabs */}
-          <div className="flex items-center gap-1.5 p-1 bg-muted/40 border border-border/50 rounded-xl text-xs">
-            {tabs.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg font-medium transition-all ${
-                    isActive
-                      ? 'bg-primary text-white shadow-xs'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
+          {/* Clean Top Tabs & Done Button */}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 p-1 bg-muted/40 border border-border/50 rounded-xl text-xs">
+              {tabs.map((tab) => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg font-medium transition-all ${
+                      isActive
+                        ? 'bg-primary text-white shadow-xs'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              onClick={handleClose}
+              className="px-4 py-2 rounded-xl bg-foreground text-background text-xs font-semibold hover:opacity-90 transition-opacity flex items-center gap-1.5 shadow-sm"
+              title="Close Settings (Esc)"
+            >
+              <span>Done</span>
+            </button>
           </div>
         </div>
       </div>

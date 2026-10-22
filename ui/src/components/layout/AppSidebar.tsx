@@ -8,6 +8,7 @@ import {
   Cloud,
   Clock,
   Settings,
+  Sliders,
   Search,
   ChevronLeft,
   ChevronRight,
@@ -17,6 +18,7 @@ import {
   MoreVertical,
   MessageSquare,
 } from 'lucide-react';
+import { AgentIcon } from '../shell/AgentIcon';
 
 interface AppSidebarProps {
   collapsed: boolean;
@@ -102,15 +104,23 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
     <aside className="w-64 shrink-0 h-full bg-[#101014] border-r border-border/40 flex flex-col select-none">
       {/* Workspace Header */}
       <div className="h-14 px-3.5 flex items-center justify-between border-b border-border/30">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="w-6 h-6 rounded-md bg-muted flex items-center justify-center text-xs font-semibold">
-            {activeAgent?.avatar?.slice(0, 2) || '🤖'}
+        <div className="flex items-center gap-2.5 min-w-0">
+          <AgentIcon
+            id={activeAgent?.id || ''}
+            name={activeAgent?.name}
+            avatar={activeAgent?.avatar}
+            size={22}
+          />
+          <div className="min-w-0">
+            <span className="font-semibold text-xs truncate text-foreground block">
+              {activeNavTab === 'groups'
+                ? activeGroup?.name || 'Groups'
+                : activeAgent?.name || 'Personal Assistant'}
+            </span>
+            <span className="text-[10px] text-muted-foreground truncate block">
+              {activeAgent?.role || 'Assistant'}
+            </span>
           </div>
-          <span className="font-semibold text-sm truncate text-foreground">
-            {activeNavTab === 'groups'
-              ? activeGroup?.name || 'Groups'
-              : activeAgent?.name || 'Kendali'}
-          </span>
         </div>
         <button
           onClick={onToggleCollapse}
@@ -190,8 +200,8 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                 : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
             }`}
           >
-            <Settings className="w-3.5 h-3.5 shrink-0" />
-            <span>Settings</span>
+            <Sliders className="w-3.5 h-3.5 shrink-0" />
+            <span>Control center</span>
           </button>
         </div>
       </div>

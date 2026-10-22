@@ -14,8 +14,10 @@ import {
   Workflow,
   Database,
   Table,
+  ArrowLeft,
 } from 'lucide-react';
 import { ComposioToolkit } from '../../types';
+import { useProfileStore } from '../../store/useProfileStore';
 
 export const ConnectionsView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'connectors' | 'plugins'>('connectors');
@@ -141,9 +143,23 @@ export const ConnectionsView: React.FC = () => {
     t.description.toLowerCase().includes(search.toLowerCase())
   );
 
+  const setActiveNavTab = useProfileStore((s) => s.setActiveNavTab);
+
   return (
     <div className="flex-1 h-full overflow-y-auto bg-[#0a0a0c] px-4 sm:px-8 py-8 select-none">
       <div className="max-w-3xl mx-auto space-y-6">
+        {/* Navigation Bar */}
+        <div className="flex items-center justify-between pb-2 border-b border-border/40">
+          <button
+            onClick={() => setActiveNavTab('chat')}
+            className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back to Chat</span>
+          </button>
+          <span className="text-xs text-muted-foreground font-mono">App Connectors & Plugins</span>
+        </div>
+
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="space-y-1">

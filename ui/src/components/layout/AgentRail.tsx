@@ -1,7 +1,8 @@
 import React from 'react';
 import { useProfileStore } from '../../store/useProfileStore';
 import { useSessionStore } from '../../store/useSessionStore';
-import { Plus, Bell, Settings, Bot, Users } from 'lucide-react';
+import { Plus, Bell, Settings, Bot, Users, Sliders } from 'lucide-react';
+import { AgentIcon } from '../shell/AgentIcon';
 
 interface AgentRailProps {
   onOpenCreateAgent?: () => void;
@@ -72,11 +73,13 @@ export const AgentRail: React.FC<AgentRailProps> = ({
               {isSelected && (
                 <span className="absolute -left-2 w-1 h-5 rounded-r-full bg-primary" />
               )}
-              {agent.avatar && agent.avatar.length <= 4 ? (
-                agent.avatar
-              ) : (
-                <Bot className="w-5 h-5" />
-              )}
+              <AgentIcon
+                id={agent.id}
+                name={agent.name}
+                avatar={agent.avatar}
+                isACP={agent.engine === 'acp'}
+                size={22}
+              />
 
               {/* Tooltip */}
               <div className="absolute left-14 ml-2 px-2.5 py-1 bg-popover text-popover-foreground text-xs rounded-md shadow-lg border border-border whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
@@ -123,17 +126,16 @@ export const AgentRail: React.FC<AgentRailProps> = ({
 
         <button
           onClick={() => {
-            if (onOpenSettings) onOpenSettings();
-            else setActiveNavTab('settings');
+            setActiveNavTab('settings');
           }}
           className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors ${
             activeNavTab === 'settings'
-              ? 'text-primary bg-primary/10'
+              ? 'text-amber-400 bg-amber-400/10 border border-amber-400/40'
               : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
           }`}
-          title="Control Center & Settings"
+          title="Control center"
         >
-          <Settings className="w-4 h-4" />
+          <Sliders className="w-4 h-4" />
         </button>
       </div>
     </aside>

@@ -13,8 +13,10 @@ import {
   Zap,
   Save,
   X,
+  ArrowLeft,
 } from 'lucide-react';
 import { AgentConfig } from '../../types';
+import { AgentIcon } from '../shell/AgentIcon';
 
 export const AgentProfileDetail: React.FC = () => {
   const { activeAgent, updateAgent, duplicateAgent, deleteAgent, setActiveNavTab } = useProfileStore();
@@ -67,11 +69,23 @@ export const AgentProfileDetail: React.FC = () => {
 
   return (
     <div className="flex-1 h-full overflow-y-auto bg-[#0a0a0c] px-4 sm:px-8 py-8 select-none">
-      <div className="max-w-2xl mx-auto space-y-8">
+      <div className="max-w-2xl mx-auto space-y-6">
+        {/* Navigation Bar */}
+        <div className="flex items-center justify-between pb-3 border-b border-border/40">
+          <button
+            onClick={() => setActiveNavTab('chat')}
+            className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back to Chat</span>
+          </button>
+          <span className="text-xs text-muted-foreground font-mono">Agent Configuration</span>
+        </div>
+
         {/* Agent Profile Header */}
         <div className="flex flex-col items-center text-center space-y-4">
-          <div className="w-20 h-20 rounded-3xl bg-muted border border-border/80 flex items-center justify-center text-4xl shadow-xl">
-            {activeAgent.avatar?.slice(0, 2) || '🤖'}
+          <div className="w-20 h-20 rounded-3xl bg-muted/40 border border-border/80 flex items-center justify-center shadow-xl">
+            <AgentIcon id={activeAgent.id} name={activeAgent.name} avatar={activeAgent.avatar} size={44} />
           </div>
 
           <div className="space-y-1">

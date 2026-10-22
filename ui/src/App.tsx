@@ -15,7 +15,7 @@ import { GroupList } from './components/groups/GroupList';
 import { GroupChatThread } from './components/chat/GroupChatThread';
 import { ConnectionsView } from './components/connections/ConnectionsView';
 import { AutomationsView } from './components/automations/AutomationsView';
-import { SettingsScreen } from './components/settings/SettingsScreen';
+import { ControlCenterView } from './components/settings/ControlCenterView';
 import { LoginScreen } from './components/LoginScreen';
 import { TerminalDock } from './components/forge/TerminalDock';
 
@@ -121,7 +121,7 @@ export const App: React.FC = () => {
     if (isSettingsRoute) {
       return (
         <div className="flex-1 overflow-y-auto">
-          <SettingsScreen section={settingsSection} />
+          <ControlCenterView />
         </div>
       );
     }
@@ -144,7 +144,7 @@ export const App: React.FC = () => {
         return <AutomationsView />;
 
       case 'settings':
-        return <SettingsScreen section={settingsSection} />;
+        return <ControlCenterView />;
 
       case 'chat':
       default:
