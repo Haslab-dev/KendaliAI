@@ -12,6 +12,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { SessionMessage } from '../../types';
+import { AgentIcon } from '../shell/AgentIcon';
 
 export const GroupChatThread: React.FC = () => {
   const { activeGroup, agents } = useProfileStore();
@@ -100,10 +101,10 @@ export const GroupChatThread: React.FC = () => {
             {memberAgents.slice(0, 3).map((a, i) => (
               <div
                 key={a.id}
-                className="w-7 h-7 rounded-full bg-muted border-2 border-[#101014] flex items-center justify-center text-xs"
+                className="w-7 h-7 rounded-full bg-muted border-2 border-[#101014] flex items-center justify-center text-xs overflow-hidden"
                 style={{ zIndex: 10 - i }}
               >
-                {a.avatar?.slice(0, 2) || '🤖'}
+                <AgentIcon id={a.id} name={a.name} avatar={a.avatar} isACP={a.engine === 'acp'} size={18} />
               </div>
             ))}
           </div>
@@ -139,10 +140,10 @@ export const GroupChatThread: React.FC = () => {
               {memberAgents.map((a, i) => (
                 <div
                   key={a.id}
-                  className="w-14 h-14 rounded-3xl bg-muted border-4 border-[#0c0c0e] flex items-center justify-center text-2xl shadow-xl"
+                  className="w-14 h-14 rounded-3xl bg-muted border-4 border-[#0c0c0e] flex items-center justify-center text-2xl shadow-xl overflow-hidden"
                   style={{ zIndex: 10 - i }}
                 >
-                  {a.avatar?.slice(0, 2) || '🤖'}
+                  <AgentIcon id={a.id} name={a.name} avatar={a.avatar} isACP={a.engine === 'acp'} size={34} />
                 </div>
               ))}
             </div>
@@ -170,7 +171,7 @@ export const GroupChatThread: React.FC = () => {
                   onClick={() => setInput(`@${agent.name.toLowerCase().replace(/\s+/g, '-')} what can you help with?`)}
                   className="px-3 py-1.5 rounded-full bg-muted/40 hover:bg-muted border border-border/50 text-xs text-foreground transition-colors flex items-center gap-1.5"
                 >
-                  <span>{agent.avatar?.slice(0, 2) || '🤖'}</span>
+                  <AgentIcon id={agent.id} name={agent.name} avatar={agent.avatar} isACP={agent.engine === 'acp'} size={14} />
                   <span>{agent.name}: what can you help with?</span>
                 </button>
               ))}
@@ -180,7 +181,7 @@ export const GroupChatThread: React.FC = () => {
           messages.map((msg) => {
             const isUser = msg.role === 'user';
             const respondingAgent = !isUser
-              ? memberAgents.find((a) => a.id === msg.agentId) || { name: 'Agent', avatar: '🤖' }
+              ? memberAgents.find((a) => a.id === msg.agentId) || { id: msg.agentId || 'agent', name: msg.senderName || 'Agent', avatar: '🤖', engine: 'rakit' }
               : null;
 
             return (
@@ -190,8 +191,14 @@ export const GroupChatThread: React.FC = () => {
               >
                 {/* Sender identity */}
                 <div className="flex items-center gap-2 mb-1.5 px-1">
-                  {!isUser && (
-                    <span className="text-xs">{respondingAgent?.avatar?.slice(0, 2) || '🤖'}</span>
+                  {!isUser && respondingAgent && (
+                    <AgentIcon
+                      id={respondingAgent.id || ''}
+                      name={respondingAgent.name}
+                      avatar={respondingAgent.avatar}
+                      isACP={respondingAgent.engine === 'acp'}
+                      size={14}
+                    />
                   )}
                   <span className="text-xs font-semibold text-muted-foreground">
                     {isUser ? 'You' : respondingAgent?.name || 'Agent'}
@@ -269,7 +276,7 @@ export const GroupChatThread: React.FC = () => {
                   onClick={() => handleInsertMention(handle)}
                   className="w-full px-2.5 py-1.5 rounded-lg text-left text-xs flex items-center gap-2 hover:bg-muted text-foreground"
                 >
-                  <span className="text-sm">{agent.avatar?.slice(0, 2) || '🤖'}</span>
+                  <AgentIcon id={agent.id} name={agent.name} avatar={agent.avatar} isACP={agent.engine === 'acp'} size={16} />
                   <span className="font-semibold truncate">{agent.name}</span>
                   <span className="text-muted-foreground text-[10px]">@{handle}</span>
                 </button>

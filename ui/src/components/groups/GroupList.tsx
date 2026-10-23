@@ -3,6 +3,7 @@ import { useProfileStore } from '../../store/useProfileStore';
 import { useSessionStore } from '../../store/useSessionStore';
 import { Users, Plus, Search, ChevronRight, MessageSquare, Trash2 } from 'lucide-react';
 import { NewGroupModal } from './NewGroupModal';
+import { AgentIcon } from '../shell/AgentIcon';
 
 export const GroupList: React.FC = () => {
   const { groups, agents, selectGroup, deleteGroup } = useProfileStore();
@@ -90,10 +91,10 @@ export const GroupList: React.FC = () => {
                       {memberAgents.slice(0, 3).map((a, i) => (
                         <div
                           key={a.id}
-                          className="w-8 h-8 rounded-full bg-muted border-2 border-[#121216] flex items-center justify-center text-sm"
+                          className="w-8 h-8 rounded-full bg-muted border-2 border-[#121216] flex items-center justify-center text-sm overflow-hidden"
                           style={{ zIndex: 10 - i }}
                         >
-                          {a.avatar?.slice(0, 2) || '🤖'}
+                          <AgentIcon id={a.id} name={a.name} avatar={a.avatar} isACP={a.engine === 'acp'} size={20} />
                         </div>
                       ))}
                     </div>

@@ -1254,7 +1254,7 @@ func (s *Server) handleSessionDetail() http.HandlerFunc {
 					}
 				}
 
-				if s.engine != nil {
+				if s.engine != nil && (sess == nil || sess.Type != "group") {
 					s.runEngineTurn(sid, aid, txt, "web", activeModel)
 					return
 				}

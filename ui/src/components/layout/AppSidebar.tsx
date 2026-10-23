@@ -105,12 +105,18 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
       {/* Workspace Header */}
       <div className="h-14 px-3.5 flex items-center justify-between border-b border-border/30">
         <div className="flex items-center gap-2.5 min-w-0">
-          <AgentIcon
-            id={activeAgent?.id || ''}
-            name={activeAgent?.name}
-            avatar={activeAgent?.avatar}
-            size={22}
-          />
+          {activeNavTab === 'groups' ? (
+            <div className="w-[22px] h-[22px] rounded-lg bg-violet-600/20 border border-violet-500/30 text-violet-400 flex items-center justify-center shrink-0">
+              <Users className="w-3.5 h-3.5" />
+            </div>
+          ) : (
+            <AgentIcon
+              id={activeAgent?.id || ''}
+              name={activeAgent?.name}
+              avatar={activeAgent?.avatar}
+              size={22}
+            />
+          )}
           <div className="min-w-0">
             <span className="font-semibold text-xs truncate text-foreground block">
               {activeNavTab === 'groups'
@@ -118,7 +124,9 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                 : activeAgent?.name || 'Personal Assistant'}
             </span>
             <span className="text-[10px] text-muted-foreground truncate block">
-              {activeAgent?.role || 'Assistant'}
+              {activeNavTab === 'groups'
+                ? (activeGroup ? `${activeGroup.memberIds.length} agents` : 'Group Chat')
+                : (activeAgent?.role || 'Assistant')}
             </span>
           </div>
         </div>

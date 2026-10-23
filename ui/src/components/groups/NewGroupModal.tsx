@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useProfileStore } from '../../store/useProfileStore';
 import { X, Users, Search, Camera } from 'lucide-react';
+import { AgentIcon } from '../shell/AgentIcon';
 
 interface NewGroupModalProps {
   isOpen: boolean;
@@ -118,7 +119,7 @@ export const NewGroupModal: React.FC<NewGroupModalProps> = ({ isOpen, onClose })
                     }`}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="text-base">{agent.avatar?.slice(0, 2) || '🤖'}</span>
+                      <AgentIcon id={agent.id} name={agent.name} avatar={agent.avatar} isACP={agent.engine === 'acp'} size={20} />
                       <div className="min-w-0">
                         <p className="font-semibold text-xs text-foreground truncate">{agent.name}</p>
                         {agent.role && <p className="text-[10px] text-muted-foreground truncate">{agent.role}</p>}

@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -400,6 +401,36 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		} else {
 			participants, _ := r.store.ListChatParticipants(sess.ID)
 			allAgents, _ := r.store.ListAgents()
+
+			if len(participants) == 0 {
+				var meta map[string]interface{}
+				if sess.Metadata != "" {
+					_ = json.Unmarshal([]byte(sess.Metadata), &meta)
+				}
+				gid := sess.AgentID
+				if meta != nil {
+					if mGid, ok := meta["groupId"].(string); ok && mGid != "" {
+						gid = mGid
+					}
+					if mIds, ok := meta["memberIds"].([]interface{}); ok && len(mIds) > 0 {
+						for _, mid := range mIds {
+							if mStr, ok := mid.(string); ok && mStr != "" {
+								participants = append(participants, ChatParticipant{
+									ParticipantType: "agent",
+									ParticipantID:   mStr,
+									Role:            "member",
+								})
+							}
+						}
+					}
+				}
+				if len(participants) == 0 && gid != "" {
+					if grpParts, err := r.store.ListChatParticipants(gid); err == nil && len(grpParts) > 0 {
+						participants = grpParts
+					}
+				}
+			}
+
 			mentioned := findAllMentionedAgents(userPrompt, "", allAgents)
 			if len(mentioned) > 0 {
 				activeAgentID = mentioned[0]

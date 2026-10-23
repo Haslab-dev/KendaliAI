@@ -18,6 +18,7 @@ import { AutomationsView } from './components/automations/AutomationsView';
 import { ControlCenterView } from './components/settings/ControlCenterView';
 import { LoginScreen } from './components/LoginScreen';
 import { TerminalDock } from './components/forge/TerminalDock';
+import { NewAgentModal } from './components/agent/NewAgentModal';
 
 type AuthState = 'checking' | 'ok' | 'login';
 
@@ -52,6 +53,7 @@ export const App: React.FC = () => {
   const { route, settingsSection } = useRoute();
   const [authState, setAuthState] = useState<AuthState>('checking');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [isNewAgentModalOpen, setIsNewAgentModalOpen] = useState(false);
 
   // Check auth status
   useEffect(() => {
@@ -163,7 +165,7 @@ export const App: React.FC = () => {
     <div className="flex h-screen max-h-screen w-screen overflow-hidden bg-background font-sans text-foreground select-none">
       {/* 1. Leftmost: Agent Rail */}
       <AgentRail
-        onOpenCreateAgent={() => setActiveNavTab('agent')}
+        onOpenCreateAgent={() => setIsNewAgentModalOpen(true)}
         onOpenSettings={() => {
           setActiveNavTab('settings');
           navigateSettings('general');
@@ -185,6 +187,12 @@ export const App: React.FC = () => {
         {/* Global Terminal Dock */}
         {terminalOpen && <TerminalDock />}
       </main>
+
+      {/* New Agent Modal */}
+      <NewAgentModal
+        isOpen={isNewAgentModalOpen}
+        onClose={() => setIsNewAgentModalOpen(false)}
+      />
     </div>
   );
 };

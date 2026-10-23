@@ -19,6 +19,7 @@ import {
 import { AgentConfig } from '../../types';
 import { AgentIcon } from '../shell/AgentIcon';
 import { ProviderIcon } from './ProviderIcon';
+import { GrokAvatar, GROK_AVATARS } from '../GrokAvatar';
 
 export const AgentProfileDetail: React.FC = () => {
   const { activeAgent, updateAgent, duplicateAgent, deleteAgent, setActiveNavTab } = useProfileStore();
@@ -26,6 +27,7 @@ export const AgentProfileDetail: React.FC = () => {
   const acpAgents = useAgentStore((s) => s.acpAgents);
 
   const [activeTab, setActiveTab] = useState<'prompt' | 'behavior' | 'tools' | 'mcp' | 'skills'>('prompt');
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   
   // Modal state for editing system prompt or soul files
   const [editingFile, setEditingFile] = useState<{
@@ -87,17 +89,65 @@ export const AgentProfileDetail: React.FC = () => {
 
         {/* Agent Profile Header */}
         <div className="flex flex-col items-center text-center space-y-4">
-          <div className="w-20 h-20 rounded-3xl bg-muted/40 border border-border/80 flex items-center justify-center shadow-xl">
-            <AgentIcon id={activeAgent.id} name={activeAgent.name} avatar={activeAgent.avatar} size={44} />
+          <div className="relative group">
+            <button
+              type="button"
+              onClick={() => setShowAvatarPicker(!showAvatarPicker)}
+              className="w-20 h-20 rounded-3xl bg-muted/40 hover:bg-muted/70 border border-border/80 hover:border-primary/60 flex items-center justify-center shadow-xl transition-all cursor-pointer group"
+              title="Click to change avatar style"
+            >
+              <AgentIcon id={activeAgent.id} name={activeAgent.name} avatar={activeAgent.avatar} size={44} />
+              <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-primary text-white text-[10px] flex items-center justify-center shadow-sm">
+                <Edit3 className="w-3 h-3" />
+              </span>
+            </button>
           </div>
 
-          <div className="space-y-1">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">
-              {activeAgent.name}
-            </h1>
-            {activeAgent.role && (
-              <p className="text-xs text-muted-foreground">{activeAgent.role}</p>
-            )}
+          {/* Quick Avatar Picker Popover */}
+          {showAvatarPicker && (
+            <div className="p-3 bg-[#121216] border border-border/70 rounded-2xl shadow-2xl flex flex-wrap items-center justify-center gap-2 max-w-sm animate-in fade-in-50 zoom-in-95">
+              {GROK_AVATARS.map((av) => (
+                <button
+                  key={av.id}
+                  type="button"
+                  onClick={() => {
+                    updateAgent({ id: activeAgent.id, avatar: av.id });
+                    setShowAvatarPicker(false);
+                  }}
+                  className={`p-1.5 rounded-xl border transition-all ${
+                    activeAgent.avatar === av.id ? 'border-primary bg-primary/20' : 'border-border/40 hover:border-border hover:bg-muted/40'
+                  }`}
+                  title={av.name}
+                >
+                  <GrokAvatar id={av.id} size={28} />
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Editable Name & Role */}
+          <div className="space-y-1 w-full max-w-sm mx-auto">
+            <div className="relative flex items-center justify-center group">
+              <input
+                type="text"
+                value={activeAgent.name || ''}
+                onChange={(e) => updateAgent({ id: activeAgent.id, name: e.target.value })}
+                placeholder="Agent Name (e.g. Senior Frontend Dev)"
+                className="w-full text-center text-2xl font-bold tracking-tight text-foreground bg-transparent border-b border-transparent hover:border-border/60 focus:border-primary focus:outline-none py-0.5 transition-colors"
+                title="Click to edit agent name"
+              />
+              <Edit3 className="w-3.5 h-3.5 text-muted-foreground/30 absolute right-2 pointer-events-none group-hover:opacity-100 transition-opacity" />
+            </div>
+            <div className="relative flex items-center justify-center group">
+              <input
+                type="text"
+                value={activeAgent.role || ''}
+                onChange={(e) => updateAgent({ id: activeAgent.id, role: e.target.value })}
+                placeholder="Agent Role (e.g. UI / UX Engineer)"
+                className="w-full text-center text-xs text-muted-foreground bg-transparent border-b border-transparent hover:border-border/60 focus:border-primary focus:outline-none py-0.5 transition-colors"
+                title="Click to edit agent role"
+              />
+            </div>
           </div>
 
           {/* Engine, Model & Reasoning Selectors */}
@@ -215,6 +265,43 @@ export const AgentProfileDetail: React.FC = () => {
         {/* Tab 1: Prompt & Soul Stack */}
         {activeTab === 'prompt' && (
           <div className="space-y-6">
+            {/* General Profile Card */}
+            <div className="rounded-2xl bg-[#121216] border border-border/60 p-4 space-y-3">
+              <span className="font-semibold text-xs text-foreground block">Agent Identity & Details</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="space-y-1">
+                  <label className="text-[11px] text-muted-foreground font-medium">Agent Name</label>
+                  <input
+                    type="text"
+                    value={activeAgent.name || ''}
+                    onChange={(e) => updateAgent({ id: activeAgent.id, name: e.target.value })}
+                    placeholder="Agent Name"
+                    className="w-full h-8 px-2.5 bg-muted/40 border border-border rounded-lg text-xs text-foreground focus:outline-none focus:border-primary/60 transition-colors"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] text-muted-foreground font-medium">Role / Title</label>
+                  <input
+                    type="text"
+                    value={activeAgent.role || ''}
+                    onChange={(e) => updateAgent({ id: activeAgent.id, role: e.target.value })}
+                    placeholder="Agent Role"
+                    className="w-full h-8 px-2.5 bg-muted/40 border border-border rounded-lg text-xs text-foreground focus:outline-none focus:border-primary/60 transition-colors"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1 text-xs">
+                <label className="text-[11px] text-muted-foreground font-medium">Description</label>
+                <input
+                  type="text"
+                  value={activeAgent.description || ''}
+                  onChange={(e) => updateAgent({ id: activeAgent.id, description: e.target.value })}
+                  placeholder="What is this agent responsible for?"
+                  className="w-full h-8 px-2.5 bg-muted/40 border border-border rounded-lg text-xs text-foreground focus:outline-none focus:border-primary/60 transition-colors"
+                />
+              </div>
+            </div>
+
             {/* System Prompt Box */}
             <div className="rounded-2xl bg-[#121216] border border-border/60 p-4 space-y-2">
               <div className="flex items-center justify-between text-xs">

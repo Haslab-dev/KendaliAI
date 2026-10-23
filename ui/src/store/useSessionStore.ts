@@ -196,12 +196,22 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   },
 
   createSessionForGroup: async (groupId: string, title?: string) => {
+    const { groups } = useProfileStore.getState();
+    const group = groups.find((g) => g.id === groupId);
+    const memberIds = group?.memberIds || [];
+    const participants = memberIds.map((id) => ({
+      participantType: 'agent',
+      participantId: id,
+      role: 'member',
+    }));
+
     const payload = {
       agentId: groupId,
-      title: title || 'New group chat',
+      title: title || group?.name || 'New group chat',
       type: 'group',
       channelId: 'web',
-      metadata: JSON.stringify({ groupId }),
+      metadata: JSON.stringify({ groupId, memberIds }),
+      participants,
     };
 
     const res = await fetch('/api/sessions', {
