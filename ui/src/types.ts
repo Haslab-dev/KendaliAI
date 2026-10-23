@@ -158,7 +158,7 @@ export interface ToolCallRecord {
   tool: string;
   arguments: Record<string, any>;
   output?: string;
-  status?: 'running' | 'success' | 'error' | 'denied';
+  status?: 'running' | 'success' | 'error' | 'denied' | 'completed' | 'failed' | string;
   durationMs?: number;
 }
 

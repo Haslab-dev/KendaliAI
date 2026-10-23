@@ -176,7 +176,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       set({ composerTarget: null });
     }
   },
-  composerTarget: null,
+  composerTarget: { kind: 'native', id: 'rakit-kode' },
   setComposerTarget: (t) => set({ composerTarget: t }),
 
   turnStart: {},
@@ -373,7 +373,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       activeAgentSessionId: null,
       newTaskOpen: false,
       newTaskPrefill: prefill ?? null,
-      composerTarget: prefill ? { kind: prefill.kind, id: prefill.agentId } : null,
+      composerTarget: prefill ? { kind: prefill.kind, id: prefill.agentId } : { kind: 'native', id: 'rakit-kode' },
     });
   },
 

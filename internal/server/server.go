@@ -334,6 +334,17 @@ func (s *Server) routes() {
 	// Git & Worktrees
 	s.router.HandleFunc("/api/git/worktrees", s.handleGitWorktrees())
 	s.router.HandleFunc("/api/git/branches", s.handleGitBranches())
+	s.router.HandleFunc("/api/git/status", s.handleGitStatus())
+	s.router.HandleFunc("/api/git/log", s.handleGitLog())
+	s.router.HandleFunc("/api/git/diff", s.handleGitDiff())
+	s.router.HandleFunc("/api/git/stage", s.handleGitStage())
+	s.router.HandleFunc("/api/git/unstage", s.handleGitUnstage())
+	s.router.HandleFunc("/api/git/discard", s.handleGitDiscard())
+	s.router.HandleFunc("/api/git/commit", s.handleGitCommit())
+	s.router.HandleFunc("/api/git/action", s.handleGitAction())
+	s.router.HandleFunc("/api/git/checkout", s.handleGitCheckout())
+	s.router.HandleFunc("/api/git/repos", s.handleGitRepos())
+	s.router.HandleFunc("/api/workspace/browse", s.handleWorkspaceBrowse())
 
 	// Reviewer
 	s.router.HandleFunc("/api/review/scan", s.handleReviewScan())
@@ -1089,7 +1100,13 @@ func (s *Server) handleSessions() http.HandlerFunc {
 				sess.Type = "direct"
 			}
 			if sess.AgentID == "" {
-				sess.AgentID = "personal-assistant"
+				sess.AgentID = "lutfi"
+			}
+			if s.acp != nil && s.acp.IsACPAgent(sess.AgentID) {
+				if sess.Metadata == "" {
+					sess.Metadata = fmt.Sprintf(`{"engine":"acp","acpAgent":%q}`, sess.AgentID)
+				}
+				sess.AgentID = "lutfi"
 			}
 			if sess.Title == "" {
 				sess.Title = "New Chat"
@@ -1176,10 +1193,12 @@ func (s *Server) handleSessionDetail() http.HandlerFunc {
 		// POST /api/sessions/{sid}/messages — user sends a message, executes turn
 		if len(parts) == 2 && parts[1] == "messages" && r.Method == "POST" {
 			var req struct {
-				Content string   `json:"content"`
-				AgentID string   `json:"agentId"`
-				Model   string   `json:"model"`
-				Images  []string `json:"images,omitempty"`
+				Content  string   `json:"content"`
+				AgentID  string   `json:"agentId"`
+				Model    string   `json:"model"`
+				Engine   string   `json:"engine"`
+				ACPAgent string   `json:"acpAgent"`
+				Images   []string `json:"images,omitempty"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Content) == "" {
 				http.Error(w, "content is required", http.StatusBadRequest)
@@ -1193,12 +1212,12 @@ func (s *Server) handleSessionDetail() http.HandlerFunc {
 				targetAgentID = sess.AgentID
 			}
 			if targetAgentID == "" {
-				targetAgentID = "personal-assistant"
+				targetAgentID = "lutfi"
 			}
 
 			// Execute turn asynchronously. Each executor (acp.Prompt, runEngineTurn, ExecuteTurnWithModel)
 			// handles user message persistence and event publication once.
-			go func(sid, aid, txt, mdl string) {
+			go func(sid, aid, txt, mdl, eng, acpAg string) {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 				defer cancel()
 
@@ -1219,28 +1238,103 @@ func (s *Server) handleSessionDetail() http.HandlerFunc {
 					activeModel = agent.Model
 				}
 
-				// Resolve locked ACP agent ID: session metadata acpAgent takes absolute priority to lock session
+				// Determine whether this session is an ACP session
+				isACP := false
 				acpAgentID := ""
+
 				if sessMeta != nil {
 					if a, ok := sessMeta["acpAgent"].(string); ok && a != "" {
 						acpAgentID = a
+						isACP = true
+					}
+					if e, ok := sessMeta["engine"].(string); ok && e == "acp" {
+						isACP = true
 					}
 				}
-				if acpAgentID == "" && agent != nil && (agent.Engine == "acp" || agent.ACPAgent != "") {
-					acpAgentID = agent.ACPAgent
+				if eng == "acp" || acpAg != "" {
+					isACP = true
+					if acpAg != "" {
+						acpAgentID = acpAg
+					}
+				}
+				if s.acp != nil {
+					if s.acp.IsACPAgent(aid) {
+						isACP = true
+						if acpAgentID == "" {
+							acpAgentID = aid
+						}
+					}
+					if s.acp.IsACPAgent(req.AgentID) {
+						isACP = true
+						if acpAgentID == "" {
+							acpAgentID = req.AgentID
+						}
+					}
+				}
+				if agent != nil && (agent.Engine == "acp" || agent.ACPAgent != "") {
+					isACP = true
+					if acpAgentID == "" {
+						acpAgentID = agent.ACPAgent
+					}
 				}
 
-				if acpAgentID != "" && s.acp != nil {
+				if isACP && s.acp != nil {
+					if acpAgentID == "" {
+						acpAgentID = "agy"
+					}
+					acpAgentID = acp.NormalizeAgentID(acpAgentID)
+
+					// Lock session metadata to ACP in persistent database
+					if sess != nil {
+						if sessMeta == nil {
+							sessMeta = make(map[string]interface{})
+						}
+						sessMeta["engine"] = "acp"
+						sessMeta["acpAgent"] = acpAgentID
+						if activeModel != "" {
+							sessMeta["model"] = activeModel
+						}
+						if data, err := json.Marshal(sessMeta); err == nil {
+							sess.Metadata = string(data)
+							_ = s.store.SaveSession(*sess)
+						}
+					}
+
 					cwd, _ := os.Getwd()
 					if sessMeta != nil {
 						if ws, ok := sessMeta["workspace"].(string); ok && ws != "" {
 							cwd = ws
 						}
 					}
-					_ = s.acp.EnsureSession(sid, acpAgentID, cwd, activeModel)
-					if err := s.acp.Prompt(sid, txt); err == nil {
+
+					if err := s.acp.EnsureSession(sid, acpAgentID, cwd, activeModel); err != nil {
+						log.Printf("[ACP] EnsureSession failed for session %s (agent %s): %v", sid, acpAgentID, err)
+						s.bus.Publish(messaging.Event{
+							ID:        uuid.New().String(),
+							Type:      messaging.EventAgentFailed,
+							SessionID: sid,
+							AgentID:   acpAgentID,
+							Channel:   "web",
+							Payload:   fmt.Sprintf("Failed to initialize ACP agent %s: %v", acpAgentID, err),
+							Timestamp: time.Now(),
+						})
 						return
 					}
+
+					if err := s.acp.Prompt(sid, txt); err != nil {
+						log.Printf("[ACP] Prompt error for session %s: %v", sid, err)
+						s.bus.Publish(messaging.Event{
+							ID:        uuid.New().String(),
+							Type:      messaging.EventAgentFailed,
+							SessionID: sid,
+							AgentID:   acpAgentID,
+							Channel:   "web",
+							Payload:   fmt.Sprintf("ACP prompt error: %v", err),
+							Timestamp: time.Now(),
+						})
+						return
+					}
+					return // STRICT: Never fall through to Rakit Kode!
 				}
 
 				// If ACP session exists by ID, prompt via ACP
@@ -1262,7 +1356,7 @@ func (s *Server) handleSessionDetail() http.HandlerFunc {
 				if err != nil {
 					log.Printf("Session %s turn error: %v", sid, err)
 				}
-			}(sessionID, targetAgentID, req.Content, req.Model)
+			}(sessionID, targetAgentID, req.Content, req.Model, req.Engine, req.ACPAgent)
 
 			w.WriteHeader(http.StatusOK)
 			json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
@@ -3318,80 +3412,64 @@ func (s *Server) handleGroups() http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method {
 		case "GET":
-			all, err := s.store.ListSessions()
+			groups, err := s.store.ListAgentGroups()
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
-			}
-			groups := make([]gateway.Session, 0)
-			for _, sess := range all {
-				if sess.Type == "group" {
-					groups = append(groups, sess)
-				}
 			}
 			json.NewEncoder(w).Encode(groups)
 
 		case "POST":
 			var req struct {
 				ID           string   `json:"id"`
+				Name         string   `json:"name"`
 				Title        string   `json:"title"`
+				Brief        string   `json:"brief"`
 				Avatar       string   `json:"avatar"`
+				MemberIDs    []string `json:"memberIds"`
 				Participants []string `json:"participants"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				http.Error(w, "invalid JSON", http.StatusBadRequest)
 				return
 			}
-			if req.Title == "" {
-				req.Title = "Group Chat"
+			name := req.Name
+			if name == "" {
+				name = req.Title
 			}
-			if req.ID == "" {
-				req.ID = "group_" + uuid.New().String()[:8]
+			if name == "" {
+				name = "Untitled Group"
 			}
-			if req.Avatar == "" {
-				req.Avatar = "users"
+			id := req.ID
+			if id == "" {
+				id = "group_" + uuid.New().String()[:8]
 			}
-
-			parts := make([]gateway.ChatParticipant, 0, len(req.Participants))
-			for _, pid := range req.Participants {
-				pType := "agent"
-				if pid == "user" || pid == "default" {
-					pType = "user"
-				}
-				parts = append(parts, gateway.ChatParticipant{
-					ID:              uuid.New().String(),
-					ChatID:          req.ID,
-					ParticipantType: pType,
-					ParticipantID:   pid,
-					Role:            "member",
-					JoinedAt:        time.Now().Unix(),
-				})
+			avatar := req.Avatar
+			if avatar == "" {
+				avatar = "users"
+			}
+			members := req.MemberIDs
+			if len(members) == 0 && len(req.Participants) > 0 {
+				members = req.Participants
+			}
+			if members == nil {
+				members = []string{}
 			}
 
-			sess := gateway.Session{
-				ID:           req.ID,
-				Title:        req.Title,
-				Type:         "group",
-				Avatar:       req.Avatar,
-				AgentID:      "",
-				ChannelID:    "web",
-				UserID:       "user",
-				Status:       "active",
-				Participants: parts,
+			grp := gateway.AgentGroup{
+				ID:        id,
+				Name:      name,
+				Title:     name,
+				Brief:     req.Brief,
+				Avatar:    avatar,
+				MemberIDs: members,
 			}
-			if err := s.store.SaveSession(sess); err != nil {
+			if err := s.store.SaveAgentGroup(grp); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 
-			s.bus.Publish(messaging.Event{
-				ID:        uuid.New().String(),
-				Type:      messaging.EventSessionCreated,
-				SessionID: sess.ID,
-				Payload:   sess,
-				Timestamp: time.Now(),
-			})
-			json.NewEncoder(w).Encode(sess)
+			json.NewEncoder(w).Encode(grp)
 
 		case "DELETE":
 			id := r.URL.Query().Get("id")
@@ -3399,7 +3477,7 @@ func (s *Server) handleGroups() http.HandlerFunc {
 				http.Error(w, "missing group id", http.StatusBadRequest)
 				return
 			}
-			if err := s.store.DeleteSession(id); err != nil {
+			if err := s.store.DeleteAgentGroup(id); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}

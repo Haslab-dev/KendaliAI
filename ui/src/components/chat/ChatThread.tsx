@@ -1,32 +1,63 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useProfileStore } from '../../store/useProfileStore';
 import { useSessionStore } from '../../store/useSessionStore';
-import { useAppStore } from '../../store/useAppStore';
 import { useAgentStore } from '../../store/useAgentStore';
 import { MarkdownView } from '../MarkdownView';
-import { ToolExecutionCard } from '../ToolExecutionCard';
+import { ToolExecutionCard, ToolExecution } from '../agent/ToolBlockViews';
+import { WorkLogList } from '../agent/WorkLog';
+import { ApprovalCard } from '../agentui/ApprovalCard';
+import { WorkspaceHeader } from '../common/WorkspaceHeader';
+import { AgentTaskInputBar, PromptSubmitOptions } from '../common/AgentTaskInputBar';
 import {
-  ArrowUp,
-  Square,
-  Plus,
+  Copy,
+  Check,
+  ThumbsUp,
+  ThumbsDown,
   Brain,
   ChevronDown,
   ChevronRight,
-  ShieldAlert,
-  Check,
-  X,
-  FileCode,
-  SlidersHorizontal,
-  Lock,
-  Cpu,
+  Sparkles,
+  Loader2,
 } from 'lucide-react';
-import { AgentIcon } from '../shell/AgentIcon';
-import { ProviderIcon } from '../agent/ProviderIcon';
-import { parseSessionMetadata } from '../../types';
+import { relativeTime } from '../../lib/time';
+import { cn } from '../../lib/cn';
+import { ToolCallRecord } from '../../types';
 
 interface ChatThreadProps {
   onToggleDrawer?: () => void;
   isDrawerOpen?: boolean;
+}
+
+function mapToolCallRecord(tc: ToolCallRecord): ToolExecution {
+  const args = tc.arguments || {};
+  let commandStr = '';
+  if (typeof args === 'string') {
+    commandStr = args;
+  } else if (typeof args === 'object' && args !== null) {
+    if (args.command || args.cmd || args.script || args.CommandLine) {
+      commandStr = args.command || args.cmd || args.script || args.CommandLine;
+    } else if (args.Path || args.path || args.filePath || args.FilePath || args.file) {
+      commandStr = args.Path || args.path || args.filePath || args.FilePath || args.file;
+    } else if (args.query || args.prompt || args.pattern) {
+      commandStr = args.query || args.prompt || args.pattern;
+    } else {
+      commandStr = JSON.stringify(args);
+    }
+  }
+
+  let status: ToolExecution['status'] = 'completed';
+  if (tc.status === 'running') status = 'running';
+  else if (tc.status === 'error' || tc.status === 'denied' || tc.status === 'failed') status = 'failed';
+  else if (tc.status === 'success' || tc.status === 'completed') status = 'success';
+
+  return {
+    id: tc.id,
+    toolName: tc.tool,
+    command: commandStr,
+    output: tc.output,
+    status,
+    durationMs: tc.durationMs,
+  };
 }
 
 export const ChatThread: React.FC<ChatThreadProps> = ({
@@ -43,420 +74,400 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
     streamingThought,
     streamingToolCalls,
     sendMessage,
-    stopSession,
-    updateSessionModel,
-    updateSessionMetadata,
+    deleteSession,
+    renameSession,
   } = useSessionStore();
 
-  const { defaultModel, availableModels } = useAppStore();
-  const { permissions, respondPermission, acpAgents } = useAgentStore();
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [likedMap, setLikedMap] = useState<Record<string, 'up' | 'down'>>({});
+  const [expandedWork, setExpandedWork] = useState<Record<string, boolean>>({});
+  const [expandedThoughts, setExpandedThoughts] = useState<Record<string, boolean>>({});
+  const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>({});
 
-  const [input, setInput] = useState('');
-  const [showThinking, setShowThinking] = useState(true);
-  const [isSending, setIsSending] = useState(false);
+  const [liveElapsed, setLiveElapsed] = useState(0);
+  const streamStartRef = useRef<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const userScrolledUpRef = useRef(false);
 
-  // Auto-scroll to bottom on new messages / stream
+  // Live timer counter when streaming
   useEffect(() => {
-    if (scrollRef.current) {
+    if (isStreaming) {
+      if (!streamStartRef.current) streamStartRef.current = Date.now();
+      const interval = setInterval(() => {
+        setLiveElapsed(Math.max(1, Math.round((Date.now() - (streamStartRef.current || Date.now())) / 1000)));
+      }, 1000);
+      return () => clearInterval(interval);
+    } else {
+      streamStartRef.current = null;
+      setLiveElapsed(0);
+    }
+  }, [isStreaming]);
+
+  // Track user scroll position
+  const handleScroll = useCallback(() => {
+    if (!scrollRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+    const distanceFromBottom = scrollHeight - (scrollTop + clientHeight);
+    userScrolledUpRef.current = distanceFromBottom > 100;
+  }, []);
+
+  // Auto-scroll to bottom unless user scrolled up
+  useEffect(() => {
+    if (scrollRef.current && !userScrolledUpRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, streamingContent, streamingToolCalls, isStreaming]);
+  }, [messages, streamingContent, streamingThought, streamingToolCalls, isStreaming]);
 
-  // Session metadata & locked engine resolution
-  const sessionMeta = useMemo(() => parseSessionMetadata(activeSession), [activeSession]);
-
-  const sessionAcpAgent = useMemo(() => {
-    if (sessionMeta.acpAgent) return sessionMeta.acpAgent;
-    if (acpAgents.some((a) => a.id === activeSession?.agentId)) {
-      return activeSession?.agentId;
-    }
-    if (activeAgent?.engine === 'acp' || activeAgent?.acpAgent) {
-      return activeAgent.acpAgent || 'claude-code';
-    }
-    return undefined;
-  }, [sessionMeta, activeSession, activeAgent, acpAgents]);
-
-  const sessionEngine = useMemo(() => {
-    if (sessionMeta.engine) return sessionMeta.engine;
-    if (sessionAcpAgent) return 'acp';
-    return activeAgent?.engine || 'rakit';
-  }, [sessionMeta, sessionAcpAgent, activeAgent]);
-
-  const lockedAcpDesc = useMemo(() => {
-    if (!sessionAcpAgent) return null;
-    return acpAgents.find((a) => a.id === sessionAcpAgent) || null;
-  }, [sessionAcpAgent, acpAgents]);
-
-  const sessionEngineLabel = useMemo(() => {
-    if (lockedAcpDesc?.name) return lockedAcpDesc.name;
-    if (sessionAcpAgent) {
-      switch (sessionAcpAgent) {
-        case 'agy':
-        case 'antigravity':
-          return 'AGY (Google Antigravity)';
-        case 'commandcode':
-        case 'cmd':
-          return 'CommandCode (CMD)';
-        case 'opencode':
-          return 'OpenCode (ACP)';
-        case 'omp':
-        case 'ohmypi':
-          return 'Oh My Pi (OMP)';
-        case 'pi':
-        case 'pi-agent':
-          return 'Pi Coding Agent';
-        case 'claude-code':
-        case 'claude':
-          return 'Claude Code (ACP)';
-        case 'codex':
-          return 'OpenAI Codex (ACP)';
-        case 'gemini':
-          return 'Gemini CLI (ACP)';
-        default:
-          return sessionAcpAgent;
-      }
-    }
-    return 'RakitKode (Native)';
-  }, [lockedAcpDesc, sessionAcpAgent]);
-
-  // Dynamic session model (editable per session)
-  const sessionModel = sessionMeta.model || activeAgent?.model || defaultModel || 'Auto';
-
-  // Available models for this session's locked agent engine
-  const selectableModels = useMemo(() => {
-    if (lockedAcpDesc?.supportedModels && lockedAcpDesc.supportedModels.length > 0) {
-      const list = [...lockedAcpDesc.supportedModels];
-      if (sessionModel && !list.includes(sessionModel) && sessionModel !== 'Auto') {
-        list.unshift(sessionModel);
-      }
-      return list.map((m) => ({ id: m, name: m }));
-    }
-    if (availableModels && availableModels.length > 0) {
-      return availableModels.map((m) => ({ id: m.id, name: m.name || m.id }));
-    }
-    if (sessionModel) {
-      return [{ id: sessionModel, name: sessionModel }];
-    }
-    return [{ id: 'default', name: 'Default Model' }];
-  }, [lockedAcpDesc, availableModels, sessionModel]);
-
-  // Ensure session metadata locks the engine permanently if not recorded yet
-  useEffect(() => {
-    if (activeSession?.id && (!sessionMeta.engine || (sessionAcpAgent && !sessionMeta.acpAgent))) {
-      updateSessionMetadata(activeSession.id, {
-        engine: sessionEngine,
-        ...(sessionAcpAgent ? { acpAgent: sessionAcpAgent } : {}),
-        model: sessionModel,
-      });
-    }
-  }, [activeSession?.id]);
-
-  const handleModelChange = (newModel: string) => {
-    if (activeSession?.id) {
-      updateSessionModel(activeSession.id, newModel);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || isStreaming || isSending) return;
-    const text = input.trim();
-    setInput('');
-    setIsSending(true);
+  const handleCopy = async (text: string, id: string) => {
     try {
-      await sendMessage(text, { agentId: activeAgent?.id, model: sessionModel });
-    } finally {
-      setIsSending(false);
+      await navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch {}
+  };
+
+  const handleThumb = (id: string, dir: 'up' | 'down') => {
+    setLikedMap((prev) => ({
+      ...prev,
+      [id]: prev[id] === dir ? undefined! : dir,
+    }));
+  };
+
+  const handleRename = () => {
+    if (!activeSession) return;
+    const current = activeSession.title || '';
+    const next = prompt('Rename task:', current);
+    if (next && next.trim() && next.trim() !== current) {
+      renameSession(activeSession.id, next.trim());
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit(e);
-    }
+  const handleFollowUp = async (text: string, options?: PromptSubmitOptions) => {
+    if (!activeSession) return;
+    userScrolledUpRef.current = false;
+    await sendMessage(text, {
+      agentId: activeSession.agentId || activeAgent?.id,
+      model: options?.model,
+      engine: options?.engineKind,
+      acpAgent: options?.engineKind === 'acp' ? options.engineId : undefined,
+    });
   };
 
-  const sessionPermissions = activeSession?.id ? permissions[activeSession.id] || [] : [];
+  const toggleWork = (wbId: string) => {
+    setExpandedWork((prev) => ({
+      ...prev,
+      [wbId]: prev[wbId] === undefined ? true : !prev[wbId],
+    }));
+  };
+
+  const toggleThought = (id: string) => {
+    setExpandedThoughts((prev) => ({
+      ...prev,
+      [id]: prev[id] === undefined ? true : !prev[id],
+    }));
+  };
+
+  const toggleTool = (id: string) => {
+    setExpandedTools((prev) => ({
+      ...prev,
+      [id]: prev[id] === undefined ? true : !prev[id],
+    }));
+  };
+
+  const displayTitle = activeSession?.title || 'Hi there';
 
   return (
-    <div className="flex-1 h-full flex flex-col min-w-0 bg-[#0c0c0e] relative overflow-hidden">
-      {/* Top Header Bar */}
-      <div className="h-14 px-4 border-b border-border/30 flex items-center justify-between shrink-0 bg-[#101014]/60 backdrop-blur-md z-10">
-        <div className="flex items-center gap-3 min-w-0">
-          <AgentIcon
-            id={activeAgent?.id || ''}
-            name={activeAgent?.name}
-            avatar={activeAgent?.avatar}
-            isACP={sessionEngine === 'acp' || !!sessionAcpAgent}
-            size={24}
-          />
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-foreground truncate">
-              {activeSession?.title || 'Chat'}
-            </h2>
-            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <span>{activeAgent?.name || 'Agent'}</span>
-              <span>•</span>
-              {/* Locked Engine Badge (cannot change mid-session) */}
-              <div
-                className="flex items-center gap-1.5 bg-muted/50 border border-border/40 rounded px-2 py-0.5 text-foreground shadow-2xs select-none"
-                title={`Session engine locked to ${sessionEngineLabel} (cannot change mid-session)`}
-              >
-                <ProviderIcon provider={sessionAcpAgent || sessionEngine} size={11} className="shrink-0" />
-                <span className="font-mono text-[10px] text-foreground font-medium truncate max-w-[150px]">
-                  {sessionEngineLabel}
-                </span>
-                <Lock className="w-2.5 h-2.5 text-muted-foreground/70 shrink-0 ml-0.5" />
-              </div>
-              <span>•</span>
-              {/* Dynamic Model Selector */}
-              <div className="flex items-center gap-1 bg-muted/40 hover:bg-muted/70 border border-border/40 rounded px-1.5 py-0.5 text-foreground transition-colors group">
-                <Cpu className="w-3 h-3 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
-                <select
-                  value={sessionModel}
-                  onChange={(e) => handleModelChange(e.target.value)}
-                  className="bg-transparent font-mono text-[10px] text-foreground focus:outline-none cursor-pointer max-w-[150px] truncate"
-                  title="Switch model for this session"
-                >
-                  {selectableModels.map((opt) => (
-                    <option key={opt.id} value={opt.id} className="bg-[#141418] text-foreground">
-                      {opt.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Header Actions */}
-        <div className="flex items-center gap-2">
-          {onToggleDrawer && (
-            <button
-              onClick={onToggleDrawer}
-              className={`p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors ${
-                isDrawerOpen ? 'bg-muted text-foreground' : ''
-              }`}
-              title="Toggle Context Drawer"
-            >
-              <SlidersHorizontal className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-      </div>
+    <div className="flex-1 h-full flex flex-col bg-background text-foreground select-none relative overflow-hidden">
+      {/* Top Workspace Header */}
+      <WorkspaceHeader
+        title={displayTitle}
+        onRenameSession={handleRename}
+        onDeleteSession={() => activeSession?.id && deleteSession(activeSession.id)}
+        onToggleSidePane={onToggleDrawer}
+        isSidePaneOpen={isDrawerOpen}
+      />
 
       {/* Messages Scroll Area */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 space-y-6 scrollbar-thin scrollbar-thumb-border"
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 scrollbar-thin scrollbar-thumb-border"
       >
-        {isLoadingMessages && messages.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-xs text-muted-foreground animate-pulse">
-            Loading transcript...
-          </div>
-        ) : (
-          <>
-            {messages.map((msg) => {
-              const isUser = msg.role === 'user';
+        <div className="chat-content-lane space-y-6">
+          {isLoadingMessages && messages.length === 0 ? (
+            <div className="py-20 text-center text-ui-xs text-muted-foreground animate-pulse">
+              Loading transcript...
+            </div>
+          ) : messages.length === 0 && !isStreaming ? (
+            /* ForgeADE Empty State parity */
+            <div className="py-24 text-center text-muted-foreground space-y-3">
+              <Sparkles className="w-9 h-9 text-muted-foreground/60 mx-auto opacity-70" />
+              <p className="font-medium text-sm text-foreground">Ready for instructions</p>
+              <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                Type a task prompt below. The agent will explore files, execute tools, reasoning blocks, and propose changes.
+              </p>
+            </div>
+          ) : (
+            <>
+              {messages.map((msg, index) => {
+                const isUser = msg.role === 'user';
+                const isMsgLiked = likedMap[msg.id];
+                const isCopied = copiedId === msg.id;
 
-              return (
-                <div
-                  key={msg.id}
-                  className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-3xl mx-auto w-full`}
-                >
-                  {/* Sender identity */}
-                  <div className="flex items-center gap-2 mb-1.5 px-1">
-                    <span className="text-xs font-semibold text-muted-foreground">
-                      {isUser ? 'You' : activeAgent?.name || 'Agent'}
-                    </span>
-                    {msg.createdAt && (
-                      <span className="text-[10px] text-muted-foreground/60 font-mono">
-                        {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Thinking / Reasoning Block */}
-                  {msg.thought && (
-                    <div className="w-full mb-3 rounded-xl bg-violet-950/20 border border-violet-800/30 p-3 text-xs text-violet-200/90 space-y-1.5">
-                      <div
-                        onClick={() => setShowThinking(!showThinking)}
-                        className="flex items-center gap-2 font-medium cursor-pointer select-none text-violet-300"
-                      >
-                        <Brain className="w-3.5 h-3.5 text-violet-400" />
-                        <span>Reasoning Process</span>
-                        {showThinking ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                if (isUser) {
+                  return (
+                    /* User Message Bubble (Kybern style: 80% width max, rounded squircle, message theme color) */
+                    <div key={msg.id || index} className="group/user-row flex flex-col items-end w-full gap-1">
+                      <div className="relative max-w-[80%] rounded-2xl bg-message px-4 py-3 text-message-foreground shadow-xs select-text">
+                        <p className="whitespace-pre-wrap break-words text-ui-sm leading-relaxed [overflow-wrap:anywhere] select-text">
+                          {msg.content}
+                        </p>
                       </div>
-                      {showThinking && (
-                        <div className="text-[11px] text-muted-foreground/90 whitespace-pre-wrap font-mono pl-5 pt-1 border-l border-violet-800/40">
-                          {msg.thought}
+                      <div className="flex w-full max-w-[80%] items-center justify-end gap-2 pr-1 text-2xs tabular-nums opacity-0 transition-opacity duration-200 group-hover/user-row:opacity-100 text-muted-foreground">
+                        <span>{relativeTime(msg.createdAt)}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(msg.content, msg.id || `u-${index}`)}
+                          className="rounded p-1 hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
+                          title="Copy message"
+                        >
+                          {copiedId === (msg.id || `u-${index}`) ? (
+                            <Check className="size-3 text-emerald-500" />
+                          ) : (
+                            <Copy className="size-3" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                /* ASSISTANT MESSAGE TURN */
+                const hasWork = Boolean(msg.thought || (msg.toolCalls && msg.toolCalls.length > 0));
+                const wbId = `wb-${msg.id || index}`;
+                const workOpen = expandedWork[wbId] !== undefined ? expandedWork[wbId] : false;
+
+                // Compute work duration in seconds
+                let workSecs = 0;
+                if (msg.durationMs && msg.durationMs > 0) {
+                  workSecs = Math.max(1, Math.round(msg.durationMs / 1000));
+                } else if (msg.toolCalls && msg.toolCalls.length > 0) {
+                  const totalToolMs = msg.toolCalls.reduce((sum, t) => sum + (t.durationMs || 0), 0);
+                  workSecs = totalToolMs > 0 ? Math.round(totalToolMs / 1000) : Math.max(msg.toolCalls.length * 2, 2);
+                } else if (msg.thought) {
+                  workSecs = 2;
+                }
+
+                return (
+                  <div key={msg.id || index} className="group/msg flex flex-col items-start w-full space-y-3">
+                    {/* WORKED-FOR ACCORDION (ForgeADE parity) */}
+                    {hasWork && (
+                      <div className="w-full flex flex-col items-start space-y-1.5 pt-0.5">
+                        <button
+                          type="button"
+                          aria-expanded={workOpen}
+                          onClick={() => toggleWork(wbId)}
+                          className="group/wb flex h-6 min-w-0 items-center gap-1.5 px-1 text-ui-xs tabular-nums cursor-pointer w-fit select-none rounded hover:bg-accent/50 transition-colors"
+                        >
+                          <span className="text-muted-foreground group-hover/wb:text-foreground font-medium">
+                            Worked for {workSecs}s
+                          </span>
+                          {workOpen ? (
+                            <ChevronDown className="size-3 text-muted-foreground opacity-60" />
+                          ) : (
+                            <ChevronRight className="size-3 text-muted-foreground opacity-60" />
+                          )}
+                        </button>
+
+                        {/* Accordion Content (Block Thinking & Block Tools) */}
+                        {workOpen && (
+                          <div className="w-full space-y-2 my-0.5 pl-1">
+                            {/* Block Thinking (Brain icon + Thought row + Clean indent) */}
+                            {msg.thought && (() => {
+                              const isThoughtOpen = expandedThoughts[msg.id] ?? false;
+                              return (
+                                <div className="w-full">
+                                  <button
+                                    type="button"
+                                    aria-expanded={isThoughtOpen}
+                                    onClick={() => toggleThought(msg.id)}
+                                    className="flex items-center gap-1.5 rounded-md px-1 py-0.5 text-ui-xs text-muted-foreground hover:bg-accent/60 hover:text-foreground cursor-pointer select-none"
+                                  >
+                                    <Brain className="size-3.5 text-muted-foreground shrink-0" />
+                                    <span className="font-medium text-foreground/80">Thought · {workSecs}s</span>
+                                    {isThoughtOpen ? (
+                                      <ChevronDown className="size-3 opacity-60 rotate-90 transition-transform" />
+                                    ) : (
+                                      <ChevronRight className="size-3 opacity-60 transition-transform" />
+                                    )}
+                                  </button>
+                                  {isThoughtOpen && (
+                                    <div className="ms-6 max-h-[360px] overflow-y-auto whitespace-pre-wrap font-mono text-[length:var(--font-size-code,12px)] leading-relaxed text-muted-foreground/85 py-1.5 pr-2 select-text scrollbar-thin">
+                                      <MarkdownView content={msg.thought} muted />
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+
+                            {/* Block Tools (WorkLogList with ToolExecutionCard) */}
+                            {msg.toolCalls && msg.toolCalls.length > 0 && (
+                              <WorkLogList className="w-full my-1">
+                                {msg.toolCalls.map((tc, idx) => {
+                                  const toolExec = mapToolCallRecord(tc);
+                                  const isToolOpen = expandedTools[tc.id] !== undefined
+                                    ? expandedTools[tc.id]
+                                    : (tc.status === 'error' || idx === msg.toolCalls!.length - 1);
+                                  return (
+                                    <ToolExecutionCard
+                                      key={tc.id}
+                                      tool={toolExec}
+                                      isOpen={isToolOpen}
+                                      onToggle={() => toggleTool(tc.id)}
+                                    />
+                                  );
+                                })}
+                              </WorkLogList>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Markdown Assistant Content (OUTSIDE the accordion) */}
+                    {msg.content && (
+                      <div className="w-full text-ui-base leading-relaxed text-foreground select-text py-0.5">
+                        <MarkdownView content={msg.content} />
+                      </div>
+                    )}
+
+                    {/* Message Action Footer Row */}
+                    <div className="flex w-full items-center gap-1 opacity-0 group-hover/msg:opacity-100 transition-opacity duration-200">
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(msg.content, msg.id)}
+                        className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
+                        title="Copy response"
+                      >
+                        {isCopied ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5" />}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleThumb(msg.id, 'up')}
+                        className={`rounded p-1 transition-colors hover:bg-accent cursor-pointer ${
+                          isMsgLiked === 'up' ? 'text-emerald-500' : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                        title="Good response"
+                      >
+                        <ThumbsUp className="size-3.5" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleThumb(msg.id, 'down')}
+                        className={`rounded p-1 transition-colors hover:bg-accent cursor-pointer ${
+                          isMsgLiked === 'down' ? 'text-destructive' : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                        title="Bad response"
+                      >
+                        <ThumbsDown className="size-3.5" />
+                      </button>
+
+                      {msg.model && (
+                        <span className="ml-1 text-3xs font-mono text-muted-foreground/60 border border-border/40 rounded px-1 py-0.5">
+                          {msg.model}
+                        </span>
+                      )}
+
+                      <span className="ml-auto text-3xs tabular-nums text-muted-foreground/75 font-mono">
+                        {relativeTime(msg.createdAt)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Streaming Live Turn (ForgeADE live progress) */}
+              {isStreaming && (
+                <div className="flex flex-col items-start w-full space-y-3">
+                  {/* Live Working / Worked Header */}
+                  {(streamingThought || streamingToolCalls.length > 0) && (
+                    <div className="w-full flex flex-col items-start space-y-1.5 pt-0.5">
+                      <div className="flex h-6 min-w-0 items-center gap-2 px-1 text-ui-xs tabular-nums select-none">
+                        <Loader2 className="size-3 animate-spin text-primary shrink-0" />
+                        <span className="font-medium live-tool-shine">
+                          {liveElapsed > 0 ? `Working for ${liveElapsed}s` : 'Working…'}
+                        </span>
+                      </div>
+
+                      {/* Live Streaming Thought */}
+                      {streamingThought && (
+                        <div className="w-full pl-1">
+                          <div className="flex items-center gap-1.5 text-ui-xs text-primary font-medium py-0.5 select-none">
+                            <Brain className="size-3.5 text-primary animate-pulse shrink-0" />
+                            <span className="live-tool-shine">
+                              {liveElapsed > 0 ? `Thinking for ${liveElapsed}s` : 'Thinking…'}
+                            </span>
+                          </div>
+                          <div className="ms-6 max-h-[360px] overflow-y-auto whitespace-pre-wrap font-mono text-[length:var(--font-size-code,12px)] leading-relaxed text-muted-foreground/85 py-1.5 pr-2 select-text scrollbar-thin">
+                            <MarkdownView content={streamingThought} muted isStreaming />
+                          </div>
                         </div>
+                      )}
+
+                      {/* Live Streaming Tool Calls (WorkLogList with ToolExecutionCard) */}
+                      {streamingToolCalls.length > 0 && (
+                        <WorkLogList className="w-full my-1 pl-1">
+                          {streamingToolCalls.map((tc) => {
+                            const toolExec = mapToolCallRecord(tc);
+                            const isOpen = expandedTools[tc.id] ?? (tc.status === 'running' || tc.status === 'error');
+                            return (
+                              <ToolExecutionCard
+                                key={tc.id}
+                                tool={toolExec}
+                                isOpen={isOpen}
+                                onToggle={() => toggleTool(tc.id)}
+                              />
+                            );
+                          })}
+                        </WorkLogList>
                       )}
                     </div>
                   )}
 
-                  {/* Message Bubble */}
-                  <div
-                    className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-                      isUser
-                        ? 'bg-[#18181b] text-foreground border border-border/40 max-w-[85%]'
-                        : 'bg-transparent text-foreground w-full'
-                    }`}
-                  >
-                    <MarkdownView content={msg.content} />
-                  </div>
+                  {/* Live Streaming Text Response */}
+                  {streamingContent && (
+                    <div className="w-full text-ui-base leading-relaxed text-foreground select-text py-0.5">
+                      <MarkdownView content={streamingContent} isStreaming />
+                    </div>
+                  )}
 
-                  {/* Inline Tool Calls */}
-                  {msg.toolCalls && msg.toolCalls.length > 0 && (
-                    <div className="w-full space-y-2 mt-2">
-                      {msg.toolCalls.map((tc) => (
-                        <ToolExecutionCard key={tc.id} toolCall={tc} />
-                      ))}
+                  {/* Fallback spinner if turn just started */}
+                  {!streamingThought && !streamingContent && streamingToolCalls.length === 0 && (
+                    <div className="flex items-center gap-2 py-2 text-ui-sm text-primary select-none">
+                      <Loader2 className="size-4 animate-spin" />
+                      <span className="live-tool-shine">Thinking…</span>
                     </div>
                   )}
                 </div>
-              );
-            })}
-
-            {/* Currently Streaming Message */}
-            {isStreaming && (
-              <div className="flex flex-col items-start max-w-3xl mx-auto w-full">
-                <div className="flex items-center gap-2 mb-1.5 px-1">
-                  <span className="text-xs font-semibold text-primary animate-pulse">
-                    {activeAgent?.name || 'Agent'} (working...)
-                  </span>
-                </div>
-
-                {/* Streaming Thinking */}
-                {streamingThought && (
-                  <div className="w-full mb-3 rounded-xl bg-violet-950/20 border border-violet-800/30 p-3 text-xs text-violet-200/90 space-y-1.5">
-                    <div className="flex items-center gap-2 font-medium text-violet-300">
-                      <Brain className="w-3.5 h-3.5 text-violet-400 animate-spin-slow" />
-                      <span>Thinking...</span>
-                    </div>
-                    <div className="text-[11px] text-muted-foreground whitespace-pre-wrap font-mono pl-5 pt-1 border-l border-violet-800/40">
-                      {streamingThought}
-                    </div>
-                  </div>
-                )}
-
-                {/* Streaming Text */}
-                {streamingContent && (
-                  <div className="rounded-2xl px-4 py-3 text-sm leading-relaxed text-foreground w-full stream-in">
-                    <MarkdownView content={streamingContent} isStreaming />
-                  </div>
-                )}
-
-                {/* Streaming Tools */}
-                {streamingToolCalls.length > 0 && (
-                  <div className="w-full space-y-2 mt-2">
-                    {streamingToolCalls.map((tc) => (
-                      <ToolExecutionCard key={tc.id} toolCall={tc} />
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Pending Interactive Permissions (ACP or Sensitive Operations) */}
-            {sessionPermissions.map((req) => (
-              <div
-                key={req.requestId}
-                className="max-w-3xl mx-auto w-full rounded-2xl bg-amber-950/20 border border-amber-600/40 p-4 space-y-3 animate-in fade-in-50"
-              >
-                <div className="flex items-center gap-2.5 text-amber-400 text-xs font-semibold">
-                  <ShieldAlert className="w-4 h-4 text-amber-500" />
-                  <span>Permission Required</span>
-                </div>
-                <p className="text-xs text-foreground font-medium">{req.title || 'Tool execution requires permission'}</p>
-                <div className="flex items-center gap-2 pt-1">
-                  {req.options.map((opt) => (
-                    <button
-                      key={opt.optionId}
-                      onClick={() => respondPermission(req.sessionId, req.requestId, opt.optionId)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                        opt.kind.includes('allow')
-                          ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                          : 'bg-muted hover:bg-muted/80 text-foreground'
-                      }`}
-                    >
-                      {opt.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </>
-        )}
+              )}
+            </>
+          )}
+        </div>
       </div>
 
-      {/* Floating Bottom Composer */}
-      <div className="p-4 bg-gradient-to-t from-[#0c0c0e] via-[#0c0c0e] to-transparent shrink-0">
-        <form
-          onSubmit={handleSubmit}
-          className="max-w-3xl mx-auto w-full rounded-2xl bg-[#141418] border border-border/60 hover:border-border focus-within:border-primary/60 transition-colors shadow-2xl p-3 flex flex-col gap-2"
-        >
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={`Message ${activeAgent?.name || 'Agent'}...`}
-            rows={2}
-            className="w-full bg-transparent border-0 resize-none text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none p-1"
-          />
-
-          <div className="flex items-center justify-between pt-1">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className="w-8 h-8 rounded-lg hover:bg-muted/60 text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors"
-                title="Attach file"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
-
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted/40 hover:bg-muted/60 border border-border/40 text-[11px] text-muted-foreground transition-colors group">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                <select
-                  value={sessionModel}
-                  onChange={(e) => handleModelChange(e.target.value)}
-                  className="bg-transparent font-mono text-[11px] text-foreground/90 group-hover:text-foreground focus:outline-none cursor-pointer max-w-[140px] truncate"
-                  title="Switch model for this session"
-                >
-                  {selectableModels.map((opt) => (
-                    <option key={opt.id} value={opt.id} className="bg-[#141418] text-foreground">
-                      {opt.name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="w-2.5 h-2.5 text-muted-foreground group-hover:text-foreground transition-colors pointer-events-none shrink-0" />
-              </div>
-            </div>
-
-            {isStreaming ? (
-              <button
-                type="button"
-                onClick={() => stopSession()}
-                className="w-8 h-8 rounded-full bg-amber-500/20 hover:bg-amber-500/30 text-amber-500 flex items-center justify-center transition-all"
-                title="Stop generation"
-              >
-                <Square className="w-3.5 h-3.5 fill-current" />
-              </button>
-            ) : (
-              <button
-                type="submit"
-                disabled={!input.trim()}
-                className="w-8 h-8 rounded-full bg-primary hover:bg-primary/90 disabled:opacity-40 disabled:hover:bg-primary text-white flex items-center justify-center transition-all shadow-md shadow-primary/20"
-                title="Send message"
-              >
-                <ArrowUp className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-        </form>
+      {/* Docked Floating Bottom Composer + Approval Card */}
+      <div className="pt-2 pb-5 px-4 sm:px-6 bg-background transition-colors w-full shrink-0">
+        {activeSession?.id && <ApprovalCard sessionId={activeSession.id} />}
+        <AgentTaskInputBar
+          placeholder="Ask for follow-up changes"
+          showContextStrip={true}
+          onSubmitPrompt={handleFollowUp}
+        />
       </div>
     </div>
   );
 };
+
+export default ChatThread;

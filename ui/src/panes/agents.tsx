@@ -828,7 +828,7 @@ export const AgentsPane: React.FC = () => {
                   <span>Visual Persona Avatar</span>
                   <span className="text-[10px] text-gray-400 font-normal">Clean SVG Grok Avatars</span>
                 </label>
-                <div className="grid grid-cols-5 sm:grid-cols-10 gap-2 mt-2">
+                <div className="grid grid-cols-5 sm:grid-cols-10 gap-2 mt-2 max-h-60 overflow-y-auto p-1 scrollbar-thin">
                   {GROK_AVATARS.map((av) => {
                     const isSelected = formAvatar === av.id;
                     return (

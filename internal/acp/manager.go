@@ -116,6 +116,20 @@ func (m *Manager) Agents() []AgentDescriptor {
 	return m.registry.list()
 }
 
+func (m *Manager) IsACPAgent(id string) bool {
+	if m == nil || m.registry == nil {
+		return false
+	}
+	return m.registry.IsACPAgent(id)
+}
+
+func (m *Manager) GetAgent(id string) (AgentDescriptor, error) {
+	if m == nil || m.registry == nil {
+		return AgentDescriptor{}, fmt.Errorf("acp manager not initialized")
+	}
+	return m.registry.Get(id)
+}
+
 // ---- Session lifecycle -----------------------------------------------------
 
 // StartSession spawns the agent process, performs the ACP handshake, and
@@ -280,7 +294,7 @@ func (m *Manager) startSessionInternal(customID, agentID, cwd, model string, aut
 	m.live[kendaliID] = live
 	m.mu.Unlock()
 
-	// Persist the kendali-side session record (type=agent, engine=acp).
+	// Persist or update the kendali-side session record (type=agent, engine=acp).
 	meta := map[string]interface{}{
 		"mode":          "agent",
 		"engine":        "acp",
@@ -292,22 +306,49 @@ func (m *Manager) startSessionInternal(customID, agentID, cwd, model string, aut
 		"autoApprove":   autoApprove,
 	}
 	metaJSON, _ := json.Marshal(meta)
-	sess := gateway.Session{
-		ID:        kendaliID,
-		AgentID:   agentDesc.ID,
-		Title:     "New Task",
-		Type:      "agent",
-		ChannelID: "web",
-		UserID:    "web",
-		Status:    "active",
-		Metadata:  string(metaJSON),
-		CreatedAt: live.createdAt,
+
+	var sess gateway.Session
+	existing, _ := m.store.GetSession(kendaliID)
+	if existing != nil {
+		sess = *existing
+		var existingMeta map[string]interface{}
+		if sess.Metadata != "" {
+			_ = json.Unmarshal([]byte(sess.Metadata), &existingMeta)
+		}
+		if existingMeta == nil {
+			existingMeta = make(map[string]interface{})
+		}
+		for k, v := range meta {
+			existingMeta[k] = v
+		}
+		if data, err := json.Marshal(existingMeta); err == nil {
+			sess.Metadata = string(data)
+		}
+		sess.Status = "active"
+	} else {
+		sess = gateway.Session{
+			ID:        kendaliID,
+			AgentID:   "lutfi",
+			Title:     "New Task",
+			Type:      "agent",
+			ChannelID: "web",
+			UserID:    "web",
+			Status:    "active",
+			Metadata:  string(metaJSON),
+			CreatedAt: live.createdAt,
+		}
 	}
+
 	if err := m.store.SaveSession(sess); err != nil {
 		cancel()
 		return nil, fmt.Errorf("acp: persist session: %w", err)
 	}
-	m.bus.Publish(messaging.Event{Type: messaging.EventSessionCreated, SessionID: kendaliID, AgentID: agentDesc.ID, Channel: "web", Payload: sess})
+
+	if existing == nil {
+		m.bus.Publish(messaging.Event{Type: messaging.EventSessionCreated, SessionID: kendaliID, AgentID: sess.AgentID, Channel: "web", Payload: sess})
+	} else {
+		m.bus.Publish(messaging.Event{Type: messaging.EventSessionUpdated, SessionID: kendaliID, AgentID: sess.AgentID, Channel: "web", Payload: sess})
+	}
 	m.publishStatus(live)
 
 	return m.sessionInfo(live), nil
@@ -538,6 +579,22 @@ func (m *Manager) Prompt(sessionID, text string) error {
 	live.setStatus("running")
 	m.publishStatus(live)
 
+	// Broadcast EventAgentStarted so frontend streaming state initializes cleanly
+	m.bus.Publish(messaging.Event{
+		ID:        uuid.New().String(),
+		Type:      messaging.EventAgentStarted,
+		SessionID: sessionID,
+		AgentID:   live.agent.ID,
+		Channel:   "web",
+		Payload: map[string]interface{}{
+			"agentId":   live.agent.ID,
+			"agentName": live.agent.Name,
+			"avatar":    live.agent.ID,
+			"model":     live.model,
+		},
+		Timestamp: time.Now(),
+	})
+
 	go func() {
 		live.turnMu.Lock()
 		defer live.turnMu.Unlock()
@@ -585,7 +642,7 @@ func (m *Manager) Prompt(sessionID, text string) error {
 			ID:         "acp-a-" + uuid.New().String(),
 			SessionID:  sessionID,
 			AgentID:    live.agent.ID,
-			Channel:    "acp",
+			Channel:    "web",
 			Role:       "assistant",
 			SenderType: "agent",
 			SenderID:   live.agent.ID,
@@ -610,12 +667,14 @@ func (m *Manager) Prompt(sessionID, text string) error {
 				final.Content = "ACP agent error: " + err.Error()
 			}
 			_ = m.store.SaveMessage(final)
-			m.bus.Publish(messaging.Event{Type: messaging.EventAgentCompleted, SessionID: sessionID, AgentID: live.agent.ID, Channel: "acp", Payload: final})
+			m.bus.Publish(messaging.Event{Type: messaging.EventMessageCreated, SessionID: sessionID, AgentID: live.agent.ID, Channel: "web", Payload: final, Timestamp: time.Now()})
+			m.bus.Publish(messaging.Event{Type: messaging.EventAgentCompleted, SessionID: sessionID, AgentID: live.agent.ID, Channel: "web", Payload: final, Timestamp: time.Now()})
 		} else if res.StopReason == "cancelled" {
 			// Interrupted by the user; keep whatever streamed in as the row.
 			if strings.TrimSpace(final.Content) != "" || len(final.ToolCalls) > 0 {
 				_ = m.store.SaveMessage(final)
-				m.bus.Publish(messaging.Event{Type: messaging.EventAgentCompleted, SessionID: sessionID, AgentID: live.agent.ID, Channel: "acp", Payload: final})
+				m.bus.Publish(messaging.Event{Type: messaging.EventMessageCreated, SessionID: sessionID, AgentID: live.agent.ID, Channel: "web", Payload: final, Timestamp: time.Now()})
+				m.bus.Publish(messaging.Event{Type: messaging.EventAgentCompleted, SessionID: sessionID, AgentID: live.agent.ID, Channel: "web", Payload: final, Timestamp: time.Now()})
 			}
 			live.setStatus("idle")
 		} else {
@@ -623,7 +682,8 @@ func (m *Manager) Prompt(sessionID, text string) error {
 			if err := m.store.SaveMessage(final); err != nil {
 				fmt.Printf("acp: persist assistant message: %v\n", err)
 			}
-			m.bus.Publish(messaging.Event{Type: messaging.EventAgentCompleted, SessionID: sessionID, AgentID: live.agent.ID, Channel: "acp", Payload: final})
+			m.bus.Publish(messaging.Event{Type: messaging.EventMessageCreated, SessionID: sessionID, AgentID: live.agent.ID, Channel: "web", Payload: final, Timestamp: time.Now()})
+			m.bus.Publish(messaging.Event{Type: messaging.EventAgentCompleted, SessionID: sessionID, AgentID: live.agent.ID, Channel: "web", Payload: final, Timestamp: time.Now()})
 		}
 		m.publishStatus(live)
 	}()
@@ -905,7 +965,7 @@ func (m *Manager) handleStreamEvent(live *liveSession, event string, raw []byte,
 					Type:      messaging.EventAgentTextDelta,
 					SessionID: live.SessionID,
 					AgentID:   live.agent.ID,
-					Channel:   "acp",
+					Channel:   "web",
 					Payload:   messaging.TextDeltaPayload{Delta: su.TextDelta},
 				})
 			}
@@ -939,31 +999,58 @@ func (m *Manager) handleStreamEvent(live *liveSession, event string, raw []byte,
 						Type:      messaging.EventAgentToolCall,
 						SessionID: live.SessionID,
 						AgentID:   live.agent.ID,
-						Channel:   "acp",
+						Channel:   "web",
 						Payload:   messaging.ToolCallPayload{ID: toolID, Tool: toolName, Arguments: params},
 					})
 				} else if su.State == "DONE" || su.State == "ERROR" {
 					var resultStr string
 					if su.ToolInfo != nil {
-						if res, ok := su.ToolInfo["result"]; ok {
-							resB, _ := json.Marshal(res)
-							resultStr = string(resB)
+						if out, ok := su.ToolInfo["output"].(string); ok && out != "" {
+							resultStr = out
+						} else if res, ok := su.ToolInfo["result"]; ok {
+							if resStr, ok := res.(string); ok {
+								resultStr = resStr
+							} else {
+								resB, _ := json.Marshal(res)
+								resultStr = string(resB)
+							}
 						}
 					}
 					st := "completed"
 					if su.State == "ERROR" {
 						st = "failed"
 					}
-					if rec, ok := live.tools[toolID]; ok {
-						rec.Status = st
-						rec.Output = resultStr
+					rec, exists := live.tools[toolID]
+					if !exists {
+						rec = &gateway.ToolCallRecord{
+							ID:        toolID,
+							Tool:      toolName,
+							Arguments: params,
+						}
+						live.tools[toolID] = rec
+						live.toolOrder = append(live.toolOrder, toolID)
 					}
+					rec.Status = st
+					rec.Output = resultStr
+					if len(rec.Arguments) == 0 && len(params) > 0 {
+						rec.Arguments = params
+					}
+					if rec.Tool == "" || rec.Tool == "tool" {
+						rec.Tool = toolName
+					}
+
 					m.bus.Publish(messaging.Event{
 						Type:      messaging.EventAgentToolResult,
 						SessionID: live.SessionID,
 						AgentID:   live.agent.ID,
-						Channel:   "acp",
-						Payload:   messaging.ToolResultPayload{ID: toolID, Tool: toolName, Output: resultStr, Status: st},
+						Channel:   "web",
+						Payload: messaging.ToolResultPayload{
+							ID:         toolID,
+							Tool:       rec.Tool,
+							Output:     resultStr,
+							Status:     st,
+							DurationMs: int64(su.DurationSeconds * 1000),
+						},
 					})
 				}
 			}
@@ -1004,7 +1091,7 @@ func (m *Manager) handleNotification(live *liveSession, method string, params js
 			live.content.WriteString(block.Text)
 			m.bus.Publish(messaging.Event{
 				Type: messaging.EventAgentTextDelta, SessionID: live.SessionID,
-				AgentID: live.agent.ID, Channel: "acp",
+				AgentID: live.agent.ID, Channel: "web",
 				Payload: messaging.TextDeltaPayload{Delta: block.Text},
 			})
 		}
@@ -1014,7 +1101,7 @@ func (m *Manager) handleNotification(live *liveSession, method string, params js
 			live.thought.WriteString(block.Text)
 			m.bus.Publish(messaging.Event{
 				Type: messaging.EventAgentThinkingDelta, SessionID: live.SessionID,
-				AgentID: live.agent.ID, Channel: "acp",
+				AgentID: live.agent.ID, Channel: "web",
 				Payload: messaging.ThinkingDeltaPayload{Delta: block.Text},
 			})
 		}
@@ -1034,7 +1121,7 @@ func (m *Manager) handleNotification(live *liveSession, method string, params js
 		live.toolOrder = append(live.toolOrder, u.ToolCallID)
 		m.bus.Publish(messaging.Event{
 			Type: messaging.EventAgentToolCall, SessionID: live.SessionID,
-			AgentID: live.agent.ID, Channel: "acp",
+			AgentID: live.agent.ID, Channel: "web",
 			Payload: messaging.ToolCallPayload{ID: rec.ID, Tool: rec.Tool, Arguments: rec.Arguments},
 		})
 	case "tool_call_update":
@@ -1048,7 +1135,7 @@ func (m *Manager) handleNotification(live *liveSession, method string, params js
 				rec.Output = extractToolOutput(u.RawOutput, u.Content)
 				m.bus.Publish(messaging.Event{
 					Type: messaging.EventAgentToolResult, SessionID: live.SessionID,
-					AgentID: live.agent.ID, Channel: "acp",
+					AgentID: live.agent.ID, Channel: "web",
 					Payload: messaging.ToolResultPayload{ID: rec.ID, Tool: rec.Tool, Output: rec.Output, Status: rec.Status},
 				})
 			default:
@@ -1068,12 +1155,12 @@ func (m *Manager) handleNotification(live *liveSession, method string, params js
 			live.toolOrder = append(live.toolOrder, u.ToolCallID)
 			m.bus.Publish(messaging.Event{
 				Type: messaging.EventAgentToolCall, SessionID: live.SessionID,
-				AgentID: live.agent.ID, Channel: "acp",
+				AgentID: live.agent.ID, Channel: "web",
 				Payload: messaging.ToolCallPayload{ID: rec.ID, Tool: rec.Tool, Arguments: rec.Arguments},
 			})
 			m.bus.Publish(messaging.Event{
 				Type: messaging.EventAgentToolResult, SessionID: live.SessionID,
-				AgentID: live.agent.ID, Channel: "acp",
+				AgentID: live.agent.ID, Channel: "web",
 				Payload: messaging.ToolResultPayload{ID: rec.ID, Tool: rec.Tool, Output: rec.Output, Status: rec.Status},
 			})
 		}

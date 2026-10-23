@@ -4,6 +4,8 @@ import { marked } from 'marked';
 interface MarkdownViewProps {
   content: string;
   isStreaming?: boolean;
+  muted?: boolean;
+  className?: string;
 }
 
 // Cleans raw internal model tags (e.g. DSML, <tool_call>, thinking leaks)
@@ -94,7 +96,7 @@ function enhanceMarkdownContainer(el: HTMLDivElement | null) {
     const language = matchLang ? matchLang[1] : '';
 
     const wrapper = document.createElement('div');
-    wrapper.className = 'rounded-lg border border-line bg-[#0D1117] text-[#E6EDF3] overflow-hidden my-3 text-xs shadow-sm';
+    wrapper.className = 'rounded-lg border border-border bg-[#0D1117] text-[#E6EDF3] overflow-hidden my-3 shadow-sm';
 
     const header = document.createElement('div');
     header.className = 'flex items-center justify-between px-3.5 py-1.5 bg-[#161B22] border-b border-[#30363D] text-[#8B949E] font-mono text-[11px] select-none';
@@ -121,7 +123,9 @@ function enhanceMarkdownContainer(el: HTMLDivElement | null) {
 
     pre.parentNode?.insertBefore(wrapper, pre);
     wrapper.appendChild(header);
-    pre.className = 'p-3 font-mono text-[#F0F6FC] overflow-x-auto text-[12px] leading-relaxed m-0 bg-transparent';
+    pre.className = 'p-3 font-mono text-[#F0F6FC] overflow-x-auto leading-relaxed m-0 bg-transparent text-[length:var(--font-size-code,13px)]';
+    pre.style.fontSize = 'var(--font-size-code, 13px)';
+    if (codeEl) codeEl.style.fontSize = 'var(--font-size-code, 13px)';
     wrapper.appendChild(pre);
   });
 
@@ -147,18 +151,19 @@ const MarkdownBlock = React.memo<{ md: string }>(({ md }) => {
   return (
     <div
       ref={ref}
-      className="text-[13px]/[22px] font-sans text-hi break-words select-text"
+      className="font-sans text-hi break-words select-text text-[length:var(--font-size-interface,15px)] leading-relaxed"
+      style={{ fontSize: 'var(--font-size-interface, 15px)' }}
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );
 });
 MarkdownBlock.displayName = 'MarkdownBlock';
 
-export const MarkdownView: React.FC<MarkdownViewProps> = ({ content, isStreaming = false }) => {
+export const MarkdownView: React.FC<MarkdownViewProps> = ({ content, isStreaming = false, muted = false, className = '' }) => {
   const blocks = useMemo(() => splitStableBlocks(sanitizeMarkdown(content)), [content]);
 
   return (
-    <div className="markdown-content break-words select-text">
+    <div className={`markdown-content break-words select-text ${muted ? 'text-muted-foreground/90' : ''} ${className}`}>
       {blocks.map((block, i) => {
         const isTail = i === blocks.length - 1;
         let md = block;

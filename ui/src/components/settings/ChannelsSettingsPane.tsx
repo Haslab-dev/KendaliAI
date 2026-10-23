@@ -87,13 +87,13 @@ export const ChannelsSettingsPane: React.FC<ChannelsSettingsPaneProps> = ({
               onClick={() => setSelectedChannel(ch.id)}
               className={`text-left p-4 rounded-xl border transition-all relative flex flex-col justify-between ${
                 isSelected
-                  ? 'bg-[#15151b] border-primary/60 ring-1 ring-primary/40 shadow-sm'
-                  : 'bg-[#101014] border-border/40 hover:border-border/80 hover:bg-[#141418]'
+                  ? 'bg-primary/10 border-primary/60 ring-1 ring-primary/40 shadow-sm'
+                  : 'bg-card border-border hover:border-border/80 hover:bg-accent'
               }`}
             >
               <div>
                 <div className="flex items-center justify-between mb-2.5">
-                  <div className="p-2 rounded-lg bg-black/40 border border-border/30">
+                  <div className="p-2 rounded-lg bg-muted border border-border">
                     <Icon size={22} />
                   </div>
                   {ch.status === 'active' ? (
@@ -132,7 +132,7 @@ export const ChannelsSettingsPane: React.FC<ChannelsSettingsPaneProps> = ({
       <div className="transition-all">
         {selectedChannel === 'telegram' && (
           <div className="space-y-4">
-            <div className="bg-[#121216] border border-border/40 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="bg-card border border-border rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-3">
                 <TelegramIcon size={24} />
                 <div>
@@ -159,14 +159,14 @@ export const ChannelsSettingsPane: React.FC<ChannelsSettingsPaneProps> = ({
         )}
 
         {selectedChannel === 'discord' && (
-          <div className="rounded-xl border border-border/40 bg-[#101014] p-6 space-y-6">
+          <div className="rounded-xl border border-border bg-card p-6 space-y-6">
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-center gap-3">
                 <DiscordIcon size={32} />
                 <div>
                   <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
                     Discord Bot Integration
-                    <span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full font-medium">
+                    <span className="text-[10px] bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2 py-0.5 rounded-full font-medium">
                       In Development
                     </span>
                   </h3>
@@ -178,7 +178,7 @@ export const ChannelsSettingsPane: React.FC<ChannelsSettingsPaneProps> = ({
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="p-4 rounded-xl bg-[#141419] border border-border/40 space-y-2">
+              <div className="p-4 rounded-xl bg-muted/30 border border-border space-y-2">
                 <div className="flex items-center gap-2 text-primary font-semibold text-xs">
                   <Hash size={14} />
                   <span>Channel Routing</span>
@@ -188,8 +188,8 @@ export const ChannelsSettingsPane: React.FC<ChannelsSettingsPaneProps> = ({
                 </p>
               </div>
 
-              <div className="p-4 rounded-xl bg-[#141419] border border-border/40 space-y-2">
-                <div className="flex items-center gap-2 text-emerald-400 font-semibold text-xs">
+              <div className="p-4 rounded-xl bg-muted/30 border border-border space-y-2">
+                <div className="flex items-center gap-2 text-emerald-500 font-semibold text-xs">
                   <Bot size={14} />
                   <span>Thread Isolation</span>
                 </div>
@@ -198,8 +198,8 @@ export const ChannelsSettingsPane: React.FC<ChannelsSettingsPaneProps> = ({
                 </p>
               </div>
 
-              <div className="p-4 rounded-xl bg-[#141419] border border-border/40 space-y-2">
-                <div className="flex items-center gap-2 text-sky-400 font-semibold text-xs">
+              <div className="p-4 rounded-xl bg-muted/30 border border-border space-y-2">
+                <div className="flex items-center gap-2 text-sky-500 font-semibold text-xs">
                   <Shield size={14} />
                   <span>Role Verification</span>
                 </div>
@@ -210,7 +210,7 @@ export const ChannelsSettingsPane: React.FC<ChannelsSettingsPaneProps> = ({
             </div>
 
             {/* Preview Form */}
-            <div className="space-y-4 pt-4 border-t border-border/30 opacity-70 pointer-events-none select-none">
+            <div className="space-y-4 pt-4 border-t border-border opacity-70 pointer-events-none select-none">
               <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider">
                 Configuration Blueprint (Preview)
               </h4>
@@ -223,7 +223,7 @@ export const ChannelsSettingsPane: React.FC<ChannelsSettingsPaneProps> = ({
                     type="text"
                     disabled
                     placeholder="123456789012345678"
-                    className="w-full bg-[#181820] border border-border/50 rounded-lg px-3 py-2 text-xs text-muted-foreground"
+                    className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-xs text-foreground"
                   />
                 </div>
                 <div>
@@ -234,7 +234,7 @@ export const ChannelsSettingsPane: React.FC<ChannelsSettingsPaneProps> = ({
                     type="password"
                     disabled
                     placeholder="MTIzNDU2Nzg5MDEyMzQ1Njc4..."
-                    className="w-full bg-[#181820] border border-border/50 rounded-lg px-3 py-2 text-xs text-muted-foreground"
+                    className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-xs text-foreground"
                   />
                 </div>
               </div>
@@ -248,14 +248,14 @@ export const ChannelsSettingsPane: React.FC<ChannelsSettingsPaneProps> = ({
         )}
 
         {selectedChannel === 'slack' && (
-          <div className="rounded-xl border border-border/40 bg-[#101014] p-6 space-y-6">
+          <div className="rounded-xl border border-border bg-card p-6 space-y-6">
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-center gap-3">
                 <SlackIcon size={32} />
                 <div>
                   <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
                     Slack App Integration
-                    <span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full font-medium">
+                    <span className="text-[10px] bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2 py-0.5 rounded-full font-medium">
                       In Development
                     </span>
                   </h3>
@@ -267,7 +267,7 @@ export const ChannelsSettingsPane: React.FC<ChannelsSettingsPaneProps> = ({
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="p-4 rounded-xl bg-[#141419] border border-border/40 space-y-2">
+              <div className="p-4 rounded-xl bg-muted/30 border border-border space-y-2">
                 <div className="flex items-center gap-2 text-primary font-semibold text-xs">
                   <Layers size={14} />
                   <span>Socket Mode</span>
@@ -277,8 +277,8 @@ export const ChannelsSettingsPane: React.FC<ChannelsSettingsPaneProps> = ({
                 </p>
               </div>
 
-              <div className="p-4 rounded-xl bg-[#141419] border border-border/40 space-y-2">
-                <div className="flex items-center gap-2 text-emerald-400 font-semibold text-xs">
+              <div className="p-4 rounded-xl bg-muted/30 border border-border space-y-2">
+                <div className="flex items-center gap-2 text-emerald-500 font-semibold text-xs">
                   <Shield size={14} />
                   <span>Interactive Approvals</span>
                 </div>
@@ -287,8 +287,8 @@ export const ChannelsSettingsPane: React.FC<ChannelsSettingsPaneProps> = ({
                 </p>
               </div>
 
-              <div className="p-4 rounded-xl bg-[#141419] border border-border/40 space-y-2">
-                <div className="flex items-center gap-2 text-sky-400 font-semibold text-xs">
+              <div className="p-4 rounded-xl bg-muted/30 border border-border space-y-2">
+                <div className="flex items-center gap-2 text-sky-500 font-semibold text-xs">
                   <Bot size={14} />
                   <span>Multi-Agent Mentions</span>
                 </div>
@@ -299,7 +299,7 @@ export const ChannelsSettingsPane: React.FC<ChannelsSettingsPaneProps> = ({
             </div>
 
             {/* Preview Form */}
-            <div className="space-y-4 pt-4 border-t border-border/30 opacity-70 pointer-events-none select-none">
+            <div className="space-y-4 pt-4 border-t border-border opacity-70 pointer-events-none select-none">
               <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider">
                 Configuration Blueprint (Preview)
               </h4>
@@ -312,7 +312,7 @@ export const ChannelsSettingsPane: React.FC<ChannelsSettingsPaneProps> = ({
                     type="password"
                     disabled
                     placeholder="xoxb-your-slack-bot-token"
-                    className="w-full bg-[#181820] border border-border/50 rounded-lg px-3 py-2 text-xs text-muted-foreground"
+                    className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-xs text-foreground"
                   />
                 </div>
                 <div>
@@ -323,7 +323,7 @@ export const ChannelsSettingsPane: React.FC<ChannelsSettingsPaneProps> = ({
                     type="password"
                     disabled
                     placeholder="xapp-your-app-level-token"
-                    className="w-full bg-[#181820] border border-border/50 rounded-lg px-3 py-2 text-xs text-muted-foreground"
+                    className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-xs text-foreground"
                   />
                 </div>
               </div>
@@ -337,14 +337,14 @@ export const ChannelsSettingsPane: React.FC<ChannelsSettingsPaneProps> = ({
         )}
 
         {selectedChannel === 'whatsapp' && (
-          <div className="rounded-xl border border-border/40 bg-[#101014] p-6 space-y-6">
+          <div className="rounded-xl border border-border bg-card p-6 space-y-6">
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-center gap-3">
                 <WhatsAppIcon size={32} />
                 <div>
                   <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
                     WhatsApp Business Channel
-                    <span className="text-[10px] bg-muted text-muted-foreground border border-border/40 px-2 py-0.5 rounded-full font-medium">
+                    <span className="text-[10px] bg-muted text-muted-foreground border border-border px-2 py-0.5 rounded-full font-medium">
                       Roadmap
                     </span>
                   </h3>
@@ -355,8 +355,8 @@ export const ChannelsSettingsPane: React.FC<ChannelsSettingsPaneProps> = ({
               </div>
             </div>
 
-            <div className="p-4 rounded-xl bg-[#141419] border border-border/40 space-y-2">
-              <div className="flex items-center gap-2 text-emerald-400 font-semibold text-xs">
+            <div className="p-4 rounded-xl bg-muted/30 border border-border space-y-2">
+              <div className="flex items-center gap-2 text-emerald-500 font-semibold text-xs">
                 <CheckCircle2 size={14} />
                 <span>Architecture</span>
               </div>

@@ -23,7 +23,7 @@ export const GroupList: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 h-full overflow-y-auto bg-[#0a0a0c] px-4 sm:px-8 py-8 select-none">
+    <div className="flex-1 h-full overflow-y-auto bg-background px-4 sm:px-8 py-8 select-none">
       <div className="max-w-2xl mx-auto space-y-6">
         {/* Top Header */}
         <div className="flex items-center justify-between">
@@ -83,7 +83,7 @@ export const GroupList: React.FC = () => {
                 <div
                   key={group.id}
                   onClick={() => handleSelectGroup(group.id)}
-                  className="rounded-2xl bg-[#121216] hover:bg-[#15151a] border border-border/60 p-4 cursor-pointer transition-colors flex items-center justify-between group"
+                  className="rounded-2xl bg-card hover:bg-surface-hover border border-border p-4 cursor-pointer transition-colors flex items-center justify-between group shadow-2xs"
                 >
                   <div className="flex items-center gap-3.5 min-w-0 flex-1">
                     {/* Combined avatars */}
@@ -91,10 +91,10 @@ export const GroupList: React.FC = () => {
                       {memberAgents.slice(0, 3).map((a, i) => (
                         <div
                           key={a.id}
-                          className="w-8 h-8 rounded-full bg-muted border-2 border-[#121216] flex items-center justify-center text-sm overflow-hidden"
+                          className="w-8 h-8 rounded-full bg-muted border-2 border-card flex items-center justify-center text-sm overflow-hidden"
                           style={{ zIndex: 10 - i }}
                         >
-                          <AgentIcon id={a.id} name={a.name} avatar={a.avatar} isACP={a.engine === 'acp'} size={20} />
+                          <AgentIcon id={a.id} name={a.name} avatar={a.avatar} size={20} />
                         </div>
                       ))}
                     </div>

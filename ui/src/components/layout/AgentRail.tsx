@@ -1,8 +1,11 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useProfileStore } from '../../store/useProfileStore';
 import { useSessionStore } from '../../store/useSessionStore';
-import { Plus, Bell, Settings, Bot, Users, Sliders } from 'lucide-react';
+import { useAgentStore } from '../../store/useAgentStore';
+import { Plus, Settings, Users } from 'lucide-react';
 import { AgentIcon } from '../shell/AgentIcon';
+import { getAgentAvatarColor } from '../GrokAvatar';
+import { AgentGroup } from '../../types';
 
 interface AgentRailProps {
   onOpenCreateAgent?: () => void;
@@ -17,22 +20,60 @@ export const AgentRail: React.FC<AgentRailProps> = ({
     agents,
     selectedAgentId,
     selectAgent,
+    groups,
     activeGroup,
-    selectedGroupId,
+    selectGroup,
     activeNavTab,
     setActiveNavTab,
   } = useProfileStore();
 
-  const { selectSession, createSessionForAgent, getAgentSessions } = useSessionStore();
+  const {
+    selectSession,
+    getAgentSessions,
+    sessions: allStoreSessions,
+    createSessionForGroup,
+  } = useSessionStore();
+
+  // Filter out any ACP engines so only real native agents appear on the rail
+  const nativeAgents = useMemo(() => {
+    const acpNames = ['agy', 'antigravity', 'commandcode', 'cmd', 'claude-code', 'claude', 'gemini', 'codex', 'opencode', 'omp', 'pi'];
+    return agents.filter((a) => !acpNames.includes(a.id.toLowerCase()));
+  }, [agents]);
+
+  // Persistent groups defined in the system
+  const allGroups = groups;
 
   const handleAgentClick = (agentId: string) => {
     selectAgent(agentId);
     setActiveNavTab('chat');
-    const agentSessions = getAgentSessions(agentId);
-    if (agentSessions.length > 0) {
-      selectSession(agentSessions[0].id);
+    // Change agent on tab -> move to new task state and default to Native rakit-kode
+    selectSession(null);
+    useAgentStore.getState().setComposerTarget({ kind: 'native', id: 'rakit-kode' });
+  };
+
+  const handleGroupClick = async (group: AgentGroup) => {
+    selectGroup(group.id);
+    setActiveNavTab('groups');
+    const matching = allStoreSessions
+      .filter((s) => {
+        if (s.type === 'group') {
+          if (s.agentId === group.id) return true;
+          if (s.metadata) {
+            try {
+              const m = JSON.parse(s.metadata);
+              return m.groupId === group.id;
+            } catch {}
+          }
+        }
+        return false;
+      })
+      .sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0));
+
+    if (matching.length > 0) {
+      await selectSession(matching[0].id);
     } else {
-      selectSession(null);
+      const newSid = await createSessionForGroup(group.id);
+      await selectSession(newSid);
     }
   };
 
@@ -45,50 +86,55 @@ export const AgentRail: React.FC<AgentRailProps> = ({
   };
 
   return (
-    <aside className="w-16 shrink-0 h-full bg-[#0a0a0c] border-r border-border/40 flex flex-col items-center py-3 select-none z-20">
-      {/* Brand Logo */}
+    <aside className="w-16 shrink-0 h-full bg-chrome border-r border-sidebar-border flex flex-col items-center py-3 select-none z-20">
+      {/* Brand Spark Glyph */}
       <div
-        className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-lg mb-4 cursor-pointer hover:bg-primary/20 transition-colors shadow-sm"
+        className="w-11 h-11 rounded-xl bg-transparent flex items-center justify-center text-primary font-bold mb-3 cursor-pointer hover:scale-105 transition-transform"
         title="KendaliAI"
         onClick={() => {
           setActiveNavTab('chat');
           selectSession(null);
+          useAgentStore.getState().setComposerTarget({ kind: 'native', id: 'rakit-kode' });
         }}
       >
-        <span className="bg-gradient-to-tr from-indigo-500 to-violet-400 bg-clip-text text-transparent">
-          K
-        </span>
+        <svg width={28} height={28} viewBox="0 0 48 48" fill="currentColor">
+          <path d="M24 3c1.6 10.6 6.4 16.7 20 21-13.6 4.3-18.4 10.4-20 21-1.6-10.6-6.4-16.7-20-21 13.6-4.3 18.4-10.4 20-21Z" />
+          <circle cx="39.5" cy="8.5" r="3.2" />
+        </svg>
       </div>
 
       {/* Agents Roster */}
-      <div className="flex-1 w-full overflow-y-auto overflow-x-hidden flex flex-col items-center gap-2.5 px-2 scrollbar-none">
-        {agents.map((agent) => {
+      <div className="flex-1 w-full overflow-y-auto overflow-x-hidden flex flex-col items-center gap-2 px-2 scrollbar-none">
+        {nativeAgents.map((agent) => {
           const isSelected = selectedAgentId === agent.id && activeNavTab !== 'groups';
+          const avatarColor = getAgentAvatarColor(agent.avatar || agent.id);
+
           return (
             <button
               key={agent.id}
+              type="button"
               onClick={() => handleAgentClick(agent.id)}
-              className={`relative group w-11 h-11 rounded-2xl flex items-center justify-center text-xl transition-all duration-150 ${
+              className={`relative group w-11 h-11 rounded-xl flex items-center justify-center p-0 bg-transparent transition-all duration-150 cursor-pointer ${
                 isSelected
-                  ? 'bg-primary text-white shadow-md shadow-primary/25 scale-105'
-                  : 'bg-muted/60 hover:bg-muted text-foreground/80 hover:text-foreground'
+                  ? 'scale-105 border-2 shadow-xs'
+                  : 'border-2 border-transparent hover:scale-105'
               }`}
+              style={
+                isSelected
+                  ? { borderColor: avatarColor, boxShadow: `0 0 10px ${avatarColor}40` }
+                  : undefined
+              }
               title={`${agent.name} (${agent.role || 'Agent'})`}
             >
-              {/* Left active indicator pill */}
-              {isSelected && (
-                <span className="absolute -left-2 w-1 h-5 rounded-r-full bg-primary" />
-              )}
               <AgentIcon
                 id={agent.id}
                 name={agent.name}
                 avatar={agent.avatar}
-                isACP={agent.engine === 'acp'}
-                size={22}
+                size={36}
               />
 
               {/* Tooltip */}
-              <div className="absolute left-14 ml-2 px-2.5 py-1 bg-popover text-popover-foreground text-xs rounded-md shadow-lg border border-border whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
+              <div className="absolute left-14 ml-2 px-2.5 py-1 bg-popover text-foreground text-ui-xs rounded-md shadow-xl border border-border/40 whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
                 <p className="font-semibold">{agent.name}</p>
                 {agent.role && <p className="text-[10px] text-muted-foreground">{agent.role}</p>}
               </div>
@@ -96,54 +142,94 @@ export const AgentRail: React.FC<AgentRailProps> = ({
           );
         })}
 
-        {/* Active Group Avatar (if in group mode) */}
-        {activeNavTab === 'groups' && activeGroup && (
-          <div
-            className="relative group w-11 h-11 rounded-2xl bg-violet-600 text-white flex items-center justify-center shadow-md scale-105 cursor-pointer"
-            title={`Group: ${activeGroup.name}`}
-          >
-            <span className="absolute -left-2 w-1 h-5 rounded-r-full bg-violet-500" />
-            <Users className="w-5 h-5" />
-            <div className="absolute left-14 ml-2 px-2.5 py-1 bg-popover text-popover-foreground text-xs rounded-md shadow-lg border border-border whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
-              <p className="font-semibold">{activeGroup.name}</p>
-              <p className="text-[10px] text-muted-foreground">Group Chat</p>
-            </div>
-          </div>
+        {/* Persistent Groups in Agent Sidebar (Rail) */}
+        {allGroups.length > 0 && (
+          <>
+            <div className="w-8 h-px bg-sidebar-border my-1 shrink-0" />
+
+            {allGroups.map((group) => {
+              const isSelected = activeNavTab === 'groups' && activeGroup?.id === group.id;
+              const displayMembers = (group.memberIds || []).slice(0, 3); // Max 3 avatars!
+
+              return (
+                <button
+                  key={group.id}
+                  type="button"
+                  onClick={() => handleGroupClick(group)}
+                  className={`relative group w-11 h-11 rounded-xl flex items-center justify-center p-0 bg-transparent transition-all duration-150 cursor-pointer ${
+                    isSelected
+                      ? 'scale-105 border-2 border-primary shadow-xs'
+                      : 'border-2 border-transparent hover:scale-105'
+                  }`}
+                  title={`${group.name} (${(group.memberIds || []).length} agents)`}
+                >
+                  {/* Group member icons inside button */}
+                  <div className="flex items-center justify-center -space-x-2 shrink-0">
+                    {displayMembers.length > 0 ? (
+                      displayMembers.map((memberId, idx) => {
+                        const memberAgent = agents.find((a) => a.id === memberId);
+                        return (
+                          <div
+                            key={memberId}
+                            className="size-6 rounded-lg flex items-center justify-center overflow-hidden shrink-0 bg-transparent"
+                            style={{ zIndex: 10 - idx }}
+                          >
+                            <AgentIcon
+                              id={memberId}
+                              name={memberAgent?.name || memberId}
+                              avatar={memberAgent?.avatar}
+                              size={20}
+                            />
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <Users className="size-5 text-muted-foreground" />
+                    )}
+                  </div>
+
+                  {/* Tooltip on hover */}
+                  <div className="absolute left-14 ml-2 px-2.5 py-1 bg-popover text-foreground text-ui-xs rounded-md shadow-xl border border-border/40 whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
+                    <p className="font-semibold">{group.name}</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      Group · {(group.memberIds || []).length} agents
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+          </>
         )}
 
         {/* Add Agent Button */}
         <button
           onClick={handleNewAgentClick}
-          className="w-10 h-10 rounded-2xl border border-dashed border-border/80 hover:border-primary/60 text-muted-foreground hover:text-primary flex items-center justify-center transition-colors"
+          className="w-11 h-11 rounded-xl bg-transparent border-2 border-transparent text-muted-foreground hover:text-foreground flex items-center justify-center transition-all cursor-pointer hover:scale-110 mt-1 p-0"
           title="Create New Agent"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-5 h-5" />
         </button>
       </div>
 
       {/* Rail Bottom Actions */}
-      <div className="pt-2 flex flex-col items-center gap-2 w-full border-t border-border/30">
-        <button
-          className="w-9 h-9 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/50 flex items-center justify-center transition-colors"
-          title="Notifications"
-        >
-          <Bell className="w-4 h-4" />
-        </button>
-
+      <div className="pt-2 flex flex-col items-center gap-2 w-full border-t border-sidebar-border">
         <button
           onClick={() => {
-            setActiveNavTab('settings');
+            if (onOpenSettings) onOpenSettings();
+            else setActiveNavTab('settings');
           }}
-          className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors ${
+          className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors cursor-pointer ${
             activeNavTab === 'settings'
-              ? 'text-amber-400 bg-amber-400/10 border border-amber-400/40'
-              : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+              ? 'text-primary bg-primary/10 border border-primary/40'
+              : 'text-muted-foreground hover:text-foreground hover:bg-accent'
           }`}
-          title="Control center"
+          title="Settings (⌘,)"
         >
-          <Sliders className="w-4 h-4" />
+          <Settings className="w-4 h-4" />
         </button>
       </div>
     </aside>
   );
 };
+
+export default AgentRail;

@@ -361,7 +361,7 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 	}
 	if sess == nil {
 		if agentID == "" {
-			agentID = "personal-assistant"
+			agentID = "lutfi"
 		}
 		title := CleanSessionTitle("", userPrompt)
 		if title == "" {
@@ -377,10 +377,10 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		}
 		_ = r.store.SaveSession(*sess)
 	} else {
-		if agentID != "" && agentID != sess.AgentID {
+		if sess.Type != "group" && agentID != "" && agentID != sess.AgentID {
 			sess.AgentID = agentID
 			_ = r.store.SaveSession(*sess)
-		} else if sess.AgentID != "" {
+		} else if sess.AgentID != "" && sess.Type != "group" {
 			agentID = sess.AgentID
 		}
 	}
@@ -680,9 +680,10 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 			agentConfig = &agents[0]
 		} else {
 			agentConfig = &AgentConfig{
-				ID:           "personal-assistant",
-				Name:         "Personal Assistant",
-				SystemPrompt: "You are a helpful personal AI assistant.",
+				ID:           "lutfi",
+				Name:         "Lutfi",
+				Role:         "Planner",
+				SystemPrompt: "You are Lutfi, a helpful AI Planner and system architect.",
 				ProviderID:   "",
 				Model:        "",
 			}
@@ -714,20 +715,14 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 	}
 
 	modelToUse := ""
-	// For direct 1:1 and group chats, the Agent Person's configured model is strictly used!
-	// modelOverride is honored only for general chat sessions.
-	if sess.Type != "general" && agentConfig.Model != "" {
+	if strings.TrimSpace(modelOverride) != "" && !strings.EqualFold(modelOverride, "default") {
+		modelToUse = strings.TrimSpace(modelOverride)
+	} else if agentConfig.Model != "" {
 		modelToUse = strings.TrimSpace(agentConfig.Model)
 	} else {
-		modelToUse = strings.TrimSpace(modelOverride)
-		if modelToUse == "" || strings.EqualFold(modelToUse, "default") {
-			modelToUse = strings.TrimSpace(agentConfig.Model)
-		}
-		if modelToUse == "" || strings.EqualFold(modelToUse, "default") {
-			modelToUse = defaultModel
-			if provCfg == nil {
-				provCfg = defaultProv
-			}
+		modelToUse = defaultModel
+		if provCfg == nil {
+			provCfg = defaultProv
 		}
 	}
 
@@ -754,9 +749,11 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 
 	if matchedProv != nil {
 		provCfg = matchedProv
-	} else if provCfg == nil {
-		provCfg = defaultProv
-		if modelToUse == "" {
+	} else {
+		if provCfg == nil {
+			provCfg = defaultProv
+		}
+		if defaultModel != "" {
 			modelToUse = defaultModel
 		}
 	}
@@ -1867,6 +1864,27 @@ func resolveGroupTurnAgent(prompt string, participants []ChatParticipant, allAge
 				}
 			}
 		}
+		if ag.ID == "lutfi" || strings.Contains(roleLow, "planner") {
+			for _, kw := range []string{"plan", "planning", "jadwal", "arsitektur", "langkah", "dekomposisi", "breakdown", "todo", "task", "milestone", "roadmap"} {
+				if strings.Contains(low, kw) {
+					score += 5
+				}
+			}
+		}
+		if ag.ID == "bewustein" || strings.Contains(roleLow, "research") {
+			for _, kw := range []string{"riset", "research", "cari", "investigasi", "fakta", "sumber", "referensi", "studi pustaka", "bukti", "data"} {
+				if strings.Contains(low, kw) {
+					score += 5
+				}
+			}
+		}
+		if ag.ID == "fatimah" || strings.Contains(roleLow, "leaner") || strings.Contains(roleLow, "learner") || strings.Contains(roleLow, "study") {
+			for _, kw := range []string{"belajar", "materi", "feynman", "konsep", "rangkuman", "hafalan", "ujian", "soal", "kuis", "kurikulum", "study", "pelajari"} {
+				if strings.Contains(low, kw) {
+					score += 5
+				}
+			}
+		}
 		if ag.ID == "personal-assistant" {
 			for _, kw := range []string{"jadwal", "reminder", "schedule", "routine", "koordinasi", "todo", "task", "meeting", "ingat", "catat"} {
 				if strings.Contains(low, kw) {
@@ -1899,7 +1917,7 @@ func resolveGroupTurnAgent(prompt string, participants []ChatParticipant, allAge
 		return bestAgent, false
 	}
 
-	// 4. Default to first participant agent, or personal-assistant
+	// 4. Default to first participant agent, or lutfi
 	if len(participants) > 0 {
 		for _, p := range participants {
 			if p.ParticipantType == "agent" {
@@ -1907,7 +1925,7 @@ func resolveGroupTurnAgent(prompt string, participants []ChatParticipant, allAge
 			}
 		}
 	}
-	return "personal-assistant", false
+	return "lutfi", false
 }
 
 // isStrictlyMentioned returns true if prompt explicitly targets a specific agent
@@ -2504,8 +2522,8 @@ func (r *Runtime) autoCaptureRoutineSafeguard(sessionID, channel string, agentCo
 		}
 	}
 
-	owner := "Personal Assistant"
-	targetAgent := "personal-assistant"
+	owner := "Lutfi"
+	targetAgent := "lutfi"
 	if agentConfig != nil {
 		if agentConfig.Name != "" {
 			owner = agentConfig.Name

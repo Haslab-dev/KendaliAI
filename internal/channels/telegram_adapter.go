@@ -873,19 +873,19 @@ func pickDefaultAgentForTopic(topicName string, fallback string) string {
 	if strings.Contains(lower, "sre") || strings.Contains(lower, "incident") || strings.Contains(lower, "outage") || strings.Contains(lower, "monitor") || strings.Contains(lower, "alert") {
 		return "sre-agent"
 	}
-	if strings.Contains(lower, "code") || strings.Contains(lower, "dev") || strings.Contains(lower, "program") || strings.Contains(lower, "tech") {
-		return "coding-agent"
+	if strings.Contains(lower, "research") || strings.Contains(lower, "investigat") || strings.Contains(lower, "riset") {
+		return "bewustein"
 	}
-	if strings.Contains(lower, "research") || strings.Contains(lower, "investigat") || strings.Contains(lower, "analys") || strings.Contains(lower, "search") {
-		return "research-agent"
+	if strings.Contains(lower, "study") || strings.Contains(lower, "belajar") || strings.Contains(lower, "materi") {
+		return "fatimah"
 	}
-	if strings.Contains(lower, "knowledge") || strings.Contains(lower, "note") || strings.Contains(lower, "brain") || strings.Contains(lower, "doc") {
-		return "knowledge-agent"
+	if strings.Contains(lower, "plan") || strings.Contains(lower, "planner") || strings.Contains(lower, "jadwal") {
+		return "lutfi"
 	}
 	if fallback != "" {
 		return fallback
 	}
-	return "personal-assistant"
+	return "lutfi"
 }
 
 func (a *TelegramAdapter) pollBot(ctx context.Context, runner *BotRunner) {
@@ -1299,14 +1299,14 @@ func (a *TelegramAdapter) handleRawTelegramMessage(runner *BotRunner, msg *RawTe
 		}
 
 		targetAgent := strings.TrimSpace(parts[1])
-		if targetAgent == "coder" || targetAgent == "coding" {
-			targetAgent = "coding-agent"
-		} else if targetAgent == "research" {
-			targetAgent = "research-agent"
-		} else if targetAgent == "knowledge" {
-			targetAgent = "knowledge-agent"
+		if targetAgent == "planner" || targetAgent == "lutfi" {
+			targetAgent = "lutfi"
+		} else if targetAgent == "research" || targetAgent == "bewustein" || targetAgent == "researcher" {
+			targetAgent = "bewustein"
+		} else if targetAgent == "study" || targetAgent == "fatimah" || targetAgent == "leaner" {
+			targetAgent = "fatimah"
 		} else if targetAgent == "assistant" || targetAgent == "personal" {
-			targetAgent = "personal-assistant"
+			targetAgent = "lutfi"
 		}
 
 		a.mu.Lock()

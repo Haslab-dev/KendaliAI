@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { Session, SessionMessage, ToolCallRecord } from '../types';
 import { useProfileStore } from './useProfileStore';
+import { useAgentStore } from './useAgentStore';
 
 export interface SessionStoreState {
   sessions: Session[];
@@ -30,7 +31,7 @@ export interface SessionStoreState {
   // Actions
   loadSessions: () => Promise<void>;
   selectSession: (sessionId: string | null) => Promise<void>;
-  createSessionForAgent: (agentId: string, title?: string) => Promise<string>;
+  createSessionForAgent: (agentId: string, title?: string, overrides?: { engine?: string; acpAgent?: string; model?: string }) => Promise<string>;
   createSessionForGroup: (groupId: string, title?: string) => Promise<string>;
   deleteSession: (sessionId: string) => Promise<void>;
   renameSession: (sessionId: string, newTitle: string) => Promise<void>;
@@ -39,7 +40,7 @@ export interface SessionStoreState {
   updateSessionMetadata: (sessionId: string, metadata: Record<string, any>) => Promise<void>;
 
   // Chat Turn Actions
-  sendMessage: (content: string, options?: { agentId?: string; images?: string[]; model?: string }) => Promise<void>;
+  sendMessage: (content: string, options?: { agentId?: string; images?: string[]; model?: string; engine?: string; acpAgent?: string }) => Promise<void>;
   stopSession: (sessionId?: string) => Promise<void>;
 
   // Streaming Reducers (fed by WebSocket in useAgentSocket)
@@ -72,7 +73,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   getAgentSessions: (agentId: string) => {
     const { sessions, searchQuery } = get();
     return sessions
-      .filter((s) => s.agentId === agentId && s.type !== 'group')
+      .filter((s) => s.type !== 'group' && s.agentId === agentId)
       .filter((s) => {
         if (!searchQuery.trim()) return true;
         return (s.title || '').toLowerCase().includes(searchQuery.toLowerCase());
@@ -116,17 +117,47 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   selectSession: async (sessionId: string | null) => {
     if (!sessionId) {
       set({ activeSessionId: null, activeSession: null, messages: [] });
+      useAgentStore.getState().setComposerTarget({ kind: 'native', id: 'rakit-kode' });
       return;
     }
 
-    const session = get().sessions.find((s) => s.id === sessionId) || null;
-    set({ activeSessionId: sessionId, activeSession: session, isLoadingMessages: true });
-
-    if (session?.agentId && session.type !== 'group') {
-      const { selectedAgentId, selectAgent } = useProfileStore.getState();
-      if (selectedAgentId !== session.agentId) {
-        selectAgent(session.agentId);
+    let session = get().sessions.find((s) => s.id === sessionId) || null;
+    if (!session) {
+      try {
+        const sRes = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}`);
+        if (sRes.ok) {
+          const sData = await sRes.json();
+          session = sData.session || sData;
+          if (session && session.id) {
+            set((state) => ({
+              sessions: state.sessions.some((s) => s.id === session!.id)
+                ? state.sessions
+                : [session!, ...state.sessions],
+            }));
+          }
+        }
+      } catch (e) {
+        console.error('[useSessionStore] fetch session detail failed:', e);
       }
+    }
+
+    set({ activeSessionId: sessionId, activeSession: session, isLoadingMessages: true, messages: [] });
+
+    if (session?.type === 'group' || (session?.metadata && session.metadata.includes('groupId'))) {
+      let gId = session.agentId;
+      if (session.metadata) {
+        try {
+          const m = JSON.parse(session.metadata);
+          if (m.groupId) gId = m.groupId;
+        } catch {}
+      }
+      const { selectGroup, setActiveNavTab } = useProfileStore.getState();
+      selectGroup(gId);
+      setActiveNavTab('groups');
+    } else if (session?.agentId) {
+      const { selectAgent, setActiveNavTab } = useProfileStore.getState();
+      selectAgent(session.agentId);
+      setActiveNavTab('chat');
     }
 
     try {
@@ -145,6 +176,8 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
             messages: detail.messages || [],
             isLoadingMessages: false,
           });
+        } else {
+          set({ isLoadingMessages: false });
         }
       }
     } catch (err) {
@@ -153,12 +186,12 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     }
   },
 
-  createSessionForAgent: async (agentId: string, title?: string) => {
+  createSessionForAgent: async (agentId: string, title?: string, overrides?: { engine?: string; acpAgent?: string; model?: string }) => {
     const { agents } = useProfileStore.getState();
     const agent = agents.find((a) => a.id === agentId);
-    const engine = agent?.engine || 'rakit';
-    const acpAgent = agent?.acpAgent || (engine === 'acp' ? 'claude-code' : undefined);
-    const model = agent?.model;
+    const engine = overrides?.engine || agent?.engine || 'rakit';
+    const acpAgent = overrides?.acpAgent || (engine === 'acp' ? (agent?.acpAgent || 'agy') : undefined);
+    const model = overrides?.model || agent?.model;
 
     const metadataObj: Record<string, any> = {
       mode: 'agent',
@@ -168,8 +201,8 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     };
 
     const payload = {
-      agentId,
-      title: title || 'New chat',
+      agentId: agentId,
+      title: title || 'New task',
       type: 'agent',
       channelId: 'web',
       metadata: JSON.stringify(metadataObj),
@@ -205,9 +238,16 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       role: 'member',
     }));
 
+    // Generate a fresh task title rather than repeating the group's name
+    const existingGroupSessions = get().sessions.filter(
+      (s) => s.type === 'group' && (s.agentId === groupId || s.metadata?.includes(groupId))
+    );
+    const topicNumber = existingGroupSessions.length + 1;
+    const resolvedTitle = title || `Topic #${topicNumber}`;
+
     const payload = {
       agentId: groupId,
-      title: title || group?.name || 'New group chat',
+      title: resolvedTitle,
       type: 'group',
       channelId: 'web',
       metadata: JSON.stringify({ groupId, memberIds }),
@@ -338,14 +378,33 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   },
 
   sendMessage: async (content: string, options) => {
-    const { activeSessionId, activeSession } = get();
-    if (!activeSessionId) return;
+    let { activeSessionId, activeSession } = get();
+    if (!activeSessionId) {
+      const { activeGroup, selectedAgentId, activeNavTab } = useProfileStore.getState();
+      if (activeNavTab === 'groups' && activeGroup) {
+        activeSessionId = await get().createSessionForGroup(activeGroup.id);
+        activeSession = get().activeSession;
+      } else {
+        const targetAgent = options?.agentId || selectedAgentId || 'lutfi';
+        activeSessionId = await get().createSessionForAgent(targetAgent, content.slice(0, 36), {
+          engine: options?.engine,
+          acpAgent: options?.acpAgent,
+          model: options?.model,
+        });
+        activeSession = get().activeSession;
+      }
+    }
 
     let chosenModel = options?.model;
-    if (!chosenModel && activeSession?.metadata) {
+    let chosenEngine = options?.engine;
+    let chosenAcpAgent = options?.acpAgent;
+
+    if (activeSession?.metadata) {
       try {
         const meta = JSON.parse(activeSession.metadata);
-        if (meta.model) chosenModel = meta.model;
+        if (!chosenModel && meta.model) chosenModel = meta.model;
+        if (!chosenEngine && meta.engine) chosenEngine = meta.engine;
+        if (!chosenAcpAgent && meta.acpAgent) chosenAcpAgent = meta.acpAgent;
       } catch (e) {
         // ignore
       }
@@ -355,7 +414,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     const userMsg: SessionMessage = {
       id: `msg_u_${Date.now()}`,
       sessionId: activeSessionId,
-      agentId: options?.agentId,
+      agentId: options?.agentId || activeSession?.agentId,
       channel: 'web',
       role: 'user',
       content,
@@ -371,14 +430,44 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       streamingToolCalls: [],
     }));
 
+    // Auto-update session title if it's currently a placeholder or generic group/task name
+    const currentTitle = activeSession?.title || '';
+    const { groups, activeAgent } = useProfileStore.getState();
+    const isPlaceholder =
+      !currentTitle ||
+      currentTitle === 'New chat' ||
+      currentTitle === 'New group chat' ||
+      currentTitle === 'New task' ||
+      currentTitle === 'Untitled task' ||
+      currentTitle.toLowerCase().startsWith('topic #') ||
+      currentTitle.toLowerCase().startsWith('task #') ||
+      currentTitle.toLowerCase().startsWith('discussion #') ||
+      (activeAgent?.name && currentTitle.toLowerCase() === activeAgent.name.toLowerCase()) ||
+      groups.some((g) => g.name.toLowerCase() === currentTitle.toLowerCase());
+
+    if (isPlaceholder && content.trim()) {
+      const generatedTitle = content.trim().replace(/[\r\n]+/g, ' ').slice(0, 42);
+      set((state) => ({
+        activeSession: state.activeSession ? { ...state.activeSession, title: generatedTitle } : null,
+        sessions: state.sessions.map((s) => (s.id === activeSessionId ? { ...s, title: generatedTitle } : s)),
+      }));
+      fetch('/api/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: activeSessionId, title: generatedTitle }),
+      }).catch(() => {});
+    }
+
     try {
       const res = await fetch(`/api/sessions/${encodeURIComponent(activeSessionId)}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           content,
-          agentId: options?.agentId,
+          agentId: options?.agentId || activeSession?.agentId,
           model: chosenModel,
+          engine: chosenEngine,
+          acpAgent: chosenAcpAgent,
           images: options?.images,
         }),
       });
@@ -432,7 +521,14 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       const existing = state.streamingToolCalls.findIndex((item) => item.id === tc.id);
       if (existing >= 0) {
         const copy = [...state.streamingToolCalls];
-        copy[existing] = { ...copy[existing], ...tc };
+        const existingTc = copy[existing];
+        copy[existing] = {
+          ...existingTc,
+          ...tc,
+          arguments: (tc.arguments && Object.keys(tc.arguments).length > 0)
+            ? tc.arguments
+            : existingTc.arguments,
+        };
         return { streamingToolCalls: copy };
       }
       return { streamingToolCalls: [...state.streamingToolCalls, tc] };

@@ -206,10 +206,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
       data-pencil-name="Sidebar"
       className={`box-border ${
         isMobile ? 'w-full' : 'w-[300px]'
-      } shrink-0 h-full flex flex-col justify-between bg-card border-r border-border/70 select-none`}
+      } shrink-0 h-full flex flex-col justify-between bg-card border-r border-border select-none`}
     >
       {/* Top Header */}
-      <div className="p-3.5 pb-2 flex flex-col gap-2.5 border-b border-border/70">
+      <div className="p-3.5 pb-2 flex flex-col gap-2.5 border-b border-border">
         {/* macOS Traffic Lights + Actions */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
@@ -553,7 +553,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, isMobile = false }) =
       </div>
 
       {/* Bottom Shortcuts */}
-      <div className="p-3 border-t border-border/70 flex flex-col gap-1.5">
+      <div className="p-3 border-t border-border flex flex-col gap-1.5">
         {/* Routines & Automations shortcut */}
         <button
           onClick={() => {

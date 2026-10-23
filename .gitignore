@@ -42,6 +42,9 @@ bin/
 *.sw?
 
 src/server/database/kendaliai.sqlite
+*.db
+*.db-shm
+*.db-wal
 
 
 config.json

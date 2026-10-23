@@ -704,7 +704,7 @@ export const ProvidersPane: React.FC = () => {
           <div className="flex items-center gap-2">
             <Sliders size={20} className="text-primary" />
             <h1 className="text-[18px] sm:text-[20px] font-bold text-foreground font-sans tracking-tight">
-              LLM Providers &amp; MCP
+              AI Providers &amp; Models
             </h1>
           </div>
           <p className="text-[12px] text-muted-foreground font-sans">
@@ -750,38 +750,10 @@ export const ProvidersPane: React.FC = () => {
         </div>
       )}
 
-      {/* Mobile Tab Switcher (Visible on small screens) */}
-      <div className="flex md:hidden px-4 pt-3 pb-1 gap-2 bg-accent/60 dark:bg-background">
-        <button
-          onClick={() => setActiveTab('providers')}
-          className={`flex-1 py-2 text-xs font-bold rounded-[8px] border transition-colors ${
-            activeTab === 'providers'
-              ? 'bg-card border-primary text-primary shadow-2xs'
-              : 'bg-transparent border-transparent text-muted-foreground'
-          }`}
-        >
-          Providers ({providers.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('mcps')}
-          className={`flex-1 py-2 text-xs font-bold rounded-[8px] border transition-colors ${
-            activeTab === 'mcps'
-              ? 'bg-card border-primary text-primary shadow-2xs'
-              : 'bg-transparent border-transparent text-muted-foreground'
-          }`}
-        >
-          MCP Servers ({mcps.length} · {totalMcpTools} tools)
-        </button>
-      </div>
-
-      {/* Main Responsive Split Layout */}
-      <div className="flex-1 w-full px-4 sm:px-8 py-4 sm:py-6 flex flex-col md:flex-row gap-5 items-start">
-        {/* Left Column: Providers List */}
-        <div
-          className={`flex-1 w-full flex flex-col gap-3.5 ${
-            activeTab === 'providers' ? 'flex' : 'hidden md:flex'
-          }`}
-        >
+      {/* Main Responsive Layout (Full Width for Providers) */}
+      <div className="flex-1 w-full px-4 sm:px-8 py-4 sm:py-6 flex flex-col gap-5">
+        {/* Providers List */}
+        <div className="w-full flex flex-col gap-3.5">
           <div className="flex items-center justify-between px-1">
             <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-sans">
               Configured Providers ({providers.length})
@@ -986,116 +958,6 @@ export const ProvidersPane: React.FC = () => {
                 OpenAI, Anthropic, Ollama, DeepSeek, vLLM, or any custom /v1 API
               </div>
             </div>
-          </div>
-        </div>
-
-        {/* Right Column: MCP Servers Panel */}
-        <div
-          className={`w-full md:w-[360px] lg:w-[400px] shrink-0 bg-card rounded-xl p-4 sm:p-5 flex flex-col gap-3.5 text-foreground border border-border shadow-sm ${
-            activeTab === 'mcps' ? 'flex' : 'hidden md:flex'
-          }`}
-        >
-          {/* Header */}
-          <div className="w-full flex items-center justify-between pb-2 border-b border-border">
-            <div className="flex items-center gap-2">
-              <Puzzle size={16} className="text-primary" />
-              <h2 className="text-[14px] font-bold text-foreground font-sans">
-                MCP Servers ({mcps.length}) · {totalMcpTools} tools
-              </h2>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setShowApiKeyModal(true)}
-                className="bg-primary text-primary-fg hover:bg-primary/85 text-[11px] font-bold font-sans px-2.5 py-1 rounded-md transition-colors cursor-pointer flex items-center gap-1 shadow-sm"
-              >
-                <Key size={12} />
-                <span>API Keys</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowMcpModal(true)}
-                className="bg-accent hover:bg-foreground/10 text-foreground text-[11px] font-bold font-sans px-3 py-1 rounded-md transition-colors cursor-pointer flex items-center gap-1 border border-border"
-              >
-                <Plus size={12} />
-                <span>Connect</span>
-              </button>
-            </div>
-          </div>
-
-          <p className="text-[11px] text-muted-foreground leading-relaxed">
-            Model Context Protocol servers extend agents with dynamic filesystem, database, and API tool integrations.
-          </p>
-
-          {/* MCP Server Cards */}
-          <div className="flex flex-col gap-2.5 w-full">
-            {mcps.map((m) => (
-              <div
-                key={m.id}
-                className="w-full bg-background rounded-lg p-3 flex flex-col gap-1.5 border border-border group hover:border-border-strong transition-colors"
-              >
-                <div className="w-full flex items-center justify-between">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <PlugZap size={14} className="text-success shrink-0" />
-                    <span className="text-[12px] font-bold font-mono text-foreground truncate">
-                      {m.name}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleToggleMcpEnabled(m.id, !m.enabled)}
-                      className={`text-[10px] px-2 py-0.5 rounded font-sans font-medium transition-colors cursor-pointer flex items-center gap-1 ${
-                        m.enabled
-                          ? 'bg-success/10 text-success border border-success/25'
-                          : 'bg-accent text-muted-foreground border border-border'
-                      }`}
-                      title={m.enabled ? 'Click to disable' : 'Click to enable'}
-                    >
-                      <span className={`w-1.5 h-1.5 rounded-full ${m.enabled ? 'bg-success' : 'bg-subtle-fg'}`} />
-                      <span>{m.enabled ? 'Enabled' : 'Disabled'}</span>
-                    </button>
-                    <div className="bg-accent rounded px-2 py-0.5">
-                      <span className="text-[9px] text-muted-foreground font-sans font-medium">
-                        {m.toolsCount} tools
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteMcp(m.id)}
-                      className="opacity-60 group-hover:opacity-100 text-muted-foreground hover:text-destructive p-1 transition-opacity cursor-pointer"
-                      title="Disconnect MCP"
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="text-[10px] text-muted-foreground font-mono truncate">
-                  {m.transport} · {m.commandOrUrl}
-                </div>
-
-                <div className="text-[10px] text-primary font-sans font-medium flex items-center gap-1">
-                  <span>● Active tool provider</span>
-                </div>
-
-                {m.toolsCached && m.toolsCached.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-1 pt-1.5 border-t border-border">
-                    {m.toolsCached.map((t) => (
-                      <span
-                        key={t.name}
-                        className="text-[9px] px-1.5 py-0.5 rounded bg-accent text-primary font-mono"
-                        title={t.description}
-                      >
-                        {t.name}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
           </div>
         </div>
       </div>

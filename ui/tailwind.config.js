@@ -1,108 +1,106 @@
 /** @type {import('tailwindcss').Config} */
+
+function alpha(variable, fallback) {
+  return ({ opacityValue }) => {
+    const expr = fallback ? `var(${variable}, ${fallback})` : `var(${variable})`;
+    if (opacityValue !== undefined) {
+      return `color-mix(in srgb, ${expr} calc(${opacityValue} * 100%), transparent)`;
+    }
+    return expr;
+  };
+}
+
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   darkMode: 'class',
   theme: {
     extend: {
+      spacing: {
+        '7.5': '1.875rem',
+      },
+      borderColor: ({ theme }) => ({
+        DEFAULT: 'var(--contrast-border, var(--border))',
+        ...theme('colors'),
+      }),
       colors: {
-        // ---- Semantic design tokens (forgeADE parity) -------------------
-        // Values are RGB channel triplets defined in src/index.css and flip
-        // on `html.dark` / `html[data-theme]`. Components never hardcode
-        // hex values for themed surfaces.
-        background: 'rgb(var(--background) / <alpha-value>)',
-        foreground: 'rgb(var(--foreground) / <alpha-value>)',
-        card: 'rgb(var(--card) / <alpha-value>)',
-        popover: 'rgb(var(--popover) / <alpha-value>)',
+        // ---- Semantic design tokens (ForgeADE design system) ------------
+        // Variables resolve directly to CSS custom properties (oklch, color-mix, hex)
+        // written by themeEngine.ts and index.css.
+        background: alpha('--background'),
+        foreground: alpha('--contrast-foreground', 'var(--foreground)'),
+        card: alpha('--card'),
+        popover: alpha('--popover'),
         primary: {
-          DEFAULT: 'rgb(var(--primary) / <alpha-value>)',
-          foreground: 'rgb(var(--primary-fg) / <alpha-value>)',
+          DEFAULT: alpha('--primary'),
+          foreground: alpha('--primary-foreground', '#ffffff'),
         },
         muted: {
-          DEFAULT: 'rgb(var(--muted) / <alpha-value>)',
-          foreground: 'rgb(var(--muted-fg) / <alpha-value>)',
+          DEFAULT: alpha('--muted'),
+          foreground: alpha('--contrast-muted-foreground', 'var(--muted-foreground)'),
         },
-        'subtle-fg': 'rgb(var(--subtle-fg) / <alpha-value>)',
+        'subtle-fg': alpha('--contrast-placeholder', 'var(--placeholder)'),
         accent: {
-          DEFAULT: 'rgb(var(--accent) / <alpha-value>)',
-          foreground: 'rgb(var(--foreground) / <alpha-value>)',
+          DEFAULT: alpha('--accent'),
+          foreground: alpha('--contrast-accent-foreground', 'var(--foreground)'),
         },
-        border: 'rgb(var(--border) / <alpha-value>)',
-        'border-strong': 'rgb(var(--border-strong) / <alpha-value>)',
-        input: 'rgb(var(--input) / <alpha-value>)',
-        sidebar: 'rgb(var(--sidebar) / <alpha-value>)',
+        border: alpha('--contrast-border', 'var(--border)'),
+        'border-strong': alpha('--contrast-border', 'var(--border)'),
+        input: alpha('--contrast-input', 'var(--input)'),
+        sidebar: alpha('--sidebar'),
         message: {
-          DEFAULT: 'rgb(var(--message) / <alpha-value>)',
-          foreground: 'rgb(var(--message-fg) / <alpha-value>)',
+          DEFAULT: alpha('--message-surface'),
+          foreground: alpha('--contrast-message-foreground', 'var(--message-foreground, var(--foreground))'),
         },
-        chrome: 'rgb(var(--chrome) / <alpha-value>)',
-        destructive: 'rgb(var(--destructive) / <alpha-value>)',
-        warning: 'rgb(var(--warning) / <alpha-value>)',
-        success: 'rgb(var(--success) / <alpha-value>)',
-        info: 'rgb(var(--info) / <alpha-value>)',
-        'full-access': 'rgb(var(--full-access) / <alpha-value>)',
-        focus: 'rgb(var(--focus) / <alpha-value>)',
+        'message-surface': alpha('--message-surface'),
+        'message-action': alpha('--message-action'),
+        'message-action-foreground': alpha('--message-action-foreground', '#ffffff'),
+        'message-action-hover': alpha('--message-action-hover'),
+        chrome: alpha('--app-chrome-background', 'var(--chrome)'),
+        destructive: alpha('--error', 'var(--destructive, #ef4444)'),
+        warning: alpha('--warning', '#f59e0b'),
+        success: alpha('--success', '#10b981'),
+        info: alpha('--info', '#3b82f6'),
+        'full-access': alpha('--full-access-accent', '#f97316'),
+        focus: alpha('--focus'),
 
-        // ---- forge-ade parity aliases (ported component vocabulary) ------
-        'fg-primary': 'rgb(var(--foreground) / <alpha-value>)',
-        'fg-secondary': 'rgb(var(--muted-fg) / <alpha-value>)',
-        'fg-tertiary': 'rgb(var(--subtle-fg) / <alpha-value>)',
-        'secondary-label': 'rgb(var(--muted-fg) / <alpha-value>)',
-        'icon-muted': 'rgb(var(--subtle-fg) / <alpha-value>)',
-        'foreground-subtle': 'rgb(var(--muted-fg) / <alpha-value>)',
-        'foreground-subtlest': 'rgb(var(--subtle-fg) / <alpha-value>)',
-        surface: 'rgb(var(--card) / <alpha-value>)',
-        'surface-hover': 'rgb(var(--accent) / <alpha-value>)',
-        sidebar: 'rgb(var(--sidebar) / <alpha-value>)',
-        'sidebar-border': 'rgb(var(--border) / <alpha-value>)',
-        'toolbar-control': 'rgb(var(--accent) / 0.6)',
-        'border-default': 'rgb(var(--border) / <alpha-value>)',
-        placeholder: 'rgb(var(--muted-fg) / <alpha-value>)',
-        chrome: 'rgb(var(--chrome) / <alpha-value>)',
-        brand: 'rgb(var(--primary) / <alpha-value>)',
-        secondary: 'rgb(var(--muted) / <alpha-value>)',
-        'message-action': {
-          DEFAULT: 'rgb(var(--foreground) / <alpha-value>)',
-          foreground: 'rgb(var(--background) / <alpha-value>)',
-          hover: 'rgb(var(--foreground) / 0.88)',
-        },
-        'tool-error-icon': 'rgb(var(--destructive) / <alpha-value>)',
-        'trajectory-reasoning': 'rgb(var(--primary) / <alpha-value>)',
-        ring: 'rgb(var(--focus) / <alpha-value>)',
+        // ---- forge-ade parity aliases -----------------------------------
+        'fg-primary': alpha('--contrast-foreground', 'var(--foreground)'),
+        'fg-secondary': alpha('--contrast-secondary-label', 'var(--secondary-label, var(--muted-foreground))'),
+        'fg-tertiary': alpha('--contrast-placeholder', 'var(--placeholder)'),
+        'secondary-label': alpha('--contrast-secondary-label', 'var(--secondary-label, var(--muted-foreground))'),
+        'icon-muted': alpha('--contrast-icon-muted', 'var(--icon-muted, var(--placeholder))'),
+        'foreground-subtle': alpha('--contrast-secondary-label', 'var(--secondary-label, var(--muted-foreground))'),
+        'foreground-subtlest': alpha('--contrast-placeholder', 'var(--placeholder)'),
+        surface: alpha('--card'),
+        'surface-raised': alpha('--surface-raised', 'var(--card)'),
+        'surface-hover': alpha('--accent'),
+        'surface-active': alpha('--accent'),
+        'sidebar-border': alpha('--contrast-sidebar-border', 'var(--sidebar-border, var(--border))'),
+        'toolbar-control': alpha('--toolbar-control', 'var(--accent)'),
+        'border-default': alpha('--contrast-border', 'var(--border)'),
+        'border-subtle': 'color-mix(in srgb, var(--contrast-border, var(--border)) 55%, transparent)',
+        placeholder: alpha('--contrast-placeholder', 'var(--placeholder)'),
+        brand: alpha('--focus'),
+        secondary: alpha('--secondary'),
+        ring: alpha('--focus'),
 
-        // ---- Legacy monochrome tokens (GOALS.md P7 consumers) -----------
-        // Aliased to the semantic palette in index.css so existing panes
-        // track the active theme.
-        app: 'rgb(var(--c-app) / <alpha-value>)',
-        panel: 'rgb(var(--c-panel) / <alpha-value>)',
-        rail: 'rgb(var(--c-rail) / <alpha-value>)',
-        raised: 'rgb(var(--c-raised) / <alpha-value>)',
-        hoverbg: 'rgb(var(--c-hoverbg) / <alpha-value>)',
-        inputbg: 'rgb(var(--c-inputbg) / <alpha-value>)',
-        line: 'rgb(var(--c-line) / <alpha-value>)',
-        hi: 'rgb(var(--c-hi) / <alpha-value>)',
-        mid: 'rgb(var(--c-mid) / <alpha-value>)',
-        lo: 'rgb(var(--c-lo) / <alpha-value>)',
-
-        // ---- Fixed reference colors kept for compatibility --------------
-        canvas: '#F7F7F5',
-        surface: '#FFFFFF',
-        deeprail: '#0F0F0F',
-        outline: '#E5E7EB',
-        subtext: '#8A8A85',
-        peach: '#FFF5EB',
-        peachborder: '#F5E3CF',
-        ambertext: '#D97706',
-        techblue: '#007AFF',
-        techbluelight: '#EBF5FF',
-        agentorange: '#F97316',
-        successgreen: '#16A34A',
-        successlight: '#DCFCE7',
+        // ---- Legacy aliases kept for compatibility ----------------------
+        app: alpha('--background'),
+        panel: alpha('--card'),
+        rail: alpha('--sidebar'),
+        raised: alpha('--surface-raised', 'var(--card)'),
+        hoverbg: alpha('--accent'),
+        inputbg: alpha('--input'),
+        line: alpha('--contrast-border', 'var(--border)'),
+        hi: alpha('--contrast-foreground', 'var(--foreground)'),
+        mid: alpha('--contrast-muted-foreground', 'var(--muted-foreground)'),
+        lo: alpha('--contrast-placeholder', 'var(--placeholder)'),
       },
       fontSize: {
-        // t3/forgeADE type scale — dense UI metadata up to titles.
-        '2xs': ['0.6875rem', { lineHeight: '1rem' }],
+        '5xs': ['0.4375rem', { lineHeight: '1' }],
+        '4xs': ['0.5rem', { lineHeight: '1' }],
         '3xs': ['0.625rem', { lineHeight: '0.875rem' }],
-        '4xs': ['0.5625rem', { lineHeight: '0.75rem' }],
+        '2xs': ['0.6875rem', { lineHeight: '1rem' }],
         'ui-xs': ['0.75rem', { lineHeight: '1.125rem' }],
         'ui-sm': ['0.8125rem', { lineHeight: '1.25rem' }],
         'ui-base': ['0.875rem', { lineHeight: '1.375rem' }],
@@ -110,7 +108,6 @@ export default {
         'ui-xl': ['1.125rem', { lineHeight: '1.625rem' }],
       },
       borderRadius: {
-        // Whole-app corner language derives from --radius (0.625rem).
         sm: 'calc(var(--radius) - 4px)',
         md: 'calc(var(--radius) - 2px)',
         lg: 'var(--radius)',
@@ -123,20 +120,24 @@ export default {
           '-apple-system',
           'BlinkMacSystemFont',
           '"Segoe UI"',
-          'Inter',
           'system-ui',
           'sans-serif',
         ],
-        mono: ['"Geist Mono"', 'ui-monospace', 'SFMono-Regular', '"SF Mono"', 'Menlo', 'monospace'],
-        funnel: ['"Funnel Sans"', 'system-ui', 'sans-serif'],
-        geist: ['Geist', 'system-ui', 'sans-serif'],
+        mono: [
+          '"SF Mono"',
+          '"SFMono-Regular"',
+          'Menlo',
+          'Consolas',
+          '"Liberation Mono"',
+          'monospace',
+        ],
       },
       boxShadow: {
-        composer: 'var(--shadow-composer)',
-        dialog: 'var(--shadow-dialog)',
-        'control-highlight': 'inset 0 1px rgb(255 255 255 / 16%)',
+        composer: 'var(--shadow-composer, 0 12px 28px -18px rgb(0 0 0 / 40%))',
+        'composer-dark': 'var(--shadow-composer-dark, 0 14px 32px -18px rgb(0 0 0 / 75%))',
+        dialog: 'var(--shadow-dialog, 0 24px 64px -24px rgb(0 0 0 / 45%))',
       },
     },
   },
   plugins: [],
-}
+};

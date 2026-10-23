@@ -404,11 +404,40 @@ func NewRegistry(cfg *config.Config) *Registry {
 			agents[i].Command = resolved
 		}
 	}
-	return &Registry{agents: agents}
+	reg := &Registry{agents: agents}
+	RefreshCatalogCacheAsync()
+	return reg
 }
 
 func newRegistry(cfg *config.Config) *Registry {
 	return NewRegistry(cfg)
+}
+
+// NormalizeAgentID normalizes user/UI strings, aliases, and agent-* identifiers
+// to canonical ACP agent IDs.
+func NormalizeAgentID(id string) string {
+	clean := strings.ToLower(strings.TrimSpace(id))
+	clean = strings.TrimPrefix(clean, "agent-")
+	switch clean {
+	case "antigravity", "agy", "google-antigravity", "google_antigravity":
+		return "agy"
+	case "cmd", "commandcode", "command-code", "command_code":
+		return "commandcode"
+	case "claude", "claude-code", "claudecode", "claude_code":
+		return "claude-code"
+	case "gemini", "gemini-cli", "geminicli":
+		return "gemini"
+	case "codex", "openai-codex", "openai_codex":
+		return "codex"
+	case "opencode", "open-code", "open_code":
+		return "opencode"
+	case "omp", "ohmypi", "oh-my-pi", "oh_my_pi":
+		return "omp"
+	case "pi", "pi-agent", "pi-coding-agent":
+		return "pi"
+	default:
+		return clean
+	}
 }
 
 func (r *Registry) List() []AgentDescriptor {
@@ -425,19 +454,33 @@ func (r *Registry) List() []AgentDescriptor {
 	}
 	out := make([]AgentDescriptor, len(r.agents))
 	copy(out, r.agents)
-	return out
+	return EnrichAgentDescriptors(out)
 }
 
 func (r *Registry) list() []AgentDescriptor {
 	return r.List()
 }
 
-func (r *Registry) Get(id string) (AgentDescriptor, error) {
+func (r *Registry) IsACPAgent(id string) bool {
+	norm := NormalizeAgentID(id)
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for _, a := range r.agents {
-		if a.ID == id {
-			return a, nil
+		if a.ID == id || a.ID == norm || NormalizeAgentID(a.ID) == norm || strings.EqualFold(a.Name, id) {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *Registry) Get(id string) (AgentDescriptor, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	norm := NormalizeAgentID(id)
+	for _, a := range r.agents {
+		if a.ID == id || a.ID == norm || NormalizeAgentID(a.ID) == norm || strings.EqualFold(a.Name, id) {
+			enriched := EnrichAgentDescriptors([]AgentDescriptor{a})
+			return enriched[0], nil
 		}
 	}
 	return AgentDescriptor{}, fmt.Errorf("acp: unknown agent %q", id)

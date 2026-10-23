@@ -146,7 +146,7 @@ export const ConnectionsView: React.FC = () => {
   const setActiveNavTab = useProfileStore((s) => s.setActiveNavTab);
 
   return (
-    <div className="flex-1 h-full overflow-y-auto bg-[#0a0a0c] px-4 sm:px-8 py-8 select-none">
+    <div className="flex-1 h-full overflow-y-auto bg-background px-4 sm:px-8 py-8 select-none">
       <div className="max-w-3xl mx-auto space-y-6">
         {/* Navigation Bar */}
         <div className="flex items-center justify-between pb-2 border-b border-border/40">
@@ -221,10 +221,10 @@ export const ConnectionsView: React.FC = () => {
               {filteredToolkits.map((toolkit) => (
                 <div
                   key={toolkit.slug}
-                  className="rounded-2xl bg-[#121216] border border-border/60 p-4 flex items-center justify-between transition-colors hover:border-border"
+                  className="rounded-2xl bg-card border border-border p-4 flex items-center justify-between transition-colors hover:border-border/80 shadow-2xs"
                 >
                   <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                    <div className="w-10 h-10 rounded-xl bg-muted/50 border border-border/60 flex items-center justify-center shrink-0">
+                    <div className="w-10 h-10 rounded-xl bg-surface border border-border flex items-center justify-center shrink-0">
                       {toolkit.slug === 'github' && <Github className="w-5 h-5 text-foreground" />}
                       {toolkit.slug === 'gmail' && <Mail className="w-5 h-5 text-red-400" />}
                       {toolkit.slug === 'googlecalendar' && <Calendar className="w-5 h-5 text-blue-400" />}
@@ -282,10 +282,10 @@ export const ConnectionsView: React.FC = () => {
               {plugins.map((plugin) => (
                 <div
                   key={plugin.id}
-                  className="rounded-2xl bg-[#121216] border border-border/60 p-4 flex items-center justify-between"
+                  className="rounded-2xl bg-card border border-border p-4 flex items-center justify-between shadow-2xs"
                 >
                   <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                    <div className="w-10 h-10 rounded-xl bg-muted/50 border border-border/60 flex items-center justify-center shrink-0">
+                    <div className="w-10 h-10 rounded-xl bg-surface border border-border flex items-center justify-center shrink-0">
                       {plugin.icon}
                     </div>
 

@@ -2,6 +2,7 @@ import React, {
   createContext,
   useContext,
   useLayoutEffect,
+  useEffect,
   useRef,
   useState,
   type ComponentProps,
@@ -157,6 +158,13 @@ export function WorkLogRow({
   className?: string;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
+
+  useEffect(() => {
+    if (defaultExpanded !== undefined) {
+      setExpanded(defaultExpanded);
+    }
+  }, [defaultExpanded]);
+
   const hasChildren = Boolean(children);
   const grouped = useContext(GroupedRows);
 

@@ -152,7 +152,7 @@ func (d *Daemon) executeTaskInternal(ctx context.Context, task *ScheduledTask, f
 		if task.Owner != "" && (task.OwnerType == "agent" || task.OwnerType == "") {
 			targetAgent = task.Owner
 		} else {
-			targetAgent = "personal-assistant"
+			targetAgent = "lutfi"
 		}
 	}
 	sid := task.SessionID

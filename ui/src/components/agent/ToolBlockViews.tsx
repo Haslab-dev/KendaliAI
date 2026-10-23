@@ -56,31 +56,37 @@ export function parseToolArgs(raw: string | Record<string, any>, toolName: strin
   let newString: string | undefined;
 
   if (typeof raw === 'object' && raw !== null) {
-    path = raw.path || raw.filepath || raw.filePath || raw.file_path || raw.file || raw.target_file || raw.targetFile || raw.TargetFile || '';
-    cmd = raw.command || raw.cmd || raw.script || raw.CommandLine || '';
-    content = raw.content || raw.text || raw.code || raw.body || raw.file_content || raw.CodeContent || '';
-    oldString = raw.old_string || raw.old || raw.target || '';
-    newString = raw.new_string || raw.new || raw.replacement || '';
+    path = raw.Path || raw.path || raw.filepath || raw.filePath || raw.file_path || raw.file || raw.target_file || raw.targetFile || raw.TargetFile || '';
+    cmd = raw.command || raw.cmd || raw.script || raw.CommandLine || raw.command_line || '';
+    if (!cmd && (raw.query || raw.prompt || raw.pattern || raw.search_term)) {
+      cmd = raw.query || raw.prompt || raw.pattern || raw.search_term;
+    }
+    content = raw.content || raw.text || raw.code || raw.body || raw.file_content || raw.CodeContent || raw.Content || '';
+    oldString = raw.old_string || raw.old || raw.target || raw.Target || '';
+    newString = raw.new_string || raw.new || raw.replacement || raw.Replacement || '';
   } else {
     const str = (raw || '').trim();
     if (str.startsWith('{')) {
       try {
         const p = JSON.parse(str);
-        path = p.path || p.filepath || p.filePath || p.file_path || p.file || p.filename || p.target_file || p.targetFile || p.TargetFile || '';
-        cmd = p.command || p.cmd || p.script || p.CommandLine || '';
-        content = p.content || p.text || p.code || p.body || p.file_content || p.CodeContent || '';
-        oldString = p.old_string || p.old || p.target || '';
-        newString = p.new_string || p.new || p.replacement || '';
+        path = p.Path || p.path || p.filepath || p.filePath || p.file_path || p.file || p.filename || p.target_file || p.targetFile || p.TargetFile || '';
+        cmd = p.command || p.cmd || p.script || p.CommandLine || p.command_line || '';
+        if (!cmd && (p.query || p.prompt || p.pattern || p.search_term)) {
+          cmd = p.query || p.prompt || p.pattern || p.search_term;
+        }
+        content = p.content || p.text || p.code || p.body || p.file_content || p.CodeContent || p.Content || '';
+        oldString = p.old_string || p.old || p.target || p.Target || '';
+        newString = p.new_string || p.new || p.replacement || p.Replacement || '';
       } catch {
-        const pm = str.match(/"(?:path|filepath|filePath|file_path|file|filename|target_file|targetFile|TargetFile)":\s*"([^"]+)"/i);
+        const pm = str.match(/"(?:Path|path|filepath|filePath|file_path|file|filename|target_file|targetFile|TargetFile)":\s*"([^"]+)"/i);
         if (pm) path = pm[1];
-        const cm = str.match(/"(?:command|cmd|script|CommandLine)":\s*"([^"]+)"/i);
+        const cm = str.match(/"(?:command|cmd|script|CommandLine|command_line|query|prompt)":\s*"([^"]+)"/i);
         if (cm) cmd = cm[1];
-        const ctm = str.match(/"(?:content|text|code|body|file_content|CodeContent)":\s*"([\s\S]+?)"(?:\s*,\s*"|\s*})/i);
+        const ctm = str.match(/"(?:content|text|code|body|file_content|CodeContent|Content)":\s*"([\s\S]+?)"(?:\s*,\s*"|\s*})/i);
         if (ctm) content = ctm[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
-        const oldM = str.match(/"(?:old_string|old|target)":\s*"([\s\S]+?)"(?:\s*,\s*"|\s*})/i);
+        const oldM = str.match(/"(?:old_string|old|target|Target)":\s*"([\s\S]+?)"(?:\s*,\s*"|\s*})/i);
         if (oldM) oldString = oldM[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
-        const newM = str.match(/"(?:new_string|new|replacement)":\s*"([\s\S]+?)"(?:\s*,\s*"|\s*})/i);
+        const newM = str.match(/"(?:new_string|new|replacement|Replacement)":\s*"([\s\S]+?)"(?:\s*,\s*"|\s*})/i);
         if (newM) newString = newM[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
       }
     } else {
@@ -573,7 +579,7 @@ export function ToolExecutionCard({
     return null;
   }, [isRead, tool.output]);
 
-  const hasOutput = Boolean(tool.output || tool.diff || parsedArgs.content || parsedArgs.cmd);
+  const hasOutput = Boolean(isRunning || tool.output || tool.diff || parsedArgs.content || parsedArgs.cmd || tool.command);
 
   if (isSkill) {
     return (
@@ -596,7 +602,7 @@ export function ToolExecutionCard({
         : 'completed';
 
   const labelNode = (
-    <div className={cn('flex min-w-0 flex-1 items-center gap-1.5 truncate', isRunning && 'font-medium text-primary')}>
+    <div className={cn('flex min-w-0 flex-1 items-center gap-1.5 truncate', isRunning && 'font-medium text-primary live-tool-shine')}>
       <span className="shrink-0">{kind}</span>
       {targetFile ? (
         <span className="inline-flex min-w-0 max-w-[340px] items-center gap-1 truncate">
@@ -607,7 +613,7 @@ export function ToolExecutionCard({
         </span>
       ) : isBash ? (
         <span className="truncate font-mono text-ui-xs text-foreground/80">
-          {parsedArgs.cmd.replace(/^bash\s+-c\s+/, '')}
+          {(parsedArgs.cmd || tool.command || '').replace(/^bash\s+-c\s+/, '')}
         </span>
       ) : (
         <span className="min-w-0 flex-1 truncate font-mono text-ui-xs" title={tool.command}>

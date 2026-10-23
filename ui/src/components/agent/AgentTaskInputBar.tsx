@@ -206,14 +206,106 @@ export const AgentTaskInputBar: React.FC<AgentTaskInputBarProps> = ({
   }, [reasoningLevel]);
 
   const isAcpTarget = composerTarget?.kind === 'acp';
-  const activeAcpAgent = isAcpTarget ? acpAgents.find((a) => a.id === composerTarget?.id) : null;
+  const activeAcpAgent = isAcpTarget
+    ? acpAgents.find(
+        (a) =>
+          a.id === composerTarget?.id ||
+          (composerTarget?.id === 'antigravity' && a.id === 'agy') ||
+          (composerTarget?.id === 'agy' && a.id === 'antigravity') ||
+          (composerTarget?.id === 'cmd' && a.id === 'commandcode') ||
+          (composerTarget?.id === 'commandcode' && a.id === 'cmd')
+      )
+    : null;
+
+  const isLocked = Boolean(sessionId);
+  const currentSession = useMemo(() => (sessionId ? sessions.find((s) => s.id === sessionId) : null), [sessions, sessionId]);
+  const sessionMeta = useMemo(() => {
+    if (!currentSession?.metadata) return {};
+    try {
+      return JSON.parse(currentSession.metadata);
+    } catch {
+      return {};
+    }
+  }, [currentSession]);
+
+  const effectiveAgentInfo = useMemo(() => {
+    if (sessionId && currentSession) {
+      if (sessionMeta.engine === 'acp' && sessionMeta.acpAgent) {
+        const norm = sessionMeta.acpAgent === 'antigravity' ? 'agy' : sessionMeta.acpAgent === 'cmd' ? 'commandcode' : sessionMeta.acpAgent;
+        const acp = acpAgents.find((a) => a.id === norm || a.id === sessionMeta.acpAgent);
+        return {
+          isAcp: true,
+          id: norm,
+          name: acp?.name || sessionMeta.acpAgent,
+        };
+      }
+      const sessAid = currentSession.agentId;
+      if (sessAid && ['agy', 'antigravity', 'commandcode', 'cmd', 'claude-code', 'claude', 'gemini', 'codex', 'opencode', 'omp', 'pi'].includes(sessAid)) {
+        const norm = sessAid === 'antigravity' ? 'agy' : sessAid === 'cmd' ? 'commandcode' : sessAid;
+        const acp = acpAgents.find((a) => a.id === norm);
+        return {
+          isAcp: true,
+          id: norm,
+          name: acp?.name || norm,
+        };
+      }
+      const nat = agents.find((a) => a.id === currentSession.agentId);
+      return {
+        isAcp: false,
+        id: currentSession.agentId,
+        name: nat?.name || activeAgent?.name || 'Agent',
+        avatar: nat?.avatar || activeAgent?.avatar,
+      };
+    }
+
+    if (isAcpTarget) {
+      return {
+        isAcp: true,
+        id: composerTarget?.id || 'agy',
+        name: activeAcpAgent?.name || composerTarget?.id || 'ACP Agent',
+      };
+    }
+
+    const targetId = composerTarget?.id || 'rakit-kode';
+    if (targetId === 'rakit-kode') {
+      return {
+        isAcp: false,
+        id: 'rakit-kode',
+        name: 'Rakit Kode',
+        avatar: 'rakit-kode',
+      };
+    }
+    const nat = agents.find((a) => a.id === targetId) || activeAgent;
+    return {
+      isAcp: false,
+      id: nat?.id || 'rakit-kode',
+      name: nat?.name || 'Rakit Kode',
+      avatar: nat?.avatar || 'rakit-kode',
+    };
+  }, [sessionId, currentSession, sessionMeta, acpAgents, agents, activeAgent, isAcpTarget, composerTarget, activeAcpAgent]);
 
   const currentModelName = useMemo(() => {
-    if (isAcpTarget) {
-      return activeModel || composerTarget?.model || activeAcpAgent?.defaultModel || 'default';
+    if (activeModel) return activeModel;
+    if (sessionId && currentSession) {
+      if (sessionMeta.model) return sessionMeta.model;
+      if ((currentSession as any).model) return (currentSession as any).model;
     }
-    return activeModel || defaultModel || 'gemini-2.5-flash';
-  }, [isAcpTarget, activeModel, composerTarget?.model, activeAcpAgent?.defaultModel, defaultModel]);
+    if (isAcpTarget) {
+      return composerTarget?.model || activeAcpAgent?.defaultModel || 'default';
+    }
+    return defaultModel || 'gemini-2.5-flash';
+  }, [activeModel, sessionId, currentSession, sessionMeta, isAcpTarget, composerTarget?.model, activeAcpAgent?.defaultModel, defaultModel]);
+
+  useEffect(() => {
+    if (sessionId && currentSession) {
+      let m = '';
+      if (sessionMeta.model) m = sessionMeta.model;
+      else if ((currentSession as any).model) m = (currentSession as any).model;
+      if (m) {
+        setActiveModel(m);
+      }
+    }
+  }, [sessionId, currentSession?.id]);
 
   // Slash commands catalog
   const slashCommands = useMemo<SlashCommandItem[]>(() => {
@@ -579,6 +671,7 @@ export const AgentTaskInputBar: React.FC<AgentTaskInputBarProps> = ({
               'w-full resize-none border-0 bg-transparent font-sans leading-relaxed text-foreground placeholder:text-muted-foreground/60 focus:outline-none',
               isCompact ? 'min-h-[30px] text-ui-sm' : 'min-h-[44px] text-ui-base'
             )}
+            style={{ fontSize: 'var(--font-size-prompt, inherit)' }}
           />
         </div>
 
@@ -773,19 +866,17 @@ export const AgentTaskInputBar: React.FC<AgentTaskInputBarProps> = ({
                 aria-expanded={isAgentPickerOpen}
                 pressed={isAgentPickerOpen}
                 className="w-full shrink items-center justify-between gap-1 px-1.5 sm:px-2"
-                title={`Agent Orchestrator: ${composerTarget?.kind === 'acp' ? (acpAgents.find((a) => a.id === composerTarget.id)?.name || composerTarget.id) : (activeAgent?.name || 'Agent')}`}
+                title={`Agent Orchestrator: ${effectiveAgentInfo.name}`}
               >
-                {composerTarget?.kind === 'acp' ? (
-                  <ProviderIcon provider={composerTarget.id} size={14} className="size-3.5 shrink-0" />
-                ) : activeAgent?.avatar ? (
-                  <GrokAvatar id={activeAgent.avatar} size={14} className="size-3.5 shrink-0" />
+                {effectiveAgentInfo.isAcp ? (
+                  <ProviderIcon provider={effectiveAgentInfo.id} size={14} className="size-3.5 shrink-0" />
+                ) : effectiveAgentInfo.avatar ? (
+                  <GrokAvatar id={effectiveAgentInfo.avatar} size={14} className="size-3.5 shrink-0" />
                 ) : (
                   <ProviderIcon provider="forge-ade" size={14} className="size-3.5 shrink-0" />
                 )}
                 <span className="min-w-0 flex-1 truncate text-left text-ui-xs leading-none">
-                  {composerTarget?.kind === 'acp'
-                    ? (acpAgents.find((a) => a.id === composerTarget.id)?.name || composerTarget.id)
-                    : (activeAgent?.name || 'Agent')}
+                  {effectiveAgentInfo.name}
                 </span>
                 <ComposerChevron size={chipSize} className="shrink-0" />
               </ComposerControl>
@@ -809,13 +900,16 @@ export const AgentTaskInputBar: React.FC<AgentTaskInputBarProps> = ({
                             if (ag.model) setActiveModel(ag.model);
                             setIsAgentPickerOpen(false);
 
-                            // If in an active task session and switching away to a different agent, start new task with this agent
+                            // Change agent on tab -> move to new task state
                             if (sessionId) {
                               const curr = sessions.find((s) => s.id === sessionId);
                               const meta = curr ? parseSessionMetadata(curr) : {};
-                              if (meta.engine === 'acp' || (curr?.agentId && curr.agentId !== ag.id)) {
+                              const currentAid = meta.acpAgent || curr?.agentId;
+                              if (currentAid !== ag.id) {
                                 openNewTask({ kind: 'native', agentId: ag.id });
                               }
+                            } else {
+                              openNewTask({ kind: 'native', agentId: ag.id });
                             }
                           }}
                           className="items-start justify-between gap-2 p-2"
@@ -858,13 +952,16 @@ export const AgentTaskInputBar: React.FC<AgentTaskInputBarProps> = ({
                                 }
                                 setIsAgentPickerOpen(false);
 
-                                // If in an active task session and switching away to a different ACP agent (or from native)
+                                // Change agent on tab -> move to new task state
                                 if (sessionId) {
                                   const curr = sessions.find((s) => s.id === sessionId);
                                   const meta = curr ? parseSessionMetadata(curr) : {};
-                                  if (meta.engine !== 'acp' || meta.acpAgent !== acp.id) {
+                                  const currentAid = meta.acpAgent || curr?.agentId;
+                                  if (currentAid !== acp.id) {
                                     openNewTask({ kind: 'acp', agentId: acp.id });
                                   }
+                                } else {
+                                  openNewTask({ kind: 'acp', agentId: acp.id });
                                 }
                               }}
                               className={`items-start justify-between gap-2 p-2 ${!acp.available ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -926,16 +1023,16 @@ export const AgentTaskInputBar: React.FC<AgentTaskInputBarProps> = ({
 
               {isModelPickerOpen && (
                 <ComposerMenu label="Select Model" className="absolute bottom-full left-0 mb-2 max-h-80 w-72 overflow-y-auto">
-                  {isAcpTarget && activeAcpAgent ? (
+                  {(effectiveAgentInfo.isAcp || (isAcpTarget && activeAcpAgent)) ? (
                     <div>
                       <ComposerMenuLabel className="flex items-center justify-between normal-case text-primary font-medium">
-                        <span>{activeAcpAgent.name} Models</span>
+                        <span>{effectiveAgentInfo.name || activeAcpAgent?.name} Models</span>
                         <span className="rounded bg-primary/15 px-1 py-0.5 font-mono text-4xs font-bold uppercase text-primary">
                           ACP Native
                         </span>
                       </ComposerMenuLabel>
                       <div className="flex flex-col gap-0.5">
-                        {(activeAcpAgent.supportedModels || []).map((m: string) => {
+                        {((acpAgents.find(a => a.id === effectiveAgentInfo.id)?.supportedModels) || activeAcpAgent?.supportedModels || []).map((m: string) => {
                           const isSelected = m === currentModelName;
                           return (
                             <ComposerMenuItem

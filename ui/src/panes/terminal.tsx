@@ -21,7 +21,7 @@ interface RootPreset {
   path: string;
 }
 
-export const TerminalPane: React.FC = () => {
+export const TerminalPane: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -123,6 +123,11 @@ export const TerminalPane: React.FC = () => {
     } catch {
       // Container may not be measured yet
     }
+    requestAnimationFrame(() => {
+      try {
+        fitAddon?.fit();
+      } catch {}
+    });
 
     const cols = term.cols || 80;
     const rows = term.rows || 24;
@@ -162,6 +167,7 @@ export const TerminalPane: React.FC = () => {
     ws.onerror = (err) => {
       console.warn('Terminal WS error:', err);
       setConnectionStatus('disconnected');
+      term?.write('\r\n\x1b[33m⚡ Shell terminal disconnected from backend (:8080).\x1b[0m\r\n\x1b[90mEnsure KendaliAI backend is running (e.g. "make dev"). Click ✕ / restart to reconnect.\x1b[0m\r\n\r\n');
     };
 
     // User typing in terminal -> send to PTY
@@ -346,6 +352,16 @@ export const TerminalPane: React.FC = () => {
           >
             {isFullscreen ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
           </button>
+
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="p-1.5 bg-[#21262D] hover:bg-[#30363D] text-[#8B949E] hover:text-[#E6EDF3] rounded border border-[#30363D] transition-colors cursor-pointer ml-1"
+              title="Close Docked Terminal"
+            >
+              <X size={12} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -358,54 +374,54 @@ export const TerminalPane: React.FC = () => {
 
       {/* 📁 Folder Picker Modal (Switch Terminal Directory) */}
       {showPickerModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-[#161B22] border border-[#30363D] rounded-[10px] p-6 w-full max-w-md shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 bg-black/50 dark:bg-black/75 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <FolderOpen size={18} className="text-[#58A6FF]" />
-                <h3 className="text-sm font-bold font-inter text-[#E6EDF3]">
+                <FolderOpen size={18} className="text-primary" />
+                <h3 className="text-sm font-bold text-foreground">
                   Switch Terminal Working Directory
                 </h3>
               </div>
               <button
                 onClick={() => setShowPickerModal(false)}
-                className="text-[#8B949E] hover:text-[#E6EDF3] cursor-pointer"
+                className="text-muted-foreground hover:text-foreground cursor-pointer"
               >
                 <X size={15} />
               </button>
             </div>
 
-            <p className="text-xs text-[#8B949E] font-funnel">
+            <p className="text-xs text-muted-foreground">
               Select a preset or type any folder path on your machine to start a shell session in that directory.
             </p>
 
             {/* Quick Presets */}
             <div className="space-y-2">
-              <div className="text-[11px] font-bold text-[#8B949E] uppercase tracking-wider">Presets</div>
+              <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Presets</div>
               <div className="grid grid-cols-1 gap-1.5">
                 {presets.map((preset) => (
                   <button
                     key={preset.path}
                     onClick={() => handleSwitchCwd(preset.path)}
-                    className="w-full p-2.5 bg-[#0D1117] hover:bg-[#21262D] border border-[#30363D] rounded-[6px] text-left flex items-center justify-between transition-colors group cursor-pointer"
+                    className="w-full p-2.5 bg-muted/30 hover:bg-muted/60 border border-border rounded-xl text-left flex items-center justify-between transition-colors group cursor-pointer"
                   >
                     <div className="flex flex-col">
-                      <span className="text-[12px] font-medium text-[#E6EDF3] font-sans">
+                      <span className="text-[12px] font-medium text-foreground">
                         {preset.label}
                       </span>
-                      <span className="text-[10px] text-[#8B949E] font-mono truncate max-w-xs">
+                      <span className="text-[10px] text-muted-foreground font-mono truncate max-w-xs">
                         {preset.path}
                       </span>
                     </div>
-                    <ChevronRight size={14} className="text-[#8B949E] group-hover:text-[#58A6FF] transition-colors" />
+                    <ChevronRight size={14} className="text-muted-foreground group-hover:text-primary transition-colors" />
                   </button>
                 ))}
               </div>
             </div>
 
             {/* Manual Path Input */}
-            <div className="space-y-2 pt-2 border-t border-[#30363D]">
-              <label className="text-[11px] font-bold text-[#8B949E] uppercase tracking-wider">
+            <div className="space-y-2 pt-2 border-t border-border">
+              <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                 Or Enter Custom Path
               </label>
               <div className="flex items-center gap-2">
@@ -419,12 +435,12 @@ export const TerminalPane: React.FC = () => {
                       handleSwitchCwd(manualPathInput.trim());
                     }
                   }}
-                  className="flex-1 bg-[#0D1117] border border-[#30363D] rounded-[6px] px-3 py-2 text-xs font-mono text-[#E6EDF3] outline-none focus:border-[#58A6FF]"
+                  className="flex-1 bg-muted/40 border border-border rounded-xl px-3 py-2 text-xs font-mono text-foreground outline-none focus:border-primary"
                 />
                 <button
                   onClick={() => handleSwitchCwd(manualPathInput.trim())}
                   disabled={!manualPathInput.trim()}
-                  className="px-4 py-2 bg-[#1F6FEB] hover:bg-[#388BFD] disabled:opacity-40 text-white text-xs font-bold font-funnel rounded-[6px] transition-colors cursor-pointer"
+                  className="px-4 py-2 bg-primary hover:opacity-90 disabled:opacity-40 text-primary-foreground text-xs font-bold rounded-xl transition-opacity cursor-pointer"
                 >
                   Open
                 </button>

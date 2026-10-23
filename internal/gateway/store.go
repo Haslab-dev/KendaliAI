@@ -150,6 +150,17 @@ type Session struct {
 	UpdatedAt    int64             `json:"updatedAt"`
 }
 
+type AgentGroup struct {
+	ID        string   `json:"id"`
+	Name      string   `json:"name"`
+	Title     string   `json:"title"`
+	Brief     string   `json:"brief"`
+	Avatar    string   `json:"avatar"`
+	MemberIDs []string `json:"memberIds"`
+	CreatedAt int64    `json:"createdAt"`
+	UpdatedAt int64    `json:"updatedAt"`
+}
+
 type ToolCallRecord struct {
 	ID         string                 `json:"id"`
 	Tool       string                 `json:"tool"`
@@ -279,6 +290,15 @@ func (s *Store) SeedInitialData(cfg *config.Config) {
 	_, _ = s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_doc_chunks_doc ON document_chunks(document_id)`)
 
 	// Telegram Auth Tables
+	_, _ = s.db.Exec(`CREATE TABLE IF NOT EXISTS agent_groups (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		brief TEXT DEFAULT '',
+		avatar TEXT DEFAULT 'users',
+		member_ids TEXT DEFAULT '[]',
+		created_at INTEGER,
+		updated_at INTEGER
+	)`)
 	_, _ = s.db.Exec(`CREATE TABLE IF NOT EXISTS system_settings (
 		key TEXT PRIMARY KEY,
 		value TEXT
@@ -352,35 +372,35 @@ func (s *Store) SeedInitialData(cfg *config.Config) {
 	now := time.Now().Unix()
 	bootstrapAgents := []AgentConfig{
 		{
-			ID:           "personal-assistant",
-			Name:         "Personal Assistant",
-			Role:         "Personal Assistant & Executive Coordinator",
-			Department:   "Executive",
-			Description:  "Proactive daily coordinator, task manager, scheduling, and personal executive assistance.",
+			ID:           "lutfi",
+			Name:         "Lutfi",
+			Role:         "Planner",
+			Department:   "Planning & Architecture",
+			Description:  "Spesialis perencana arsitektur sistem, pemecah masalah, dan dekomposisi task bertahap.",
 			ProviderID:   "",
-			Model:        "gpt-6-astra",
-			SystemPrompt: "You are Personal Assistant, a proactive executive coordinator. You organize schedules, manage tasks, coordinate with other specialized agents, and keep workflows structured and on track.",
-			Skills:       []string{"planning", "coordination", "task-management"},
-			Tools:        []string{"*"},
+			Model:        "",
+			SystemPrompt: "You are Lutfi, lead Planner and system architect in Kendali AI. You break down complex requests into clear, structured, phased plans with explicit tasks, dependencies, and acceptance criteria. You focus on strategic architecture, technical design, and actionable decomposition without skipping details.",
+			Skills:       []string{"planning", "task-decomposition", "architecture", "system-design"},
+			Tools:        []string{"filesystem.*", "shell.*", "git.*", "search"},
 			MCP:          []string{},
 			MemoryScopes: []string{"user", "agent", "session", "workspace"},
 			Policy:       map[string]string{},
-			Avatar:       "purple-pebble",
+			Avatar:       "amber-star",
 			IsDefault:    true,
 			CreatedAt:    now,
 			UpdatedAt:    now,
 		},
 		{
-			ID:           "research-agent",
-			Name:         "Research Agent",
-			Role:         "Lead Research & Intelligence",
-			Department:   "Intelligence",
-			Description:  "In-depth research, web investigation, source synthesis, literature review, and factual verification.",
+			ID:           "bewustein",
+			Name:         "Bewustein",
+			Role:         "Researcher",
+			Department:   "Research & Intelligence",
+			Description:  "Spesialis riset mendalam, pencarian fakta, investigasi web, dan sintesis literatur.",
 			ProviderID:   "",
-			Model:        "deepseek-v4-flash",
-			SystemPrompt: "You are Research Agent, an expert investigator and analyst. You gather facts, evaluate sources, synthesize complex multi-domain information, and provide clear, cited conclusions.",
-			Skills:       []string{"deep-research", "synthesis", "fact-checking"},
-			Tools:        []string{"http.*", "search", "filesystem.read"},
+			Model:        "",
+			SystemPrompt: "You are Bewustein, Lead Researcher and factual intelligence analyst at Kendali AI. You conduct deep investigations, gather multi-domain evidence, cross-reference sources, verify facts rigorously, and synthesize comprehensive, cited reports.",
+			Skills:       []string{"deep-research", "synthesis", "fact-checking", "literature-review"},
+			Tools:        []string{"http.*", "search", "web.fetch", "filesystem.read", "bash"},
 			MCP:          []string{},
 			MemoryScopes: []string{"user", "session"},
 			Policy:       map[string]string{},
@@ -390,213 +410,20 @@ func (s *Store) SeedInitialData(cfg *config.Config) {
 			UpdatedAt:    now,
 		},
 		{
-			ID:           "knowledge-agent",
-			Name:         "Knowledge Agent",
-			Role:         "Knowledge & Second Brain Curator",
-			Department:   "Intelligence",
-			Description:  "Second brain, personal documentation, memory recall, concept mapping, and knowledge retrieval.",
+			ID:           "fatimah",
+			Name:         "Fatimah",
+			Role:         "Study Leaner",
+			Department:   "Learning & Mastery",
+			Description:  "Spesialis akselerasi belajar adaptif, teknik Feynman, pemahaman konsep rumit, dan panduan belajar terarah.",
 			ProviderID:   "",
-			Model:        "gpt-5-6-luna",
-			SystemPrompt: "You are Knowledge Agent, curator of personal intelligence and second-brain memory. You store, categorize, connect concepts, retrieve documentation, and distill actionable insights.",
-			Skills:       []string{"knowledge-graph", "memory-retrieval", "note-taking"},
-			Tools:        []string{"filesystem.*", "search"},
+			Model:        "",
+			SystemPrompt: "You are Fatimah, an empathetic and highly structured Study Leaner (learning specialist and study companion) at Kendali AI. You deconstruct complex educational topics and difficult concepts using the Feynman technique, intuitive analogies, active recall drills, spaced repetition schedules, and clear study summaries to help users master any subject quickly.",
+			Skills:       []string{"feynman-technique", "active-recall", "study-guide", "concept-mapping", "spaced-repetition"},
+			Tools:        []string{"filesystem.read", "search", "web.fetch"},
 			MCP:          []string{},
 			MemoryScopes: []string{"user", "agent", "session"},
 			Policy:       map[string]string{},
-			Avatar:       "cyan-bubble",
-			IsDefault:    false,
-			CreatedAt:    now,
-			UpdatedAt:    now,
-		},
-		{
-			ID:           "coding-agent",
-			Name:         "Coding Agent",
-			Role:         "Senior Full-Stack Engineer",
-			Department:   "Engineering",
-			Description:  "Senior software engineer for architectural planning, code authoring, debugging, refactoring, and test writing.",
-			ProviderID:   "",
-			Model:        "codestral-latest",
-			SystemPrompt: "You are Coding Agent, a world-class senior software engineer and architect. You write clean, idiomatic, robust code, inspect systems thoroughly, diagnose bugs, and execute commands safely.",
-			Skills:       []string{"coding", "debugging", "code-review"},
-			Tools:        []string{"filesystem.*", "shell.*", "git.*", "search", "skill.*", "plugin.*"},
-			MCP:          []string{"github"},
-			MemoryScopes: []string{"user", "agent", "session", "workspace"},
-			Policy: map[string]string{
-				"shell.exec":       "approval",
-				"filesystem.write": "allow",
-			},
-			Avatar:    "blue-drop",
-			IsDefault: false,
-			CreatedAt: now,
-			UpdatedAt: now,
-		},
-		{
-			ID:           "reviewer",
-			Name:         "Reviewer Agent",
-			Role:         "Code & Security Reviewer",
-			Department:   "Security",
-			Description:  "Specialized code and security reviewer. Analyzes git diffs, catches vulnerabilities, bugs, secret leaks, and enforces code quality.",
-			ProviderID:   "",
-			Model:        "gpt-oss-120b",
-			SystemPrompt: "You are Reviewer Agent, a senior security and quality code reviewer. You review git diffs, source files, and workspace structures. You detect security flaws (OWASP top 10, injection, hardcoded secrets), race conditions, performance bottlenecks, and edge cases. You output structured, actionable review feedback with exact line references and remediation code.",
-			Skills:       []string{"code-review", "security-audit", "quality-assurance"},
-			Tools:        []string{"review.*", "git.*", "filesystem.read"},
-			MCP:          []string{},
-			MemoryScopes: []string{"user", "workspace"},
-			Policy:       map[string]string{},
-			Avatar:       "ruby-capsule",
-			IsDefault:    false,
-			CreatedAt:    now,
-			UpdatedAt:    now,
-		},
-		{
-			ID:           "planner",
-			Name:         "Planner Agent",
-			Role:         "System Architecture Planner",
-			Department:   "Architecture",
-			Description:  "System architect and task decomposition specialist. Breaks complex requirements into step-by-step implementation plans.",
-			ProviderID:   "",
-			Model:        "glm-5-3-flash",
-			SystemPrompt: "You are Planner Agent, an expert system architect and project planner. You break complex goals into structured phases, tasks, acceptance criteria, and worktree isolation plans without modifying code directly.",
-			Skills:       []string{"planning", "architecture", "task-decomposition"},
-			Tools:        []string{"filesystem.read", "search", "git.status"},
-			MCP:          []string{},
-			MemoryScopes: []string{"user", "workspace"},
-			Policy:       map[string]string{},
-			Avatar:       "amber-star",
-			IsDefault:    false,
-			CreatedAt:    now,
-			UpdatedAt:    now,
-		},
-		{
-			ID:           "lead-frontend",
-			Name:         "Alex Rivera",
-			Role:         "Lead Frontend Dev",
-			Department:   "Engineering",
-			Description:  "Lead web developer specialized in React, TypeScript, Tailwind CSS, and mobile-responsive architectures.",
-			ProviderID:   "",
-			Model:        "gpt-6-astra",
-			SystemPrompt: "You are Alex Rivera, Lead Frontend Developer of KendaliAI. You architect modern, responsive user interfaces with React, TypeScript, and Tailwind CSS. You write clean, decoupled components, handle state management gracefully, and ensure 60fps snappy animations.",
-			Skills:       []string{"react-19", "typescript", "tailwind-css", "mobile-responsive", "vite-build"},
-			Tools:        []string{"bash", "file.write", "file.read", "git_worktree", "web.fetch", "telegram.send"},
-			MCP:          []string{},
-			MemoryScopes: []string{"user", "workspace"},
-			Policy:       map[string]string{},
-			Avatar:       "blue-drop",
-			IsDefault:    false,
-			CreatedAt:    now,
-			UpdatedAt:    now,
-		},
-		{
-			ID:           "lead-architecture",
-			Name:         "Elena Rostova",
-			Role:         "Lead Solution Architecture",
-			Department:   "Architecture",
-			Description:  "System architect designing modular component boundaries, git worktree branching, and RFC specifications.",
-			ProviderID:   "",
-			Model:        "glm-5-3-flash",
-			SystemPrompt: "You are Elena Rostova, Lead Solution Architect of KendaliAI. You define architectural blueprints, evaluate trade-offs between speed and modularity, specify API protocols, and govern system boundaries.",
-			Skills:       []string{"system-design", "worktree-branching", "domain-driven-design", "rfc-specifications"},
-			Tools:        []string{"file.read", "git_worktree", "web.fetch", "rag.query", "telegram.send"},
-			MCP:          []string{},
-			MemoryScopes: []string{"user", "workspace"},
-			Policy:       map[string]string{},
-			Avatar:       "cyan-bubble",
-			IsDefault:    false,
-			CreatedAt:    now,
-			UpdatedAt:    now,
-		},
-		{
-			ID:           "lead-backend",
-			Name:         "Marcus Chen",
-			Role:         "Lead Backend Dev",
-			Department:   "Engineering",
-			Description:  "Distributed systems engineer specialized in Go, SQLite/PostgreSQL, WebSockets, and low-latency API runtimes.",
-			ProviderID:   "",
-			Model:        "codestral-latest",
-			SystemPrompt: "You are Marcus Chen, Lead Backend Developer of KendaliAI. You build robust, concurrent Go servers, manage database persistence, write clean idiomatic Go, and optimize streaming RPCs.",
-			Skills:       []string{"golang", "sqlite", "websockets", "concurrency", "distributed-systems"},
-			Tools:        []string{"bash", "file.write", "file.read", "git_worktree", "rag.query", "telegram.send"},
-			MCP:          []string{},
-			MemoryScopes: []string{"user", "workspace"},
-			Policy:       map[string]string{},
-			Avatar:       "green-cloud",
-			IsDefault:    false,
-			CreatedAt:    now,
-			UpdatedAt:    now,
-		},
-		{
-			ID:           "legal-counsel",
-			Name:         "Sarah Vance",
-			Role:         "Legal Counsel & Compliance",
-			Department:   "Legal",
-			Description:  "Advises on open-source licensing, terms of service, AI data governance, and regulatory compliance.",
-			ProviderID:   "",
-			Model:        "gpt-5-6-luna",
-			SystemPrompt: "You are Sarah Vance, Legal & Compliance Counsel of KendaliAI. You review code licenses (MIT, Apache 2.0, GPL), data privacy considerations, and compliance risks.",
-			Skills:       []string{"licensing-audit", "compliance", "privacy-governance", "ip-review"},
-			Tools:        []string{"file.read", "web.fetch", "telegram.send"},
-			MCP:          []string{},
-			MemoryScopes: []string{"user", "workspace"},
-			Policy:       map[string]string{},
-			Avatar:       "bronze-shield",
-			IsDefault:    false,
-			CreatedAt:    now,
-			UpdatedAt:    now,
-		},
-		{
-			ID:           "chief-security",
-			Name:         "Kavita Patel",
-			Role:         "Chief Security Officer",
-			Department:   "Security",
-			Description:  "Oversees sandbox security, token encryption, permission policies, and OWASP audits.",
-			ProviderID:   "",
-			Model:        "gpt-oss-120b",
-			SystemPrompt: "You are Kavita Patel, Chief Security Officer of KendaliAI. You identify vulnerabilities, enforce least-privilege security policies, prevent credential leaks, and perform red-team analysis.",
-			Skills:       []string{"penetration-testing", "secret-scanning", "owasp-top-10", "rbac-policy"},
-			Tools:        []string{"file.read", "review.diff", "git.status", "telegram.send"},
-			MCP:          []string{},
-			MemoryScopes: []string{"user", "workspace"},
-			Policy:       map[string]string{},
-			Avatar:       "ruby-capsule",
-			IsDefault:    false,
-			CreatedAt:    now,
-			UpdatedAt:    now,
-		},
-		{
-			ID:           "devops-lead",
-			Name:         "Darius Thorne",
-			Role:         "DevOps & Infrastructure Lead",
-			Department:   "Operations",
-			Description:  "Maintains deployment pipelines, Docker containers, system daemons, and cloud infrastructure.",
-			ProviderID:   "",
-			Model:        "deepseek-v4-flash",
-			SystemPrompt: "You are Darius Thorne, DevOps & Infrastructure Lead of KendaliAI. You maintain CI/CD pipelines, Docker environments, release configurations, and system health daemons.",
-			Skills:       []string{"docker", "ci-cd", "linux-daemons", "monitoring", "networking"},
-			Tools:        []string{"bash", "file.write", "file.read", "git.status", "telegram.send"},
-			MCP:          []string{},
-			MemoryScopes: []string{"user", "workspace"},
-			Policy:       map[string]string{},
-			Avatar:       "orange-leaf",
-			IsDefault:    false,
-			CreatedAt:    now,
-			UpdatedAt:    now,
-		},
-		{
-			ID:           "sre-agent",
-			Name:         "Alex Vance",
-			Role:         "Site Reliability & Incident Response",
-			Department:   "Operations",
-			Description:  "SRE specialist for production incident response, error triage, telemetry diagnostics, and deterministic health monitoring.",
-			ProviderID:   "",
-			Model:        "",
-			SystemPrompt: "You are Alex Vance, Site Reliability Engineer and Incident Responder at KendaliAI. You investigate production incidents, analyze HTTP 5xx spikes, trace connection leaks, inspect server telemetry, correlate errors with git commits, and provide clear diagnoses with high confidence. You NEVER modify production or restart critical services without explicit human authorization.",
-			Skills:       []string{"incident-response", "vps-monitor", "telemetry-triage", "root-cause-analysis"},
-			Tools:        []string{"bash", "file.read", "git.status", "git_diff", "telegram.send"},
-			MCP:          []string{},
-			MemoryScopes: []string{"user", "workspace"},
-			Policy:       map[string]string{},
-			Avatar:       "amber-star",
+			Avatar:       "purple-pebble",
 			IsDefault:    false,
 			CreatedAt:    now,
 			UpdatedAt:    now,
@@ -1298,11 +1125,14 @@ func (s *Store) EnsureDirectChatsForAgents() error {
 			ID:        "general_default",
 			Title:     "General Chat",
 			Type:      "general",
-			AgentID:   "personal-assistant",
+			AgentID:   "lutfi",
 			ChannelID: "web",
 			UserID:    "user",
 			Status:    "active",
 		})
+	} else if genChat.AgentID == "personal-assistant" {
+		genChat.AgentID = "lutfi"
+		_ = s.SaveSession(*genChat)
 	}
 
 	// Ensure Direct 1:1 Chat exists for each agent
@@ -2307,6 +2137,61 @@ func (s *Store) SetTelegramAuthRequired(required bool) error {
 	_, err := s.db.Exec(`
 		INSERT INTO system_settings (key, value) VALUES ('telegram_auth_required', ?)
 		ON CONFLICT(key) DO UPDATE SET value = excluded.value`, val)
+	return err
+}
+
+func (s *Store) ListAgentGroups() ([]AgentGroup, error) {
+	rows, err := s.db.Query("SELECT id, name, brief, avatar, member_ids, created_at, updated_at FROM agent_groups ORDER BY created_at ASC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var groups []AgentGroup
+	for rows.Next() {
+		var g AgentGroup
+		var memJSON sql.NullString
+		if err := rows.Scan(&g.ID, &g.Name, &g.Brief, &g.Avatar, &memJSON, &g.CreatedAt, &g.UpdatedAt); err != nil {
+			continue
+		}
+		g.Title = g.Name
+		if memJSON.Valid && memJSON.String != "" {
+			_ = json.Unmarshal([]byte(memJSON.String), &g.MemberIDs)
+		}
+		if g.MemberIDs == nil {
+			g.MemberIDs = []string{}
+		}
+		groups = append(groups, g)
+	}
+	if groups == nil {
+		groups = []AgentGroup{}
+	}
+	return groups, nil
+}
+
+func (s *Store) SaveAgentGroup(g AgentGroup) error {
+	memJSON, _ := json.Marshal(g.MemberIDs)
+	now := time.Now().Unix()
+	if g.CreatedAt == 0 {
+		g.CreatedAt = now
+	}
+	g.UpdatedAt = now
+	_, err := s.db.Exec(`
+		INSERT INTO agent_groups (id, name, brief, avatar, member_ids, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			name = excluded.name,
+			brief = excluded.brief,
+			avatar = excluded.avatar,
+			member_ids = excluded.member_ids,
+			updated_at = excluded.updated_at`,
+		g.ID, g.Name, g.Brief, g.Avatar, string(memJSON), g.CreatedAt, g.UpdatedAt)
+	return err
+}
+
+func (s *Store) DeleteAgentGroup(id string) error {
+	_, _ = s.db.Exec("DELETE FROM sessions WHERE agent_id = ?", id)
+	_, err := s.db.Exec("DELETE FROM agent_groups WHERE id = ?", id)
 	return err
 }
 

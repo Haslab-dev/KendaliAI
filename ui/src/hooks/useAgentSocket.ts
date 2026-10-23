@@ -267,10 +267,9 @@ function connectGlobalSocket() {
           case 'agent.tool_result':
             if (isCurrentSession && ev.payload) {
               store.setThinkingStatus(`Finished ${ev.payload.tool}`);
-              const tcRes = {
+              const tcRes: any = {
                 id: ev.payload.id,
                 tool: ev.payload.tool,
-                arguments: {},
                 output: ev.payload.output,
                 status: (ev.payload.status || 'success') as any,
                 durationMs: ev.payload.durationMs,

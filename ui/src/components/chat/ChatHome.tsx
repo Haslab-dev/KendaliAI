@@ -1,190 +1,182 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useProfileStore } from '../../store/useProfileStore';
 import { useSessionStore } from '../../store/useSessionStore';
 import { useAppStore } from '../../store/useAppStore';
+import { useAgentStore } from '../../store/useAgentStore';
 import {
-  AlertTriangle,
-  Lightbulb,
-  Plus,
-  ArrowUp,
   ChevronDown,
-  Bot,
-  Sparkles,
+  Check,
+  Search,
 } from 'lucide-react';
+import { AgentTaskInputBar, PromptSubmitOptions } from '../common/AgentTaskInputBar';
+import { WorkspaceHeader } from '../common/WorkspaceHeader';
 import { AgentIcon } from '../shell/AgentIcon';
+import { cn } from '../../lib/cn';
 
 export const ChatHome: React.FC = () => {
-  const { agents, activeAgent, selectAgent, setActiveNavTab } = useProfileStore();
+  const { agents, activeAgent, selectAgent, selectedAgentId } = useProfileStore();
   const { createSessionForAgent, sendMessage } = useSessionStore();
-  const { providers, availableModels, defaultModel } = useAppStore();
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const [input, setInput] = useState('');
-  const [agentDropdownOpen, setAgentDropdownOpen] = useState(false);
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
-  // Time-based greeting
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Hi, good morning!';
-    if (hour < 18) return 'Hi, good afternoon!';
-    return 'Hi, good evening!';
+  const currentName = activeAgent?.name || 'General';
+
+  const filteredAgents = agents.filter((a) =>
+    a.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const handleSubmitPrompt = async (text: string, options?: PromptSubmitOptions) => {
+    const isAcp = options?.engineKind === 'acp';
+    const acpAgent = isAcp ? (options?.engineId || 'agy') : undefined;
+    const targetAgentId = activeAgent?.id || selectedAgentId || agents[0]?.id || 'lutfi';
+    const chosenModel = options?.model || (isAcp ? undefined : activeAgent?.model);
+    const engineKind = isAcp ? 'acp' : 'rakit';
+
+    await createSessionForAgent(targetAgentId, text.slice(0, 36), {
+      engine: engineKind,
+      acpAgent,
+      model: chosenModel,
+    });
+    await sendMessage(text, {
+      agentId: targetAgentId,
+      model: chosenModel,
+      engine: engineKind,
+      acpAgent,
+    });
   };
 
-  const hasConfiguredProvider = providers.some((p) => p.enabled && p.apiKey);
+  // Stacked landing tray chip above the composer
+  const landingTray = (
+    <div
+      ref={dropdownRef}
+      className="flex min-h-8 w-full flex-nowrap items-center gap-x-1.5 px-3.5 py-1 text-xs text-muted-foreground"
+    >
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setIsDropdownOpen((prev) => !prev)}
+          className={cn(
+            'inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md px-2 font-normal text-muted-foreground hover:bg-accent hover:text-foreground transition-colors',
+            isDropdownOpen && 'bg-accent text-foreground'
+          )}
+        >
+          <AgentIcon
+            id={activeAgent?.id || ''}
+            name={currentName}
+            avatar={activeAgent?.avatar}
+            isACP={false}
+            size={14}
+            className="shrink-0"
+          />
+          <span className="max-w-[180px] truncate">{currentName}</span>
+          <ChevronDown className="size-3 shrink-0 opacity-60" />
+        </button>
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || !activeAgent) return;
-
-    const text = input.trim();
-    setInput('');
-    const newSessionId = await createSessionForAgent(activeAgent.id, text.slice(0, 32));
-    await sendMessage(text, { agentId: activeAgent.id });
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit(e);
-    }
-  };
-
-  const activeModel = activeAgent?.model || defaultModel || 'Auto';
-
-  return (
-    <div className="flex-1 h-full flex flex-col items-center justify-center px-4 relative overflow-y-auto">
-      <div className="w-full max-w-2xl flex flex-col items-center text-center space-y-6 -mt-12">
-        {/* Greeting Header */}
-        <div className="space-y-3">
-          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground">
-            {getGreeting()}
-          </h1>
-
-          {/* Select Agent Dropdown */}
-          <div className="relative inline-block text-left">
-            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-              <span>Select agent</span>
-              <button
-                type="button"
-                onClick={() => setAgentDropdownOpen(!agentDropdownOpen)}
-                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-muted/60 hover:bg-muted border border-border text-foreground font-medium text-xs transition-colors shadow-xs"
-              >
-                <AgentIcon
-                  id={activeAgent?.id || ''}
-                  name={activeAgent?.name}
-                  avatar={activeAgent?.avatar}
-                  size={16}
+        {isDropdownOpen && (
+          <div className="dropdown-glass absolute bottom-full left-0 z-50 mb-2 w-64 animate-in rounded-xl p-1 text-ui-sm text-foreground shadow-2xl fade-in zoom-in-95 duration-100">
+            <div className="border-b border-border/40 px-2.5 pt-2 pb-1.5">
+              <div className="relative flex items-center">
+                <Search className="absolute left-1.5 size-3.5 text-muted-foreground" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Select agent..."
+                  className="h-6 w-full bg-transparent pl-6 pr-2 text-ui-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
+                  autoFocus
                 />
-                <span>{activeAgent?.name || 'Personal Assistant'}</span>
-                <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
-              </button>
+              </div>
             </div>
-
-            {/* Dropdown Menu */}
-            {agentDropdownOpen && (
-              <div
-                className="absolute left-1/2 -translate-x-1/2 mt-2 w-56 rounded-xl bg-popover border border-border shadow-2xl py-1.5 z-50 animate-in fade-in-50"
-                onClick={() => setAgentDropdownOpen(false)}
-              >
-                {agents.map((agent) => (
+            <div className="max-h-56 space-y-1 overflow-y-auto p-1 pt-1 scrollbar-thin">
+              <div className="px-2 py-0.5 text-4xs font-semibold uppercase tracking-wider text-muted-foreground/70">
+                Assistants
+              </div>
+              {filteredAgents.map((ag) => {
+                const isCurrent = ag.id === activeAgent?.id;
+                return (
                   <button
-                    key={agent.id}
-                    onClick={() => selectAgent(agent.id)}
-                    className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2.5 hover:bg-muted transition-colors ${
-                      activeAgent?.id === agent.id ? 'bg-muted/80 font-semibold text-primary' : 'text-foreground'
-                    }`}
+                    key={ag.id}
+                    type="button"
+                    onClick={() => {
+                      selectAgent(ag.id);
+                      setIsDropdownOpen(false);
+                      useSessionStore.getState().selectSession(null);
+                      useAgentStore.getState().setComposerTarget({ kind: 'native', id: 'rakit-kode' });
+                    }}
+                    className={cn(
+                      'flex min-h-7 w-full cursor-pointer items-center justify-between rounded-lg px-2 py-1.5 text-left text-ui-xs transition-colors',
+                      isCurrent ? 'bg-primary/10 text-primary font-medium' : 'text-foreground/80 hover:bg-accent hover:text-foreground'
+                    )}
                   >
-                    <AgentIcon
-                      id={agent.id}
-                      name={agent.name}
-                      avatar={agent.avatar}
-                      size={18}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate">{agent.name}</p>
-                      {agent.role && <p className="text-[10px] text-muted-foreground">{agent.role}</p>}
+                    <div className="flex items-center gap-2 truncate">
+                      <AgentIcon id={ag.id} name={ag.name} avatar={ag.avatar} isACP={false} size={14} />
+                      <span className="truncate">{ag.name}</span>
                     </div>
+                    {isCurrent && <Check className="size-3.5 text-primary shrink-0" />}
                   </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Warning Banner if No Provider */}
-        {!hasConfiguredProvider && (
-          <div className="w-full rounded-2xl bg-amber-500/10 border border-amber-500/20 p-4 text-left flex items-center justify-between gap-4 shadow-xs">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-              <div className="space-y-0.5">
-                <p className="text-xs font-semibold text-amber-500">
-                  One more step to start chatting
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Connect an AI service so Kendali can respond to your messages.
-                </p>
-              </div>
+                );
+              })}
             </div>
-            <button
-              onClick={() => setActiveNavTab('settings')}
-              className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-black font-semibold text-xs shrink-0 transition-colors shadow-xs"
-            >
-              Set up AI
-            </button>
           </div>
         )}
+      </div>
+    </div>
+  );
 
-        {/* Tip Banner */}
-        <div className="w-full rounded-xl bg-muted/20 border border-border/50 px-4 py-2.5 flex items-center gap-2.5 text-xs text-muted-foreground text-left">
-          <Lightbulb className="w-4 h-4 text-amber-400 shrink-0" />
-          <span>Use the Super Kendali profile to create your own agents and custom tools.</span>
-        </div>
+  return (
+    <div className="flex-1 h-full bg-background text-foreground flex flex-col relative overflow-hidden select-none transition-colors">
+      {/* Top Workspace Header */}
+      <WorkspaceHeader />
 
-        {/* Floating Composer */}
-        <form
-          onSubmit={handleSubmit}
-          className="w-full rounded-2xl bg-[#141418] border border-border/60 hover:border-border focus-within:border-primary/60 transition-colors shadow-xl p-3 flex flex-col gap-2 text-left"
-        >
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Do anything..."
-            rows={2}
-            className="w-full bg-transparent border-0 resize-none text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none p-1"
-          />
-
-          <div className="flex items-center justify-between pt-1">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className="w-8 h-8 rounded-lg hover:bg-muted/60 text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors"
-                title="Add attachment"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
-
-              {/* Status/Model Pill */}
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted/40 border border-border/40 text-[11px] text-muted-foreground">
-                <span
-                  className={`w-1.5 h-1.5 rounded-full ${
-                    hasConfiguredProvider ? 'bg-emerald-500' : 'bg-amber-500'
-                  }`}
-                />
-                <span>{hasConfiguredProvider ? activeModel : 'Offline'}</span>
-              </div>
+      {/* Centered Landing Content */}
+      <div className="flex flex-1 flex-col items-center justify-center px-4 z-10 min-h-0">
+        <div className="flex w-full max-w-[var(--chat-content-max-width,46rem)] flex-col items-center justify-center gap-7 my-auto pb-12">
+          {/* Brand Spark Glyph + Heading */}
+          <div className="flex flex-col items-center gap-4 text-center select-none w-full">
+            <div className="text-foreground">
+              <svg width={56} height={56} viewBox="0 0 48 48" fill="currentColor" className="shrink-0" aria-hidden="true">
+                <path d="M24 3c1.6 10.6 6.4 16.7 20 21-13.6 4.3-18.4 10.4-20 21-1.6-10.6-6.4-16.7-20-21 13.6-4.3 18.4-10.4 20-21Z" />
+                <circle cx="39.5" cy="8.5" r="3.2" />
+              </svg>
             </div>
 
-            <button
-              type="submit"
-              disabled={!input.trim()}
-              className="w-8 h-8 rounded-full bg-primary hover:bg-primary/90 disabled:opacity-40 disabled:hover:bg-primary text-white flex items-center justify-center transition-all shadow-md shadow-primary/20"
-              title="Send message"
-            >
-              <ArrowUp className="w-4 h-4" />
-            </button>
+            <h2 className="text-[26px] font-normal leading-[1.15] tracking-[-0.015em] text-foreground sm:text-[30px]">
+              What should we do in{' '}
+              <button
+                type="button"
+                onClick={() => setIsDropdownOpen((prev) => !prev)}
+                className="cursor-pointer rounded-xs text-inherit underline decoration-dotted decoration-[1.5px] underline-offset-[6px] transition-colors duration-150 ease-out hover:text-foreground/75 focus:outline-none"
+              >
+                {currentName}
+              </button>
+              ?
+            </h2>
           </div>
-        </form>
+
+          {/* Centered Composer */}
+          <div className="w-full pt-1">
+            <AgentTaskInputBar
+              placeholder="Ask anything, @ threads or files, $ skills, or / commands"
+              autoFocus={true}
+              headerNode={landingTray}
+              onSubmitPrompt={handleSubmitPrompt}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );
 };
+
+export default ChatHome;

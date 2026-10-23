@@ -17,6 +17,22 @@ export const ProviderIcon: React.FC<ProviderIconProps> = ({
   const norm = (provider || '').toLowerCase();
   const gradId = useId();
 
+  if (norm.includes('rakit') || norm.includes('native') || norm.includes('kendali')) {
+    return (
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 48 48"
+        fill="currentColor"
+        className={className}
+        {...props}
+      >
+        <path d="M24 3c1.6 10.6 6.4 16.7 20 21-13.6 4.3-18.4 10.4-20 21-1.6-10.6-6.4-16.7-20-21 13.6-4.3 18.4-10.4 20-21Z" />
+        <circle cx="39.5" cy="8.5" r="3.2" />
+      </svg>
+    );
+  }
+
   if (norm.includes('claude')) {
     return (
       <svg
@@ -212,55 +228,72 @@ export const ProviderIcon: React.FC<ProviderIconProps> = ({
     );
   }
 
-  // Default Forge ADE internal agent brand icon (gradient 3D "F" logo from app icon)
+  if (norm.includes('forge')) {
+    // Forge ADE internal agent brand icon (gradient 3D "F" logo from app icon)
+    return (
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        className={className}
+        {...props}
+      >
+        <defs>
+          <linearGradient id={`${gradId}-forge-main`} x1="100%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#38BDF8" />
+            <stop offset="35%" stopColor="#2563EB" />
+            <stop offset="70%" stopColor="#7C3AED" />
+            <stop offset="100%" stopColor="#C026D3" />
+          </linearGradient>
+          <linearGradient id={`${gradId}-forge-mid-fold`} x1="0%" y1="0%" x2="100%" y2="50%">
+            <stop offset="0%" stopColor="#1E3A8A" />
+            <stop offset="100%" stopColor="#2563EB" />
+          </linearGradient>
+          <linearGradient id={`${gradId}-forge-mid`} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#2563EB" />
+            <stop offset="100%" stopColor="#60A5FA" />
+          </linearGradient>
+          <linearGradient id={`${gradId}-forge-tail`} x1="100%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#7C3AED" />
+            <stop offset="100%" stopColor="#E879F9" />
+          </linearGradient>
+        </defs>
+
+        <g transform="translate(0.5, 0.5)">
+          <path
+            d="M 10.5 2.5 C 8.2 2.5 6.6 4.1 6.0 6.3 L 3.0 20.0 L 6.6 18.2 L 8.4 11.2 C 8.7 9.8 9.9 8.8 11.3 8.8 L 17.8 8.8 L 21.2 2.5 C 21.2 2.5 14.8 2.5 10.5 2.5 Z"
+            fill={`url(#${gradId}-forge-main)`}
+          />
+          <path
+            d="M 8.8 11.0 L 11.8 9.0 L 14.6 9.0 L 10.2 11.0 Z"
+            fill={`url(#${gradId}-forge-mid-fold)`}
+          />
+          <path
+            d="M 9.0 11.0 L 17.5 11.0 L 15.5 14.4 L 7.6 14.4 Z"
+            fill={`url(#${gradId}-forge-mid)`}
+          />
+          <path
+            d="M 3.0 20.0 L 6.6 18.2 L 7.6 14.4 L 5.2 14.4 Z"
+            fill={`url(#${gradId}-forge-tail)`}
+          />
+        </g>
+      </svg>
+    );
+  }
+
+  // Default Kendali AI Brand Spark Glyph for Native / generic orchestrators
   return (
     <svg
       width={size}
       height={size}
-      viewBox="0 0 24 24"
-      fill="none"
+      viewBox="0 0 48 48"
+      fill="currentColor"
       className={className}
       {...props}
     >
-      <defs>
-        <linearGradient id={`${gradId}-forge-main`} x1="100%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor="#38BDF8" />
-          <stop offset="35%" stopColor="#2563EB" />
-          <stop offset="70%" stopColor="#7C3AED" />
-          <stop offset="100%" stopColor="#C026D3" />
-        </linearGradient>
-        <linearGradient id={`${gradId}-forge-mid-fold`} x1="0%" y1="0%" x2="100%" y2="50%">
-          <stop offset="0%" stopColor="#1E3A8A" />
-          <stop offset="100%" stopColor="#2563EB" />
-        </linearGradient>
-        <linearGradient id={`${gradId}-forge-mid`} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#2563EB" />
-          <stop offset="100%" stopColor="#60A5FA" />
-        </linearGradient>
-        <linearGradient id={`${gradId}-forge-tail`} x1="100%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor="#7C3AED" />
-          <stop offset="100%" stopColor="#E879F9" />
-        </linearGradient>
-      </defs>
-
-      <g transform="translate(0.5, 0.5)">
-        <path
-          d="M 10.5 2.5 C 8.2 2.5 6.6 4.1 6.0 6.3 L 3.0 20.0 L 6.6 18.2 L 8.4 11.2 C 8.7 9.8 9.9 8.8 11.3 8.8 L 17.8 8.8 L 21.2 2.5 C 21.2 2.5 14.8 2.5 10.5 2.5 Z"
-          fill={`url(#${gradId}-forge-main)`}
-        />
-        <path
-          d="M 8.8 11.0 L 11.8 9.0 L 14.6 9.0 L 10.2 11.0 Z"
-          fill={`url(#${gradId}-forge-mid-fold)`}
-        />
-        <path
-          d="M 9.0 11.0 L 17.5 11.0 L 15.5 14.4 L 7.6 14.4 Z"
-          fill={`url(#${gradId}-forge-mid)`}
-        />
-        <path
-          d="M 3.0 20.0 L 6.6 18.2 L 7.6 14.4 L 5.2 14.4 Z"
-          fill={`url(#${gradId}-forge-tail)`}
-        />
-      </g>
+      <path d="M24 3c1.6 10.6 6.4 16.7 20 21-13.6 4.3-18.4 10.4-20 21-1.6-10.6-6.4-16.7-20-21 13.6-4.3 18.4-10.4 20-21Z" />
+      <circle cx="39.5" cy="8.5" r="3.2" />
     </svg>
   );
 };

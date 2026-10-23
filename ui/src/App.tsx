@@ -19,6 +19,8 @@ import { ControlCenterView } from './components/settings/ControlCenterView';
 import { LoginScreen } from './components/LoginScreen';
 import { TerminalDock } from './components/forge/TerminalDock';
 import { NewAgentModal } from './components/agent/NewAgentModal';
+import { GitClientView } from './components/git/GitClientView';
+import { SimpleEditorView } from './components/editor/SimpleEditorView';
 
 type AuthState = 'checking' | 'ok' | 'login';
 
@@ -117,24 +119,30 @@ export const App: React.FC = () => {
   }
 
   // Determine which main view to display
-  const isSettingsRoute = route === 'settings';
+  const isSettingsRoute = route === 'settings' || activeNavTab === 'settings';
 
   const renderMainContent = () => {
     if (isSettingsRoute) {
       return (
-        <div className="flex-1 overflow-y-auto">
-          <ControlCenterView />
+        <div className="flex-1 h-full min-h-0 overflow-hidden">
+          <ControlCenterView section={settingsSection} />
         </div>
       );
     }
 
     switch (activeNavTab) {
+      case 'editor':
+        return <SimpleEditorView />;
+
+      case 'git':
+        return <GitClientView />;
+
       case 'agent':
         return <AgentProfileDetail />;
 
       case 'groups':
-        // If in a group session, show GroupChatThread, otherwise list groups
-        if (activeGroup && activeSessionId && activeSession?.type === 'group') {
+        // If in a group session or active group selected, show GroupChatThread, otherwise list groups
+        if (activeGroup || (activeSessionId && activeSession?.type === 'group')) {
           return <GroupChatThread />;
         }
         return <GroupList />;
@@ -145,16 +153,10 @@ export const App: React.FC = () => {
       case 'automations':
         return <AutomationsView />;
 
-      case 'settings':
-        return <ControlCenterView />;
-
       case 'chat':
       default:
-        // If there's an active session, show the chat thread canvas; otherwise home
-        if (activeSessionId) {
-          if (activeSession?.type === 'group') {
-            return <GroupChatThread />;
-          }
+        // Direct 1:1 agent session view — group chat sessions belong to groups
+        if (activeSessionId && activeSession?.type !== 'group') {
           return <ChatThread />;
         }
         return <ChatHome />;

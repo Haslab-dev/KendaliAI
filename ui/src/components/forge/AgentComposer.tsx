@@ -62,6 +62,7 @@ export const AgentComposer: React.FC<{
   const acpSessions = useAgentStore((s) => s.acpSessions);
   const acpAgents = useAgentStore((s) => s.acpAgents);
   const toggleAutoApprove = useAgentStore((s) => s.toggleAutoApprove);
+  const openNewTask = useAgentStore((s) => s.openNewTask);
   const executionMode = useAgentStore((s) => s.executionMode);
   const setExecutionMode = useAgentStore((s) => s.setExecutionMode);
   const sessions = useAppStore((s) => s.sessions);
@@ -120,7 +121,7 @@ export const AgentComposer: React.FC<{
 
   const session = sessions.find((s) => s.id === sessionId);
   const sessionMeta = parseSessionMetadata(session);
-  const sessionAgentId = sessionMeta.acpAgent || session?.agentId || composerTarget?.id || '';
+  const sessionAgentId = sessionMeta.acpAgent || session?.agentId || composerTarget?.id || 'rakit-kode';
   const sessionIsACP = sessionMeta.engine === 'acp' || !!acpSessions[sessionId || ''];
   const currentMode = MODES.find((m) => m.id === executionMode) || MODES[1];
   const isFullAccess = executionMode === 'bypass';
@@ -128,7 +129,7 @@ export const AgentComposer: React.FC<{
   const agentName =
     composerTarget?.kind === 'acp'
       ? acpAgents.find((a) => a.id === composerTarget.id)?.name || composerTarget.id
-      : agents.find((a) => a.id === sessionAgentId)?.name || 'Agent';
+      : (sessionAgentId === 'rakit-kode' || !sessionAgentId ? 'Rakit Kode' : agents.find((a) => a.id === sessionAgentId)?.name || 'Rakit Kode');
 
   const wsName = sessionMeta.workspaceName || (activeWorkspacePath ? activeWorkspacePath.split('/').filter(Boolean).pop() : '') || '';
 
@@ -319,6 +320,10 @@ export const AgentComposer: React.FC<{
                         if (!a.available) return;
                         setComposerTarget({ kind: 'acp', id: a.id, model: a.defaultModel });
                         closeAll();
+                        // Change agent on tab -> move to new task state
+                        if (sessionId) {
+                          openNewTask({ kind: 'acp', agentId: a.id });
+                        }
                       }}
                     >
                       <span className="flex min-w-0 items-center gap-2">
@@ -341,6 +346,10 @@ export const AgentComposer: React.FC<{
                       onClick={() => {
                         setComposerTarget({ kind: 'native', id: a.id, model: a.model || undefined });
                         closeAll();
+                        // Change agent on tab -> move to new task state
+                        if (sessionId) {
+                          openNewTask({ kind: 'native', agentId: a.id });
+                        }
                       }}
                     >
                       <span className="flex min-w-0 items-center gap-2">

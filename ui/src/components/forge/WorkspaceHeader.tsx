@@ -21,7 +21,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { useAgentStore } from '../../store/useAgentStore';
 import { navigate, navigateSettings } from '../../router';
 import { parseSessionMetadata } from '../../types';
-import { ThemePicker } from '../shell/ThemePicker';
+import { ThemePicker } from '../common/ThemePicker';
 import { ProviderIcon } from '../agent/ProviderIcon';
 
 export const ForgeWorkspaceHeader: React.FC<{ onOpenGit?: () => void }> = ({ onOpenGit }) => {

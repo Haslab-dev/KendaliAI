@@ -62,7 +62,7 @@ export const ThemePicker: React.FC<{ compact?: boolean; side?: 'top' | 'bottom' 
           {THEME_PALETTES.map((pal) => (
             <MenuItem
               key={pal.id}
-              selected={themePack === pal.id || (themePack === 'forge' && pal.id === 't3-chat')}
+              selected={themePack === pal.id || ((themePack as string) === 'forge' && pal.id === 'forge-default')}
               onClick={() => {
                 setThemePack(pal.id);
                 close();
@@ -76,7 +76,7 @@ export const ThemePicker: React.FC<{ compact?: boolean; side?: 'top' | 'bottom' 
                   />
                   <span>{pal.label}</span>
                 </span>
-                {(themePack === pal.id || (themePack === 'forge' && pal.id === 't3-chat')) && (
+                {(themePack === pal.id || ((themePack as string) === 'forge' && pal.id === 'forge-default')) && (
                   <Check size={13} className="text-primary" />
                 )}
               </span>

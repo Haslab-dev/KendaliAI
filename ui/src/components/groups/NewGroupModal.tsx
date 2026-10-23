@@ -37,17 +37,17 @@ export const NewGroupModal: React.FC<NewGroupModalProps> = ({ isOpen, onClose })
   );
 
   return (
-    <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-lg rounded-2xl bg-[#141418] border border-border/60 shadow-2xl overflow-hidden animate-in fade-in-50 zoom-in-95">
+    <div className="fixed inset-0 bg-black/40 dark:bg-black/70 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
+      <div className="w-full max-w-lg rounded-2xl bg-card border border-border shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
-        <div className="px-5 py-4 border-b border-border/40 flex items-center justify-between">
+        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-2 font-semibold text-sm text-foreground">
             <Users className="w-4 h-4 text-primary" />
             <span>New group</span>
           </div>
           <button
             onClick={onClose}
-            className="w-7 h-7 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground"
+            className="w-7 h-7 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -59,7 +59,7 @@ export const NewGroupModal: React.FC<NewGroupModalProps> = ({ isOpen, onClose })
           <div className="space-y-1.5">
             <label className="font-medium text-foreground">Group name</label>
             <div className="relative">
-              <div className="w-8 h-8 absolute left-1.5 top-1.5 rounded-lg bg-muted flex items-center justify-center text-muted-foreground">
+              <div className="w-8 h-8 absolute left-1.5 top-1.5 rounded-lg bg-muted/60 flex items-center justify-center text-muted-foreground">
                 <Camera className="w-4 h-4" />
               </div>
               <input
@@ -67,7 +67,8 @@ export const NewGroupModal: React.FC<NewGroupModalProps> = ({ isOpen, onClose })
                 placeholder="e.g. Core Engineering, Sales Squad"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full h-11 pl-12 pr-3 bg-muted/30 border border-border rounded-xl text-sm text-foreground focus:outline-none focus:border-primary/60"
+                className="w-full h-11 pl-12 pr-3 bg-muted/30 hover:bg-muted/50 focus:bg-background border border-border rounded-xl text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/60 transition-colors"
+                autoFocus
               />
             </div>
           </div>
@@ -80,7 +81,7 @@ export const NewGroupModal: React.FC<NewGroupModalProps> = ({ isOpen, onClose })
               rows={3}
               value={brief}
               onChange={(e) => setBrief(e.target.value)}
-              className="w-full p-3 bg-muted/30 border border-border rounded-xl text-xs text-foreground focus:outline-none focus:border-primary/60 resize-none"
+              className="w-full p-3 bg-muted/30 hover:bg-muted/50 focus:bg-background border border-border rounded-xl text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/60 resize-none transition-colors"
             />
           </div>
 
@@ -100,12 +101,12 @@ export const NewGroupModal: React.FC<NewGroupModalProps> = ({ isOpen, onClose })
                 placeholder="Search agents"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full h-8 pl-8 pr-2.5 bg-muted/20 border border-border/50 rounded-lg text-xs text-foreground focus:outline-none"
+                className="w-full h-8 pl-8 pr-2.5 bg-muted/30 hover:bg-muted/50 focus:bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none transition-colors"
               />
             </div>
 
             {/* Available Agents List */}
-            <div className="max-h-40 overflow-y-auto space-y-1 pt-1 pr-1">
+            <div className="max-h-40 overflow-y-auto space-y-1 pt-1 pr-1 scrollbar-thin">
               {filteredAgents.map((agent) => {
                 const isSelected = selectedAgentIds.includes(agent.id);
                 return (
@@ -114,12 +115,12 @@ export const NewGroupModal: React.FC<NewGroupModalProps> = ({ isOpen, onClose })
                     onClick={() => toggleAgent(agent.id)}
                     className={`flex items-center justify-between p-2 rounded-xl border cursor-pointer transition-colors ${
                       isSelected
-                        ? 'bg-primary/10 border-primary/40 text-foreground'
-                        : 'bg-muted/20 border-border/40 hover:bg-muted/40 text-muted-foreground'
+                        ? 'bg-primary/10 border-primary/50 text-foreground'
+                        : 'bg-muted/20 border-border hover:bg-muted/40 text-foreground'
                     }`}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <AgentIcon id={agent.id} name={agent.name} avatar={agent.avatar} isACP={agent.engine === 'acp'} size={20} />
+                      <AgentIcon id={agent.id} name={agent.name} avatar={agent.avatar} size={20} />
                       <div className="min-w-0">
                         <p className="font-semibold text-xs text-foreground truncate">{agent.name}</p>
                         {agent.role && <p className="text-[10px] text-muted-foreground truncate">{agent.role}</p>}
@@ -129,7 +130,7 @@ export const NewGroupModal: React.FC<NewGroupModalProps> = ({ isOpen, onClose })
                       type="checkbox"
                       checked={isSelected}
                       onChange={() => {}}
-                      className="rounded border-border text-primary focus:ring-0"
+                      className="rounded border-border text-primary focus:ring-0 cursor-pointer"
                     />
                   </div>
                 );
@@ -139,17 +140,17 @@ export const NewGroupModal: React.FC<NewGroupModalProps> = ({ isOpen, onClose })
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3.5 border-t border-border/40 flex items-center justify-end gap-2 bg-muted/10">
+        <div className="px-5 py-3.5 border-t border-border flex items-center justify-end gap-2 bg-muted/15">
           <button
             onClick={onClose}
-            className="px-3.5 py-1.5 rounded-xl hover:bg-muted text-xs font-medium text-foreground transition-colors"
+            className="px-3.5 py-1.5 rounded-xl hover:bg-muted text-xs font-medium text-foreground transition-colors cursor-pointer"
           >
             Cancel
           </button>
           <button
             onClick={handleCreate}
             disabled={!name.trim() || selectedAgentIds.length === 0}
-            className="px-4 py-1.5 rounded-xl bg-primary hover:bg-primary/90 disabled:opacity-40 text-xs font-semibold text-white transition-colors shadow-xs"
+            className="px-4 py-1.5 rounded-xl bg-primary hover:bg-primary/90 disabled:opacity-40 text-xs font-semibold text-primary-foreground transition-colors shadow-xs cursor-pointer"
           >
             Create group
           </button>

@@ -95,7 +95,7 @@ export const AutomationsView: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 h-full overflow-y-auto bg-[#0a0a0c] px-4 sm:px-8 py-8 select-none">
+    <div className="flex-1 h-full overflow-y-auto bg-background px-4 sm:px-8 py-8 select-none">
       <div className="max-w-4xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -172,7 +172,7 @@ export const AutomationsView: React.FC = () => {
             {/* Comparison Cards: YOU SET ➔ YOU GET */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
               {/* YOU SET */}
-              <div className="rounded-2xl bg-[#121216] border border-border/60 p-5 space-y-3 min-h-[160px] flex flex-col justify-between">
+              <div className="rounded-2xl bg-card border border-border p-5 space-y-3 min-h-[160px] flex flex-col justify-between shadow-2xs">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
@@ -188,7 +188,7 @@ export const AutomationsView: React.FC = () => {
               </div>
 
               {/* YOU GET */}
-              <div className="rounded-2xl bg-[#141418] border border-border/60 p-5 space-y-3 min-h-[160px] flex flex-col justify-between relative">
+              <div className="rounded-2xl bg-card border border-border p-5 space-y-3 min-h-[160px] flex flex-col justify-between relative shadow-2xs">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-bold text-amber-500 uppercase tracking-wider">

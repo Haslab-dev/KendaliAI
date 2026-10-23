@@ -345,4 +345,13 @@ var schemaQueries = []string{
 		created_at INTEGER,
 		updated_at INTEGER
 	)`,
+	`CREATE TABLE IF NOT EXISTS agent_groups (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		brief TEXT DEFAULT '',
+		avatar TEXT DEFAULT 'users',
+		member_ids TEXT DEFAULT '[]',
+		created_at INTEGER,
+		updated_at INTEGER
+	)`,
 }

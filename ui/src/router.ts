@@ -76,6 +76,11 @@ export function parseHash(): ParsedRoute {
 
 /** Navigate by route name or any legacy pane name (mapped automatically). */
 export function navigate(route: string) {
+  if (route === '/' || route === '' || route === 'workspace' || route === 'home') {
+    window.location.hash = '#/agent';
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    return;
+  }
   let target: RouteName | null = null;
   if ((ROUTES as readonly string[]).includes(route)) {
     target = route as RouteName;

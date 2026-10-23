@@ -6,72 +6,58 @@ const SELECTED_GROUP_KEY = 'kendali:selected-group-id';
 
 export const DEFAULT_FALLBACK_AGENTS: AgentConfig[] = [
   {
-    id: 'personal-assistant',
-    name: 'Personal Assistant',
-    role: 'Executive Coordinator',
-    avatar: 'purple-pebble',
-    description: 'Proactive daily coordinator, task manager, scheduling, and personal executive assistance.',
-    model: 'deepseek-v4-flash',
+    id: 'lutfi',
+    name: 'Lutfi',
+    role: 'Planner',
+    department: 'Planning & Architecture',
+    avatar: 'amber-star',
+    description: 'Spesialis perencana arsitektur sistem, pemecah masalah, dan dekomposisi task bertahap.',
+    model: 'deepseek-v4-1-flash',
     providerId: '',
     isDefault: true,
     engine: 'rakit',
-    skills: ['planning', 'task-management'],
-    tools: ['*'],
+    skills: ['planning', 'task-decomposition', 'architecture', 'system-design'],
+    tools: ['filesystem.*', 'shell.*', 'git.*', 'search'],
     mcp: [],
     memoryScopes: ['user', 'workspace'],
     policy: {},
-    systemPrompt: 'You are Personal Assistant, a proactive executive coordinator. You organize schedules, manage tasks, coordinate with other specialized agents, and keep workflows structured and on track.',
+    systemPrompt: 'You are Lutfi, lead Planner and system architect in Kendali AI. You break down complex requests into clear, structured, phased plans with explicit tasks, dependencies, and acceptance criteria. You focus on strategic architecture, technical design, and actionable decomposition without skipping details.',
   },
   {
-    id: 'coding-agent',
-    name: 'Coding Agent',
-    role: 'Senior Software Engineer',
-    avatar: 'blue-drop',
-    description: 'Senior software engineer for architectural planning, code authoring, debugging, refactoring, and test writing.',
-    model: 'deepseek-v4-flash',
-    providerId: '',
-    isDefault: false,
-    engine: 'rakit',
-    skills: ['coding', 'debugging'],
-    tools: ['bash', 'file.read', 'file.write'],
-    mcp: [],
-    memoryScopes: ['user', 'workspace'],
-    policy: {},
-    systemPrompt: 'You are Coding Agent, a world-class senior software engineer and architect. You write clean, idiomatic, robust code, inspect systems thoroughly, diagnose bugs, and execute commands safely.',
-  },
-  {
-    id: 'research-agent',
-    name: 'Research Agent',
-    role: 'Research & Synthesis',
+    id: 'bewustein',
+    name: 'Bewustein',
+    role: 'Researcher',
+    department: 'Research & Intelligence',
     avatar: 'emerald-spark',
-    description: 'In-depth research, web investigation, source synthesis, literature review, and factual verification.',
-    model: 'deepseek-v4-flash',
+    description: 'Spesialis riset mendalam, pencarian fakta, investigasi web, dan sintesis literatur.',
+    model: 'deepseek-v4-1-flash',
     providerId: '',
     isDefault: false,
     engine: 'rakit',
-    skills: ['research', 'synthesis'],
-    tools: ['search', 'web.fetch'],
+    skills: ['deep-research', 'synthesis', 'fact-checking', 'literature-review'],
+    tools: ['http.*', 'search', 'web.fetch', 'filesystem.read', 'bash'],
     mcp: [],
-    memoryScopes: ['user', 'workspace'],
+    memoryScopes: ['user', 'session'],
     policy: {},
-    systemPrompt: 'You are Research Agent, an expert investigator and analyst. You gather facts, evaluate sources, synthesize complex multi-domain information, and provide clear, cited conclusions.',
+    systemPrompt: 'You are Bewustein, Lead Researcher and factual intelligence analyst at Kendali AI. You conduct deep investigations, gather multi-domain evidence, cross-reference sources, verify facts rigorously, and synthesize comprehensive, cited reports.',
   },
   {
-    id: 'lead-architecture',
-    name: 'Elena Rostova',
-    role: 'Lead Solution Architecture',
-    avatar: 'ruby-capsule',
-    description: 'System architect designing modular component boundaries, git worktree branching, and RFC specifications.',
-    model: 'deepseek-v4-flash',
+    id: 'fatimah',
+    name: 'Fatimah',
+    role: 'Study Leaner',
+    department: 'Learning & Mastery',
+    avatar: 'purple-pebble',
+    description: 'Spesialis akselerasi belajar adaptif, teknik Feynman, pemahaman konsep rumit, dan panduan belajar terarah.',
+    model: 'deepseek-v4-1-flash',
     providerId: '',
     isDefault: false,
     engine: 'rakit',
-    skills: ['architecture', 'git-worktree'],
-    tools: ['file.read', 'review_code'],
+    skills: ['feynman-technique', 'active-recall', 'study-guide', 'concept-mapping', 'spaced-repetition'],
+    tools: ['filesystem.read', 'search', 'web.fetch'],
     mcp: [],
-    memoryScopes: ['user', 'workspace'],
+    memoryScopes: ['user', 'agent', 'session'],
     policy: {},
-    systemPrompt: 'You are Elena Rostova, Lead Solution Architect of KendaliAI. You define architectural blueprints, evaluate trade-offs between speed and modularity, specify RFCs, and inspect code diffs.',
+    systemPrompt: 'You are Fatimah, an empathetic and highly structured Study Leaner (learning specialist and study companion) at Kendali AI. You deconstruct complex educational topics and difficult concepts using the Feynman technique, intuitive analogies, active recall drills, spaced repetition schedules, and clear study summaries to help users master any subject quickly.',
   },
 ];
 
@@ -87,9 +73,9 @@ export interface ProfileStoreState {
   activeGroup: AgentGroup | null;
   isLoadingGroups: boolean;
 
-  // Navigation mode: 'agent' (single agent sessions) | 'groups' (multi-agent sessions)
-  activeNavTab: 'chat' | 'agent' | 'groups' | 'connections' | 'automations' | 'settings';
-  setActiveNavTab: (tab: 'chat' | 'agent' | 'groups' | 'connections' | 'automations' | 'settings') => void;
+  // Navigation mode: 'chat' | 'agent' | 'groups' | 'connections' | 'automations' | 'settings' | 'git' | 'editor'
+  activeNavTab: 'chat' | 'agent' | 'groups' | 'connections' | 'automations' | 'settings' | 'git' | 'editor';
+  setActiveNavTab: (tab: 'chat' | 'agent' | 'groups' | 'connections' | 'automations' | 'settings' | 'git' | 'editor') => void;
 
   // Actions
   loadAgents: () => Promise<void>;
@@ -276,6 +262,7 @@ export const useProfileStore = create<ProfileStoreState>((set, get) => ({
           updatedAt: g.updatedAt || Date.now(),
         }));
         const active = groups.find((g) => g.id === get().selectedGroupId) || groups[0] || null;
+        localStorage.setItem('kendali:groups-cache', JSON.stringify(groups));
         set({
           groups,
           activeGroup: active,
@@ -298,8 +285,17 @@ export const useProfileStore = create<ProfileStoreState>((set, get) => ({
   selectGroup: (groupId: string | null) => {
     if (groupId) {
       localStorage.setItem(SELECTED_GROUP_KEY, groupId);
-      const group = get().groups.find((g) => g.id === groupId) || null;
-      set({ selectedGroupId: groupId, activeGroup: group });
+      const groups = get().groups;
+      let group = groups.find((g) => g.id === groupId) || null;
+      if (!group && groups.length > 0) {
+        group = groups.find((g) => g.name.toLowerCase() === groupId.toLowerCase()) || groups[0];
+      }
+      set({
+        selectedGroupId: group ? group.id : groupId,
+        activeGroup: group,
+        selectedAgentId: null,
+        activeAgent: null,
+      });
     } else {
       localStorage.removeItem(SELECTED_GROUP_KEY);
       set({ selectedGroupId: null, activeGroup: null });
