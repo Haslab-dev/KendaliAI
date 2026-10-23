@@ -227,8 +227,13 @@ func NewServer(db *sql.DB) *Server {
 }
 
 func (s *Server) Start(port string) error {
-	addr := fmt.Sprintf(":%s", port)
-	log.Printf("🚀 Starting KendaliAI Gateway on http://localhost%s\n", addr)
+	return s.StartAddr(":" + port)
+}
+
+// StartAddr binds an explicit listen address (e.g. ":8080" or
+// "127.0.0.1:8080") and serves until the listener fails.
+func (s *Server) StartAddr(addr string) error {
+	log.Printf("🚀 Starting KendaliAI Gateway on http://localhost%s\n", strings.TrimPrefix(addr, "127.0.0.1"))
 
 	srv := &http.Server{
 		Addr:         addr,
@@ -299,6 +304,8 @@ func (s *Server) routes() {
 	s.router.HandleFunc("/api/groups/", s.handleGroupDetail())
 	s.router.HandleFunc("/api/mcps", s.handleMCPs())
 	s.router.HandleFunc("/api/mcps/fetch-tools", s.handleMCPFetchTools())
+	s.router.HandleFunc("/api/composio/key", s.handleComposioKey())
+	s.router.HandleFunc("/api/composio/tools", s.handleComposioTools())
 	s.router.HandleFunc("/api/skills", s.handleSkills())
 	s.router.HandleFunc("/api/tools", s.handleTools())
 	s.router.HandleFunc("/api/policies", s.handlePolicies())
@@ -357,9 +364,10 @@ func (s *Server) routes() {
 	s.router.HandleFunc("/api/plugins", s.handlePlugins())
 	s.router.HandleFunc("/api/plugins/", s.handlePluginAction())
 
-	// Connectors (Composio / 3rd-party integrations)
+	// Connectors (Composio / 3rd-party integrations, real OAuth via the
+	// Composio REST API; key managed under /api/composio/key)
 	s.router.HandleFunc("/api/connectors", s.handleConnectors())
-	s.router.HandleFunc("/api/connectors/", s.handleConnectorAction())
+	s.router.HandleFunc("/api/connectors/", s.handleConnectors())
 
 	// Routines & Schedules (renamed from Scheduler)
 	s.router.HandleFunc("/api/routines", s.handleSchedules())

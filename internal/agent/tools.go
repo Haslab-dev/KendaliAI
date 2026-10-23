@@ -1995,6 +1995,10 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 		}
 	}
 
+	for name, tool := range ComposioTools(db) {
+		registry[name] = tool
+	}
+
 	return registry
 }
 
@@ -2350,6 +2354,68 @@ func executeMCPCall(ctx context.Context, cfg *config.Config, db *sql.DB, args ma
 	return string(b)
 }
 
+// normalizeMCPTextOutput flattens MCP/MCP-style tool responses into plain
+// text. Providers return shapes like `[{"type":"text","text":"..."}]`,
+// {"content":[{"type":"text","text":"..."}]}, or plain strings; agents and
+// the tool cards both read best as clean text. Output is capped to keep
+// conversation context manageable.
+func normalizeMCPTextOutput(raw string) string {
+	const maxLen = 12000
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return trimmed
+	}
+
+	extract := func(blocks []struct {
+		Text string `json:"text"`
+	}) string {
+		var b strings.Builder
+		for _, blk := range blocks {
+			if blk.Text == "" {
+				continue
+			}
+			if b.Len() > 0 {
+				b.WriteString("\n\n")
+			}
+			b.WriteString(blk.Text)
+		}
+		return b.String()
+	}
+
+	var asArray []struct {
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal([]byte(trimmed), &asArray); err == nil && len(asArray) > 0 {
+		if s := extract(asArray); s != "" {
+			return capString(s, maxLen)
+		}
+	}
+
+	var asObject struct {
+		Content []struct {
+			Text string `json:"text"`
+		} `json:"content"`
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal([]byte(trimmed), &asObject); err == nil {
+		if s := extract(asObject.Content); s != "" {
+			return capString(s, maxLen)
+		}
+		if strings.TrimSpace(asObject.Text) != "" {
+			return capString(asObject.Text, maxLen)
+		}
+	}
+
+	return capString(trimmed, maxLen)
+}
+
+func capString(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "\n...(truncated)"
+}
+
 func executeWebSearch(ctx context.Context, cfg *config.Config, db *sql.DB, args map[string]interface{}) string {
 	q, _ := args["query"].(string)
 	if q == "" {
@@ -2366,7 +2432,7 @@ func executeWebSearch(ctx context.Context, cfg *config.Config, db *sql.DB, args 
 		"arguments": map[string]interface{}{"query": q},
 	})
 	if !strings.Contains(exaRes, "API key is required") && !strings.Contains(exaRes, "failed to") && !strings.HasPrefix(exaRes, "error:") {
-		return exaRes
+		return normalizeMCPTextOutput(exaRes)
 	}
 
 	// 2. Try Firecrawl firecrawl_search
@@ -2376,7 +2442,7 @@ func executeWebSearch(ctx context.Context, cfg *config.Config, db *sql.DB, args 
 		"arguments": map[string]interface{}{"query": q},
 	})
 	if !strings.Contains(fcRes, "API key is required") && !strings.Contains(fcRes, "failed to") && !strings.HasPrefix(fcRes, "error:") {
-		return fcRes
+		return normalizeMCPTextOutput(fcRes)
 	}
 
 	return fmt.Sprintf("Web search is available via Exa and Firecrawl MCP. To enable live results, configure your API key in config.json under mcpServers.exa or mcpServers.firecrawl (or set EXA_API_KEY / FIRECRAWL_API_KEY in environment).\nDetails: %s", exaRes)
@@ -2395,7 +2461,7 @@ func executeWebScrape(ctx context.Context, cfg *config.Config, db *sql.DB, args 
 		"arguments": map[string]interface{}{"url": u},
 	})
 	if !strings.Contains(fcRes, "API key is required") && !strings.Contains(fcRes, "failed to") && !strings.HasPrefix(fcRes, "error:") {
-		return fcRes
+		return normalizeMCPTextOutput(fcRes)
 	}
 
 	// 2. Try Exa web_fetch_exa
@@ -2405,7 +2471,7 @@ func executeWebScrape(ctx context.Context, cfg *config.Config, db *sql.DB, args 
 		"arguments": map[string]interface{}{"url": u},
 	})
 	if !strings.Contains(exaRes, "API key is required") && !strings.Contains(exaRes, "failed to") && !strings.HasPrefix(exaRes, "error:") {
-		return exaRes
+		return normalizeMCPTextOutput(exaRes)
 	}
 
 	// 3. Fallback to basic HTTP fetch

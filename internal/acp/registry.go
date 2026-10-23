@@ -26,6 +26,11 @@ type AgentDescriptor struct {
 	Available       bool     `json:"available"`
 	ACP             bool     `json:"acp"` // always true here; lets the UI badge uniformly
 	Version         string   `json:"version,omitempty"`
+
+	// fromConfig marks agents explicitly declared in config.acp.agents. They
+	// stay listed even when the scan cannot find the binary so the user can
+	// see (and fix) a broken entry; scanned defaults are dropped instead.
+	fromConfig bool
 }
 
 // findExecutableDirect checks candidate dirs and exec.LookPath without checking aliases.
@@ -345,7 +350,7 @@ func defaultAgents() []AgentDescriptor {
 	}
 }
 
-// Registry merges defaults with config overrides and resolves availability.
+// Registry merges scan results with config overrides and resolves availability.
 type Registry struct {
 	mu     sync.RWMutex
 	agents []AgentDescriptor
@@ -353,7 +358,10 @@ type Registry struct {
 
 type registry = Registry
 
-// NewRegistry creates a new Registry with default ACP agents and configuration overrides.
+// NewRegistry scans the machine for launchable ACP agents and keeps only
+// what is actually installed. Well-known adapters (defaultAgents) act as the
+// scan target list; config.acp.agents entries extend or override the scan and
+// are always kept so a misconfigured command stays visible to the user.
 func NewRegistry(cfg *config.Config) *Registry {
 	agents := defaultAgents()
 	known := map[string]bool{}
@@ -378,6 +386,7 @@ func NewRegistry(cfg *config.Config) *Registry {
 				Args:            custom.Args,
 				DefaultModel:    custom.DefaultModel,
 				SupportedModels: custom.SupportedModels,
+				fromConfig:      true,
 			}
 			if desc.Name == "" {
 				desc.Name = id
@@ -396,15 +405,21 @@ func NewRegistry(cfg *config.Config) *Registry {
 		}
 	}
 
+	// Availability scan: drop defaults whose command cannot be found so the
+	// UI only ever shows agents that can actually be launched here.
+	scanned := make([]AgentDescriptor, 0, len(agents))
 	for i := range agents {
-		agents[i].Available = false
 		agents[i].ACP = true
 		if resolved, err := ResolveExecutablePath(agents[i].Command); err == nil {
 			agents[i].Available = true
 			agents[i].Command = resolved
+			scanned = append(scanned, agents[i])
+		} else if agents[i].fromConfig {
+			agents[i].Available = false
+			scanned = append(scanned, agents[i])
 		}
 	}
-	reg := &Registry{agents: agents}
+	reg := &Registry{agents: scanned}
 	RefreshCatalogCacheAsync()
 	return reg
 }
@@ -443,17 +458,22 @@ func NormalizeAgentID(id string) string {
 func (r *Registry) List() []AgentDescriptor {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	// Refresh availability in case tools were installed or PATH updated
+	// Re-scan availability (tools may be installed or uninstalled while
+	// running) and keep the roster scan-first: only installed agents are
+	// listed, except explicitly configured ones which stay visible.
+	out := make([]AgentDescriptor, 0, len(r.agents))
 	for i := range r.agents {
 		if resolved, err := ResolveExecutablePath(r.agents[i].Command); err == nil {
 			r.agents[i].Available = true
 			r.agents[i].Command = resolved
+			out = append(out, r.agents[i])
 		} else {
 			r.agents[i].Available = false
+			if r.agents[i].fromConfig {
+				out = append(out, r.agents[i])
+			}
 		}
 	}
-	out := make([]AgentDescriptor, len(r.agents))
-	copy(out, r.agents)
 	return EnrichAgentDescriptors(out)
 }
 

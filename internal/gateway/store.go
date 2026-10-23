@@ -356,7 +356,10 @@ func (s *Store) SeedInitialData(cfg *config.Config) {
 		})
 	}
 
-	// 2. Agents (Bootstrap Agents: Personal Assistant, Research Agent, Knowledge Agent, Coding Agent)
+	// 2. Agents — first installs no longer get pre-seeded agents. Users create
+	// their own via the UI; the runtime falls back to a built-in planner
+	// profile when no agent rows exist. Existing installs keep whatever the
+	// user already has.
 	// Clean up legacy mock/dummy agents and remove hardcoded deepseek references
 	_, _ = s.db.Exec("DELETE FROM agents WHERE id IN ('finance', 'data-science', 'general', 'engineer')")
 	_, _ = s.db.Exec("UPDATE agents SET provider_id = '', model = '' WHERE provider_id = 'deepseek' OR model LIKE 'deepseek%'")
@@ -368,78 +371,6 @@ func (s *Store) SeedInitialData(cfg *config.Config) {
 	_, _ = s.db.Exec("UPDATE agents SET avatar = 'blue-drop' WHERE avatar IN ('💻', '🛠️')")
 	_, _ = s.db.Exec("UPDATE agents SET avatar = 'ruby-capsule' WHERE avatar IN ('🛡️')")
 	_, _ = s.db.Exec("UPDATE agents SET avatar = 'amber-star' WHERE avatar IN ('📋')")
-
-	now := time.Now().Unix()
-	bootstrapAgents := []AgentConfig{
-		{
-			ID:           "lutfi",
-			Name:         "Lutfi",
-			Role:         "Planner",
-			Department:   "Planning & Architecture",
-			Description:  "Spesialis perencana arsitektur sistem, pemecah masalah, dan dekomposisi task bertahap.",
-			ProviderID:   "",
-			Model:        "",
-			SystemPrompt: "You are Lutfi, lead Planner and system architect in Kendali AI. You break down complex requests into clear, structured, phased plans with explicit tasks, dependencies, and acceptance criteria. You focus on strategic architecture, technical design, and actionable decomposition without skipping details.",
-			Skills:       []string{"planning", "task-decomposition", "architecture", "system-design"},
-			Tools:        []string{"filesystem.*", "shell.*", "git.*", "search"},
-			MCP:          []string{},
-			MemoryScopes: []string{"user", "agent", "session", "workspace"},
-			Policy:       map[string]string{},
-			Avatar:       "amber-star",
-			IsDefault:    true,
-			CreatedAt:    now,
-			UpdatedAt:    now,
-		},
-		{
-			ID:           "bewustein",
-			Name:         "Bewustein",
-			Role:         "Researcher",
-			Department:   "Research & Intelligence",
-			Description:  "Spesialis riset mendalam, pencarian fakta, investigasi web, dan sintesis literatur.",
-			ProviderID:   "",
-			Model:        "",
-			SystemPrompt: "You are Bewustein, Lead Researcher and factual intelligence analyst at Kendali AI. You conduct deep investigations, gather multi-domain evidence, cross-reference sources, verify facts rigorously, and synthesize comprehensive, cited reports.",
-			Skills:       []string{"deep-research", "synthesis", "fact-checking", "literature-review"},
-			Tools:        []string{"http.*", "search", "web.fetch", "filesystem.read", "bash"},
-			MCP:          []string{},
-			MemoryScopes: []string{"user", "session"},
-			Policy:       map[string]string{},
-			Avatar:       "emerald-spark",
-			IsDefault:    false,
-			CreatedAt:    now,
-			UpdatedAt:    now,
-		},
-		{
-			ID:           "fatimah",
-			Name:         "Fatimah",
-			Role:         "Study Leaner",
-			Department:   "Learning & Mastery",
-			Description:  "Spesialis akselerasi belajar adaptif, teknik Feynman, pemahaman konsep rumit, dan panduan belajar terarah.",
-			ProviderID:   "",
-			Model:        "",
-			SystemPrompt: "You are Fatimah, an empathetic and highly structured Study Leaner (learning specialist and study companion) at Kendali AI. You deconstruct complex educational topics and difficult concepts using the Feynman technique, intuitive analogies, active recall drills, spaced repetition schedules, and clear study summaries to help users master any subject quickly.",
-			Skills:       []string{"feynman-technique", "active-recall", "study-guide", "concept-mapping", "spaced-repetition"},
-			Tools:        []string{"filesystem.read", "search", "web.fetch"},
-			MCP:          []string{},
-			MemoryScopes: []string{"user", "agent", "session"},
-			Policy:       map[string]string{},
-			Avatar:       "purple-pebble",
-			IsDefault:    false,
-			CreatedAt:    now,
-			UpdatedAt:    now,
-		},
-	}
-
-	for _, a := range bootstrapAgents {
-		existing, _ := s.GetAgent(a.ID)
-		if existing == nil {
-			_ = s.SaveAgent(a)
-		} else if existing.ProviderID == "deepseek" || strings.HasPrefix(existing.Model, "deepseek") {
-			existing.ProviderID = ""
-			existing.Model = ""
-			_ = s.SaveAgent(*existing)
-		}
-	}
 
 	_ = s.EnsureDirectChatsForAgents()
 
@@ -2137,6 +2068,23 @@ func (s *Store) SetTelegramAuthRequired(required bool) error {
 	_, err := s.db.Exec(`
 		INSERT INTO system_settings (key, value) VALUES ('telegram_auth_required', ?)
 		ON CONFLICT(key) DO UPDATE SET value = excluded.value`, val)
+	return err
+}
+
+// GetSetting reads one system_settings value; empty string when unset.
+func (s *Store) GetSetting(key string) string {
+	var val string
+	if err := s.db.QueryRow("SELECT value FROM system_settings WHERE key = ?", key).Scan(&val); err != nil {
+		return ""
+	}
+	return val
+}
+
+// SetSetting upserts one system_settings value.
+func (s *Store) SetSetting(key, value string) error {
+	_, err := s.db.Exec(`
+		INSERT INTO system_settings (key, value) VALUES (?, ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value)
 	return err
 }
 

@@ -1,5 +1,6 @@
 import React, { useMemo, useEffect, useRef } from 'react';
 import { marked } from 'marked';
+import { OpenUIBlock } from './chat/OpenUIBlock';
 
 interface MarkdownViewProps {
   content: string;
@@ -51,6 +52,46 @@ const FENCE_RE = /^\s{0,3}(```|~~~)/;
 
 function isFenceLine(line: string): boolean {
   return FENCE_RE.test(line);
+}
+
+type Segment =
+  | { type: 'md'; text: string }
+  | { type: 'opui'; text: string; unclosed: boolean };
+
+// Split a message into markdown segments and ```opui generative-UI segments.
+// An opui fence that is still open at the end of a streaming message is kept
+// as an "unclosed" segment so the OpenUI renderer can paint it progressively.
+function splitOpuiSegments(text: string): Segment[] {
+  if (!text) return [];
+  const segments: Segment[] = [];
+  let buf: string[] = [];
+  let inOpui = false;
+
+  for (const line of text.split('\n')) {
+    const fence = line.match(/^\s{0,3}```\s*([a-zA-Z0-9_-]*)\s*$/);
+    if (fence) {
+      const lang = fence[1].toLowerCase();
+      if (!inOpui && (lang === 'opui' || lang === 'openui')) {
+        if (buf.length > 0) segments.push({ type: 'md', text: buf.join('\n') });
+        buf = [];
+        inOpui = true;
+        continue;
+      }
+      if (inOpui) {
+        segments.push({ type: 'opui', text: buf.join('\n'), unclosed: false });
+        buf = [];
+        inOpui = false;
+        continue;
+      }
+    }
+    buf.push(line);
+  }
+  if (inOpui) {
+    segments.push({ type: 'opui', text: buf.join('\n'), unclosed: true });
+  } else if (buf.length > 0) {
+    segments.push({ type: 'md', text: buf.join('\n') });
+  }
+  return segments;
 }
 
 // Split text into blocks at boundaries that can never move as more text
@@ -159,17 +200,17 @@ const MarkdownBlock = React.memo<{ md: string }>(({ md }) => {
 });
 MarkdownBlock.displayName = 'MarkdownBlock';
 
-export const MarkdownView: React.FC<MarkdownViewProps> = ({ content, isStreaming = false, muted = false, className = '' }) => {
-  const blocks = useMemo(() => splitStableBlocks(sanitizeMarkdown(content)), [content]);
+const MarkdownSegment: React.FC<{ text: string; isTail: boolean; isStreaming: boolean }> = ({ text, isTail, isStreaming }) => {
+  const blocks = useMemo(() => splitStableBlocks(text), [text]);
 
   return (
-    <div className={`markdown-content break-words select-text ${muted ? 'text-muted-foreground/90' : ''} ${className}`}>
+    <>
       {blocks.map((block, i) => {
-        const isTail = i === blocks.length - 1;
+        const tail = isTail && i === blocks.length - 1;
         let md = block;
         // While streaming, temporarily close an unclosed code fence in the
         // tail so partial code renders as a code block instead of text.
-        if (isStreaming && isTail) {
+        if (isStreaming && tail) {
           let fences = 0;
           for (const line of md.split('\n')) {
             if (isFenceLine(line)) fences++;
@@ -179,6 +220,28 @@ export const MarkdownView: React.FC<MarkdownViewProps> = ({ content, isStreaming
           }
         }
         return <MarkdownBlock key={i} md={md} />;
+      })}
+    </>
+  );
+};
+
+export const MarkdownView: React.FC<MarkdownViewProps> = ({ content, isStreaming = false, muted = false, className = '' }) => {
+  const segments = useMemo(() => splitOpuiSegments(sanitizeMarkdown(content)), [content]);
+
+  return (
+    <div className={`markdown-content break-words select-text ${muted ? 'text-muted-foreground/90' : ''} ${className}`}>
+      {segments.map((seg, i) => {
+        if (seg.type === 'opui') {
+          return <OpenUIBlock key={`opui-${i}`} code={seg.text} streaming={isStreaming && seg.unclosed} />;
+        }
+        return (
+          <MarkdownSegment
+            key={`md-${i}`}
+            text={seg.text}
+            isTail={i === segments.length - 1}
+            isStreaming={isStreaming}
+          />
+        );
       })}
     </div>
   );

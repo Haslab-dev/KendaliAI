@@ -150,6 +150,8 @@ export interface ComposioToolkit {
   logoUrl?: string;
   connected: boolean;
   connectedAccountId?: string;
+  status?: string;
+  redirectUrl?: string;
 }
 
 

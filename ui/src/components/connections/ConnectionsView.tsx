@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Cloud,
-  Layers,
   Search,
   ExternalLink,
   CheckCircle2,
@@ -15,72 +14,158 @@ import {
   Database,
   Table,
   ArrowLeft,
+  KeyRound,
+  Loader2,
+  XCircle,
 } from 'lucide-react';
 import { ComposioToolkit } from '../../types';
 import { useProfileStore } from '../../store/useProfileStore';
 
+const COMPOSIO_KEY_URL = 'https://app.composio.dev/settings/api-keys';
+
+type ConnectPhase = 'idle' | 'connecting' | 'awaiting-oauth' | 'error';
+
 export const ConnectionsView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'connectors' | 'plugins'>('connectors');
   const [search, setSearch] = useState('');
+  const [toolkits, setToolkits] = useState<ComposioToolkit[]>([]);
+  const [keyConfigured, setKeyConfigured] = useState<boolean | null>(null);
+  const [apiKeyInput, setApiKeyInput] = useState('');
+  const [savingKey, setSavingKey] = useState(false);
+  const [connectPhase, setConnectPhase] = useState<Record<string, ConnectPhase>>({});
+  const [error, setError] = useState<string | null>(null);
+  const pollRef = useRef<number | null>(null);
 
-  // Sample Composio Toolkits
-  const [toolkits, setToolkits] = useState<ComposioToolkit[]>([
-    {
-      slug: 'github',
-      name: 'GitHub',
-      description: 'Create issues, review pull requests, and commit code directly.',
-      connected: true,
-      connectedAccountId: 'acc_gh_hasdev',
-    },
-    {
-      slug: 'gmail',
-      name: 'Gmail',
-      description: 'Search emails, read threads, and draft replies.',
-      connected: false,
-    },
-    {
-      slug: 'googlecalendar',
-      name: 'Google Calendar',
-      description: 'Inspect availability, schedule meetings, and send invites.',
-      connected: false,
-    },
-    {
-      slug: 'slack',
-      name: 'Slack',
-      description: 'Post updates to channels, notify team members, and read messages.',
-      connected: false,
-    },
-    {
-      slug: 'linear',
-      name: 'Linear',
-      description: 'Manage backlog issues, create tickets, and update cycles.',
-      connected: false,
-    },
-    {
-      slug: 'notion',
-      name: 'Notion',
-      description: 'Search documentation, update database rows, and create pages.',
-      connected: false,
-    },
-    {
-      slug: 'jira',
-      name: 'Jira Software',
-      description: 'Track enterprise issues, transitions, and sprint boards.',
-      connected: false,
-    },
-  ]);
-
-  // Load connectors state from backend
-  useEffect(() => {
-    fetch('/api/connectors')
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          setToolkits(data);
-        }
-      })
-      .catch(() => {});
+  const loadConnectors = useCallback(async () => {
+    try {
+      const res = await fetch('/api/connectors');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) setToolkits(data);
+      }
+    } catch (err) {
+      console.error('[ConnectionsView] failed to load connectors:', err);
+    }
   }, []);
+
+  useEffect(() => {
+    fetch('/api/composio/key')
+      .then((res) => (res.ok ? res.json() : { configured: false }))
+      .then((data) => setKeyConfigured(!!data.configured))
+      .catch(() => setKeyConfigured(false));
+    void loadConnectors();
+    return () => {
+      if (pollRef.current) window.clearInterval(pollRef.current);
+    };
+  }, [loadConnectors]);
+
+  const saveApiKey = async () => {
+    const key = apiKeyInput.trim();
+    if (!key) return;
+    setSavingKey(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/composio/key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: key }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      setKeyConfigured(true);
+      setApiKeyInput('');
+      await loadConnectors();
+    } catch (err: any) {
+      setError(err?.message || 'Failed to save the API key.');
+    } finally {
+      setSavingKey(false);
+    }
+  };
+
+  const removeApiKey = async () => {
+    try {
+      await fetch('/api/composio/key', { method: 'DELETE' });
+      setKeyConfigured(false);
+      await loadConnectors();
+    } catch {
+      /* non-fatal */
+    }
+  };
+
+  const beginPolling = useCallback((slug: string, accountId: string) => {
+    if (pollRef.current) window.clearInterval(pollRef.current);
+    const started = Date.now();
+    pollRef.current = window.setInterval(async () => {
+      if (Date.now() - started > 3 * 60 * 1000) {
+        window.clearInterval(pollRef.current!);
+        setConnectPhase((p) => ({ ...p, [slug]: 'error' }));
+        setError(`Authorization for ${slug} timed out. Try connecting again.`);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/connectors/status/${encodeURIComponent(accountId)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.connected) {
+          window.clearInterval(pollRef.current!);
+          setConnectPhase((p) => ({ ...p, [slug]: 'idle' }));
+          await loadConnectors();
+        } else if (data.status === 'FAILED' || data.status === 'EXPIRED') {
+          window.clearInterval(pollRef.current!);
+          setConnectPhase((p) => ({ ...p, [slug]: 'error' }));
+          setError(`Authorization for ${slug} failed. Please try again.`);
+        }
+      } catch {
+        /* keep polling through transient errors */
+      }
+    }, 2500);
+  }, [loadConnectors]);
+
+  const handleConnect = async (slug: string) => {
+    setError(null);
+    setConnectPhase((p) => ({ ...p, [slug]: 'connecting' }));
+    try {
+      const res = await fetch(`/api/connectors/${encodeURIComponent(slug)}/connect`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setConnectPhase((p) => ({ ...p, [slug]: 'error' }));
+        setError(data?.error || `Could not start connecting ${slug}.`);
+        return;
+      }
+      if (data.redirectUrl) {
+        setConnectPhase((p) => ({ ...p, [slug]: 'awaiting-oauth' }));
+        window.open(data.redirectUrl, '_blank', 'noopener,width=680,height=760');
+        if (data.connectedAccountId) beginPolling(slug, data.connectedAccountId);
+        else await loadConnectors();
+      } else if (data.connected) {
+        setConnectPhase((p) => ({ ...p, [slug]: 'idle' }));
+        await loadConnectors();
+      } else {
+        setConnectPhase((p) => ({ ...p, [slug]: 'idle' }));
+        await loadConnectors();
+      }
+    } catch (err: any) {
+      setConnectPhase((p) => ({ ...p, [slug]: 'error' }));
+      setError(err?.message || `Could not connect ${slug}.`);
+    }
+  };
+
+  const handleDisconnect = async (slug: string) => {
+    setError(null);
+    setConnectPhase((p) => ({ ...p, [slug]: 'connecting' }));
+    try {
+      await fetch(`/api/connectors/${encodeURIComponent(slug)}/disconnect`, { method: 'POST' });
+    } finally {
+      setConnectPhase((p) => ({ ...p, [slug]: 'idle' }));
+      await loadConnectors();
+    }
+  };
+
+  const filteredToolkits = toolkits.filter((t) =>
+    t.name.toLowerCase().includes(search.toLowerCase()) ||
+    t.description.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const setActiveNavTab = useProfileStore((s) => s.setActiveNavTab);
 
   const plugins = [
     {
@@ -106,44 +191,12 @@ export const ConnectionsView: React.FC = () => {
     },
   ];
 
-  const handleConnect = async (slug: string) => {
-    const current = toolkits.find((t) => t.slug === slug);
-    const action = current?.connected ? 'disconnect' : 'connect';
-
-    // Optimistic toggle
-    setToolkits((prev) =>
-      prev.map((t) => (t.slug === slug ? { ...t, connected: !t.connected } : t))
-    );
-
-    try {
-      const res = await fetch(`/api/connectors/${encodeURIComponent(slug)}/${action}`, {
-        method: 'POST',
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setToolkits((prev) =>
-          prev.map((t) =>
-            t.slug === slug
-              ? {
-                  ...t,
-                  connected: data.connected ?? !current?.connected,
-                  connectedAccountId: data.connectedAccountId || t.connectedAccountId,
-                }
-              : t
-          )
-        );
-      }
-    } catch (err) {
-      console.error('[ConnectionsView] connector action failed:', err);
-    }
+  const phaseIcon = (slug: string, connected: boolean) => {
+    const phase = connectPhase[slug] || 'idle';
+    if (phase === 'connecting' || phase === 'awaiting-oauth')
+      return <Loader2 className="w-3.5 h-3.5 animate-spin" />;
+    return <ExternalLink className="w-3.5 h-3.5" />;
   };
-
-  const filteredToolkits = toolkits.filter((t) =>
-    t.name.toLowerCase().includes(search.toLowerCase()) ||
-    t.description.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const setActiveNavTab = useProfileStore((s) => s.setActiveNavTab);
 
   return (
     <div className="flex-1 h-full overflow-y-auto bg-background px-4 sm:px-8 py-8 select-none">
@@ -165,10 +218,69 @@ export const ConnectionsView: React.FC = () => {
           <div className="space-y-1">
             <h1 className="text-2xl font-bold tracking-tight text-foreground">Connections</h1>
             <p className="text-xs text-muted-foreground">
-              Empower your agents with 1,000+ app connectors via Composio, plus custom plugins.
+              Empower your agents with 500+ app connectors via Composio, plus custom plugins.
             </p>
           </div>
         </div>
+
+        {error && (
+          <div className="flex items-start gap-2 rounded-xl border border-red-500/40 bg-red-500/5 px-4 py-3 text-xs text-red-400">
+            <XCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span className="flex-1">{error}</span>
+            <button onClick={() => setError(null)} className="text-red-400/70 hover:text-red-400">×</button>
+          </div>
+        )}
+
+        {/* Composio API key setup */}
+        {keyConfigured === false && (
+          <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <KeyRound className="w-4 h-4 text-primary" />
+              <h3 className="text-sm font-semibold text-foreground">Connect via Composio</h3>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Create a project API key at{' '}
+              <a href={COMPOSIO_KEY_URL} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                app.composio.dev → API Keys
+              </a>{' '}
+              and paste it here. Credentials stay encrypted with Composio — your agents only see connected
+              account references, never tokens.
+            </p>
+            <div className="flex items-center gap-2">
+              <input
+                type="password"
+                value={apiKeyInput}
+                onChange={(e) => setApiKeyInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && saveApiKey()}
+                placeholder="Paste your Composio API key..."
+                className="flex-1 h-9 rounded-lg bg-muted/20 border border-border/50 px-3 text-xs text-foreground focus:outline-none focus:border-primary/60"
+              />
+              <button
+                onClick={saveApiKey}
+                disabled={savingKey || !apiKeyInput.trim()}
+                className="h-9 px-4 rounded-lg bg-primary text-white text-xs font-semibold shadow-xs hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+              >
+                {savingKey ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                <span>Save</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {keyConfigured && (
+          <div className="flex items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-4 py-2.5">
+            <div className="flex items-center gap-2 text-xs text-emerald-400">
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Composio connected — your agents can use these apps via composio_call.</span>
+            </div>
+            <button
+              onClick={removeApiKey}
+              className="text-3xs font-semibold text-muted-foreground hover:text-destructive transition-colors"
+            >
+              Disconnect key
+            </button>
+          </div>
+        )}
 
         {/* Tabs: Connectors vs Plugins */}
         <div className="flex items-center justify-between border-b border-border/40 pb-3">
@@ -214,59 +326,78 @@ export const ConnectionsView: React.FC = () => {
         {activeTab === 'connectors' && (
           <div className="space-y-3">
             <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider px-1">
-              Popular App Connectors
+              App Connectors {keyConfigured === false && <span className="normal-case font-normal">— add your Composio API key above to connect</span>}
             </div>
 
             <div className="grid grid-cols-1 gap-3">
-              {filteredToolkits.map((toolkit) => (
-                <div
-                  key={toolkit.slug}
-                  className="rounded-2xl bg-card border border-border p-4 flex items-center justify-between transition-colors hover:border-border/80 shadow-2xs"
-                >
-                  <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                    <div className="w-10 h-10 rounded-xl bg-surface border border-border flex items-center justify-center shrink-0">
-                      {toolkit.slug === 'github' && <Github className="w-5 h-5 text-foreground" />}
-                      {toolkit.slug === 'gmail' && <Mail className="w-5 h-5 text-red-400" />}
-                      {toolkit.slug === 'googlecalendar' && <Calendar className="w-5 h-5 text-blue-400" />}
-                      {toolkit.slug === 'slack' && <MessageSquare className="w-5 h-5 text-emerald-400" />}
-                      {toolkit.slug === 'notion' && <FileText className="w-5 h-5 text-foreground" />}
-                      {!['github', 'gmail', 'googlecalendar', 'slack', 'notion'].includes(toolkit.slug) && (
-                        <Cloud className="w-5 h-5 text-primary" />
-                      )}
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-sm text-foreground">{toolkit.name}</h3>
-                        {toolkit.connected && (
-                          <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-medium bg-emerald-950/30 border border-emerald-800/40 px-2 py-0.2 rounded-full">
-                            <CheckCircle2 className="w-3 h-3" /> Connected
-                          </span>
+              {filteredToolkits.map((toolkit) => {
+                const phase = connectPhase[toolkit.slug] || 'idle';
+                const busy = phase === 'connecting' || phase === 'awaiting-oauth';
+                return (
+                  <div
+                    key={toolkit.slug}
+                    className="rounded-2xl bg-card border border-border p-4 flex items-center justify-between transition-colors hover:border-border/80 shadow-2xs"
+                  >
+                    <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                      <div className="w-10 h-10 rounded-xl bg-surface border border-border flex items-center justify-center shrink-0 overflow-hidden">
+                        {toolkit.logoUrl ? (
+                          <img src={toolkit.logoUrl} alt={toolkit.name} className="w-6 h-6 rounded" loading="lazy" />
+                        ) : (
+                          <>
+                            {toolkit.slug === 'github' && <Github className="w-5 h-5 text-foreground" />}
+                            {toolkit.slug === 'gmail' && <Mail className="w-5 h-5 text-red-400" />}
+                            {(toolkit.slug === 'googlecalendar' || toolkit.slug === 'gcalendar') && <Calendar className="w-5 h-5 text-blue-400" />}
+                            {toolkit.slug === 'slack' && <MessageSquare className="w-5 h-5 text-emerald-400" />}
+                            {toolkit.slug === 'notion' && <FileText className="w-5 h-5 text-foreground" />}
+                            {!['github', 'gmail', 'googlecalendar', 'gcalendar', 'slack', 'notion'].includes(toolkit.slug) && (
+                              <Cloud className="w-5 h-5 text-primary" />
+                            )}
+                          </>
                         )}
                       </div>
-                      <p className="text-xs text-muted-foreground truncate mt-0.5">{toolkit.description}</p>
-                    </div>
-                  </div>
 
-                  <button
-                    onClick={() => handleConnect(toolkit.slug)}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 shrink-0 ${
-                      toolkit.connected
-                        ? 'bg-muted/60 hover:bg-destructive/10 hover:text-destructive text-muted-foreground border border-border/60'
-                        : 'bg-primary hover:bg-primary/90 text-white shadow-xs'
-                    }`}
-                  >
-                    {toolkit.connected ? (
-                      <span>Disconnect</span>
-                    ) : (
-                      <>
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        <span>Connect</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              ))}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-semibold text-sm text-foreground">{toolkit.name}</h3>
+                          {toolkit.connected ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-medium bg-emerald-950/30 border border-emerald-800/40 px-2 py-0.5 rounded-full">
+                              <CheckCircle2 className="w-3 h-3" /> Connected
+                            </span>
+                          ) : phase === 'awaiting-oauth' ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-amber-400 font-medium bg-amber-950/30 border border-amber-800/40 px-2 py-0.5 rounded-full">
+                              <Loader2 className="w-3 h-3 animate-spin" /> Awaiting authorization…
+                            </span>
+                          ) : phase === 'error' ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-red-400 font-medium bg-red-950/30 border border-red-800/40 px-2 py-0.5 rounded-full">
+                              <XCircle className="w-3 h-3" /> Failed
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="text-xs text-muted-foreground truncate mt-0.5">{toolkit.description}</p>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => (toolkit.connected ? handleDisconnect(toolkit.slug) : handleConnect(toolkit.slug))}
+                      disabled={busy || keyConfigured === false}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 shrink-0 disabled:opacity-60 ${
+                        toolkit.connected
+                          ? 'bg-muted/60 hover:bg-destructive/10 hover:text-destructive text-muted-foreground border border-border/60'
+                          : 'bg-primary hover:bg-primary/90 text-white shadow-xs'
+                      }`}
+                    >
+                      {toolkit.connected ? (
+                        <span>Disconnect</span>
+                      ) : (
+                        <>
+                          {phaseIcon(toolkit.slug, toolkit.connected)}
+                          <span>Connect</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

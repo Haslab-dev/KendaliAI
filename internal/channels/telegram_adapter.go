@@ -890,6 +890,10 @@ func pickDefaultAgentForTopic(topicName string, fallback string) string {
 
 func (a *TelegramAdapter) pollBot(ctx context.Context, runner *BotRunner) {
 	offset := 0
+	// 409 Conflict means another getUpdates client is polling the same token
+	// (second gateway instance, another machine, ...). Back off progressively
+	// instead of hammering Telegram every 2s.
+	backoff := 2 * time.Second
 	for {
 		select {
 		case <-ctx.Done():
@@ -904,13 +908,19 @@ func (a *TelegramAdapter) pollBot(ctx context.Context, runner *BotRunner) {
 		resp, err := runner.Bot.MakeRequest("getUpdates", params)
 		if err != nil {
 			log.Printf("⚠️ [Telegram Poller] Polling error for @%s: %v", runner.Bot.Self.UserName, err)
+			wait := backoff
+			if strings.Contains(err.Error(), "Conflict") || strings.Contains(err.Error(), "409") {
+				backoff = min(backoff*2, time.Minute)
+				wait = backoff
+			}
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(2 * time.Second):
+			case <-time.After(wait):
 			}
 			continue
 		}
+		backoff = 2 * time.Second
 
 		var rawUpdates []RawTelegramUpdate
 		if err := json.Unmarshal(resp.Result, &rawUpdates); err != nil {

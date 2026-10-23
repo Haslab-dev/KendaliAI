@@ -16,7 +16,11 @@ func HandleOnboard(db *sql.DB) {
 	fmt.Print("🚀 KendaliAI Onboarding\n\n")
 
 	if p == nil || p.APIKey == "" {
-		fmt.Println("❌ Error: chatProvider.apiKey is required in config.json")
+		// Normal on a fresh install: no chatProviders configured yet. The
+		// gateway keeps running; users configure providers in the Web UI.
+		fmt.Println("ℹ️  No chatProvider configured yet — skipping gateway auto-setup.")
+		fmt.Println("   Configure a provider in the Web UI (Settings → Providers),")
+		fmt.Println("   or add \"chatProviders\" to config.json and restart.")
 		return
 	}
 

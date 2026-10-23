@@ -903,6 +903,21 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		}
 	}
 
+	// Composio app integrations hint: tell the model which apps are authorized
+	// so it reaches for composio_call instead of saying it cannot.
+	if activeComposio := composioActiveApps(r.store.db); len(activeComposio) > 0 {
+		sysPrompt += "\n\n## CONNECTED APPS (Composio):\n"
+		sysPrompt += "The user has authorized these external apps: " + strings.Join(activeComposio, ", ") + ".\n"
+		sysPrompt += "You can act on them: tool: composio_actions({\"toolkit\": \"APP\"}) to discover actions, then tool: composio_call({\"action\": \"APP_ACTION\", \"arguments\": {...}}).\n"
+		sysPrompt += "To request a new app connection: tool: composio_connections({\"connect_slug\": \"app-slug\"}) and share the returned redirectUrl with the user.\n"
+	}
+
+	// OpenUI generative-UI capability: the web UI renders ```opui fenced
+	// blocks with the OpenUI Lang renderer. Give the model the grammar so it
+	// can answer with rich cards, dashboards, and forms when visual output
+	// helps (compose the same components as ui/src/components/chat/opuiLibrary.tsx).
+	sysPrompt += openUISystemPrompt()
+
 	// Inject active plugins system prompts
 	if plugins.DefaultManager != nil {
 		for _, p := range plugins.DefaultManager.List() {
@@ -1194,15 +1209,9 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		filter.Flush()
 
 		if err != nil {
-			log.Printf("SSE stream error (%v), attempting fallback...", err)
-			// Fast synthesis fallback from tool output if tools already succeeded
-			if step > 0 && len(recordedToolCalls) > 0 {
-				lastTool := recordedToolCalls[len(recordedToolCalls)-1]
-				if lastTool.Output != "" {
-					finalContent = lastTool.Output
-					break
-				}
-			}
+			log.Printf("SSE stream error (%v), attempting non-streaming fallback...", err)
+			// Never surface raw tool output as the answer — fall through to
+			// the non-streaming request below and let it fail loudly instead.
 
 			pClient := r.createProviderClient(provCfg, modelToUse)
 
@@ -1314,13 +1323,19 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		}
 	}
 
+	// The model never produced a textual answer (step cap reached after tool
+	// rounds). Never dump raw tool output as the assistant message — the tool
+	// results are already attached to this message and rendered as
+	// ToolExecutionCards by the UI; keep the text human-readable.
 	if finalContent == "" && len(recordedToolCalls) > 0 {
-		lastTool := recordedToolCalls[len(recordedToolCalls)-1]
-		if lastTool.Output != "" {
-			finalContent = lastTool.Output
-		} else {
-			finalContent = "Completed executing tool actions."
+		toolNames := make([]string, 0, len(recordedToolCalls))
+		for _, tc := range recordedToolCalls {
+			toolNames = append(toolNames, tc.Tool)
 		}
+		finalContent = fmt.Sprintf(
+			"I ran %d tool call(s) — %s — but hit the turn limit before composing a summary. The raw results are in the tool cards above; ask me to continue and I'll analyze them.",
+			len(recordedToolCalls), strings.Join(toolNames, ", "),
+		)
 		r.bus.Publish(messaging.Event{
 			Type:      messaging.EventAgentTextDelta,
 			SessionID: sessionID,

@@ -217,6 +217,8 @@ func AssembleLayeredContext(
 				role = "user"
 			}
 			content := m.Content
+			// Keep stale opui grammar out of the model's few-shot view.
+			content = sanitizeOpuiHistory(content)
 			// Clean massive raw outputs scaled by model capacity
 			if len(content) > cfg.MaxTurnChars {
 				half := cfg.MaxTurnChars / 2
@@ -383,6 +385,8 @@ func AssembleLayeredContext(
 			role = "user"
 		}
 		content := m.Content
+		// Keep stale opui grammar out of the model's few-shot view.
+		content = sanitizeOpuiHistory(content)
 		if len(content) > cfg.MaxTurnChars {
 			half := cfg.MaxTurnChars / 2
 			content = content[:half] + "\n\n... [content trimmed for context window] ...\n\n" + content[len(content)-half:]

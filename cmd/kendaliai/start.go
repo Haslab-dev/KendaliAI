@@ -8,7 +8,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
+	"time"
 
 	"github.com/kendaliai/app/internal/config"
 	"github.com/kendaliai/app/internal/db"
@@ -135,8 +137,28 @@ func runStart(cmd *cobra.Command, args []string) {
 	_ = os.WriteFile(pidFile, []byte(fmt.Sprintf("%d", os.Getpid())), 0644)
 	defer os.Remove(pidFile)
 
-	if err := srv.Start(listenPort); err != nil {
-		log.Fatalf("❌ Server error: %v", err)
+	// Bind with retries: under Air live-reload a dying predecessor can still
+	// hold the port for a moment after stopAndClearPort ran. If the wildcard
+	// bind keeps failing, something privileged (e.g. `tailscale serve`)
+	// holds the port on a specific interface where lsof can't reach it —
+	// fall back to a loopback-only bind so local dev still works.
+	listenAddr := ":" + listenPort
+	var bindErr error
+	for attempt := 0; attempt < 12; attempt++ {
+		bindErr = srv.StartAddr(listenAddr)
+		if bindErr == nil || !strings.Contains(bindErr.Error(), "address already in use") {
+			break
+		}
+		if attempt == 3 && listenAddr != "127.0.0.1:"+listenPort {
+			log.Printf("⚠️  Port %s is held on a specific interface by a privileged process (likely `tailscale serve` — check `tailscale serve status`). Falling back to loopback-only bind.", listenPort)
+			listenAddr = "127.0.0.1:" + listenPort
+		}
+		log.Printf("⚠️  Port %s still busy (attempt %d/12), clearing and retrying...", listenPort, attempt+1)
+		stopAndClearPort(listenPort, pidFile)
+		time.Sleep(500 * time.Millisecond)
+	}
+	if bindErr != nil {
+		log.Fatalf("❌ Server error: %v", bindErr)
 	}
 
 	select {}
