@@ -35,9 +35,11 @@ export interface SessionStoreState {
   deleteSession: (sessionId: string) => Promise<void>;
   renameSession: (sessionId: string, newTitle: string) => Promise<void>;
   pinSession: (sessionId: string, pinned: boolean) => Promise<void>;
+  updateSessionModel: (sessionId: string, model: string) => Promise<void>;
+  updateSessionMetadata: (sessionId: string, metadata: Record<string, any>) => Promise<void>;
 
   // Chat Turn Actions
-  sendMessage: (content: string, options?: { agentId?: string; images?: string[] }) => Promise<void>;
+  sendMessage: (content: string, options?: { agentId?: string; images?: string[]; model?: string }) => Promise<void>;
   stopSession: (sessionId?: string) => Promise<void>;
 
   // Streaming Reducers (fed by WebSocket in useAgentSocket)
@@ -152,11 +154,25 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   },
 
   createSessionForAgent: async (agentId: string, title?: string) => {
+    const { agents } = useProfileStore.getState();
+    const agent = agents.find((a) => a.id === agentId);
+    const engine = agent?.engine || 'rakit';
+    const acpAgent = agent?.acpAgent || (engine === 'acp' ? 'claude-code' : undefined);
+    const model = agent?.model;
+
+    const metadataObj: Record<string, any> = {
+      mode: 'agent',
+      engine,
+      ...(acpAgent ? { acpAgent } : {}),
+      ...(model ? { model } : {}),
+    };
+
     const payload = {
       agentId,
       title: title || 'New chat',
       type: 'agent',
       channelId: 'web',
+      metadata: JSON.stringify(metadataObj),
     };
 
     const res = await fetch('/api/sessions', {
@@ -247,9 +263,83 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     }));
   },
 
+  updateSessionModel: async (sessionId: string, model: string) => {
+    const { sessions, activeSession } = get();
+    const target = sessions.find((s) => s.id === sessionId) || (activeSession?.id === sessionId ? activeSession : null);
+    if (!target) return;
+
+    let meta: Record<string, any> = {};
+    if (target.metadata) {
+      try {
+        meta = JSON.parse(target.metadata);
+      } catch (e) {
+        meta = {};
+      }
+    }
+    meta.model = model;
+    const metadataStr = JSON.stringify(meta);
+
+    set((state) => ({
+      sessions: state.sessions.map((s) => (s.id === sessionId ? { ...s, metadata: metadataStr } : s)),
+      activeSession: state.activeSession?.id === sessionId ? { ...state.activeSession, metadata: metadataStr } : state.activeSession,
+    }));
+
+    try {
+      await fetch('/api/sessions', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: sessionId, metadata: metadataStr }),
+      });
+    } catch (err) {
+      console.error('[useSessionStore] updateSessionModel failed:', err);
+    }
+  },
+
+  updateSessionMetadata: async (sessionId: string, metadata: Record<string, any>) => {
+    const { sessions, activeSession } = get();
+    const target = sessions.find((s) => s.id === sessionId) || (activeSession?.id === sessionId ? activeSession : null);
+    if (!target) return;
+
+    let existingMeta: Record<string, any> = {};
+    if (target.metadata) {
+      try {
+        existingMeta = JSON.parse(target.metadata);
+      } catch (e) {
+        existingMeta = {};
+      }
+    }
+    const mergedMeta = { ...existingMeta, ...metadata };
+    const metadataStr = JSON.stringify(mergedMeta);
+
+    set((state) => ({
+      sessions: state.sessions.map((s) => (s.id === sessionId ? { ...s, metadata: metadataStr } : s)),
+      activeSession: state.activeSession?.id === sessionId ? { ...state.activeSession, metadata: metadataStr } : state.activeSession,
+    }));
+
+    try {
+      await fetch('/api/sessions', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: sessionId, metadata: metadataStr }),
+      });
+    } catch (err) {
+      console.error('[useSessionStore] updateSessionMetadata failed:', err);
+    }
+  },
+
   sendMessage: async (content: string, options) => {
-    const { activeSessionId } = get();
+    const { activeSessionId, activeSession } = get();
     if (!activeSessionId) return;
+
+    let chosenModel = options?.model;
+    if (!chosenModel && activeSession?.metadata) {
+      try {
+        const meta = JSON.parse(activeSession.metadata);
+        if (meta.model) chosenModel = meta.model;
+      } catch (e) {
+        // ignore
+      }
+    }
 
     // Append optimistic user message
     const userMsg: SessionMessage = {
@@ -259,6 +349,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       channel: 'web',
       role: 'user',
       content,
+      model: chosenModel,
       createdAt: Date.now(),
     };
 
@@ -277,6 +368,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
         body: JSON.stringify({
           content,
           agentId: options?.agentId,
+          model: chosenModel,
           images: options?.images,
         }),
       });

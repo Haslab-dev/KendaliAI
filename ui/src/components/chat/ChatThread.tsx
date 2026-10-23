@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useProfileStore } from '../../store/useProfileStore';
 import { useSessionStore } from '../../store/useSessionStore';
 import { useAppStore } from '../../store/useAppStore';
@@ -17,9 +17,12 @@ import {
   X,
   FileCode,
   SlidersHorizontal,
+  Lock,
+  Cpu,
 } from 'lucide-react';
 import { AgentIcon } from '../shell/AgentIcon';
 import { ProviderIcon } from '../agent/ProviderIcon';
+import { parseSessionMetadata } from '../../types';
 
 interface ChatThreadProps {
   onToggleDrawer?: () => void;
@@ -41,10 +44,12 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
     streamingToolCalls,
     sendMessage,
     stopSession,
+    updateSessionModel,
+    updateSessionMetadata,
   } = useSessionStore();
 
   const { defaultModel, availableModels } = useAppStore();
-  const { permissions, respondPermission } = useAgentStore();
+  const { permissions, respondPermission, acpAgents } = useAgentStore();
 
   const [input, setInput] = useState('');
   const [showThinking, setShowThinking] = useState(true);
@@ -58,6 +63,101 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
     }
   }, [messages, streamingContent, streamingToolCalls, isStreaming]);
 
+  // Session metadata & locked engine resolution
+  const sessionMeta = useMemo(() => parseSessionMetadata(activeSession), [activeSession]);
+
+  const sessionAcpAgent = useMemo(() => {
+    if (sessionMeta.acpAgent) return sessionMeta.acpAgent;
+    if (acpAgents.some((a) => a.id === activeSession?.agentId)) {
+      return activeSession?.agentId;
+    }
+    if (activeAgent?.engine === 'acp' || activeAgent?.acpAgent) {
+      return activeAgent.acpAgent || 'claude-code';
+    }
+    return undefined;
+  }, [sessionMeta, activeSession, activeAgent, acpAgents]);
+
+  const sessionEngine = useMemo(() => {
+    if (sessionMeta.engine) return sessionMeta.engine;
+    if (sessionAcpAgent) return 'acp';
+    return activeAgent?.engine || 'rakit';
+  }, [sessionMeta, sessionAcpAgent, activeAgent]);
+
+  const lockedAcpDesc = useMemo(() => {
+    if (!sessionAcpAgent) return null;
+    return acpAgents.find((a) => a.id === sessionAcpAgent) || null;
+  }, [sessionAcpAgent, acpAgents]);
+
+  const sessionEngineLabel = useMemo(() => {
+    if (lockedAcpDesc?.name) return lockedAcpDesc.name;
+    if (sessionAcpAgent) {
+      switch (sessionAcpAgent) {
+        case 'agy':
+        case 'antigravity':
+          return 'AGY (Google Antigravity)';
+        case 'commandcode':
+        case 'cmd':
+          return 'CommandCode (CMD)';
+        case 'opencode':
+          return 'OpenCode (ACP)';
+        case 'omp':
+        case 'ohmypi':
+          return 'Oh My Pi (OMP)';
+        case 'pi':
+        case 'pi-agent':
+          return 'Pi Coding Agent';
+        case 'claude-code':
+        case 'claude':
+          return 'Claude Code (ACP)';
+        case 'codex':
+          return 'OpenAI Codex (ACP)';
+        case 'gemini':
+          return 'Gemini CLI (ACP)';
+        default:
+          return sessionAcpAgent;
+      }
+    }
+    return 'RakitKode (Native)';
+  }, [lockedAcpDesc, sessionAcpAgent]);
+
+  // Dynamic session model (editable per session)
+  const sessionModel = sessionMeta.model || activeAgent?.model || defaultModel || 'Auto';
+
+  // Available models for this session's locked agent engine
+  const selectableModels = useMemo(() => {
+    if (lockedAcpDesc?.supportedModels && lockedAcpDesc.supportedModels.length > 0) {
+      const list = [...lockedAcpDesc.supportedModels];
+      if (sessionModel && !list.includes(sessionModel) && sessionModel !== 'Auto') {
+        list.unshift(sessionModel);
+      }
+      return list.map((m) => ({ id: m, name: m }));
+    }
+    if (availableModels && availableModels.length > 0) {
+      return availableModels.map((m) => ({ id: m.id, name: m.name || m.id }));
+    }
+    if (sessionModel) {
+      return [{ id: sessionModel, name: sessionModel }];
+    }
+    return [{ id: 'default', name: 'Default Model' }];
+  }, [lockedAcpDesc, availableModels, sessionModel]);
+
+  // Ensure session metadata locks the engine permanently if not recorded yet
+  useEffect(() => {
+    if (activeSession?.id && (!sessionMeta.engine || (sessionAcpAgent && !sessionMeta.acpAgent))) {
+      updateSessionMetadata(activeSession.id, {
+        engine: sessionEngine,
+        ...(sessionAcpAgent ? { acpAgent: sessionAcpAgent } : {}),
+        model: sessionModel,
+      });
+    }
+  }, [activeSession?.id]);
+
+  const handleModelChange = (newModel: string) => {
+    if (activeSession?.id) {
+      updateSessionModel(activeSession.id, newModel);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isStreaming || isSending) return;
@@ -65,7 +165,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
     setInput('');
     setIsSending(true);
     try {
-      await sendMessage(text, { agentId: activeAgent?.id });
+      await sendMessage(text, { agentId: activeAgent?.id, model: sessionModel });
     } finally {
       setIsSending(false);
     }
@@ -79,7 +179,6 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
   };
 
   const sessionPermissions = activeSession?.id ? permissions[activeSession.id] || [] : [];
-  const activeModel = activeAgent?.model || defaultModel || 'Auto';
 
   return (
     <div className="flex-1 h-full flex flex-col min-w-0 bg-[#0c0c0e] relative overflow-hidden">
@@ -90,7 +189,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
             id={activeAgent?.id || ''}
             name={activeAgent?.name}
             avatar={activeAgent?.avatar}
-            isACP={activeAgent?.engine === 'acp'}
+            isACP={sessionEngine === 'acp' || !!sessionAcpAgent}
             size={24}
           />
           <div className="min-w-0">
@@ -100,40 +199,34 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
             <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
               <span>{activeAgent?.name || 'Agent'}</span>
               <span>•</span>
-              <div className="flex items-center gap-1 bg-muted/60 hover:bg-muted border border-border/40 rounded px-1.5 py-0.5 text-foreground transition-colors shadow-2xs">
-                <ProviderIcon provider={activeAgent?.acpAgent || activeAgent?.engine || 'rakit'} size={11} className="shrink-0" />
-                <select
-                  value={activeAgent?.acpAgent || (activeAgent?.engine === 'acp' ? 'claude-code' : 'rakit')}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (activeAgent) {
-                      if (val === 'rakit') {
-                        useProfileStore.getState().updateAgent({ id: activeAgent.id, engine: 'rakit', acpAgent: undefined });
-                      } else {
-                        useProfileStore.getState().updateAgent({ id: activeAgent.id, engine: 'acp', acpAgent: val });
-                      }
-                    }
-                  }}
-                  className="bg-transparent font-mono text-[10px] text-foreground focus:outline-none cursor-pointer"
-                  title="Switch coding agent engine"
-                >
-                  <option value="rakit">RakitKode (Native)</option>
-                  <optgroup label="External ACP Agents">
-                    <option value="agy">AGY (Google Antigravity)</option>
-                    <option value="commandcode">CommandCode (CMD)</option>
-                    <option value="opencode">OpenCode (ACP)</option>
-                    <option value="omp">Oh My Pi (OMP)</option>
-                    <option value="pi">Pi Coding Agent</option>
-                    <option value="claude-code">Claude Code (ACP)</option>
-                    <option value="codex">OpenAI Codex (ACP)</option>
-                    <option value="gemini">Gemini CLI (ACP)</option>
-                  </optgroup>
-                </select>
+              {/* Locked Engine Badge (cannot change mid-session) */}
+              <div
+                className="flex items-center gap-1.5 bg-muted/50 border border-border/40 rounded px-2 py-0.5 text-foreground shadow-2xs select-none"
+                title={`Session engine locked to ${sessionEngineLabel} (cannot change mid-session)`}
+              >
+                <ProviderIcon provider={sessionAcpAgent || sessionEngine} size={11} className="shrink-0" />
+                <span className="font-mono text-[10px] text-foreground font-medium truncate max-w-[150px]">
+                  {sessionEngineLabel}
+                </span>
+                <Lock className="w-2.5 h-2.5 text-muted-foreground/70 shrink-0 ml-0.5" />
               </div>
               <span>•</span>
-              <span className="font-mono text-[10px] text-muted-foreground truncate max-w-[120px]">
-                {activeModel}
-              </span>
+              {/* Dynamic Model Selector */}
+              <div className="flex items-center gap-1 bg-muted/40 hover:bg-muted/70 border border-border/40 rounded px-1.5 py-0.5 text-foreground transition-colors group">
+                <Cpu className="w-3 h-3 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
+                <select
+                  value={sessionModel}
+                  onChange={(e) => handleModelChange(e.target.value)}
+                  className="bg-transparent font-mono text-[10px] text-foreground focus:outline-none cursor-pointer max-w-[150px] truncate"
+                  title="Switch model for this session"
+                >
+                  {selectableModels.map((opt) => (
+                    <option key={opt.id} value={opt.id} className="bg-[#141418] text-foreground">
+                      {opt.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
         </div>
@@ -324,9 +417,21 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
                 <Plus className="w-4 h-4" />
               </button>
 
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted/40 border border-border/40 text-[11px] text-muted-foreground">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                <span>{activeModel}</span>
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted/40 hover:bg-muted/60 border border-border/40 text-[11px] text-muted-foreground transition-colors group">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                <select
+                  value={sessionModel}
+                  onChange={(e) => handleModelChange(e.target.value)}
+                  className="bg-transparent font-mono text-[11px] text-foreground/90 group-hover:text-foreground focus:outline-none cursor-pointer max-w-[140px] truncate"
+                  title="Switch model for this session"
+                >
+                  {selectableModels.map((opt) => (
+                    <option key={opt.id} value={opt.id} className="bg-[#141418] text-foreground">
+                      {opt.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-2.5 h-2.5 text-muted-foreground group-hover:text-foreground transition-colors pointer-events-none shrink-0" />
               </div>
             </div>
 

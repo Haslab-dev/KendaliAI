@@ -281,6 +281,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     const agent = get().agents.find((a) => a.id === agentId);
     const title = agent ? (agent.name || agent.role || agentId) : agentId;
     const avatar = agent ? (agent.avatar || 'blue-drop') : 'blue-drop';
+    const metadata = JSON.stringify({
+      engine: agent?.engine || 'rakit',
+      ...(agent?.acpAgent ? { acpAgent: agent.acpAgent } : {}),
+      ...(agent?.model ? { model: agent.model } : {}),
+    });
 
     try {
       const res = await fetch('/api/sessions', {
@@ -293,6 +298,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           type: 'direct',
           avatar,
           channelId: 'web',
+          metadata,
           participants: [{ participantType: 'agent', participantId: agentId, role: 'member' }],
         }),
       });

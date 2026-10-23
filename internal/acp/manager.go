@@ -127,6 +127,21 @@ func (m *Manager) StartSession(agentID, cwd, model string, autoApprove bool) (*S
 // EnsureSession ensures an ACP process is running for the given sessionID.
 func (m *Manager) EnsureSession(sessionID, agentID, cwd, model string) error {
 	if live := m.getLive(sessionID); live != nil {
+		if model != "" && model != live.model {
+			live.model = model
+			if live.protocol != "agy-stream" && live.client != nil {
+				_ = live.client.Notify("session/set_model", map[string]string{
+					"sessionId": live.AgentSessionID,
+					"modelId":   model,
+				})
+				_ = live.client.Notify("session/set_config_option", map[string]interface{}{
+					"sessionId": live.AgentSessionID,
+					"configId":  "model",
+					"value":     model,
+				})
+			}
+			m.persistMeta(live)
+		}
 		return nil
 	}
 	_, err := m.startSessionInternal(sessionID, agentID, cwd, model, false)
@@ -774,6 +789,48 @@ func (m *Manager) publishStatus(live *liveSession) {
 	})
 }
 
+// SetSessionModel updates the active model for a session, notifying the live ACP agent if connected.
+func (m *Manager) SetSessionModel(sessionID, model string) error {
+	if model == "" {
+		return nil
+	}
+	if live := m.getLive(sessionID); live != nil {
+		live.model = model
+		if live.protocol != "agy-stream" && live.client != nil {
+			_ = live.client.Notify("session/set_model", map[string]string{
+				"sessionId": live.AgentSessionID,
+				"modelId":   model,
+			})
+			_ = live.client.Notify("session/set_config_option", map[string]interface{}{
+				"sessionId": live.AgentSessionID,
+				"configId":  "model",
+				"value":     model,
+			})
+		}
+		m.persistMeta(live)
+		return nil
+	}
+
+	// If not live, update persisted session metadata
+	sess, err := m.store.GetSession(sessionID)
+	if err != nil || sess == nil {
+		return nil
+	}
+	var meta map[string]interface{}
+	if sess.Metadata != "" {
+		_ = json.Unmarshal([]byte(sess.Metadata), &meta)
+	}
+	if meta == nil {
+		meta = make(map[string]interface{})
+	}
+	meta["model"] = model
+	if data, err := json.Marshal(meta); err == nil {
+		sess.Metadata = string(data)
+		_ = m.store.SaveSession(*sess)
+	}
+	return nil
+}
+
 // persistMeta writes mutable live fields back into the persisted metadata.
 func (m *Manager) persistMeta(live *liveSession) {
 	sess, err := m.store.GetSession(live.SessionID)
@@ -781,13 +838,17 @@ func (m *Manager) persistMeta(live *liveSession) {
 		return
 	}
 	var meta map[string]interface{}
-	if sess.Metadata != "" && json.Unmarshal([]byte(sess.Metadata), &meta) == nil {
-		meta["autoApprove"] = live.autoApprove
-		meta["model"] = live.model
-		if data, err := json.Marshal(meta); err == nil {
-			sess.Metadata = string(data)
-			_ = m.store.SaveSession(*sess)
-		}
+	if sess.Metadata != "" {
+		_ = json.Unmarshal([]byte(sess.Metadata), &meta)
+	}
+	if meta == nil {
+		meta = make(map[string]interface{})
+	}
+	meta["autoApprove"] = live.autoApprove
+	meta["model"] = live.model
+	if data, err := json.Marshal(meta); err == nil {
+		sess.Metadata = string(data)
+		_ = m.store.SaveSession(*sess)
 	}
 }
 

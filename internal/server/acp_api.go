@@ -116,6 +116,24 @@ func (s *Server) handleACPSessionAction() http.HandlerFunc {
 			}
 			json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 
+		case "model":
+			if r.Method != http.MethodPost && r.Method != http.MethodPatch {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			var req struct {
+				Model string `json:"model"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Model) == "" {
+				http.Error(w, "model is required", http.StatusBadRequest)
+				return
+			}
+			if err := s.acp.SetSessionModel(sessionID, req.Model); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+
 		case "permission":
 			var req struct {
 				RequestID string `json:"requestId"`

@@ -1029,7 +1029,7 @@ func (s *Server) handleSessions() http.HandlerFunc {
 			}
 			json.NewEncoder(w).Encode(list)
 
-		case "POST":
+		case "POST", "PATCH":
 			var sess gateway.Session
 			if err := json.NewDecoder(r.Body).Decode(&sess); err != nil {
 				http.Error(w, "invalid JSON", http.StatusBadRequest)
@@ -1066,6 +1066,17 @@ func (s *Server) handleSessions() http.HandlerFunc {
 					}
 					if sess.Metadata != "" {
 						existing.Metadata = sess.Metadata
+						if s.acp != nil {
+							var meta map[string]interface{}
+							if err := json.Unmarshal([]byte(sess.Metadata), &meta); err == nil {
+								if mdl, ok := meta["model"].(string); ok && mdl != "" {
+									_ = s.acp.SetSessionModel(existing.ID, mdl)
+								}
+							}
+						}
+					}
+					if sess.Pinned != existing.Pinned {
+						existing.Pinned = sess.Pinned
 					}
 					sess = *existing
 				}
@@ -1191,15 +1202,42 @@ func (s *Server) handleSessionDetail() http.HandlerFunc {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 				defer cancel()
 
-				// If agent is configured with an external ACP engine, dispatch to ACP
-				agent, _ := s.store.GetAgent(aid)
-				if agent != nil && (agent.Engine == "acp" || agent.ACPAgent != "") && s.acp != nil {
-					acpAgentID := agent.ACPAgent
-					if acpAgentID == "" {
-						acpAgentID = "claude-code"
+				var sessMeta map[string]interface{}
+				if sess != nil && sess.Metadata != "" {
+					_ = json.Unmarshal([]byte(sess.Metadata), &sessMeta)
+				}
+
+				// Resolve target model: explicit request model > session metadata model > agent profile model
+				activeModel := mdl
+				if activeModel == "" && sessMeta != nil {
+					if m, ok := sessMeta["model"].(string); ok && m != "" {
+						activeModel = m
 					}
+				}
+				agent, _ := s.store.GetAgent(aid)
+				if activeModel == "" && agent != nil {
+					activeModel = agent.Model
+				}
+
+				// Resolve locked ACP agent ID: session metadata acpAgent takes absolute priority to lock session
+				acpAgentID := ""
+				if sessMeta != nil {
+					if a, ok := sessMeta["acpAgent"].(string); ok && a != "" {
+						acpAgentID = a
+					}
+				}
+				if acpAgentID == "" && agent != nil && (agent.Engine == "acp" || agent.ACPAgent != "") {
+					acpAgentID = agent.ACPAgent
+				}
+
+				if acpAgentID != "" && s.acp != nil {
 					cwd, _ := os.Getwd()
-					_ = s.acp.EnsureSession(sid, acpAgentID, cwd, mdl)
+					if sessMeta != nil {
+						if ws, ok := sessMeta["workspace"].(string); ok && ws != "" {
+							cwd = ws
+						}
+					}
+					_ = s.acp.EnsureSession(sid, acpAgentID, cwd, activeModel)
 					if err := s.acp.Prompt(sid, txt); err == nil {
 						return
 					}
@@ -1209,6 +1247,7 @@ func (s *Server) handleSessionDetail() http.HandlerFunc {
 				if s.acp != nil {
 					for _, as := range s.acp.ListSessions() {
 						if as.ID == sid {
+							_ = s.acp.EnsureSession(sid, as.AgentID, as.CWD, activeModel)
 							_ = s.acp.Prompt(sid, txt)
 							return
 						}
@@ -1216,10 +1255,10 @@ func (s *Server) handleSessionDetail() http.HandlerFunc {
 				}
 
 				if s.engine != nil {
-					s.runEngineTurn(sid, aid, txt, "web", mdl)
+					s.runEngineTurn(sid, aid, txt, "web", activeModel)
 					return
 				}
-				_, err := s.runtime.ExecuteTurnWithModel(ctx, sid, aid, txt, "web", mdl)
+				_, err := s.runtime.ExecuteTurnWithModel(ctx, sid, aid, txt, "web", activeModel)
 				if err != nil {
 					log.Printf("Session %s turn error: %v", sid, err)
 				}
