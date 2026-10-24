@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useProfileStore } from '../../store/useProfileStore';
 import { useSessionStore } from '../../store/useSessionStore';
-import { useAgentStore } from '../../store/useAgentStore';
 import { MarkdownView } from '../MarkdownView';
 import { ToolExecutionCard, ToolExecution } from '../agent/ToolBlockViews';
 import { WorkLogList } from '../agent/WorkLog';
 import { ApprovalCard } from '../agentui/ApprovalCard';
-import { WorkspaceHeader } from '../common/WorkspaceHeader';
 import { AgentTaskInputBar, PromptSubmitOptions } from '../common/AgentTaskInputBar';
+import { ProfileBadge } from '../shell/ProfileBadge';
+import { ChatTopControls } from '../shell/ChatTopControls';
 import {
   Copy,
   Check,
@@ -60,10 +60,7 @@ function mapToolCallRecord(tc: ToolCallRecord): ToolExecution {
   };
 }
 
-export const ChatThread: React.FC<ChatThreadProps> = ({
-  onToggleDrawer,
-  isDrawerOpen,
-}) => {
+export const ChatThread: React.FC<ChatThreadProps> = () => {
   const { activeAgent } = useProfileStore();
   const {
     activeSession,
@@ -74,8 +71,6 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
     streamingThought,
     streamingToolCalls,
     sendMessage,
-    deleteSession,
-    renameSession,
   } = useSessionStore();
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -85,6 +80,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
   const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>({});
 
   const [liveElapsed, setLiveElapsed] = useState(0);
+  const [headerScrolled, setHeaderScrolled] = useState(false);
   const streamStartRef = useRef<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
@@ -103,12 +99,13 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
     }
   }, [isStreaming]);
 
-  // Track user scroll position
+  // Track user scroll position (and whether content passes under the top controls)
   const handleScroll = useCallback(() => {
     if (!scrollRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
     const distanceFromBottom = scrollHeight - (scrollTop + clientHeight);
     userScrolledUpRef.current = distanceFromBottom > 100;
+    setHeaderScrolled(scrollTop > 24);
   }, []);
 
   // Auto-scroll to bottom unless user scrolled up
@@ -131,15 +128,6 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
       ...prev,
       [id]: prev[id] === dir ? undefined! : dir,
     }));
-  };
-
-  const handleRename = () => {
-    if (!activeSession) return;
-    const current = activeSession.title || '';
-    const next = prompt('Rename task:', current);
-    if (next && next.trim() && next.trim() !== current) {
-      renameSession(activeSession.id, next.trim());
-    }
   };
 
   const handleFollowUp = async (text: string, options?: PromptSubmitOptions) => {
@@ -174,24 +162,17 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
     }));
   };
 
-  const displayTitle = activeSession?.title || 'Hi there';
-
   return (
     <div className="flex-1 h-full flex flex-col bg-background text-foreground select-none relative overflow-hidden">
-      {/* Top Workspace Header */}
-      <WorkspaceHeader
-        title={displayTitle}
-        onRenameSession={handleRename}
-        onDeleteSession={() => activeSession?.id && deleteSession(activeSession.id)}
-        onToggleSidePane={onToggleDrawer}
-        isSidePaneOpen={isDrawerOpen}
-      />
+      {/* Floating controls (no header bar): top-right cluster + top-center profile */}
+      <ChatTopControls showSessionMenu scrolled={headerScrolled} />
+      <ProfileBadge scrolled={headerScrolled} />
 
       {/* Messages Scroll Area */}
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 scrollbar-thin scrollbar-thumb-border"
+        className="flex-1 overflow-y-auto px-4 sm:px-6 pt-24 pb-6 scrollbar-thin scrollbar-thumb-border"
       >
         <div className="chat-content-lane space-y-6">
           {isLoadingMessages && messages.length === 0 ? (

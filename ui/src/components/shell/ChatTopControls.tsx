@@ -1,0 +1,148 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { Ellipsis, Menu, Pencil, SquareTerminal, Trash2 } from 'lucide-react';
+import { cn } from '../../lib/cn';
+import { ThemePicker } from '../common/ThemePicker';
+import { useSessionStore } from '../../store/useSessionStore';
+import { useAgentStore } from '../../store/useAgentStore';
+import { useUIStore } from '../../store/useUIStore';
+import { isMainSession } from '../../store/useSessionStore';
+
+interface ChatTopControlsProps {
+  /** Show the "..." session actions menu (rename / terminal / delete). */
+  showSessionMenu?: boolean;
+  /** True when chat content has scrolled beneath the floating controls. */
+  scrolled?: boolean;
+  /** Extra controls rendered before the theme picker & hamburger. */
+  children?: React.ReactNode;
+}
+
+/**
+ * Floating top-right controls — replaces the old header bar. No bar, no
+ * border line: just the session menu, theme picker and the session-history
+ * hamburger hovering over the chat surface. When content scrolls beneath,
+ * the cluster gains a dark blurred chip so icons stay readable.
+ */
+export const ChatTopControls: React.FC<ChatTopControlsProps> = ({
+  showSessionMenu,
+  scrolled,
+  children,
+}) => {
+  const { activeSession, renameSession, deleteSession } = useSessionStore();
+  const { terminalOpen, setTerminalOpen } = useAgentStore();
+  const { rightPanel, toggleSessionsPanel } = useUIStore();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    if (menuOpen) {
+      document.addEventListener('mousedown', handleOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [menuOpen]);
+
+  const showMenu = showSessionMenu && Boolean(activeSession);
+  const protectedSession = isMainSession(activeSession);
+
+  const handleRename = () => {
+    if (!activeSession) return;
+    setMenuOpen(false);
+    const current = activeSession.title || '';
+    const next = prompt('Rename task:', current);
+    if (next && next.trim() && next.trim() !== current) {
+      renameSession(activeSession.id, next.trim());
+    }
+  };
+
+  const handleDelete = () => {
+    if (!activeSession || protectedSession) return;
+    setMenuOpen(false);
+    deleteSession(activeSession.id);
+  };
+
+  return (
+    <div
+      className={cn(
+        'absolute top-3 right-4 z-30 flex items-center gap-1.5 rounded-xl p-1 transition-all duration-300 select-none',
+        scrolled && 'bg-background/70 shadow-sm ring-1 ring-border/40 backdrop-blur-md'
+      )}
+    >
+      {children}
+
+      {showMenu && (
+        <div className="relative flex items-center" ref={menuRef}>
+          <button
+            type="button"
+            onClick={() => setMenuOpen(!menuOpen)}
+            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
+            title="More actions"
+          >
+            <Ellipsis className="size-4" />
+          </button>
+
+          {menuOpen && (
+            <div className="dropdown-glass absolute right-0 top-full z-50 mt-1 w-48 rounded-xl p-1 shadow-xl">
+              <button
+                type="button"
+                onClick={handleRename}
+                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-ui-xs text-foreground hover:bg-accent cursor-pointer"
+              >
+                <Pencil className="size-3.5 text-muted-foreground" />
+                <span>Rename task</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  setTerminalOpen(!terminalOpen);
+                }}
+                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-ui-xs text-foreground hover:bg-accent cursor-pointer"
+              >
+                <SquareTerminal className="size-3.5 text-muted-foreground" />
+                <span>Toggle terminal</span>
+              </button>
+              {!protectedSession && (
+                <>
+                  <div className="my-1 h-px bg-border/60" />
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-ui-xs text-destructive hover:bg-destructive/10 cursor-pointer"
+                  >
+                    <Trash2 className="size-3.5" />
+                    <span>Delete task</span>
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Theme & Palette Picker */}
+      <ThemePicker compact />
+
+      {/* Session history hamburger */}
+      <button
+        type="button"
+        onClick={toggleSessionsPanel}
+        aria-label="Toggle session history"
+        title="Session history"
+        className={cn(
+          'flex size-7 shrink-0 items-center justify-center rounded-md transition-colors cursor-pointer',
+          rightPanel === 'sessions'
+            ? 'bg-accent text-foreground'
+            : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+        )}
+      >
+        <Menu className="size-4" />
+      </button>
+    </div>
+  );
+};
+
+export default ChatTopControls;

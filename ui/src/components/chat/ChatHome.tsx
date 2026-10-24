@@ -3,19 +3,21 @@ import { useProfileStore } from '../../store/useProfileStore';
 import { useSessionStore } from '../../store/useSessionStore';
 import { useAppStore } from '../../store/useAppStore';
 import { useAgentStore } from '../../store/useAgentStore';
+import { useUIStore } from '../../store/useUIStore';
 import {
   ChevronDown,
   Check,
   Search,
 } from 'lucide-react';
 import { AgentTaskInputBar, PromptSubmitOptions } from '../common/AgentTaskInputBar';
-import { WorkspaceHeader } from '../common/WorkspaceHeader';
+import { ChatTopControls } from '../shell/ChatTopControls';
 import { AgentIcon } from '../shell/AgentIcon';
 import { cn } from '../../lib/cn';
 
 export const ChatHome: React.FC = () => {
   const { agents, activeAgent, selectAgent, selectedAgentId } = useProfileStore();
   const { createSessionForAgent, sendMessage } = useSessionStore();
+  const { toggleProfilePanel, rightPanel } = useUIStore();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [search, setSearch] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -136,21 +138,42 @@ export const ChatHome: React.FC = () => {
 
   return (
     <div className="flex-1 h-full bg-background text-foreground flex flex-col relative overflow-hidden select-none transition-colors">
-      {/* Top Workspace Header */}
-      <WorkspaceHeader />
+      {/* Floating top-right controls (no header bar) */}
+      <ChatTopControls />
 
       {/* Centered Landing Content */}
       <div className="flex flex-1 flex-col items-center justify-center px-4 z-10 min-h-0">
         <div className="flex w-full max-w-[var(--chat-content-max-width,46rem)] flex-col items-center justify-center gap-7 my-auto pb-12">
-          {/* Brand Spark Glyph + Heading */}
-          <div className="flex flex-col items-center gap-4 text-center select-none w-full">
-            <div className="text-foreground">
-              <svg width={56} height={56} viewBox="0 0 48 48" fill="currentColor" className="shrink-0" aria-hidden="true">
-                <path d="M24 3c1.6 10.6 6.4 16.7 20 21-13.6 4.3-18.4 10.4-20 21-1.6-10.6-6.4-16.7-20-21 13.6-4.3 18.4-10.4 20-21Z" />
-                <circle cx="39.5" cy="8.5" r="3.2" />
-              </svg>
-            </div>
+          {/* Enlarged agent avatar + name beneath (click → profile panel); hides while the profile panel is open */}
+          <div
+            className={cn(
+              'flex flex-col items-center gap-3 text-center select-none w-full pt-10 transition-all duration-300',
+              rightPanel === 'profile' ? 'pointer-events-none -translate-y-2 opacity-0' : 'opacity-100'
+            )}
+          >
+            <button
+              type="button"
+              onClick={toggleProfilePanel}
+              aria-label="Open agent profile"
+              title={`${currentName} — profile`}
+              className="group flex flex-col items-center gap-2.5 rounded-3xl px-6 py-3 transition-all cursor-pointer hover:bg-accent/40"
+            >
+              <div className="size-20 shrink-0 overflow-hidden rounded-full bg-background ring-2 ring-foreground/10 transition-transform group-hover:scale-105">
+                <AgentIcon
+                  id={activeAgent?.id || ''}
+                  name={currentName}
+                  avatar={activeAgent?.avatar}
+                  size={80}
+                />
+              </div>
+              <span className="rounded-full border border-border/40 bg-foreground/10 px-3 py-0.5 text-ui-sm font-semibold text-foreground backdrop-blur-md">
+                {currentName}
+              </span>
+            </button>
+          </div>
 
+          {/* Heading */}
+          <div className="flex flex-col items-center gap-4 text-center select-none w-full">
             <h2 className="text-[26px] font-normal leading-[1.15] tracking-[-0.015em] text-foreground sm:text-[30px]">
               What should we do in{' '}
               <button

@@ -5,6 +5,7 @@ import {
   Database, Eye, EyeOff, FileText, Upload, BookOpen
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
+import { PaneToolbar, PaneToolbarFilters, PaneToolbarActions, StatChip, SettingsSearchInput } from '../components/settings/settingsPrimitives';
 import {
   ProviderConfig, AgentConfig, MCPServerConfig, SkillItem, ToolDefinition, TelegramBotConfig,
   ModelItem, isReasoningModel, EmbeddingConfig, DocumentItem
@@ -64,32 +65,26 @@ export const SkillsPane: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-base font-bold text-hi">Skills Library</h3>
-          <p className="text-xs text-mid">
-            Modular domain instructions (SKILL.md) loaded lazily on demand.
-          </p>
-        </div>
-        <button
-          onClick={fetchSkills}
-          title="Refresh skills"
-          className="p-2 rounded-lg border border-line text-mid hover:text-hi transition-colors"
-        >
-          <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
-        </button>
-      </div>
-
-      <div className="w-full relative">
-        <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-mid" />
-        <input
-          type="text"
-          placeholder="Filter skills by name or keyword..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-9 pr-4 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi placeholder-mid focus:outline-none"
-        />
-      </div>
+      <PaneToolbar>
+        <PaneToolbarFilters>
+          <SettingsSearchInput
+            value={searchQuery}
+            onChange={setSearchQuery}
+            placeholder="Filter skills by name or keyword..."
+            className="max-w-md flex-1"
+          />
+        </PaneToolbarFilters>
+        <PaneToolbarActions>
+          <StatChip label="installed" value={skills.length} />
+          <button
+            onClick={fetchSkills}
+            title="Refresh skills"
+            className="p-2 rounded-lg border border-line text-mid hover:text-hi transition-colors cursor-pointer"
+          >
+            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+          </button>
+        </PaneToolbarActions>
+      </PaneToolbar>
 
       {filteredSkills.length === 0 ? (
         <div className="w-full p-12 text-center bg-raised border border-dashed border-line rounded-xl flex flex-col items-center justify-center gap-2">

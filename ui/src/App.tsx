@@ -7,20 +7,20 @@ import { useAgentSocket } from './hooks/useAgentSocket';
 import { useRoute, navigate, navigateSettings } from './router';
 
 import { AgentRail } from './components/layout/AgentRail';
-import { AppSidebar } from './components/layout/AppSidebar';
 import { ChatHome } from './components/chat/ChatHome';
 import { ChatThread } from './components/chat/ChatThread';
 import { AgentProfileDetail } from './components/agent/AgentProfileDetail';
 import { GroupList } from './components/groups/GroupList';
 import { GroupChatThread } from './components/chat/GroupChatThread';
-import { ConnectionsView } from './components/connections/ConnectionsView';
-import { AutomationsView } from './components/automations/AutomationsView';
 import { ControlCenterView } from './components/settings/ControlCenterView';
 import { LoginScreen } from './components/LoginScreen';
 import { TerminalDock } from './components/forge/TerminalDock';
 import { NewAgentModal } from './components/agent/NewAgentModal';
 import { GitClientView } from './components/git/GitClientView';
 import { SimpleEditorView } from './components/editor/SimpleEditorView';
+import { FeedView } from './components/feed/FeedView';
+import { SessionsPanel } from './components/shell/SessionsPanel';
+import { ProfilePanel } from './components/shell/ProfilePanel';
 
 type AuthState = 'checking' | 'ok' | 'login';
 
@@ -54,7 +54,6 @@ export const App: React.FC = () => {
 
   const { route, settingsSection } = useRoute();
   const [authState, setAuthState] = useState<AuthState>('checking');
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isNewAgentModalOpen, setIsNewAgentModalOpen] = useState(false);
 
   // Check auth status
@@ -118,8 +117,13 @@ export const App: React.FC = () => {
     return <LoginScreen onSuccess={() => setAuthState('ok')} />;
   }
 
-  // Determine which main view to display
-  const isSettingsRoute = route === 'settings' || activeNavTab === 'settings';
+  // Connections & Automations now live inside the Settings panel;
+  // the hash router maps legacy links there, and stale nav tabs fall through too.
+  const effectiveTab: typeof activeNavTab =
+    activeNavTab === 'connections' || activeNavTab === 'automations'
+      ? 'settings'
+      : activeNavTab;
+  const isSettingsRoute = route === 'settings' || effectiveTab === 'settings';
 
   const renderMainContent = () => {
     if (isSettingsRoute) {
@@ -130,7 +134,7 @@ export const App: React.FC = () => {
       );
     }
 
-    switch (activeNavTab) {
+    switch (effectiveTab) {
       case 'editor':
         return <SimpleEditorView />;
 
@@ -147,11 +151,8 @@ export const App: React.FC = () => {
         }
         return <GroupList />;
 
-      case 'connections':
-        return <ConnectionsView />;
-
-      case 'automations':
-        return <AutomationsView />;
+      case 'feed':
+        return <FeedView />;
 
       case 'chat':
       default:
@@ -165,7 +166,7 @@ export const App: React.FC = () => {
 
   return (
     <div className="flex h-screen max-h-screen w-screen overflow-hidden bg-background font-sans text-foreground select-none">
-      {/* 1. Leftmost: Agent Rail */}
+      {/* 1. Leftmost: Agent Rail (brand, agents, dev FAB, settings) */}
       <AgentRail
         onOpenCreateAgent={() => setIsNewAgentModalOpen(true)}
         onOpenSettings={() => {
@@ -174,21 +175,17 @@ export const App: React.FC = () => {
         }}
       />
 
-      {/* 2. Middle-Left: Scoped Sessions & Navigation Sidebar */}
-      {!isSettingsRoute && (
-        <AppSidebar
-          collapsed={sidebarCollapsed}
-          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-        />
-      )}
-
-      {/* 3. Main Workspace Surface */}
+      {/* 2. Main Workspace Surface — no permanent sidebar; history is a floating right panel */}
       <main className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative bg-background">
         {renderMainContent()}
 
         {/* Global Terminal Dock */}
         {terminalOpen && <TerminalDock />}
       </main>
+
+      {/* 3. Floating right panels (session history & profile) */}
+      <SessionsPanel />
+      <ProfilePanel />
 
       {/* New Agent Modal */}
       <NewAgentModal

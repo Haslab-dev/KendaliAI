@@ -13,11 +13,14 @@ import {
   BarChart3,
   RefreshCw,
   FolderOpen,
+  Share2,
+  CalendarClock,
 } from 'lucide-react';
 import { useProfileStore } from '../../store/useProfileStore';
 import { useAppStore } from '../../store/useAppStore';
 import { useAgentStore } from '../../store/useAgentStore';
 import { ProfileRow } from '../shell/ProfileRow';
+import { APP_VERSION, APP_BUILD } from '../../lib/utils';
 import { navigate } from '../../router';
 import { cn } from '../../lib/utils';
 import {
@@ -37,6 +40,8 @@ import { PluginsPane } from '../../panes/plugins';
 import { ToolsPane } from '../../panes/tools';
 import { ChannelsSettingsPane } from './ChannelsSettingsPane';
 import { DashboardPane } from '../../panes/dashboard';
+import { ConnectionsView } from '../connections/ConnectionsView';
+import { AutomationsView } from '../automations/AutomationsView';
 
 export type SettingsSectionId =
   | 'general'
@@ -48,6 +53,8 @@ export type SettingsSectionId =
   | 'mcps'
   | 'plugins'
   | 'channels'
+  | 'connections'
+  | 'automations'
   | 'dashboard';
 
 interface NavItem {
@@ -86,6 +93,14 @@ const NAV_GROUPS: Array<{ id: string; label: string; items: NavItem[] }> = [
     ],
   },
   {
+    id: 'integrations',
+    label: 'Integrations',
+    items: [
+      { id: 'connections', label: 'Connections', icon: Share2 },
+      { id: 'automations', label: 'Automations', icon: CalendarClock },
+    ],
+  },
+  {
     id: 'system',
     label: 'System',
     items: [
@@ -98,14 +113,43 @@ const SECTION_TITLES: Record<SettingsSectionId, string> = {
   general: 'General',
   appearance: 'Appearance',
   providers: 'AI Providers & Models',
-  acpAgents: 'Agent Client Protocol (ACP) & Orchestrators',
-  tools: 'Tools & Security Policies',
-  skills: 'Agent Skills Catalog',
-  mcps: 'Model Context Protocol (MCP) Servers',
-  plugins: 'Community & Ecosystem Plugins',
-  channels: 'Channels & Messaging Bridge',
-  dashboard: 'Diagnostics, Usage & System Logs',
+  acpAgents: 'ACP Orchestrators',
+  tools: 'Tools & Policies',
+  skills: 'Skills',
+  mcps: 'MCP Servers',
+  plugins: 'Plugins',
+  channels: 'Channels',
+  connections: 'Connections',
+  automations: 'Automations',
+  dashboard: 'Diagnostics & Usage',
 };
+
+/** One-line description shown under each section title. */
+const SECTION_SUBTITLES: Partial<Record<SettingsSectionId, string>> = {
+  general: 'Workspace, indexing, and runtime environment.',
+  appearance: 'Themes, contrast, fonts, and chat density.',
+  providers: 'Connect OpenAI, Anthropic, DeepSeek, Ollama, or custom /v1 endpoints.',
+  acpAgents: 'Agent Client Protocol — external CLI runners and orchestrators.',
+  tools: 'ALLOW / APPROVAL / DENY policies per agent role.',
+  skills: 'Modular domain instructions (SKILL.md) loaded on demand.',
+  mcps: 'Supervised background tools and remote MCP endpoints.',
+  plugins: 'Default capability plugins and community extensions.',
+  channels: 'Telegram and messaging bridge configuration.',
+  connections: 'Composio app connectors — GitHub, Gmail, Google Workspace, and more.',
+  automations: 'Schedules, routines, and background agent loops.',
+  dashboard: 'Live telemetry, usage counters, and system logs.',
+};
+
+/** Sections that need the wide content column (dense grids, tables). */
+const WIDE_SECTIONS: SettingsSectionId[] = [
+  'providers',
+  'plugins',
+  'connections',
+  'automations',
+  'dashboard',
+  'channels',
+  'appearance',
+];
 
 interface SettingsScreenProps {
   section?: string;
@@ -138,9 +182,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ section }) => {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground select-none">
-      {/* 1. Left Navigation Sidebar */}
-      <aside className="flex w-64 shrink-0 flex-col border-r border-border/40 bg-sidebar transition-colors">
+    <div className="flex h-full w-full overflow-hidden bg-background text-foreground select-none">
+      {/* 1. Left Navigation Sidebar (hidden on mobile — chips row below) */}
+      <aside className="hidden w-64 shrink-0 flex-col border-r border-border/40 bg-sidebar transition-colors md:flex">
         {/* Top Back Action */}
         <div className="flex h-12 shrink-0 items-center justify-between border-b border-border/40 px-3">
           <button
@@ -206,19 +250,54 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ section }) => {
 
       {/* 2. Content Column */}
       <section className="relative flex min-h-0 flex-col flex-1 bg-background overflow-hidden">
-        {/* Top hairline bar with breadcrumb */}
-        <div className="h-12 shrink-0 border-b border-border/40 bg-background/50 backdrop-blur-xs">
-          <div className="flex h-full items-center justify-between px-6">
-            <span className="truncate text-ui-sm text-foreground-subtle font-medium">
+        {/* Mobile: back + horizontal section chips (md:hidden) */}
+        <div className="shrink-0 border-b border-border/40 bg-sidebar/60 md:hidden">
+          <div className="flex items-center justify-between px-3 pt-2">
+            <button
+              type="button"
+              onClick={handleBackToWorkspace}
+              className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-ui-xs font-semibold text-foreground-subtle transition-colors hover:bg-foreground/5 hover:text-foreground cursor-pointer"
+            >
+              <ArrowLeft className="size-3.5" />
+              <span>Back</span>
+            </button>
+            <span className="truncate text-ui-xs font-semibold text-foreground">
               {SECTION_TITLES[activeSection]}
             </span>
+          </div>
+          <div className="flex items-center gap-1.5 overflow-x-auto px-3 py-2 scrollbar-none">
+            {NAV_GROUPS.flatMap((grp) => grp.items).map((item) => {
+              const Icon = item.icon;
+              const isActive = activeSection === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setActiveSection(item.id)}
+                  className={cn(
+                    'flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-ui-xs font-medium transition-colors cursor-pointer',
+                    isActive
+                      ? 'border-primary/40 bg-primary/10 text-primary font-semibold'
+                      : 'border-border/60 text-foreground-subtle hover:bg-foreground/5 hover:text-foreground'
+                  )}
+                >
+                  <Icon className="size-3.5 shrink-0" />
+                  <span className="whitespace-nowrap">{item.label}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
         {/* Scrollable content pane */}
         <main className="min-h-0 flex-1 overflow-y-auto">
-          <div className={cn(SETTINGS_FRAME_CONTENT_CLASSNAME, 'flex flex-col gap-6 pt-6')}>
-            <SectionTitle title={SECTION_TITLES[activeSection]} />
+          <div
+            className={cn(
+              'mx-auto flex w-full flex-col gap-6 px-4 pb-10 pt-6 lg:px-8',
+              WIDE_SECTIONS.includes(activeSection) ? 'max-w-6xl' : SETTINGS_FRAME_CONTENT_CLASSNAME
+            )}
+          >
+            <SectionTitle title={SECTION_TITLES[activeSection]} subtitle={SECTION_SUBTITLES[activeSection]} />
             <SectionErrorBoundary section={activeSection}>
               <div className="space-y-6">
                 {activeSection === 'general' && <GeneralSection />}
@@ -230,6 +309,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ section }) => {
                 {activeSection === 'mcps' && <McpsPane />}
                 {activeSection === 'plugins' && <PluginsPane />}
                 {activeSection === 'channels' && <ChannelsSettingsPane />}
+                {activeSection === 'connections' && <ConnectionsView embedded />}
+                {activeSection === 'automations' && <AutomationsView embedded />}
                 {activeSection === 'dashboard' && <DashboardPane />}
               </div>
             </SectionErrorBoundary>
@@ -338,7 +419,7 @@ const GeneralSection: React.FC = () => {
           description="Local developer environment with multi-agent orchestration."
           control={
             <span className="font-mono text-ui-xs font-semibold text-foreground-subtle">
-              v0.6.0 #55
+              v{APP_VERSION} #{APP_BUILD}
             </span>
           }
         />

@@ -2,6 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { useProfileStore } from '../../store/useProfileStore';
 import { useAppStore } from '../../store/useAppStore';
 import { useAgentStore } from '../../store/useAgentStore';
+import { navigateSettings } from '../../router';
+import { PluginCheckboxGrid, usePluginCatalog } from '../shell/PluginCatalog';
 import {
   Edit3,
   Copy,
@@ -15,6 +17,7 @@ import {
   X,
   Save,
   ArrowLeft,
+  Puzzle,
 } from 'lucide-react';
 import { GrokAvatar, GROK_AVATARS, AI_BOT_AVATARS, CLASSIC_SHAPE_AVATARS } from '../GrokAvatar';
 import { BUILTIN_AGENT_ENGINES } from '../common/AgentTaskInputBar';
@@ -24,8 +27,9 @@ export const AgentProfileDetail: React.FC = () => {
   const { activeAgent, updateAgent, duplicateAgent, deleteAgent, setActiveNavTab } = useProfileStore();
   const { availableModels, defaultModel } = useAppStore();
   const acpAgents = useAgentStore((s) => s.acpAgents);
+  const catalog = usePluginCatalog();
 
-  const [activeTab, setActiveTab] = useState<'prompt' | 'channels' | 'behavior' | 'tools' | 'mcp' | 'skills'>('prompt');
+  const [activeTab, setActiveTab] = useState<'prompt' | 'channels' | 'behavior' | 'tools' | 'mcp' | 'skills' | 'plugins'>('prompt');
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const [avatarCategory, setAvatarCategory] = useState<'ai-bot' | 'classic'>('ai-bot');
   const [hoveredAvatar, setHoveredAvatar] = useState<string | null>(null);
@@ -82,6 +86,14 @@ export const AgentProfileDetail: React.FC = () => {
     }
     return list;
   }, [acpAgents]);
+
+  // Effective enabled plugins: explicit list wins; undefined = catalog defaults.
+  const effectivePlugins = useMemo(() => {
+    if (activeAgent?.plugins) return activeAgent.plugins;
+    if (!catalog) return [];
+    return catalog.plugins.filter((p) => p.defaultOn).map((p) => p.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeAgent?.plugins, catalog]);
 
   if (!activeAgent) {
     return (
@@ -369,6 +381,7 @@ export const AgentProfileDetail: React.FC = () => {
             { id: 'tools', label: `Tools ${activeAgent.tools?.length || 13}` },
             { id: 'mcp', label: `MCP ${activeAgent.mcp?.length || 0}` },
             { id: 'skills', label: `Skills ${activeAgent.skills?.length || 8}` },
+            { id: 'plugins', label: `Plugins ${effectivePlugins.length}` },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -590,6 +603,37 @@ export const AgentProfileDetail: React.FC = () => {
               </div>
             ))}
           </div>
+        )}
+
+        {activeTab === 'plugins' && (
+          catalog ? (
+            <div className="rounded-2xl border border-border/60 bg-card/40 p-5">
+              <div className="flex items-center gap-2 pb-4">
+                <Puzzle className="size-4 text-primary" />
+                <span className="font-semibold text-ui-base text-foreground">
+                  Capability plugins — {activeAgent.name}
+                </span>
+              </div>
+              <PluginCheckboxGrid
+                catalog={catalog}
+                enabled={effectivePlugins}
+                onToggle={(pluginId) => {
+                  const next = effectivePlugins.includes(pluginId)
+                    ? effectivePlugins.filter((id) => id !== pluginId)
+                    : [...effectivePlugins, pluginId];
+                  updateAgent({ id: activeAgent.id, plugins: next });
+                }}
+                onOpenConnections={() => {
+                  setActiveNavTab('settings');
+                  navigateSettings('connections');
+                }}
+              />
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-border/60 bg-card p-5 text-ui-xs text-muted-foreground animate-pulse">
+              Loading plugin catalog…
+            </div>
+          )
         )}
 
         {/* 4. Action Buttons (2x2 Grid + Destructive Row) (Exact Screenshot Parity) */}

@@ -1,13 +1,12 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useProfileStore } from '../../store/useProfileStore';
-import { useSessionStore } from '../../store/useSessionStore';
-import { useAppStore } from '../../store/useAppStore';
+import { useSessionStore, isMainSession } from '../../store/useSessionStore';
 import { useAgentStore } from '../../store/useAgentStore';
+import { useUIStore } from '../../store/useUIStore';
 import {
   Plus,
   Search,
   CalendarClock,
-  UserRound,
   Users,
   Share2,
   ListFilter,
@@ -17,29 +16,19 @@ import {
   BellOff,
   Trash2,
   X,
-  PanelLeft,
   RotateCcw,
-  Square,
-  Clock,
   CirclePlus,
   CheckCircle2,
-  Terminal,
-  FolderGit2,
-  Code2,
+  Home,
 } from 'lucide-react';
 import { cn } from '../../lib/cn';
 import { relativeTime } from '../../lib/time';
-import { ProfileRow } from '../shell/ProfileRow';
-import { AgentIcon } from '../shell/AgentIcon';
+import { navigateSettings } from '../../router';
+import { AgentIcon } from './AgentIcon';
 import { ProviderIcon } from '../agent/ProviderIcon';
 import { Session } from '../../types';
 
-interface AppSidebarProps {
-  collapsed: boolean;
-  onToggleCollapse: () => void;
-}
-
-type SidebarTab = 'active' | 'pinned' | 'snoozed' | 'archived';
+type PanelTab = 'active' | 'pinned' | 'snoozed' | 'archived';
 type ListSortBy = 'updated' | 'created';
 
 function loadSnoozedSessions(): Record<string, number> {
@@ -94,21 +83,21 @@ function HighlightMatch({ text, query }: { text: string; query?: string }) {
   );
 }
 
-export const AppSidebar: React.FC<AppSidebarProps> = ({
-  collapsed,
-  onToggleCollapse,
-}) => {
+/**
+ * Floating right sidebar with the session history. Hidden by default; slides
+ * in from the right when the header hamburger is clicked. Purely an overlay —
+ * it never pushes the chat content.
+ */
+export const SessionsPanel: React.FC = () => {
   const {
     activeAgent,
     selectedAgentId,
-    selectAgent,
     activeGroup,
     selectedGroupId,
     activeNavTab,
     setActiveNavTab,
     agents,
     groups,
-    selectGroup,
   } = useProfileStore();
 
   const {
@@ -116,17 +105,15 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
     selectSession,
     deleteSession,
     pinSession,
-    getAgentSessions,
     createSessionForGroup,
     sessions: allStoreSessions,
     searchQuery,
     setSearchQuery,
-    stopSession,
   } = useSessionStore();
 
-  const { themeMode, setThemeMode } = useAppStore();
+  const { rightPanel, closePanels, toggleProfilePanel } = useUIStore();
 
-  const [sidebarTab, setSidebarTab] = useState<SidebarTab>('active');
+  const [panelTab, setPanelTab] = useState<PanelTab>('active');
   const [sortBy, setSortBy] = useState<ListSortBy>('updated');
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const [snoozedMap, setSnoozedMap] = useState<Record<string, number>>(loadSnoozedSessions);
@@ -134,6 +121,9 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const filterMenuRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  const isOpen = rightPanel === 'sessions';
 
   useEffect(() => {
     const handleOutside = (e: MouseEvent) => {
@@ -147,20 +137,15 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
     return () => document.removeEventListener('mousedown', handleOutside);
   }, [filterMenuOpen]);
 
-  // Global keyboard shortcuts (⌘N for New Task, ⌘K for search)
+  // Close on Escape
   useEffect(() => {
+    if (!isOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'n') {
-        e.preventDefault();
-        handleNewTask();
-      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        searchInputRef.current?.focus();
-      }
+      if (e.key === 'Escape') closePanels();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [isOpen, closePanels]);
 
   const handleNewTask = async () => {
     if (activeNavTab === 'groups' && activeGroup) {
@@ -231,9 +216,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   };
 
   // Group chat sessions belong exclusively to Groups mode.
-  // Each agent has their own isolated sessions in Chat mode.
   const baseSessions = useMemo(() => {
-    // 1. If currently in Groups mode or a group agent is selected: show only sessions for this group agent
     if (activeNavTab === 'groups' || (!selectedAgentId && activeGroup)) {
       const gId = activeGroup?.id || selectedGroupId;
       if (!gId) return [];
@@ -250,25 +233,22 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
       });
     }
 
-    // 2. Chat mode: show strictly only sessions belonging to the currently selected agent
     const targetAgentId = selectedAgentId || activeAgent?.id || agents[0]?.id || 'lutfi';
     return allStoreSessions.filter((s) => s.type !== 'group' && s.agentId === targetAgentId);
   }, [activeNavTab, selectedAgentId, activeGroup, selectedGroupId, activeAgent, agents, allStoreSessions]);
 
-  // Tab counts
   const pinnedCount = useMemo(() => baseSessions.filter((s) => s.pinned).length, [baseSessions]);
   const snoozedCount = useMemo(() => baseSessions.filter((s) => (snoozedMap[s.id] || 0) > Date.now()).length, [baseSessions, snoozedMap]);
   const archivedCount = useMemo(() => baseSessions.filter((s) => archivedIds.has(s.id)).length, [baseSessions, archivedIds]);
 
-  // Filtered and sorted flat session list (no project grouping!)
   const filteredSessions = useMemo(() => {
     return baseSessions
       .filter((sess) => {
         const isArchived = archivedIds.has(sess.id);
         const isSnoozed = (snoozedMap[sess.id] || 0) > Date.now();
         const isPinned = sess.pinned;
+        const isMain = isMainSession(sess);
 
-        // Search match
         if (searchQuery.trim()) {
           const q = searchQuery.toLowerCase().trim();
           const title = sess.title || '';
@@ -277,16 +257,19 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           }
         }
 
-        if (sidebarTab === 'pinned') return isPinned;
-        if (sidebarTab === 'snoozed') return isSnoozed;
-        if (sidebarTab === 'archived') return isArchived;
+        if (panelTab === 'pinned') return isPinned;
+        if (panelTab === 'snoozed') return isSnoozed;
+        if (panelTab === 'archived') return isArchived;
 
-        // Default 'active' tab hides archived and snoozed
-        if (isArchived || isSnoozed) return false;
+        // Main Chat is permanent — it never hides from the active list
+        if (!isMain && (isArchived || isSnoozed)) return false;
         return true;
       })
       .sort((a, b) => {
-        if (sidebarTab === 'active') {
+        // Main Chat always floats to the top
+        const mainDiff = (isMainSession(b) ? 1 : 0) - (isMainSession(a) ? 1 : 0);
+        if (mainDiff !== 0) return mainDiff;
+        if (panelTab === 'active') {
           if (a.pinned && !b.pinned) return -1;
           if (!a.pinned && b.pinned) return 1;
         }
@@ -295,166 +278,84 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
         }
         return (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0);
       });
-  }, [baseSessions, searchQuery, sidebarTab, sortBy, archivedIds, snoozedMap]);
+  }, [baseSessions, searchQuery, panelTab, sortBy, archivedIds, snoozedMap]);
 
-  if (collapsed) {
-    return (
-      <aside className="w-12 shrink-0 h-full bg-sidebar border-r border-sidebar-border flex flex-col items-center py-3 select-none">
-        <button
-          onClick={onToggleCollapse}
-          className="w-8 h-8 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors cursor-pointer"
-          title="Expand sidebar"
-        >
-          <PanelLeft className="w-4 h-4" />
-        </button>
-      </aside>
-    );
-  }
-
-  const sidebarActionClasses =
-    'flex h-7.5 w-full shrink-0 items-center justify-start gap-2.5 rounded-[6px] px-2.5 text-left text-ui-sm font-medium text-foreground/85 transition-colors cursor-pointer hover:bg-foreground/5 hover:text-foreground';
+  if (!isOpen) return null;
 
   return (
-    <aside className="w-64 shrink-0 h-full bg-sidebar border-r border-sidebar-border flex flex-col select-none text-sidebar-foreground transition-colors overflow-hidden">
-      {/* Top Window Strip / Collapse Button */}
-      <div className="flex shrink-0 items-center justify-between px-3 h-9 border-b border-sidebar-border">
-        <span className="text-[11px] font-semibold tracking-wider uppercase text-muted-foreground truncate max-w-[180px]">
-          {activeNavTab === 'groups'
-            ? activeGroup?.name || 'Group Tasks'
-            : activeAgent?.name || 'Workspace'}
-        </span>
-        <button
-          type="button"
-          onClick={onToggleCollapse}
-          aria-label="Hide sidebar (⌘B)"
-          title="Hide sidebar (⌘B)"
-          className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-foreground/5 hover:text-foreground transition-colors cursor-pointer"
-        >
-          <PanelLeft className="size-4" />
-        </button>
-      </div>
+    <>
+      {/* Transparent click-catcher */}
+      <div className="fixed inset-0 z-40" onClick={closePanels} />
 
-      {/* Top actions: + New task, Search, Profile, Groups, Connections, Automations, Git Client, Editor */}
-      <div className="flex flex-col gap-0.5 px-2 pb-2 pt-1.5 border-b border-sidebar-border">
-        {/* + New task */}
-        <button
-          type="button"
-          onClick={handleNewTask}
-          className={cn(
-            sidebarActionClasses,
-            activeNavTab === 'chat' && !activeSessionId ? 'bg-foreground/10 text-foreground font-semibold' : ''
-          )}
-        >
-          <Plus className="size-4 shrink-0 text-foreground" />
-          <span className="min-w-0 flex-1 truncate">New task</span>
-          <span className="ml-auto shrink-0 text-ui-xs font-normal text-muted-foreground">⌘N</span>
-        </button>
+      <aside
+        ref={panelRef}
+        className="panel-slide-in-right fixed right-0 top-0 z-50 h-full w-[320px] shrink-0 bg-sidebar/95 backdrop-blur-xl border-l border-sidebar-border shadow-2xl flex flex-col select-none text-sidebar-foreground overflow-hidden"
+      >
+        {/* Panel header */}
+        <div className="flex shrink-0 items-center justify-between px-3 h-10 border-b border-sidebar-border">
+          <span className="text-[11px] font-semibold tracking-wider uppercase text-muted-foreground truncate max-w-[220px]">
+            {activeNavTab === 'groups'
+              ? activeGroup?.name || 'Group Tasks'
+              : activeAgent?.name || 'Workspace'}
+          </span>
+          <button
+            type="button"
+            onClick={closePanels}
+            aria-label="Close session history"
+            title="Close"
+            className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-foreground/5 hover:text-foreground transition-colors cursor-pointer"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
 
-        {/* Search */}
-        <button
-          type="button"
-          onClick={() => searchInputRef.current?.focus()}
-          className={sidebarActionClasses}
-          title="Search tasks (⌘K)"
-        >
-          <Search className="size-4 shrink-0 text-foreground/75" />
-          <span className="min-w-0 flex-1 truncate">Search</span>
-          <span className="ml-auto shrink-0 text-ui-xs font-normal text-muted-foreground">⌘K</span>
-        </button>
+        {/* Quick actions */}
+        <div className="flex items-center gap-1.5 px-2.5 py-2 border-b border-sidebar-border">
+          <button
+            type="button"
+            onClick={handleNewTask}
+            className="flex h-7 flex-1 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border/70 text-ui-xs font-medium text-foreground/85 transition-colors cursor-pointer hover:bg-foreground/5 hover:text-foreground"
+            title="New task (⌘N)"
+          >
+            <Plus className="size-3.5" />
+            <span>New task</span>
+          </button>
+          <button
+            type="button"
+            onClick={toggleProfilePanel}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors cursor-pointer hover:bg-foreground/5 hover:text-foreground"
+            title="Profile"
+          >
+            <Users className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              closePanels();
+              setActiveNavTab('settings');
+              navigateSettings('connections');
+            }}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors cursor-pointer hover:bg-foreground/5 hover:text-foreground"
+            title="Connections"
+          >
+            <Share2 className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              closePanels();
+              setActiveNavTab('settings');
+              navigateSettings('automations');
+            }}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors cursor-pointer hover:bg-foreground/5 hover:text-foreground"
+            title="Automations"
+          >
+            <CalendarClock className="size-3.5" />
+          </button>
+        </div>
 
-        {/* Profile (agent profile) */}
-        <button
-          type="button"
-          onClick={() => setActiveNavTab('agent')}
-          className={cn(
-            sidebarActionClasses,
-            activeNavTab === 'agent' ? 'bg-foreground/10 text-foreground font-semibold' : ''
-          )}
-          title="Profile (Agent Profile)"
-        >
-          <UserRound className="size-4 shrink-0 text-foreground/75" />
-          <span className="min-w-0 flex-1 truncate">Profile</span>
-        </button>
-
-        {/* Groups */}
-        <button
-          type="button"
-          onClick={() => {
-            selectSession(null);
-            selectGroup(null);
-            setActiveNavTab('groups');
-          }}
-          className={cn(
-            sidebarActionClasses,
-            activeNavTab === 'groups' && !activeGroup && !activeSessionId ? 'bg-foreground/10 text-foreground font-semibold' : ''
-          )}
-          title="Groups"
-        >
-          <Users className="size-4 shrink-0 text-foreground/75" />
-          <span className="min-w-0 flex-1 truncate">Groups</span>
-        </button>
-
-        {/* Connections */}
-        <button
-          type="button"
-          onClick={() => setActiveNavTab('connections')}
-          className={cn(
-            sidebarActionClasses,
-            activeNavTab === 'connections' ? 'bg-foreground/10 text-foreground font-semibold' : ''
-          )}
-          title="Connections"
-        >
-          <Share2 className="size-4 shrink-0 text-foreground/75" />
-          <span className="min-w-0 flex-1 truncate">Connections</span>
-        </button>
-
-        {/* Automations */}
-        <button
-          type="button"
-          onClick={() => setActiveNavTab('automations')}
-          className={cn(
-            sidebarActionClasses,
-            activeNavTab === 'automations' ? 'bg-foreground/10 text-foreground font-semibold' : ''
-          )}
-          title="Automations"
-        >
-          <CalendarClock className="size-4 shrink-0 text-foreground/75" />
-          <span className="min-w-0 flex-1 truncate">Automations</span>
-        </button>
-
-        {/* Git Client */}
-        <button
-          type="button"
-          onClick={() => setActiveNavTab('git')}
-          className={cn(
-            sidebarActionClasses,
-            activeNavTab === 'git' ? 'bg-foreground/10 text-foreground font-semibold' : ''
-          )}
-          title="Git Client"
-        >
-          <FolderGit2 className="size-4 shrink-0 text-foreground/75" />
-          <span className="min-w-0 flex-1 truncate">Git Client</span>
-        </button>
-
-        {/* Simple Editor */}
-        <button
-          type="button"
-          onClick={() => setActiveNavTab('editor')}
-          className={cn(
-            sidebarActionClasses,
-            activeNavTab === 'editor' ? 'bg-foreground/10 text-foreground font-semibold' : ''
-          )}
-          title="Simple Editor (File Explorer & Shell)"
-        >
-          <Code2 className="size-4 shrink-0 text-foreground/75" />
-          <span className="min-w-0 flex-1 truncate">Editor</span>
-        </button>
-      </div>
-
-      {/* Scrollable Tasks Area */}
-      <div className="relative flex min-h-0 flex-1 flex-col pt-1.5">
-        {/* Unified Search & List Controls Bar */}
-        <div className="flex items-center gap-1.5 px-2.5 pb-2">
+        {/* Search & list controls */}
+        <div className="flex items-center gap-1.5 px-2.5 py-2">
           <div className="relative flex-1 flex items-center">
             <Search className="absolute left-2 size-3.5 text-muted-foreground pointer-events-none" />
             <input
@@ -528,10 +429,10 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
 
           <button
             type="button"
-            onClick={() => setSidebarTab(sidebarTab === 'archived' ? 'active' : 'archived')}
+            onClick={() => setPanelTab(panelTab === 'archived' ? 'active' : 'archived')}
             className={cn(
               'flex size-7 shrink-0 items-center justify-center rounded-md border border-border/70 transition-colors cursor-pointer',
-              sidebarTab === 'archived' ? 'bg-accent text-foreground border-primary/40' : 'text-muted-foreground hover:bg-foreground/5 hover:text-foreground'
+              panelTab === 'archived' ? 'bg-accent text-foreground border-primary/40' : 'text-muted-foreground hover:bg-foreground/5 hover:text-foreground'
             )}
             title="Archived tasks"
           >
@@ -539,16 +440,16 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           </button>
         </div>
 
-        {/* Filter Segmented Tabs: Active, Pinned, Snoozed, Archived */}
+        {/* Filter segmented tabs */}
         <div className="flex items-center gap-1 px-2.5 pb-2 text-ui-xs overflow-x-auto scrollbar-none">
           {(['active', 'pinned', 'snoozed', 'archived'] as const).map((tab) => {
-            const isSelected = sidebarTab === tab;
+            const isSelected = panelTab === tab;
             const count = tab === 'pinned' ? pinnedCount : tab === 'snoozed' ? snoozedCount : tab === 'archived' ? archivedCount : 0;
             return (
               <button
                 key={tab}
                 type="button"
-                onClick={() => setSidebarTab(tab)}
+                onClick={() => setPanelTab(tab)}
                 className={cn(
                   'px-2 py-0.5 rounded-full capitalize transition-colors cursor-pointer shrink-0 text-ui-xs',
                   isSelected
@@ -562,16 +463,16 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           })}
         </div>
 
-        {/* Tasks Section Header */}
+        {/* Tasks section header */}
         <div className="flex items-center justify-between px-3.5 pb-1 text-ui-xs font-semibold uppercase tracking-wider text-muted-foreground/75">
-          <span>Tasks</span>
+          <span>History</span>
           <span className="text-[10px] lowercase text-muted-foreground font-normal">
             {filteredSessions.length} {filteredSessions.length === 1 ? 'task' : 'tasks'}
           </span>
         </div>
 
-        {/* Flat Task List (NO project groupings!) */}
-        <div className="flex-1 overflow-y-auto px-1.5 space-y-0.5 scrollbar-thin scrollbar-thumb-border">
+        {/* Flat task list */}
+        <div className="flex-1 overflow-y-auto px-1.5 space-y-0.5 pb-3 scrollbar-thin scrollbar-thumb-border">
           {filteredSessions.length === 0 ? (
             <div className="py-10 text-center text-ui-xs text-muted-foreground/60">
               No tasks found
@@ -583,6 +484,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               const isPinned = sess.pinned;
               const isSnoozed = (snoozedMap[sess.id] || 0) > Date.now();
               const isArchived = archivedIds.has(sess.id);
+              const isMain = isMainSession(sess);
               const isGroup = sess.type === 'group';
               const groupMembers = isGroup ? getSessionGroupMembers(sess) : [];
               const displayGroupMembers = groupMembers.slice(0, 3);
@@ -614,7 +516,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                 : null;
 
               let displayTitle = sess.title || 'Untitled task';
-              // If group session title is just the group's name, don't repeat the group name for every session!
               if (
                 isGroup &&
                 (displayTitle.toLowerCase() === (activeGroup?.name || '').toLowerCase() ||
@@ -647,7 +548,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                     isSnoozed && !isActive && 'opacity-50'
                   )}
                 >
-                  {/* Task Icon: Stacked Member Avatars (max 3) for Groups, AgentIcon for Direct Tasks */}
+                  {/* Task icon: stacked member avatars for groups, AgentIcon for direct tasks */}
                   {isGroup ? (
                     <div className="flex -space-x-1.5 shrink-0 items-center">
                       {displayGroupMembers.length > 0 ? (
@@ -709,100 +610,104 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                     <span className="truncate">
                       <HighlightMatch text={displayTitle} query={searchQuery} />
                     </span>
+                    {isMain && (
+                      <span title="Main Chat — permanent" className="shrink-0 flex">
+                        <Home className="size-3 text-primary fill-primary/30" />
+                      </span>
+                    )}
                     {isPinned && (
                       <Pin className="size-2.5 text-primary shrink-0 rotate-45 fill-primary" />
                     )}
                   </span>
 
-                  {/* Right side: Timestamp & Hover Action Buttons */}
+                  {/* Right side: timestamp & hover actions */}
                   <div className="flex shrink-0 items-center gap-1">
-                    {/* Time elapsed label */}
                     <span className="text-ui-xs text-muted-foreground group-hover/session-item:hidden">
                       {relativeTime(sess.updatedAt || sess.createdAt)}
                     </span>
 
-                    {/* Pin button */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        togglePin(sess.id, isPinned);
-                      }}
-                      className={cn(
-                        'size-5 items-center justify-center rounded p-0.5 transition-colors cursor-pointer',
-                        isPinned
-                          ? 'flex text-primary hover:bg-foreground/5'
-                          : 'hidden text-muted-foreground hover:text-foreground hover:bg-foreground/5 group-hover/session-item:flex'
-                      )}
-                      title={isPinned ? 'Unpin task' : 'Pin task to top'}
-                    >
-                      <Pin className={cn('size-3', isPinned && 'fill-primary')} />
-                    </button>
+                    {isMain ? (
+                      <span
+                        className="hidden shrink-0 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[9px] font-bold uppercase tracking-wider group-hover/session-item:hidden"
+                        title="Main Chat — cannot be deleted"
+                      >
+                        Main
+                      </span>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            togglePin(sess.id, isPinned);
+                          }}
+                          className={cn(
+                            'size-5 items-center justify-center rounded p-0.5 transition-colors cursor-pointer',
+                            isPinned
+                              ? 'flex text-primary hover:bg-foreground/5'
+                              : 'hidden text-muted-foreground hover:text-foreground hover:bg-foreground/5 group-hover/session-item:flex'
+                          )}
+                          title={isPinned ? 'Unpin task' : 'Pin task to top'}
+                        >
+                          <Pin className={cn('size-3', isPinned && 'fill-primary')} />
+                        </button>
 
-                    {/* Snooze button */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleSnooze(sess.id);
-                      }}
-                      className={cn(
-                        'size-5 items-center justify-center rounded p-0.5 transition-colors cursor-pointer',
-                        isSnoozed
-                          ? 'flex text-amber-500 hover:bg-foreground/5'
-                          : 'hidden text-muted-foreground hover:text-foreground hover:bg-foreground/5 group-hover/session-item:flex'
-                      )}
-                      title={isSnoozed ? 'Unsnooze task' : 'Snooze task for 24h'}
-                    >
-                      <BellOff className="size-3" />
-                    </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleSnooze(sess.id);
+                          }}
+                          className={cn(
+                            'size-5 items-center justify-center rounded p-0.5 transition-colors cursor-pointer',
+                            isSnoozed
+                              ? 'flex text-amber-500 hover:bg-foreground/5'
+                              : 'hidden text-muted-foreground hover:text-foreground hover:bg-foreground/5 group-hover/session-item:flex'
+                          )}
+                          title={isSnoozed ? 'Unsnooze task' : 'Snooze task for 24h'}
+                        >
+                          <BellOff className="size-3" />
+                        </button>
 
-                    {/* Archive button */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleArchive(sess.id);
-                      }}
-                      className={cn(
-                        'size-5 items-center justify-center rounded p-0.5 transition-colors cursor-pointer',
-                        isArchived
-                          ? 'flex text-primary hover:bg-foreground/5'
-                          : 'hidden text-muted-foreground hover:text-foreground hover:bg-foreground/5 group-hover/session-item:flex'
-                      )}
-                      title={isArchived ? 'Unarchive task' : 'Archive task'}
-                    >
-                      <Archive className="size-3" />
-                    </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleArchive(sess.id);
+                          }}
+                          className={cn(
+                            'size-5 items-center justify-center rounded p-0.5 transition-colors cursor-pointer',
+                            isArchived
+                              ? 'flex text-primary hover:bg-foreground/5'
+                              : 'hidden text-muted-foreground hover:text-foreground hover:bg-foreground/5 group-hover/session-item:flex'
+                          )}
+                          title={isArchived ? 'Unarchive task' : 'Archive task'}
+                        >
+                          {isArchived ? <RotateCcw className="size-3" /> : <Archive className="size-3" />}
+                        </button>
 
-                    {/* Delete button */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteSession(sess.id);
-                      }}
-                      className="hidden size-5 items-center justify-center rounded p-0.5 text-muted-foreground hover:text-destructive hover:bg-foreground/5 group-hover/session-item:flex cursor-pointer transition-colors"
-                      title="Delete task"
-                    >
-                      <Trash2 className="size-3" />
-                    </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteSession(sess.id);
+                          }}
+                          className="hidden size-5 items-center justify-center rounded p-0.5 text-muted-foreground hover:text-destructive hover:bg-foreground/5 group-hover/session-item:flex cursor-pointer transition-colors"
+                          title="Delete task"
+                        >
+                          <Trash2 className="size-3" />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               );
             })
           )}
         </div>
-      </div>
-
-      {/* Footer ProfileRow */}
-      <ProfileRow
-        theme={themeMode}
-        onToggleTheme={(next) => setThemeMode(next)}
-        onOpenSettings={() => setActiveNavTab('settings')}
-      />
-    </aside>
+      </aside>
+    </>
   );
 };
 
-export default AppSidebar;
+export default SessionsPanel;

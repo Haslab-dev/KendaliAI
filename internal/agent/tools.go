@@ -1999,6 +1999,22 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 		registry[name] = tool
 	}
 
+	// Default capability plugins: local document/visual/motion tools (pure Go,
+	// sandboxed to the workspace) and Google Workspace via Composio. Actual
+	// availability per agent is gated by its enabled plugin set (AgentConfig.Plugins).
+	for name, tool := range DocumentTools(workspaceRoot) {
+		registry[name] = tool
+	}
+	for name, tool := range VisualTools(workspaceRoot) {
+		registry[name] = tool
+	}
+	for name, tool := range MotionTools(workspaceRoot) {
+		registry[name] = tool
+	}
+	for name, tool := range GoogleWorkspaceTools(db) {
+		registry[name] = tool
+	}
+
 	return registry
 }
 

@@ -7,6 +7,7 @@ import {
 import { useAppStore } from '../store/useAppStore';
 import { ApiKeyModal } from '../components/ApiKeyModal';
 import { navigate } from '../router';
+import { PaneToolbar, PaneToolbarFilters, PaneToolbarActions, StatChip } from '../components/settings/settingsPrimitives';
 import {
   ProviderConfig, AgentConfig, MCPServerConfig, SkillItem, ToolDefinition, TelegramBotConfig,
   ModelItem, isReasoningModel, EmbeddingConfig, DocumentItem
@@ -165,19 +166,17 @@ export const McpsPane: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-        <div>
-          <h3 className="text-base font-bold text-hi">Model Context Protocol (MCP) Servers</h3>
-          <p className="text-xs text-mid">
-            Supervised background tools, local CLI subprocesses, or remote Streamable HTTP / SSE endpoints.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+      <PaneToolbar>
+        <PaneToolbarFilters>
+          <StatChip label="servers" value={mcps.length} />
+          <StatChip label="tools cached" value={allMcpTools.length} tone="primary" />
+        </PaneToolbarFilters>
+        <PaneToolbarActions>
           <button
             type="button"
             onClick={() => handleFetchTools()}
             disabled={isFetchingTools}
-            className="px-2.5 py-1.5 bg-raised hover:bg-hoverbg border border-line rounded-lg text-xs font-semibold text-hi flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="px-2.5 py-1.5 bg-raised hover:bg-hoverbg border border-line rounded-lg text-xs font-semibold text-hi flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-60"
             title="Probe and update cached tools for all servers"
           >
             <RefreshCw size={13} className={isFetchingTools ? 'animate-spin' : ''} />
@@ -194,8 +193,8 @@ export const McpsPane: React.FC = () => {
             <Key size={13} />
             <span>Configure API Keys</span>
           </button>
-        </div>
-      </div>
+        </PaneToolbarActions>
+      </PaneToolbar>
 
       {/* Stats Overview Banner */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

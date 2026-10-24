@@ -53,6 +53,8 @@ export interface AgentConfig {
   mcp: string[];
   memoryScopes: string[];
   policy: Record<string, string>;
+  /** Enabled default capability plugins; undefined = catalog defaults. */
+  plugins?: string[];
   avatar: string;
   isDefault: boolean;
   isSuper?: boolean;
@@ -69,6 +71,19 @@ export interface AgentConfig {
   telegramBot?: TelegramBotConfig;
   createdAt?: number;
   updatedAt?: number;
+}
+
+/** One default capability plugin from /api/plugins/catalog. */
+export interface CatalogPlugin {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  engine: 'local' | 'composio';
+  tools: string[];
+  toolkit?: string;
+  skillHint?: string;
+  defaultOn: boolean;
 }
 
 export interface ChatParticipant {

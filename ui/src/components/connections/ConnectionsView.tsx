@@ -25,7 +25,7 @@ const COMPOSIO_KEY_URL = 'https://app.composio.dev/settings/api-keys';
 
 type ConnectPhase = 'idle' | 'connecting' | 'awaiting-oauth' | 'error';
 
-export const ConnectionsView: React.FC = () => {
+export const ConnectionsView: React.FC<{ embedded?: boolean }> = ({ embedded }) => {
   const [activeTab, setActiveTab] = useState<'connectors' | 'plugins'>('connectors');
   const [search, setSearch] = useState('');
   const [toolkits, setToolkits] = useState<ComposioToolkit[]>([]);
@@ -199,29 +199,33 @@ export const ConnectionsView: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 h-full overflow-y-auto bg-background px-4 sm:px-8 py-8 select-none">
+    <div className="flex-1 h-full overflow-y-auto bg-background select-none">
       <div className="max-w-3xl mx-auto space-y-6">
-        {/* Navigation Bar */}
-        <div className="flex items-center justify-between pb-2 border-b border-border/40">
-          <button
-            onClick={() => setActiveNavTab('chat')}
-            className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Back to Chat</span>
-          </button>
-          <span className="text-xs text-muted-foreground font-mono">App Connectors & Plugins</span>
-        </div>
-
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="space-y-1">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">Connections</h1>
-            <p className="text-xs text-muted-foreground">
-              Empower your agents with 500+ app connectors via Composio, plus custom plugins.
-            </p>
+        {/* Navigation Bar (hidden when embedded in Settings) */}
+        {!embedded && (
+          <div className="flex items-center justify-between pb-2 border-b border-border/40">
+            <button
+              onClick={() => setActiveNavTab('chat')}
+              className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Back to Chat</span>
+            </button>
+            <span className="text-xs text-muted-foreground font-mono">App Connectors & Plugins</span>
           </div>
-        </div>
+        )}
+
+        {/* Header (hidden when embedded — the Settings frame owns the title) */}
+        {!embedded && (
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <h1 className="text-2xl font-bold tracking-tight text-foreground">Connections</h1>
+              <p className="text-xs text-muted-foreground">
+                Empower your agents with 500+ app connectors via Composio, plus custom plugins.
+              </p>
+            </div>
+          </div>
+        )}
 
         {error && (
           <div className="flex items-start gap-2 rounded-xl border border-red-500/40 bg-red-500/5 px-4 py-3 text-xs text-red-400">

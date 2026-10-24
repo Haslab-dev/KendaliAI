@@ -5,6 +5,7 @@ import {
   Database, Eye, EyeOff, FileText, Upload, BookOpen
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
+import { PaneToolbar, PaneToolbarFilters, PaneToolbarActions, StatChip } from '../components/settings/settingsPrimitives';
 import {
   ProviderConfig, AgentConfig, MCPServerConfig, SkillItem, ToolDefinition, TelegramBotConfig,
   ModelItem, isReasoningModel, EmbeddingConfig, DocumentItem
@@ -46,29 +47,27 @@ export const ToolsPane: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-base font-bold text-hi">Capability Tools & Policies</h3>
-          <p className="text-xs text-mid">
-            Configure ALLOW, APPROVAL (Human-in-the-loop), or DENY policies per agent role.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-mid">Role:</span>
-          <select
-            className="px-3 py-1.5 bg-raised border border-line rounded-lg text-xs text-hi outline-none"
-            value={selectedAgent}
-            onChange={(e) => setSelectedAgent(e.target.value)}
-          >
-            {agents.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+      <PaneToolbar>
+        <PaneToolbarFilters>
+          <StatChip label="tools registered" value={tools.length} />
+        </PaneToolbarFilters>
+        <PaneToolbarActions>
+          <label className="flex items-center gap-2 text-xs text-mid">
+            <span className="whitespace-nowrap">Role:</span>
+            <select
+              className="px-3 py-1.5 bg-raised border border-line rounded-lg text-xs text-hi outline-none cursor-pointer"
+              value={selectedAgent}
+              onChange={(e) => setSelectedAgent(e.target.value)}
+            >
+              {agents.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </PaneToolbarActions>
+      </PaneToolbar>
 
       <div className="overflow-x-auto custom-scrollbar border border-line rounded-xl">
         <table className="w-full text-left text-xs border-collapse min-w-[540px]">

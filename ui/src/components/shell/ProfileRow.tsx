@@ -2,11 +2,11 @@ import React from 'react';
 import { Laptop, Moon, Sun } from 'lucide-react';
 import { cn } from '../../lib/cn';
 import type { ThemeMode } from '../../lib/theme';
+import { APP_VERSION, APP_BUILD } from '../../lib/utils';
 
 const NEXT_MODE: Record<ThemeMode, ThemeMode> = { light: 'dark', dark: 'system', system: 'light' };
 
-export const APP_VERSION = '0.6.0';
-export const APP_BUILD = 55;
+export { APP_VERSION, APP_BUILD };
 
 export const ProfileRow: React.FC<{
   theme: ThemeMode;

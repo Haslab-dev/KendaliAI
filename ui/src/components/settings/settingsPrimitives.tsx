@@ -86,10 +86,10 @@ export function SettingsRow({
     <div className="border-t border-border px-4 py-3 first:border-t-0">
       <div
         className={cn(
-          'grid items-center gap-4',
+          'grid items-center gap-3 sm:gap-4',
           controlLayout === 'wide'
             ? 'grid-cols-1 sm:grid-cols-[minmax(0,1fr)_280px]'
-            : 'grid-cols-[minmax(0,1fr)_192px]'
+            : 'grid-cols-1 sm:grid-cols-[minmax(0,1fr)_192px]'
         )}
       >
         <div className="min-w-0">
@@ -104,6 +104,60 @@ export function SettingsRow({
         </div>
       </div>
       {detail && controlLayout !== 'wide' ? <div className="mt-3">{detail}</div> : null}
+    </div>
+  );
+}
+
+/** Wrapping toolbar row shared by every settings pane: search/filters flow on
+    one line on desktop, stack on mobile. Place primary actions last. */
+export function PaneToolbar({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={cn('flex flex-col-reverse gap-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3', className)}>
+      {children}
+    </div>
+  );
+}
+
+/** Left cluster inside a PaneToolbar (search, selects, counters). */
+export function PaneToolbarFilters({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={cn('flex min-w-0 flex-1 flex-wrap items-center gap-2', className)}>
+      {children}
+    </div>
+  );
+}
+
+/** Right cluster inside a PaneToolbar (primary actions). */
+export function PaneToolbarActions({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={cn('flex shrink-0 flex-wrap items-center gap-2', className)}>
+      {children}
+    </div>
+  );
+}
+
+/** Compact stat counter chip used in pane toolbars. */
+export function StatChip({ label, value, tone = 'default' }: { label: string; value: React.ReactNode; tone?: 'default' | 'primary' }) {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-ui-xs font-medium',
+        tone === 'primary'
+          ? 'border-primary/40 bg-primary/10 text-primary'
+          : 'border-border bg-surface text-foreground-subtle'
+      )}
+    >
+      <span className="font-semibold text-foreground">{value}</span>
+      {label}
+    </span>
+  );
+}
+
+/** Responsive card grid shared by resource panes. */
+export function PaneGrid({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={cn('grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3', className)}>
+      {children}
     </div>
   );
 }
@@ -186,7 +240,8 @@ export function SettingsEmptyState({ children }: { children: React.ReactNode }) 
   );
 }
 
-/** Section title heading used at the top of each settings section. */
+/** Section title heading used at the top of each settings section. The one
+    and only page-level heading — panes must not render their own headers. */
 export function SectionTitle({
   title,
   badge,
@@ -200,13 +255,17 @@ export function SectionTitle({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-center gap-3">
-        <h2 className="text-[32px] font-semibold leading-tight tracking-tight text-foreground">{title}</h2>
-        {badge ? <BetaBadge label={badge} /> : null}
-        {children}
+    <div className="flex flex-col gap-1.5 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <h2 className="text-2xl font-semibold leading-tight tracking-tight text-foreground">{title}</h2>
+          {badge ? <BetaBadge label={badge} /> : null}
+        </div>
+        {subtitle ? <p className="mt-1 text-ui-sm text-foreground-subtle">{subtitle}</p> : null}
       </div>
-      {subtitle ? <p className="text-ui-base text-foreground-subtle">{subtitle}</p> : null}
+      {children ? (
+        <div className="flex shrink-0 flex-wrap items-center gap-2">{children}</div>
+      ) : null}
     </div>
   );
 }

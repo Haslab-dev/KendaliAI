@@ -12,7 +12,7 @@ interface AutomationPreset {
   outputPreview: string[];
 }
 
-export const AutomationsView: React.FC = () => {
+export const AutomationsView: React.FC<{ embedded?: boolean }> = ({ embedded }) => {
   const [activeTab, setActiveTab] = useState<'active' | 'presets'>('active');
   const agents = useAppStore((s) => s.agents);
 
@@ -95,22 +95,24 @@ export const AutomationsView: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 h-full overflow-y-auto bg-background px-4 sm:px-8 py-8 select-none">
+    <div className="flex-1 h-full bg-background select-none">
       <div className="max-w-4xl mx-auto space-y-6">
-        {/* Header */}
+        {/* Header (title/description hidden when embedded — the Settings frame owns them) */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">Automations</h1>
-            <p className="text-xs text-muted-foreground">
-              Schedule recurring tasks, briefings, and automated agent loops running in the background.
-            </p>
-          </div>
+          {!embedded && (
+            <div className="space-y-1">
+              <h1 className="text-2xl font-bold tracking-tight text-foreground">Automations</h1>
+              <p className="text-xs text-muted-foreground">
+                Schedule recurring tasks, briefings, and automated agent loops running in the background.
+              </p>
+            </div>
+          )}
 
           {/* Tab Switcher */}
-          <div className="flex items-center gap-1.5 p-1 bg-muted/40 border border-border/50 rounded-xl text-xs self-start sm:self-auto">
+          <div className={`flex items-center gap-1.5 p-1 bg-muted/40 border border-border/50 rounded-xl text-xs self-start sm:self-auto ${embedded ? 'w-full sm:w-auto justify-center sm:justify-end' : ''}`}>
             <button
               onClick={() => setActiveTab('active')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
                 activeTab === 'active'
                   ? 'bg-primary text-white shadow-xs'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
@@ -121,7 +123,7 @@ export const AutomationsView: React.FC = () => {
             </button>
             <button
               onClick={() => setActiveTab('presets')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
                 activeTab === 'presets'
                   ? 'bg-primary text-white shadow-xs'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'

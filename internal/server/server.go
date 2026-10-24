@@ -23,6 +23,7 @@ import (
 	"github.com/kendaliai/app/internal/agent"
 	"github.com/kendaliai/app/internal/agentengine"
 	"github.com/kendaliai/app/internal/channels"
+	"github.com/kendaliai/app/internal/composio"
 	"github.com/kendaliai/app/internal/config"
 	"github.com/kendaliai/app/internal/embedding"
 	"github.com/kendaliai/app/internal/gateway"
@@ -362,6 +363,7 @@ func (s *Server) routes() {
 
 	// Plugins
 	s.router.HandleFunc("/api/plugins", s.handlePlugins())
+	s.router.HandleFunc("/api/plugins/catalog", s.handlePluginCatalog())
 	s.router.HandleFunc("/api/plugins/", s.handlePluginAction())
 
 	// Connectors (Composio / 3rd-party integrations, real OAuth via the
@@ -3283,6 +3285,42 @@ func (s *Server) handlePlugins() http.HandlerFunc {
 		default:
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
+	}
+}
+
+// handlePluginCatalog serves the default capability plugin catalog (documents,
+// visual, motion, Google Workspace) plus live connection status for plugins
+// that need a Composio connection.
+func (s *Server) handlePluginCatalog() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != "GET" {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Google connection status: composio key configured + ACTIVE account.
+		google := map[string]interface{}{"keyConfigured": false, "connected": false}
+		var key string
+		if err := s.db.QueryRow("SELECT value FROM system_settings WHERE key = 'composio_api_key'").Scan(&key); err == nil && strings.TrimSpace(key) != "" {
+			google["keyConfigured"] = true
+			client := composio.NewClient(strings.TrimSpace(key))
+			ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+			defer cancel()
+			if accounts, err := client.Accounts(ctx); err == nil {
+				for _, acc := range accounts {
+					if strings.EqualFold(acc.Status, "active") && (strings.Contains(strings.ToLower(acc.ToolkitSlug), "google")) {
+						google["connected"] = true
+						break
+					}
+				}
+			}
+		}
+
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"plugins": plugins.Catalog(),
+			"google":  google,
+		})
 	}
 }
 

@@ -73,9 +73,9 @@ export interface ProfileStoreState {
   activeGroup: AgentGroup | null;
   isLoadingGroups: boolean;
 
-  // Navigation mode: 'chat' | 'agent' | 'groups' | 'connections' | 'automations' | 'settings' | 'git' | 'editor'
-  activeNavTab: 'chat' | 'agent' | 'groups' | 'connections' | 'automations' | 'settings' | 'git' | 'editor';
-  setActiveNavTab: (tab: 'chat' | 'agent' | 'groups' | 'connections' | 'automations' | 'settings' | 'git' | 'editor') => void;
+  // Navigation mode: 'chat' | 'agent' | 'groups' | 'connections' | 'automations' | 'settings' | 'git' | 'editor' | 'feed'
+  activeNavTab: 'chat' | 'agent' | 'groups' | 'connections' | 'automations' | 'settings' | 'git' | 'editor' | 'feed';
+  setActiveNavTab: (tab: 'chat' | 'agent' | 'groups' | 'connections' | 'automations' | 'settings' | 'git' | 'editor' | 'feed') => void;
 
   // Actions
   loadAgents: () => Promise<void>;

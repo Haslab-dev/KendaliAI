@@ -932,6 +932,31 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 	// Out-of-chat sub-agent delegation, bound to this turn's parent session.
 	toolRegistry["spawn_subagent"] = r.SpawnSubagentTool(sessionID)
 	toolRegistry["deep_search"] = r.DeepSearchTool(sessionID)
+
+	// Default capability plugins (documents / visual / motion / Google
+	// Workspace): nil means the defaults, an explicit list is honored as-is.
+	// Enabled plugins unlock their tools beyond the agent's base allowlist.
+	effectivePlugins := plugins.EffectivePlugins(agentConfig.Plugins)
+	pluginTools := plugins.ToolsForPlugins(effectivePlugins)
+	toolAllowed := func(name string) bool {
+		if name == "spawn_subagent" || name == "deep_search" {
+			return true
+		}
+		return pluginTools[name] || r.isToolAllowed(name, agentConfig.Tools)
+	}
+
+	// Surface the enabled capabilities to the model so it knows it can produce
+	// real .docx/.xlsx/.pptx files, vector images, decks, and motion projects.
+	if len(effectivePlugins) > 0 {
+		sysPrompt += "\n\n## ENABLED CAPABILITY PLUGINS:\n"
+		sysPrompt += "Beyond text answers, these capability plugins are enabled for you — prefer producing real files over describing content:\n"
+		for _, pid := range effectivePlugins {
+			if p := plugins.FindCatalogPlugin(pid); p != nil {
+				sysPrompt += fmt.Sprintf("- %s (%s): %s Tools: %s\n", p.Name, p.Engine, p.Description, strings.Join(p.Tools, ", "))
+			}
+		}
+	}
+
 	sysPrompt += "\n\n## AVAILABLE TOOLS:\n"
 	sysPrompt += "You can execute tools to perform actions. When calling tools, use the standard format:\n"
 	sysPrompt += "tool: TOOL_NAME({\"arg\": \"value\"})\n"
@@ -940,7 +965,7 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 	for name, def := range toolRegistry {
 		// spawn_subagent and deep_search are orchestration with no direct side effects, so they
 		// stay available even on agents with a restrictive tool allowlist.
-		if name == "spawn_subagent" || name == "deep_search" || r.isToolAllowed(name, agentConfig.Tools) {
+		if toolAllowed(name) {
 			sysPrompt += fmt.Sprintf("- %s: %s (Signature: %s)\n", name, def.Description, def.Signature)
 		}
 	}
@@ -949,9 +974,7 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 	// instructions above are kept so the text protocol remains a working
 	// fallback for providers that reject the tools API.
 	nativeToolsEnabled := config.Cfg.NativeToolsEnabled()
-	toolDefs := agent.BuildToolDefinitions(toolRegistry, func(name string) bool {
-		return name == "spawn_subagent" || name == "deep_search" || r.isToolAllowed(name, agentConfig.Tools)
-	})
+	toolDefs := agent.BuildToolDefinitions(toolRegistry, toolAllowed)
 	if nativeToolsEnabled && len(toolDefs) > 0 {
 		sysPrompt += "\nTool definitions are also attached via the native function-calling API. Prefer issuing tool calls through it; the `tool: NAME({...})` text format remains available as a fallback.\n"
 	}

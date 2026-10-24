@@ -87,6 +87,7 @@ type AgentConfig struct {
 	MCP                []string          `json:"mcp"`
 	MemoryScopes       []string          `json:"memoryScopes"`
 	Policy             map[string]string `json:"policy"`
+	Plugins            []string          `json:"plugins,omitempty"`
 	Avatar             string            `json:"avatar"`
 	IsDefault          bool              `json:"isDefault"`
 	Engine             string            `json:"engine,omitempty"`
@@ -266,6 +267,7 @@ func (s *Store) SeedInitialData(cfg *config.Config) {
 	_, _ = s.db.Exec("ALTER TABLE session_messages ADD COLUMN rag_sources TEXT DEFAULT ''")
 	_, _ = s.db.Exec("ALTER TABLE session_messages ADD COLUMN reactions TEXT DEFAULT '[]'")
 	_, _ = s.db.Exec("ALTER TABLE document_chunks ADD COLUMN dimensions INTEGER DEFAULT 0")
+	_, _ = s.db.Exec("ALTER TABLE agents ADD COLUMN plugins TEXT DEFAULT ''")
 
 	_, _ = s.db.Exec(`CREATE TABLE IF NOT EXISTS documents (
 		id TEXT PRIMARY KEY,
@@ -598,7 +600,7 @@ func (s *Store) populateTelegramForAgents(agents []AgentConfig) []AgentConfig {
 }
 
 func (s *Store) ListAgents() ([]AgentConfig, error) {
-	rows, err := s.db.Query("SELECT id, name, description, provider_id, model, system_prompt, skills, tools, mcp, memory_scopes, policy, avatar, is_default, COALESCE(role, ''), COALESCE(department, ''), COALESCE(engine, 'rakit'), COALESCE(acp_agent, ''), created_at, updated_at FROM agents ORDER BY is_default DESC, name ASC")
+	rows, err := s.db.Query("SELECT id, name, description, provider_id, model, system_prompt, skills, tools, mcp, memory_scopes, policy, avatar, is_default, COALESCE(role, ''), COALESCE(department, ''), COALESCE(engine, 'rakit'), COALESCE(acp_agent, ''), COALESCE(plugins, ''), created_at, updated_at FROM agents ORDER BY is_default DESC, name ASC")
 	if err != nil {
 		return nil, err
 	}
@@ -607,9 +609,9 @@ func (s *Store) ListAgents() ([]AgentConfig, error) {
 	res := make([]AgentConfig, 0)
 	for rows.Next() {
 		var a AgentConfig
-		var skillsJSON, toolsJSON, mcpJSON, memoryJSON, policyJSON string
+		var skillsJSON, toolsJSON, mcpJSON, memoryJSON, policyJSON, pluginsJSON string
 		var isDef int
-		if err := rows.Scan(&a.ID, &a.Name, &a.Description, &a.ProviderID, &a.Model, &a.SystemPrompt, &skillsJSON, &toolsJSON, &mcpJSON, &memoryJSON, &policyJSON, &a.Avatar, &isDef, &a.Role, &a.Department, &a.Engine, &a.ACPAgent, &a.CreatedAt, &a.UpdatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.Name, &a.Description, &a.ProviderID, &a.Model, &a.SystemPrompt, &skillsJSON, &toolsJSON, &mcpJSON, &memoryJSON, &policyJSON, &a.Avatar, &isDef, &a.Role, &a.Department, &a.Engine, &a.ACPAgent, &pluginsJSON, &a.CreatedAt, &a.UpdatedAt); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal([]byte(skillsJSON), &a.Skills)
@@ -617,6 +619,10 @@ func (s *Store) ListAgents() ([]AgentConfig, error) {
 		_ = json.Unmarshal([]byte(mcpJSON), &a.MCP)
 		_ = json.Unmarshal([]byte(memoryJSON), &a.MemoryScopes)
 		_ = json.Unmarshal([]byte(policyJSON), &a.Policy)
+		if strings.TrimSpace(pluginsJSON) != "" {
+			// Empty string means "never customized" (nil → default plugins).
+			_ = json.Unmarshal([]byte(pluginsJSON), &a.Plugins)
+		}
 		a.IsDefault = isDef == 1
 		res = append(res, a)
 	}
@@ -625,10 +631,10 @@ func (s *Store) ListAgents() ([]AgentConfig, error) {
 
 func (s *Store) GetAgent(id string) (*AgentConfig, error) {
 	var a AgentConfig
-	var skillsJSON, toolsJSON, mcpJSON, memoryJSON, policyJSON string
+	var skillsJSON, toolsJSON, mcpJSON, memoryJSON, policyJSON, pluginsJSON string
 	var isDef int
-	err := s.db.QueryRow("SELECT id, name, description, provider_id, model, system_prompt, skills, tools, mcp, memory_scopes, policy, avatar, is_default, COALESCE(role, ''), COALESCE(department, ''), COALESCE(engine, 'rakit'), COALESCE(acp_agent, ''), created_at, updated_at FROM agents WHERE id = ?", id).
-		Scan(&a.ID, &a.Name, &a.Description, &a.ProviderID, &a.Model, &a.SystemPrompt, &skillsJSON, &toolsJSON, &mcpJSON, &memoryJSON, &policyJSON, &a.Avatar, &isDef, &a.Role, &a.Department, &a.Engine, &a.ACPAgent, &a.CreatedAt, &a.UpdatedAt)
+	err := s.db.QueryRow("SELECT id, name, description, provider_id, model, system_prompt, skills, tools, mcp, memory_scopes, policy, avatar, is_default, COALESCE(role, ''), COALESCE(department, ''), COALESCE(engine, 'rakit'), COALESCE(acp_agent, ''), COALESCE(plugins, ''), created_at, updated_at FROM agents WHERE id = ?", id).
+		Scan(&a.ID, &a.Name, &a.Description, &a.ProviderID, &a.Model, &a.SystemPrompt, &skillsJSON, &toolsJSON, &mcpJSON, &memoryJSON, &policyJSON, &a.Avatar, &isDef, &a.Role, &a.Department, &a.Engine, &a.ACPAgent, &pluginsJSON, &a.CreatedAt, &a.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -640,6 +646,10 @@ func (s *Store) GetAgent(id string) (*AgentConfig, error) {
 	_ = json.Unmarshal([]byte(mcpJSON), &a.MCP)
 	_ = json.Unmarshal([]byte(memoryJSON), &a.MemoryScopes)
 	_ = json.Unmarshal([]byte(policyJSON), &a.Policy)
+	if strings.TrimSpace(pluginsJSON) != "" {
+		// Empty string means "never customized" (nil → default plugins).
+		_ = json.Unmarshal([]byte(pluginsJSON), &a.Plugins)
+	}
 	a.IsDefault = isDef == 1
 
 	bots, _ := s.ListTelegramBots()
@@ -660,6 +670,13 @@ func (s *Store) SaveAgent(a AgentConfig) error {
 	mcpJSON, _ := json.Marshal(a.MCP)
 	memJSON, _ := json.Marshal(a.MemoryScopes)
 	polJSON, _ := json.Marshal(a.Policy)
+	// Plugins: nil (never customized) is stored as empty string so it stays
+	// distinguishable from an explicit "[]"; the schema column default is ''.
+	pluginsJSON := ""
+	if a.Plugins != nil {
+		b, _ := json.Marshal(a.Plugins)
+		pluginsJSON = string(b)
+	}
 
 	isDef := 0
 	if a.IsDefault {
@@ -676,8 +693,8 @@ func (s *Store) SaveAgent(a AgentConfig) error {
 	}
 
 	_, err := s.db.Exec(`
-		INSERT INTO agents (id, name, description, provider_id, model, system_prompt, skills, tools, mcp, memory_scopes, policy, avatar, is_default, role, department, engine, acp_agent, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO agents (id, name, description, provider_id, model, system_prompt, skills, tools, mcp, memory_scopes, policy, avatar, is_default, role, department, engine, acp_agent, plugins, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			name = excluded.name,
 			description = excluded.description,
@@ -695,10 +712,11 @@ func (s *Store) SaveAgent(a AgentConfig) error {
 			department = excluded.department,
 			engine = excluded.engine,
 			acp_agent = excluded.acp_agent,
+			plugins = excluded.plugins,
 			updated_at = excluded.updated_at`,
 		a.ID, a.Name, a.Description, a.ProviderID, a.Model, a.SystemPrompt,
 		string(skillsJSON), string(toolsJSON), string(mcpJSON), string(memJSON), string(polJSON),
-		a.Avatar, isDef, a.Role, a.Department, a.Engine, a.ACPAgent, a.CreatedAt, a.UpdatedAt)
+		a.Avatar, isDef, a.Role, a.Department, a.Engine, a.ACPAgent, pluginsJSON, a.CreatedAt, a.UpdatedAt)
 	return err
 }
 

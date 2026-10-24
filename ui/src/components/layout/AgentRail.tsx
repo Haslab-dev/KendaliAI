@@ -1,16 +1,32 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useProfileStore } from '../../store/useProfileStore';
 import { useSessionStore } from '../../store/useSessionStore';
 import { useAgentStore } from '../../store/useAgentStore';
-import { Plus, Settings, Users } from 'lucide-react';
+import { useUIStore } from '../../store/useUIStore';
+import {
+  Plus,
+  Settings,
+  Users,
+  Hammer,
+  FolderGit2,
+  SquareCode,
+  Newspaper,
+} from 'lucide-react';
 import { AgentIcon } from '../shell/AgentIcon';
 import { getAgentAvatarColor } from '../GrokAvatar';
 import { AgentGroup } from '../../types';
+import { cn } from '../../lib/cn';
 
 interface AgentRailProps {
   onOpenCreateAgent?: () => void;
   onOpenSettings?: () => void;
 }
+
+/** Entries of the dev FAB popup, rendered bottom-to-top (bottom = closest to the anchor). */
+const DEV_FAB_ITEMS = [
+  { id: 'git', label: 'Git Client', icon: FolderGit2 },
+  { id: 'editor', label: 'Editor', icon: SquareCode },
+] as const;
 
 export const AgentRail: React.FC<AgentRailProps> = ({
   onOpenCreateAgent,
@@ -29,10 +45,14 @@ export const AgentRail: React.FC<AgentRailProps> = ({
 
   const {
     selectSession,
-    getAgentSessions,
     sessions: allStoreSessions,
     createSessionForGroup,
   } = useSessionStore();
+
+  const { closePanels } = useUIStore();
+
+  const [devFabOpen, setDevFabOpen] = useState(false);
+  const devFabRef = useRef<HTMLDivElement>(null);
 
   // Filter out any ACP engines so only real native agents appear on the rail
   const nativeAgents = useMemo(() => {
@@ -43,12 +63,24 @@ export const AgentRail: React.FC<AgentRailProps> = ({
   // Persistent groups defined in the system
   const allGroups = groups;
 
-  const handleAgentClick = (agentId: string) => {
+  // Close the dev FAB on outside click
+  useEffect(() => {
+    if (!devFabOpen) return;
+    const handleOutside = (e: MouseEvent) => {
+      if (devFabRef.current && !devFabRef.current.contains(e.target as Node)) {
+        setDevFabOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [devFabOpen]);
+
+  const handleAgentClick = async (agentId: string) => {
     selectAgent(agentId);
     setActiveNavTab('chat');
-    // Change agent on tab -> move to new task state and default to Native rakit-kode
-    selectSession(null);
     useAgentStore.getState().setComposerTarget({ kind: 'native', id: 'rakit-kode' });
+    // Opening an agent always lands on its permanent Main Chat session
+    await useSessionStore.getState().openMainSession(agentId);
   };
 
   const handleGroupClick = async (group: AgentGroup) => {
@@ -83,6 +115,12 @@ export const AgentRail: React.FC<AgentRailProps> = ({
     } else {
       setActiveNavTab('agent');
     }
+  };
+
+  const handleFabNavigate = (tab: (typeof DEV_FAB_ITEMS)[number]['id']) => {
+    setDevFabOpen(false);
+    closePanels();
+    setActiveNavTab(tab);
   };
 
   return (
@@ -213,6 +251,95 @@ export const AgentRail: React.FC<AgentRailProps> = ({
 
       {/* Rail Bottom Actions */}
       <div className="pt-2 flex flex-col items-center gap-2 w-full border-t border-sidebar-border">
+        {/* Feed — AI-generated feed from web sources */}
+        <button
+          type="button"
+          onClick={() => {
+            closePanels();
+            setActiveNavTab('feed');
+          }}
+          className={cn(
+            'w-9 h-9 rounded-xl flex items-center justify-center transition-colors cursor-pointer',
+            activeNavTab === 'feed'
+              ? 'text-primary bg-primary/10 border border-primary/40'
+              : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+          )}
+          title="Feed"
+        >
+          <Newspaper className="w-4 h-4" />
+        </button>
+
+        {/* Groups — open the groups list */}
+        <button
+          type="button"
+          onClick={() => {
+            closePanels();
+            selectSession(null);
+            selectGroup(null);
+            setActiveNavTab('groups');
+          }}
+          className={cn(
+            'w-9 h-9 rounded-xl flex items-center justify-center transition-colors cursor-pointer',
+            activeNavTab === 'groups'
+              ? 'text-primary bg-primary/10 border border-primary/40'
+              : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+          )}
+          title="Groups"
+        >
+          <Users className="w-4 h-4" />
+        </button>
+
+        {/* Dev FAB: one anchor icon that fans out Editor / Git Client */}
+        <div className="relative w-full flex justify-center" ref={devFabRef}>
+          {/* FAB popup stack (expands upward, Muse-style floating action buttons) */}
+          {devFabOpen && (
+            <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 z-50">
+              {[...DEV_FAB_ITEMS].reverse().map((item, idx) => {
+                const Icon = item.icon;
+                const isActive = activeNavTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleFabNavigate(item.id)}
+                    className={cn(
+                      'fab-pop group relative size-10 rounded-xl flex items-center justify-center border shadow-lg transition-colors cursor-pointer',
+                      isActive
+                        ? 'bg-primary/15 border-primary/50 text-primary'
+                        : 'bg-card border-border/60 text-muted-foreground hover:text-foreground hover:border-primary/40'
+                    )}
+                    style={{ animationDelay: `${idx * 40}ms` }}
+                    title={item.label}
+                  >
+                    <Icon className="size-4.5" />
+
+                    {/* Label tooltip */}
+                    <div className="absolute left-12 px-2 py-1 bg-popover text-foreground text-ui-xs rounded-md shadow-xl border border-border/40 whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
+                      {item.label}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* FAB anchor */}
+          <button
+            type="button"
+            onClick={() => setDevFabOpen(!devFabOpen)}
+            aria-expanded={devFabOpen}
+            className={cn(
+              'w-9 h-9 rounded-xl flex items-center justify-center transition-all cursor-pointer',
+              devFabOpen
+                ? 'text-primary bg-primary/10 border border-primary/40 rotate-12'
+                : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+            )}
+            title="Dev tools — Editor, Git Client"
+          >
+            <Hammer className="w-4 h-4" />
+          </button>
+        </div>
+
         <button
           onClick={() => {
             if (onOpenSettings) onOpenSettings();

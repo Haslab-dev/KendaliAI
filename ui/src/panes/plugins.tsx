@@ -28,6 +28,9 @@ import {
 import { useAppStore } from '../store/useAppStore';
 import { SkillItem } from '../types';
 import { navigate } from '../router';
+import { usePluginCatalog } from '../components/shell/PluginCatalog';
+import { PaneToolbar, PaneToolbarFilters, PaneToolbarActions } from '../components/settings/settingsPrimitives';
+import { HardDrive, Cloud } from 'lucide-react';
 
 interface PluginToolDef {
   name: string;
@@ -411,58 +414,17 @@ export const PluginsPane: React.FC = () => {
   }, [pluginsList, skillsList]);
 
   return (
-    <div className="w-full min-h-screen bg-accent/60 dark:bg-background flex flex-col font-sans">
-      {/* Top Header */}
-      <div className="w-full bg-card border-b border-border px-6 lg:px-9 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-[6px] bg-warning/10 dark:bg-amber-950/40 flex items-center justify-center text-agentorange">
-              <Puzzle size={16} />
-            </div>
-            <h1 className="text-[18px] font-bold text-foreground font-sans tracking-tight">
-              Plugins &amp; Skills
-            </h1>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
-              Hot-Reload Active
-            </span>
-          </div>
-          <p className="text-[12px] text-muted-foreground dark:text-[#A1A1AA]">
-            Extensible agent capabilities, shell tools, and modular USP/KSP skills loaded dynamically on demand.
-          </p>
-        </div>
-
-        {/* Action Buttons & Tabs */}
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <button
-            type="button"
-            onClick={loadData}
-            title="Scan & Discover capabilities from disk"
-            className="p-2 rounded-[8px] border border-border text-muted-foreground hover:text-foreground bg-white dark:bg-[#252528] hover:bg-accent/60 transition-colors cursor-pointer"
-          >
-            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-foreground text-background text-xs font-bold rounded-[8px] hover:bg-black/90 dark:hover:bg-neutral-200 transition-all shadow-xs cursor-pointer"
-          >
-            <Plus size={13} />
-            <span>Create Plugin</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Navigation Sub-Tabs & Global Counters */}
-      <div className="w-full bg-card dark:bg-card border-b border-border px-6 lg:px-9 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-1.5">
+    <div className="w-full flex flex-col gap-4 font-sans text-foreground">
+      {/* Toolbar row: sub-tabs left, stats + actions right (page title lives in the Settings frame) */}
+      <PaneToolbar>
+        <PaneToolbarFilters className="overflow-x-auto scrollbar-none flex-nowrap sm:flex-wrap">
           <button
             type="button"
             onClick={() => {
               setActiveTab('plugins');
               if (pluginsList.length > 0) setSelectedPlugin(pluginsList[0]);
             }}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-[8px] text-xs font-bold transition-colors cursor-pointer ${
+            className={`flex shrink-0 items-center gap-2 px-3 py-1.5 rounded-[8px] text-xs font-bold transition-colors cursor-pointer ${
               activeTab === 'plugins'
                 ? 'bg-foreground text-white dark:bg-white dark:text-black'
                 : 'text-muted-foreground hover:bg-foreground/5'
@@ -478,53 +440,66 @@ export const PluginsPane: React.FC = () => {
               setActiveTab('skills');
               if (skillsList.length > 0) setSelectedSkill(skillsList[0]);
             }}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-[8px] text-xs font-bold transition-colors cursor-pointer ${
+            className={`flex shrink-0 items-center gap-2 px-3 py-1.5 rounded-[8px] text-xs font-bold transition-colors cursor-pointer ${
               activeTab === 'skills'
                 ? 'bg-foreground text-white dark:bg-white dark:text-black'
                 : 'text-muted-foreground hover:bg-foreground/5'
             }`}
           >
             <Brain size={14} />
-            <span>Skills Library ({skillsList.length})</span>
+            <span>Skills ({skillsList.length})</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('discover')}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-[8px] text-xs font-bold transition-colors cursor-pointer ${
+            className={`flex shrink-0 items-center gap-2 px-3 py-1.5 rounded-[8px] text-xs font-bold transition-colors cursor-pointer ${
               activeTab === 'discover'
                 ? 'bg-foreground text-white dark:bg-white dark:text-black'
                 : 'text-muted-foreground hover:bg-foreground/5'
             }`}
           >
             <Globe size={14} />
-            <span>Discover &amp; Catalog ({DISCOVERY_CATALOG.length})</span>
+            <span>Discover ({DISCOVERY_CATALOG.length})</span>
           </button>
-        </div>
+        </PaneToolbarFilters>
 
-        {/* Capability Stats Chips */}
-        <div className="flex items-center gap-3 text-xs text-muted-foreground font-mono">
-          <div className="flex items-center gap-1.5">
+        <PaneToolbarActions>
+          <span className="hidden md:inline-flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
             <Wrench size={13} className="text-primary" />
-            <span>{totalExportedTools} Exported Tools</span>
-          </div>
-          <span>•</span>
-          <div className="flex items-center gap-1.5">
-            <CheckCircle2 size={13} className="text-emerald-500" />
-            <span>Zero-Restart Active</span>
-          </div>
-        </div>
-      </div>
+            <span>{totalExportedTools} tools</span>
+          </span>
+          <button
+            type="button"
+            onClick={loadData}
+            title="Scan & Discover capabilities from disk"
+            className="p-2 rounded-[8px] border border-border text-muted-foreground hover:text-foreground bg-card hover:bg-accent/60 transition-colors cursor-pointer"
+          >
+            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-foreground text-background text-xs font-bold rounded-[8px] hover:bg-black/90 dark:hover:bg-neutral-200 transition-all shadow-xs cursor-pointer"
+          >
+            <Plus size={13} />
+            <span>Create Plugin</span>
+          </button>
+        </PaneToolbarActions>
+      </PaneToolbar>
+
+      {/* Default Capability Plugins catalog — checkboxes live per agent in Profile → Plugins */}
+      <DefaultCapabilityCatalog />
 
       {actionError && (
-        <div className="mx-6 lg:mx-9 mt-4 p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 text-xs rounded-[8px] flex items-center gap-2">
+        <div className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 text-xs rounded-[8px] flex items-center gap-2">
           <AlertCircle size={14} className="shrink-0" />
           <span>{actionError}</span>
         </div>
       )}
 
       {/* Main Content Layout */}
-      <div className="flex-1 w-full px-6 lg:px-9 py-5 flex flex-col lg:flex-row gap-5 items-start">
+      <div className="flex-1 w-full flex flex-col lg:flex-row gap-5 items-start">
         {/* Left Column: List Section */}
         <div className="flex-1 w-full flex flex-col gap-3.5 min-w-0">
           {/* Search & Category Filter */}
@@ -1153,6 +1128,64 @@ export const PluginsPane: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+    </div>
+  );
+};
+
+// ============================================================================
+// Default Capability Plugins — read-only catalog of the built-in plugin system
+// (documents / visual / motion / Google Workspace). Checkboxes live per agent
+// in Profile → Plugins.
+// ============================================================================
+
+const DefaultCapabilityCatalog: React.FC = () => {
+  const catalog = usePluginCatalog();
+  if (!catalog || catalog.plugins.length === 0) return null;
+
+  return (
+    <div className="w-full rounded-xl border border-border bg-card px-4 py-3.5">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <Layers size={14} className="text-primary" />
+          <span className="text-xs font-bold text-foreground">Default Capability Plugins</span>
+          <span className="text-[11px] text-muted-foreground">
+            — enable per agent in <span className="font-semibold text-foreground/80">Profile → Plugins</span>
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {catalog.plugins.map((p) => (
+            <span
+              key={p.id}
+              title={`${p.description}\nTools: ${p.tools.join(', ')}`}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium cursor-default ${
+                p.defaultOn
+                  ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400'
+                  : 'border-border bg-accent/40 text-muted-foreground'
+              }`}
+            >
+              {p.engine === 'local' ? <HardDrive size={11} /> : <Cloud size={11} />}
+              {p.name}
+              {p.defaultOn && <Check size={11} />}
+            </span>
+          ))}
+        </div>
+      </div>
+      {catalog.google && !catalog.google.connected && (
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          Google Workspace plugin needs a Composio API key and a connected Google account — set it up in{' '}
+          <a
+            href="#/settings?section=connections"
+            onClick={(e) => {
+              e.preventDefault();
+              navigate('connections');
+            }}
+            className="text-primary underline underline-offset-2 cursor-pointer"
+          >
+            Connections
+          </a>
+          .
+        </p>
       )}
     </div>
   );

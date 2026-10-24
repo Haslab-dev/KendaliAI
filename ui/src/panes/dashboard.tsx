@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { navigate } from '../router';
+import { PaneToolbar, PaneToolbarFilters, PaneToolbarActions, StatChip } from '../components/settings/settingsPrimitives';
 
 interface SystemMetrics {
   storage: {
@@ -164,41 +165,32 @@ export const DashboardPane: React.FC = () => {
   return (
     <div
       data-pencil-name="Desktop — Dashboard"
-      className="flex-1 h-full flex flex-col gap-[20px] p-[20px_24px] md:p-[28px_36px] overflow-y-auto custom-scrollbar bg-accent/60 dark:bg-[#0E0E0E]"
+      className="w-full flex flex-col gap-5 text-foreground"
     >
-      {/* Top Greeting Row */}
-      <div
-        data-pencil-name="Top Row"
-        className="box-border w-full h-fit shrink-0 flex flex-col md:flex-row gap-[14px] md:gap-[12px] justify-between items-start md:items-center"
-      >
-        <div data-pencil-name="Titles" className="flex flex-col gap-[2px]">
-          <h1
-            data-pencil-name="Greeting"
-            className="text-[22px] md:text-[24px] font-sans font-bold text-foreground"
+      {/* Toolbar row: live stats as chips + New Task action (title lives in the Settings frame) */}
+      <PaneToolbar>
+        <PaneToolbarFilters>
+          <StatChip label="agents registered" value={activeAgentsCount} />
+          <StatChip label="active tasks" value={activeTasksCount} tone="primary" />
+          <span className="inline-flex items-center gap-1.5 text-ui-xs text-muted-foreground">
+            <span className="size-2 rounded-full bg-success animate-pulse" />
+            Live telemetry active
+          </span>
+        </PaneToolbarFilters>
+        <PaneToolbarActions>
+          <button
+            onClick={async () => {
+              const sid = await createSession();
+              await selectSession(sid);
+              navigate('chat');
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-foreground hover:bg-black/80 text-white dark:bg-white dark:text-black dark:hover:bg-white/90 rounded-[8px] shadow-sm transition-all cursor-pointer"
           >
-            KendaliAI Control Center
-          </h1>
-          <p
-            data-pencil-name="Sub"
-            className="text-[12px] text-muted-foreground font-funnel font-normal"
-          >
-            {activeAgentsCount} agents registered · {activeTasksCount} active tasks running · Live telemetry active
-          </p>
-        </div>
-
-        <button
-          onClick={async () => {
-            const sid = await createSession();
-            await selectSession(sid);
-            navigate('chat');
-          }}
-          data-pencil-name="New Task Btn"
-          className="box-border w-fit shrink-0 h-fit flex flex-row gap-[8px] px-4 py-2 justify-start items-center bg-foreground hover:bg-black/80 text-white dark:bg-white dark:text-black dark:hover:bg-white/90 rounded-[8px] shadow-sm transition-all cursor-pointer"
-        >
-          <Plus size={15} strokeWidth={2.2} />
-          <span className="text-[12px] font-sans font-bold whitespace-nowrap">New Task</span>
-        </button>
-      </div>
+            <Plus size={15} strokeWidth={2.2} />
+            <span className="text-[12px] font-sans font-bold whitespace-nowrap">New Task</span>
+          </button>
+        </PaneToolbarActions>
+      </PaneToolbar>
 
       {/* 🖥️ Server Resource Monitoring (Storage, Memory, CPU) */}
       <div className="w-full flex flex-col gap-3 p-4 bg-white dark:bg-card border border-border/70 rounded-[8px] shadow-[0px_1px_2px_0px_#0000000a]">

@@ -26,7 +26,9 @@ export type SettingsSection =
   | 'plugins'
   | 'worktrees'
   | 'sessions'
-  | 'logs';
+  | 'logs'
+  | 'connections'
+  | 'automations';
 
 /** Legacy hash → new route (+ settings section where applicable). */
 const LEGACY_MAP: Record<string, { route: RouteName; settings?: SettingsSection }> = {
@@ -42,6 +44,8 @@ const LEGACY_MAP: Record<string, { route: RouteName; settings?: SettingsSection 
   docs: { route: 'settings', settings: 'docs' },
   channels: { route: 'settings', settings: 'channels' },
   telegram: { route: 'settings', settings: 'channels' },
+  connections: { route: 'settings', settings: 'connections' },
+  automations: { route: 'settings', settings: 'automations' },
   plugins: { route: 'settings', settings: 'plugins' },
   worktrees: { route: 'settings', settings: 'worktrees' },
   sessions: { route: 'settings', settings: 'sessions' },

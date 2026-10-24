@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { ApiKeyModal } from '../components/ApiKeyModal';
+import { PaneToolbar, PaneToolbarFilters, PaneToolbarActions, StatChip } from '../components/settings/settingsPrimitives';
 import { ProviderConfig, MCPServerConfig, ModelItem, isReasoningModel } from '../types';
 
 interface ExtendedProvider {
@@ -697,45 +698,39 @@ export const ProvidersPane: React.FC = () => {
   }, [modelsList]);
 
   return (
-    <div className="w-full min-h-screen bg-accent/60 dark:bg-background flex flex-col text-foreground transition-colors select-none">
-      {/* Page Header */}
-      <div className="w-full bg-card dark:bg-card border-b border-border/70 px-4 sm:px-8 py-4 sm:py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
-        <div className="flex flex-col gap-0.5">
-          <div className="flex items-center gap-2">
-            <Sliders size={20} className="text-primary" />
-            <h1 className="text-[18px] sm:text-[20px] font-bold text-foreground font-sans tracking-tight">
-              AI Providers &amp; Models
-            </h1>
-          </div>
-          <p className="text-[12px] text-muted-foreground font-sans">
-            Connect OpenAI, Anthropic, DeepSeek, Ollama, or custom /v1 endpoints · Select available models for chat &amp; agents
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2 sm:gap-3 self-end sm:self-center">
+    <div className="w-full flex flex-col gap-5 text-foreground transition-colors select-none">
+      {/* Toolbar: refresh + add (page title lives in the Settings frame) */}
+      <PaneToolbar>
+        <PaneToolbarFilters>
+          <StatChip label="providers" value={providers.length} />
+          <StatChip label="active in chat" value={providers.filter((p) => p.enabled).length} tone="primary" />
+          <StatChip label="models enabled" value={providers.reduce((acc, p) => acc + p.models.filter((m) => m.enabled).length, 0)} />
+        </PaneToolbarFilters>
+        <PaneToolbarActions>
           <button
             onClick={() => {
               loadData();
               loadModels(true);
             }}
             title="Refresh providers & models"
-            className="p-2 rounded-[8px] border border-border text-muted-foreground hover:text-foreground hover:bg-foreground/5 transition-colors cursor-pointer"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3.5 text-ui-sm font-medium text-foreground-subtle transition-colors hover:bg-surface-hover hover:text-foreground cursor-pointer"
           >
-            <RefreshCw size={15} className={isLoading ? 'animate-spin text-primary' : ''} />
+            <RefreshCw size={14} className={isLoading ? 'animate-spin text-primary' : ''} />
+            <span className="hidden sm:inline">Refresh</span>
           </button>
           <button
             onClick={handleOpenAddModal}
-            className="flex items-center gap-1.5 px-3.5 sm:px-4 py-2 bg-primary hover:bg-primary/85 text-white text-[12px] font-bold rounded-[8px] transition-all shadow-sm cursor-pointer active:scale-95"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-4 text-ui-sm font-semibold text-foreground-inverse transition-colors hover:bg-brand/80 active:scale-95 cursor-pointer"
           >
-            <Plus size={15} strokeWidth={2.5} />
+            <Plus size={14} strokeWidth={2.5} />
             <span>Add Provider</span>
           </button>
-        </div>
-      </div>
+        </PaneToolbarActions>
+      </PaneToolbar>
 
       {/* Toast Notification Alert */}
       {toast && (
-        <div className="mx-4 sm:mx-8 mt-3 p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs rounded-[8px] flex items-center justify-between animate-fade-in">
+        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs rounded-[8px] flex items-center justify-between animate-fade-in">
           <div className="flex items-center gap-2">
             {toast.type === 'success' ? (
               <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
@@ -751,17 +746,9 @@ export const ProvidersPane: React.FC = () => {
       )}
 
       {/* Main Responsive Layout (Full Width for Providers) */}
-      <div className="flex-1 w-full px-4 sm:px-8 py-4 sm:py-6 flex flex-col gap-5">
+      <div className="flex-1 w-full flex flex-col gap-5">
         {/* Providers List */}
         <div className="w-full flex flex-col gap-3.5">
-          <div className="flex items-center justify-between px-1">
-            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-sans">
-              Configured Providers ({providers.length})
-            </span>
-            <span className="text-[11px] text-muted-foreground">
-              Active in Chat: {providers.filter((p) => p.enabled).length}
-            </span>
-          </div>
 
           {providers.map((p) => {
             const isDefault = p.id === activeDefaultId || p.isDefault;

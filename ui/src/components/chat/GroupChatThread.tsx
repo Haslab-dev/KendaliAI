@@ -4,6 +4,7 @@ import { useSessionStore } from '../../store/useSessionStore';
 import { MarkdownView } from '../MarkdownView';
 import { ToolExecutionCard, ToolExecution } from '../agent/ToolBlockViews';
 import { WorkLogList } from '../agent/WorkLog';
+import { ChatTopControls } from '../shell/ChatTopControls';
 import {
   ArrowUp,
   Plus,
@@ -74,6 +75,7 @@ export const GroupChatThread: React.FC = () => {
   const [input, setInput] = useState('');
   const [showMentionPopup, setShowMentionPopup] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [headerScrolled, setHeaderScrolled] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [likedMap, setLikedMap] = useState<Record<string, 'up' | 'down'>>({});
   const [expandedWork, setExpandedWork] = useState<Record<string, boolean>>({});
@@ -104,11 +106,12 @@ export const GroupChatThread: React.FC = () => {
     }
   }, [isStreaming]);
 
-  // Track user scroll intent
+  // Track user scroll intent (and whether content passes under the top controls)
   const handleScroll = useCallback(() => {
     if (!scrollRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
     userScrolledUpRef.current = scrollHeight - (scrollTop + clientHeight) > 100;
+    setHeaderScrolled(scrollTop > 24);
   }, []);
 
   // Auto-scroll to bottom unless user scrolled up
@@ -204,31 +207,8 @@ export const GroupChatThread: React.FC = () => {
 
   return (
     <div className="flex-1 h-full flex flex-col min-w-0 bg-background relative overflow-hidden">
-      {/* Top Header Bar */}
-      <div className="h-14 px-4 sm:px-6 border-b border-border/30 flex items-center justify-between shrink-0 bg-card/40 backdrop-blur-md z-10">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="flex -space-x-2 shrink-0">
-            {memberAgents.slice(0, 3).map((a, i) => (
-              <div
-                key={a.id}
-                className="size-8 rounded-xl flex items-center justify-center overflow-hidden shrink-0 bg-transparent"
-                style={{ zIndex: 10 - i }}
-              >
-                <AgentIcon id={a.id} name={a.name} avatar={a.avatar} size={28} />
-              </div>
-            ))}
-          </div>
-
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-foreground truncate">
-              {activeGroup?.name || 'Group Chat'}
-            </h2>
-            <p className="text-[11px] text-muted-foreground truncate">
-              {memberAgents.length} agents {activeGroup?.brief ? `• ${activeGroup.brief}` : ''}
-            </p>
-          </div>
-        </div>
-
+      {/* Floating controls (no header bar): top-right cluster + top-center group identity */}
+      <ChatTopControls scrolled={headerScrolled}>
         <button
           onClick={handleNewChat}
           className="px-3 py-1.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
@@ -236,13 +216,35 @@ export const GroupChatThread: React.FC = () => {
           <Plus className="w-3.5 h-3.5" />
           <span>New chat</span>
         </button>
+      </ChatTopControls>
+
+      {/* Floating group identity: enlarged stacked avatars + name beneath */}
+      <div
+        aria-label="Group members"
+        title={`${activeGroup?.name || 'Group Chat'} — ${memberAgents.length} agents`}
+        className="absolute left-1/2 top-4 -translate-x-1/2 z-30 flex flex-col items-center gap-1.5 rounded-2xl px-4 py-1.5 transition-all duration-300 cursor-default select-none"
+      >
+        <div className="flex -space-x-2.5 shrink-0">
+          {memberAgents.slice(0, 3).map((a, i) => (
+            <div
+              key={a.id}
+              className="size-11 rounded-full flex items-center justify-center overflow-hidden shrink-0 bg-background ring-2 ring-background outline outline-1 outline-foreground/10"
+              style={{ zIndex: 10 - i }}
+            >
+              <AgentIcon id={a.id} name={a.name} avatar={a.avatar} size={42} />
+            </div>
+          ))}
+        </div>
+        <span className="max-w-44 truncate rounded-full border border-border/40 bg-foreground/10 px-3 py-0.5 text-ui-xs font-semibold text-foreground backdrop-blur-md">
+          {activeGroup?.name || 'Group Chat'}
+        </span>
       </div>
 
       {/* Messages Scroll Area */}
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 space-y-6 scrollbar-thin scrollbar-thumb-border"
+        className="flex-1 overflow-y-auto px-4 sm:px-8 pt-24 pb-6 space-y-6 scrollbar-thin scrollbar-thumb-border"
       >
         {messages.length === 0 ? (
           /* Empty / Initial State */

@@ -3,6 +3,21 @@ import { Session, SessionMessage, ToolCallRecord } from '../types';
 import { useProfileStore } from './useProfileStore';
 import { useAgentStore } from './useAgentStore';
 
+/**
+ * The agent's Main Chat is the default, undeletable session every agent owns.
+ * Flagged via metadata.isMain (with a legacy title fallback).
+ */
+export function isMainSession(sess: Session | null | undefined): boolean {
+  if (!sess || sess.type === 'group') return false;
+  if (sess.metadata) {
+    try {
+      const m = JSON.parse(sess.metadata);
+      if (m && m.isMain === true) return true;
+    } catch {}
+  }
+  return (sess.title || '').trim().toLowerCase() === 'main chat';
+}
+
 export interface SessionStoreState {
   sessions: Session[];
   activeSessionId: string | null;
@@ -31,6 +46,7 @@ export interface SessionStoreState {
   // Actions
   loadSessions: () => Promise<void>;
   selectSession: (sessionId: string | null) => Promise<void>;
+  openMainSession: (agentId: string) => Promise<string>;
   createSessionForAgent: (agentId: string, title?: string, overrides?: { engine?: string; acpAgent?: string; model?: string }) => Promise<string>;
   createSessionForGroup: (groupId: string, title?: string) => Promise<string>;
   deleteSession: (sessionId: string) => Promise<void>;
@@ -186,6 +202,20 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     }
   },
 
+  openMainSession: async (agentId: string) => {
+    // Open the agent's Main Chat, creating it on first visit.
+    const existing = get().sessions.find(
+      (s) => s.type !== 'group' && s.agentId === agentId && isMainSession(s)
+    );
+    if (existing) {
+      await get().selectSession(existing.id);
+      return existing.id;
+    }
+    const sid = await get().createSessionForAgent(agentId, 'Main Chat');
+    await get().updateSessionMetadata(sid, { isMain: true });
+    return sid;
+  },
+
   createSessionForAgent: async (agentId: string, title?: string, overrides?: { engine?: string; acpAgent?: string; model?: string }) => {
     const { agents } = useProfileStore.getState();
     const agent = agents.find((a) => a.id === agentId);
@@ -274,6 +304,10 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   },
 
   deleteSession: async (sessionId: string) => {
+    // Main Chat sessions are permanent — silently refuse deletion.
+    const target = get().sessions.find((s) => s.id === sessionId);
+    if (target && isMainSession(target)) return;
+
     await fetch(`/api/sessions?id=${encodeURIComponent(sessionId)}`, { method: 'DELETE' });
     set((state) => {
       const remaining = state.sessions.filter((s) => s.id !== sessionId);
