@@ -177,10 +177,10 @@ export const AutomationsView: React.FC<{ embedded?: boolean }> = ({ embedded }) 
               <div className="rounded-2xl bg-card border border-border p-5 space-y-3 min-h-[160px] flex flex-col justify-between shadow-2xs">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                    <span className="text-ui-xs font-bold text-muted-foreground uppercase tracking-wider">
                       YOU SET
                     </span>
-                    <span className="text-[11px] font-mono text-muted-foreground bg-muted/40 px-2 py-0.5 rounded">
+                    <span className="text-ui-xs font-mono text-muted-foreground bg-muted/40 px-2 py-0.5 rounded">
                       {selectedPreset.schedule}
                     </span>
                   </div>
@@ -193,10 +193,10 @@ export const AutomationsView: React.FC<{ embedded?: boolean }> = ({ embedded }) 
               <div className="rounded-2xl bg-card border border-border p-5 space-y-3 min-h-[160px] flex flex-col justify-between relative shadow-2xs">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-amber-500 uppercase tracking-wider">
+                    <span className="text-ui-xs font-bold text-amber-500 uppercase tracking-wider">
                       YOU GET
                     </span>
-                    <span className="text-[11px] font-mono text-muted-foreground">
+                    <span className="text-ui-xs font-mono text-muted-foreground">
                       {selectedPreset.schedule.split(' at ')[1] || 'Scheduled'}
                     </span>
                   </div>

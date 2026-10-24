@@ -329,7 +329,7 @@ export const ConnectionsView: React.FC<{ embedded?: boolean }> = ({ embedded }) 
         {/* Tab 1: Connectors (Composio) */}
         {activeTab === 'connectors' && (
           <div className="space-y-3">
-            <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider px-1">
+            <div className="text-ui-xs font-bold text-muted-foreground uppercase tracking-wider px-1">
               App Connectors {keyConfigured === false && <span className="normal-case font-normal">— add your Composio API key above to connect</span>}
             </div>
 
@@ -364,15 +364,15 @@ export const ConnectionsView: React.FC<{ embedded?: boolean }> = ({ embedded }) 
                         <div className="flex items-center gap-2">
                           <h3 className="font-semibold text-sm text-foreground">{toolkit.name}</h3>
                           {toolkit.connected ? (
-                            <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-medium bg-emerald-950/30 border border-emerald-800/40 px-2 py-0.5 rounded-full">
+                            <span className="inline-flex items-center gap-1 text-ui-xs text-emerald-400 font-medium bg-emerald-950/30 border border-emerald-800/40 px-2 py-0.5 rounded-full">
                               <CheckCircle2 className="w-3 h-3" /> Connected
                             </span>
                           ) : phase === 'awaiting-oauth' ? (
-                            <span className="inline-flex items-center gap-1 text-[10px] text-amber-400 font-medium bg-amber-950/30 border border-amber-800/40 px-2 py-0.5 rounded-full">
+                            <span className="inline-flex items-center gap-1 text-ui-xs text-amber-400 font-medium bg-amber-950/30 border border-amber-800/40 px-2 py-0.5 rounded-full">
                               <Loader2 className="w-3 h-3 animate-spin" /> Awaiting authorization…
                             </span>
                           ) : phase === 'error' ? (
-                            <span className="inline-flex items-center gap-1 text-[10px] text-red-400 font-medium bg-red-950/30 border border-red-800/40 px-2 py-0.5 rounded-full">
+                            <span className="inline-flex items-center gap-1 text-ui-xs text-red-400 font-medium bg-red-950/30 border border-red-800/40 px-2 py-0.5 rounded-full">
                               <XCircle className="w-3 h-3" /> Failed
                             </span>
                           ) : null}
@@ -409,7 +409,7 @@ export const ConnectionsView: React.FC<{ embedded?: boolean }> = ({ embedded }) 
         {/* Tab 2: Plugins */}
         {activeTab === 'plugins' && (
           <div className="space-y-3">
-            <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider px-1">
+            <div className="text-ui-xs font-bold text-muted-foreground uppercase tracking-wider px-1">
               Built-in System Plugins
             </div>
 

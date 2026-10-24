@@ -114,14 +114,14 @@ export const SkillsPane: React.FC = () => {
                     <span className="truncate">{sk.name}</span>
                   </div>
                   {sk.category && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono whitespace-nowrap">
+                    <span className="text-ui-xs px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono whitespace-nowrap">
                       {sk.category}
                     </span>
                   )}
                 </div>
-                <div className="text-[11px] text-mid line-clamp-2">{sk.description}</div>
+                <div className="text-ui-xs text-mid line-clamp-2">{sk.description}</div>
                 {sk.tools && sk.tools.length > 0 && (
-                  <div className="text-[10px] text-lo font-mono flex items-center gap-1 pt-1">
+                  <div className="text-ui-xs text-lo font-mono flex items-center gap-1 pt-1">
                     <Wrench size={10} className="text-blue-500" />
                     <span>{sk.tools.length} executable tool{sk.tools.length > 1 ? 's' : ''}</span>
                   </div>

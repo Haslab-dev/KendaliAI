@@ -54,3 +54,4 @@ config.yaml
 projects/sample-app
 refs/
 .workspace/
+ui/vite.config.preview.ts

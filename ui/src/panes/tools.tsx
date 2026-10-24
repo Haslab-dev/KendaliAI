@@ -86,11 +86,11 @@ export const ToolsPane: React.FC = () => {
                 <tr key={t.name} className="border-b border-line hover:bg-raised">
                   <td className="py-2 px-3 font-semibold text-hi font-mono">{t.name}</td>
                   <td className="py-2 px-3">
-                    <span className="bg-raised text-mid px-2 py-0.5 rounded text-[10px]">
+                    <span className="bg-raised text-mid px-2 py-0.5 rounded text-ui-xs">
                       {t.category}
                     </span>
                   </td>
-                  <td className="py-2 px-3 font-mono text-[11px] text-lo truncate max-w-xs">
+                  <td className="py-2 px-3 font-mono text-ui-xs text-lo truncate max-w-xs">
                     {t.signature}
                   </td>
                   <td className="py-2 px-3 text-right">

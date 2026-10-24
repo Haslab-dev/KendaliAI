@@ -7,7 +7,7 @@ import {
 import { useAppStore } from '../store/useAppStore';
 import { ApiKeyModal } from '../components/ApiKeyModal';
 import { navigate } from '../router';
-import { PaneToolbar, PaneToolbarFilters, PaneToolbarActions, StatChip } from '../components/settings/settingsPrimitives';
+import { PaneToolbar, PaneToolbarFilters, PaneToolbarActions, StatCard, StatChip } from '../components/settings/settingsPrimitives';
 import {
   ProviderConfig, AgentConfig, MCPServerConfig, SkillItem, ToolDefinition, TelegramBotConfig,
   ModelItem, isReasoningModel, EmbeddingConfig, DocumentItem
@@ -196,32 +196,14 @@ export const McpsPane: React.FC = () => {
         </PaneToolbarActions>
       </PaneToolbar>
 
-      {/* Stats Overview Banner */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="p-3 bg-raised border border-line rounded-xl flex items-center justify-between">
-          <div>
-            <span className="text-[10px] text-mid font-semibold uppercase tracking-wider">Registered Servers</span>
-            <div className="text-xl font-bold text-hi mt-0.5">{mcps.length}</div>
-          </div>
-          <Plug size={22} className="text-mid" />
-        </div>
-        <div className="p-3 bg-raised border border-line rounded-xl flex items-center justify-between">
-          <div>
-            <span className="text-[10px] text-mid font-semibold uppercase tracking-wider">Active Providers</span>
-            <div className="text-xl font-bold text-emerald-500 mt-0.5">{activeCount}</div>
-          </div>
-          <CheckCircle size={22} className="text-emerald-500" />
-        </div>
-        <div className="p-3 bg-raised border border-line rounded-xl flex items-center justify-between">
-          <div>
-            <span className="text-[10px] text-mid font-semibold uppercase tracking-wider">Total Discovered Tools</span>
-            <div className="text-xl font-bold text-blue-500 mt-0.5">{totalTools}</div>
-          </div>
-          <Wrench size={22} className="text-blue-500" />
-        </div>
+      {/* Stats as compact cards */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <StatCard icon={Plug} label="Registered servers" value={mcps.length} />
+        <StatCard icon={CheckCircle} label="Active" value={activeCount} tone="primary" />
+        <StatCard icon={Wrench} label="Discovered tools" value={totalTools} />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {mcps.map((m) => {
           const isFc = m.name?.toLowerCase() === 'firecrawl' || m.id?.toLowerCase() === 'firecrawl';
           const isEx = m.name?.toLowerCase() === 'exa' || m.id?.toLowerCase() === 'exa';
@@ -245,7 +227,7 @@ export const McpsPane: React.FC = () => {
                 <div className="font-semibold text-sm text-hi flex items-center gap-1.5">
                   <Plug size={15} className={isEnabled ? 'text-hi' : 'text-lo'} />
                   <span>{m.name}</span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-foreground/10 text-mid uppercase font-mono">
+                  <span className="text-ui-xs px-1.5 py-0.5 rounded bg-foreground/10 text-mid uppercase font-mono">
                     {m.transport || 'stdio'}
                   </span>
                 </div>
@@ -255,7 +237,7 @@ export const McpsPane: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleToggle(m)}
-                    className={`text-[10px] px-2 py-0.5 rounded font-sans font-medium transition-colors cursor-pointer flex items-center gap-1 ${
+                    className={`text-ui-xs px-2 py-0.5 rounded font-sans font-medium transition-colors cursor-pointer flex items-center gap-1 ${
                       isEnabled
                         ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                         : 'bg-zinc-500/10 text-zinc-400 border border-zinc-500/20'
@@ -291,16 +273,16 @@ export const McpsPane: React.FC = () => {
                 <div className="flex items-center gap-1.5">
                   {isFc || isEx ? (
                     isConfigured ? (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium flex items-center gap-1">
+                      <span className="text-ui-xs px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium flex items-center gap-1">
                         <Check size={10} /> Key Configured
                       </span>
                     ) : (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-medium flex items-center gap-1">
+                      <span className="text-ui-xs px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-medium flex items-center gap-1">
                         <AlertCircle size={10} /> Key Required
                       </span>
                     )
                   ) : m.headers && Object.keys(m.headers).length > 0 ? (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono">
+                    <span className="text-ui-xs px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono">
                       {Object.keys(m.headers).length} Header{Object.keys(m.headers).length > 1 ? 's' : ''}
                     </span>
                   ) : null}
@@ -311,7 +293,7 @@ export const McpsPane: React.FC = () => {
                     type="button"
                     onClick={() => handleFetchTools(m.id)}
                     disabled={isFetchingTools}
-                    className="text-[11px] text-mid hover:text-hi font-medium flex items-center gap-1 cursor-pointer transition-colors"
+                    className="text-ui-xs text-mid hover:text-hi font-medium flex items-center gap-1 cursor-pointer transition-colors"
                     title="Fetch / Refresh tools from this server"
                   >
                     <RefreshCw size={11} className={isFetchingTools ? 'animate-spin' : ''} />
@@ -324,7 +306,7 @@ export const McpsPane: React.FC = () => {
                       setApiKeyTarget(isFc ? 'firecrawl' : isEx ? 'exa' : 'all');
                       setShowApiKeyModal(true);
                     }}
-                    className="text-[11px] text-blue-400 hover:text-blue-300 font-medium flex items-center gap-1 cursor-pointer transition-colors"
+                    className="text-ui-xs text-blue-400 hover:text-blue-300 font-medium flex items-center gap-1 cursor-pointer transition-colors"
                   >
                     <Key size={11} />
                     <span>Configure Key</span>
@@ -337,7 +319,7 @@ export const McpsPane: React.FC = () => {
                   {m.toolsCached.map((t) => (
                     <span
                       key={t.name}
-                      className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono"
+                      className="text-ui-xs px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono"
                       title={t.description}
                     >
                       {t.name}
@@ -395,7 +377,7 @@ export const McpsPane: React.FC = () => {
             <button
               type="button"
               onClick={() => setSelectedServer('all')}
-              className={`text-[11px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap transition-colors cursor-pointer ${
+              className={`text-ui-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap transition-colors cursor-pointer ${
                 selectedServer === 'all'
                   ? 'bg-blue-600 text-white'
                   : 'bg-raised text-mid border border-line hover:bg-hoverbg'
@@ -410,7 +392,7 @@ export const McpsPane: React.FC = () => {
                   key={m.id}
                   type="button"
                   onClick={() => setSelectedServer(m.id || m.name)}
-                  className={`text-[11px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap transition-colors cursor-pointer ${
+                  className={`text-ui-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap transition-colors cursor-pointer ${
                     selectedServer === m.id || selectedServer === m.name
                       ? 'bg-blue-600 text-white'
                       : 'bg-raised text-mid border border-line hover:bg-hoverbg'
@@ -432,7 +414,7 @@ export const McpsPane: React.FC = () => {
                 ? 'No MCP Tools Discovered Yet'
                 : 'No MCP tools match your search filter'}
             </span>
-            <p className="text-[11px] text-mid max-w-sm">
+            <p className="text-ui-xs text-mid max-w-sm">
               {allMcpTools.length === 0
                 ? 'Make sure your MCP servers are configured with valid API keys or commands, then click "Sync All Tools".'
                 : 'Try clearing the search query or selecting "All Servers".'}
@@ -473,12 +455,12 @@ export const McpsPane: React.FC = () => {
                         {isCopied ? <Check size={11} className="text-emerald-500" /> : <Copy size={11} />}
                       </button>
 
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-foreground/10 text-mid uppercase font-mono">
+                      <span className="text-ui-xs px-1.5 py-0.5 rounded bg-foreground/10 text-mid uppercase font-mono">
                         {tool.serverName} · {tool.serverTransport}
                       </span>
 
                       <span
-                        className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
+                        className={`text-ui-xs px-1.5 py-0.5 rounded font-mono ${
                           tool.serverEnabled
                             ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                             : 'bg-zinc-500/10 text-zinc-400 border border-zinc-500/20'
@@ -500,7 +482,7 @@ export const McpsPane: React.FC = () => {
                         copyTool(tool.name);
                         navigate('chat');
                       }}
-                      className="px-2.5 py-1 bg-inputbg hover:bg-line border border-line rounded text-[11px] font-medium text-hi flex items-center gap-1 transition-colors cursor-pointer"
+                      className="px-2.5 py-1 bg-inputbg hover:bg-line border border-line rounded text-ui-xs font-medium text-hi flex items-center gap-1 transition-colors cursor-pointer"
                       title="Copy tool name and open Chat"
                     >
                       <ExternalLink size={11} />
@@ -518,7 +500,7 @@ export const McpsPane: React.FC = () => {
         <h4 className="text-sm font-semibold text-hi">Register New MCP Server</h4>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label className="text-[11px] font-semibold text-mid uppercase">Name</label>
+            <label className="text-ui-xs font-semibold text-mid uppercase">Name</label>
             <input
               type="text"
               className="w-full mt-1 px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi outline-none"
@@ -528,7 +510,7 @@ export const McpsPane: React.FC = () => {
             />
           </div>
           <div>
-            <label className="text-[11px] font-semibold text-mid uppercase">Transport</label>
+            <label className="text-ui-xs font-semibold text-mid uppercase">Transport</label>
             <select
               className="w-full mt-1 px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi outline-none"
               value={form.transport || 'stdio'}
@@ -543,7 +525,7 @@ export const McpsPane: React.FC = () => {
           {form.transport === 'http' || form.transport === 'sse' ? (
             <>
               <div className="sm:col-span-2">
-                <label className="text-[11px] font-semibold text-mid uppercase">Endpoint URL</label>
+                <label className="text-ui-xs font-semibold text-mid uppercase">Endpoint URL</label>
                 <input
                   type="text"
                   className="w-full mt-1 px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi outline-none font-mono"
@@ -553,7 +535,7 @@ export const McpsPane: React.FC = () => {
                 />
               </div>
               <div className="sm:col-span-2">
-                <label className="text-[11px] font-semibold text-mid uppercase">HTTP Headers (API Key)</label>
+                <label className="text-ui-xs font-semibold text-mid uppercase">HTTP Headers (API Key)</label>
                 <div className="flex gap-2 mt-1">
                   <input
                     type="text"
@@ -588,7 +570,7 @@ export const McpsPane: React.FC = () => {
                 {form.headers && Object.keys(form.headers).length > 0 && (
                   <div className="mt-2 space-y-1">
                     {Object.entries(form.headers).map(([k, v]) => (
-                      <div key={k} className="flex items-center justify-between px-2.5 py-1 bg-inputbg border border-line rounded text-[11px] font-mono text-mid">
+                      <div key={k} className="flex items-center justify-between px-2.5 py-1 bg-inputbg border border-line rounded text-ui-xs font-mono text-mid">
                         <span>{k}: {v.slice(0, 12)}...</span>
                         <button
                           type="button"
@@ -610,7 +592,7 @@ export const McpsPane: React.FC = () => {
           ) : (
             <>
               <div>
-                <label className="text-[11px] font-semibold text-mid uppercase">Command</label>
+                <label className="text-ui-xs font-semibold text-mid uppercase">Command</label>
                 <input
                   type="text"
                   className="w-full mt-1 px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi outline-none"
@@ -620,7 +602,7 @@ export const McpsPane: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="text-[11px] font-semibold text-mid uppercase">Arguments</label>
+                <label className="text-ui-xs font-semibold text-mid uppercase">Arguments</label>
                 <input
                   type="text"
                   className="w-full mt-1 px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi outline-none"

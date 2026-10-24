@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   ArrowLeft,
+  Activity,
   Settings2,
   Palette,
   Cpu,
@@ -30,6 +31,7 @@ import {
   SectionTitle,
   SettingsGroupCard,
   SettingsRow,
+  StatCard,
   settingsButtonClasses as btn,
 } from './settingsPrimitives';
 import { AppearanceSettingsPane } from './AppearanceSettingsPane';
@@ -433,31 +435,19 @@ const AcpAgentsSection: React.FC = () => {
   const { acpAgents, acpSessions } = useAgentStore();
 
   return (
-    <div className="space-y-4">
-      <p className="text-ui-base leading-6 text-foreground-subtle">
-        Agent Client Protocol (ACP) enables orchestration across sub-agents, external CLI runners, and tool subprocesses.
-      </p>
+    <div className="space-y-5">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <StatCard icon={Cable} label="ACP service" value="Active" hint="ws://localhost:18889" tone="primary" />
+        <StatCard icon={Bot} label="Registered agents" value={acpAgents.length} hint="Via ACP handshake" />
+        <StatCard icon={Activity} label="Live sessions" value={Object.keys(acpSessions).length} hint="Running or paused" />
+      </div>
       <SettingsGroupCard>
         <SettingsRow
-          label="ACP Protocol Service"
-          description="WebSocket RPC server dispatching events between UI and orchestrators."
-          control={<span className="text-ui-sm font-semibold text-emerald-500">Active (ws://localhost:18889)</span>}
-        />
-        <SettingsRow
-          label="Registered ACP Agents"
-          description="Agents reporting capability via the ACP client handshake."
+          label="Registered ACP agents"
+          description="External runners reporting capability during the client handshake. Configure engines from an agent's Profile → Engine selector."
           control={
             <span className="font-mono text-ui-xs text-foreground bg-surface px-2 py-0.5 rounded border border-border">
               {acpAgents.length} registered
-            </span>
-          }
-        />
-        <SettingsRow
-          label="Active ACP Sessions"
-          description="Live orchestrator instances currently running or paused."
-          control={
-            <span className="font-mono text-ui-xs text-foreground bg-surface px-2 py-0.5 rounded border border-border">
-              {Object.keys(acpSessions).length} live
             </span>
           }
         />

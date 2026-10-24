@@ -97,12 +97,12 @@ export const ChannelsSettingsPane: React.FC<ChannelsSettingsPaneProps> = ({
                     <Icon size={22} />
                   </div>
                   {ch.status === 'active' ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-ui-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                       {ch.statusLabel}
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-muted/40 text-muted-foreground border border-border/30">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-ui-xs font-medium bg-muted/40 text-muted-foreground border border-border/30">
                       <Clock size={10} />
                       {ch.statusLabel}
                     </span>
@@ -118,7 +118,7 @@ export const ChannelsSettingsPane: React.FC<ChannelsSettingsPaneProps> = ({
               </div>
 
               {isSelected && (
-                <div className="mt-3 pt-2 border-t border-border/30 flex items-center gap-1 text-[11px] font-medium text-primary">
+                <div className="mt-3 pt-2 border-t border-border/30 flex items-center gap-1 text-ui-xs font-medium text-primary">
                   <CheckCircle2 size={12} />
                   <span>Viewing Configuration</span>
                 </div>
@@ -138,7 +138,7 @@ export const ChannelsSettingsPane: React.FC<ChannelsSettingsPaneProps> = ({
                 <div>
                   <h4 className="font-semibold text-foreground text-sm flex items-center gap-2">
                     Telegram Channel Gateway
-                    <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded font-mono">
+                    <span className="text-ui-xs bg-primary/20 text-primary px-1.5 py-0.5 rounded font-mono">
                       v1.2
                     </span>
                   </h4>
@@ -166,7 +166,7 @@ export const ChannelsSettingsPane: React.FC<ChannelsSettingsPaneProps> = ({
                 <div>
                   <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
                     Discord Bot Integration
-                    <span className="text-[10px] bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2 py-0.5 rounded-full font-medium">
+                    <span className="text-ui-xs bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2 py-0.5 rounded-full font-medium">
                       In Development
                     </span>
                   </h3>
@@ -255,7 +255,7 @@ export const ChannelsSettingsPane: React.FC<ChannelsSettingsPaneProps> = ({
                 <div>
                   <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
                     Slack App Integration
-                    <span className="text-[10px] bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2 py-0.5 rounded-full font-medium">
+                    <span className="text-ui-xs bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2 py-0.5 rounded-full font-medium">
                       In Development
                     </span>
                   </h3>
@@ -344,7 +344,7 @@ export const ChannelsSettingsPane: React.FC<ChannelsSettingsPaneProps> = ({
                 <div>
                   <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
                     WhatsApp Business Channel
-                    <span className="text-[10px] bg-muted text-muted-foreground border border-border px-2 py-0.5 rounded-full font-medium">
+                    <span className="text-ui-xs bg-muted text-muted-foreground border border-border px-2 py-0.5 rounded-full font-medium">
                       Roadmap
                     </span>
                   </h3>
