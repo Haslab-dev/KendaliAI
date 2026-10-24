@@ -1,11 +1,58 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Ellipsis, Menu, Pencil, SquareTerminal, Trash2 } from 'lucide-react';
+import { Ellipsis, Menu, Pencil, Plus, SquareTerminal, Trash2 } from 'lucide-react';
 import { cn } from '../../lib/cn';
 import { ThemePicker } from '../common/ThemePicker';
 import { useSessionStore } from '../../store/useSessionStore';
 import { useAgentStore } from '../../store/useAgentStore';
 import { useUIStore } from '../../store/useUIStore';
 import { isMainSession } from '../../store/useSessionStore';
+
+/**
+ * Mobile drawer trigger icon (matches Muse AI mobile view: circular menu button with stepped lines and active dot).
+ */
+export const MobileDrawerTrigger: React.FC<{ scrolled?: boolean }> = ({ scrolled }) => {
+  const { toggleMobileDrawer } = useUIStore();
+
+  const handleTrigger = (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleMobileDrawer();
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleTrigger}
+      onTouchEnd={handleTrigger}
+      aria-label="Open agent roster"
+      title="Agents & Groups"
+      className={cn(
+        'absolute top-3.5 left-4 z-40 flex size-10 items-center justify-center rounded-full border border-border/80 bg-card/95 backdrop-blur-xl text-foreground shadow-md transition-all md:hidden cursor-pointer hover:bg-surface active:scale-90 touch-manipulation pointer-events-auto',
+        scrolled && 'bg-background/95 shadow-md ring-1 ring-border/50'
+      )}
+    >
+      <div className="relative flex items-center justify-center">
+        {/* Muse AI stepped hamburger: medium top line, full middle line, short bottom line */}
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          className="text-foreground"
+        >
+          <line x1="4" y1="6" x2="16" y2="6" />
+          <line x1="4" y1="12" x2="20" y2="12" />
+          <line x1="4" y1="18" x2="11" y2="18" />
+        </svg>
+        {/* Active notification indicator dot */}
+        <span className="absolute -top-1.5 -right-1.5 size-2.5 rounded-full bg-primary ring-2 ring-background shadow-xs pointer-events-none" />
+      </div>
+    </button>
+  );
+};
 
 interface ChatTopControlsProps {
   /** Show the "..." session actions menu (rename / terminal / delete). */
@@ -72,6 +119,19 @@ export const ChatTopControls: React.FC<ChatTopControlsProps> = ({
       )}
     >
       {children}
+
+      {/* Mobile: Muse AI style "+ New" pill button */}
+      <button
+        type="button"
+        onClick={() => {
+          useSessionStore.getState().selectSession(null);
+        }}
+        className="flex md:hidden items-center gap-1 px-2.5 py-1 rounded-full bg-surface/90 border border-border/60 text-ui-xs font-semibold text-foreground shadow-xs hover:bg-surface active:scale-95 transition-all cursor-pointer"
+        title="Start new task"
+      >
+        <Plus className="size-3.5 text-primary" />
+        <span>New</span>
+      </button>
 
       {showMenu && (
         <div className="relative flex items-center" ref={menuRef}>

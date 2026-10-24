@@ -2014,6 +2014,9 @@ func GetToolRegistry(cfg *config.Config, excludeCmds []string, workspaceRoot str
 	for name, tool := range GoogleWorkspaceTools(db) {
 		registry[name] = tool
 	}
+	for name, tool := range GitHubTools(db) {
+		registry[name] = tool
+	}
 
 	return registry
 }
@@ -2252,6 +2255,24 @@ func executeMCPCall(ctx context.Context, cfg *config.Config, db *sql.DB, args ma
 						"x-api-key": os.Getenv("EXA_API_KEY"),
 					},
 				}
+			} else if lower == "composio" {
+				composioKey := os.Getenv("COMPOSIO_API_KEY")
+				if composioKey == "" && db != nil {
+					_ = db.QueryRow("SELECT value FROM system_settings WHERE key = 'composio_api_key'").Scan(&composioKey)
+				}
+				headerName := "x-api-key"
+				if strings.HasPrefix(composioKey, "ck_") {
+					headerName = "x-consumer-api-key"
+				}
+				srv = &config.MCPServerConfig{
+					Type:      "http",
+					ServerURL: "https://connect.composio.dev/mcp",
+					URL:       "https://connect.composio.dev/mcp",
+					Headers: map[string]string{
+						headerName: composioKey,
+						"Accept":   "application/json, text/event-stream",
+					},
+				}
 			}
 		}
 	}
@@ -2288,7 +2309,7 @@ func executeMCPCall(ctx context.Context, cfg *config.Config, db *sql.DB, args ma
 		}
 	}
 
-	// Validate required keys for firecrawl and exa
+	// Validate required keys for firecrawl, exa, and composio
 	if strings.EqualFold(serverName, "firecrawl") {
 		authVal := effectiveHeaders["Authorization"]
 		if authVal == "" || authVal == "Bearer " || authVal == "Bearer <FIRECRAWL_API_KEY>" {
@@ -2299,9 +2320,20 @@ func executeMCPCall(ctx context.Context, cfg *config.Config, db *sql.DB, args ma
 		if exaKey == "" || exaKey == "YOUR_EXA_API_KEY" || exaKey == "<YOUR_EXA_API_KEY>" {
 			return "error: Exa API key is required. Please set EXA_API_KEY in your environment or configure mcpServers.exa.headers.x-api-key in config.json"
 		}
+	} else if strings.EqualFold(serverName, "composio") {
+		compKey := effectiveHeaders["x-consumer-api-key"]
+		if compKey == "" {
+			compKey = effectiveHeaders["x-api-key"]
+		}
+		if compKey == "" {
+			return "error: Composio API key is required. Please set it in Connections or configure mcpServers.composio in config.json"
+		}
 	}
 
 	if serverURL != "" {
+		if _, hasAccept := effectiveHeaders["Accept"]; !hasAccept {
+			effectiveHeaders["Accept"] = "application/json, text/event-stream"
+		}
 		var opts []transport.StreamableHTTPCOption
 		if len(effectiveHeaders) > 0 {
 			opts = append(opts, transport.WithHTTPHeaders(effectiveHeaders))
@@ -2317,6 +2349,7 @@ func executeMCPCall(ctx context.Context, cfg *config.Config, db *sql.DB, args ma
 
 		initReq := mcp.InitializeRequest{}
 		initReq.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+		initReq.Params.Capabilities = mcp.ClientCapabilities{}
 		initReq.Params.ClientInfo = mcp.Implementation{Name: "kendaliai", Version: "1.0.0"}
 		if _, err := c.Initialize(ctx, initReq); err != nil {
 			return fmt.Sprintf("failed to initialize MCP client: %v", err)

@@ -5,10 +5,29 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 )
+
+// sanitizeWorkspacePath strips synthetic prefixes that LLMs frequently prepend
+// like "/workspaces/", "/workspace/", or "~/workspaces/" and returns a normalized relative path.
+func sanitizeWorkspacePath(path string) string {
+	cleaned := strings.TrimSpace(path)
+	for _, prefix := range []string{
+		"/workspaces/", "workspaces/",
+		"/workspace/", "workspace/",
+		"~/workspaces/", "~/workspace/",
+		"~/",
+	} {
+		if strings.HasPrefix(cleaned, prefix) {
+			cleaned = strings.TrimPrefix(cleaned, prefix)
+			break
+		}
+	}
+	return cleaned
+}
 
 // resolveToolPath resolves a (possibly relative) tool path against the
 // workspace root and validates it stays inside the sandbox.
@@ -16,9 +35,13 @@ func resolveToolPath(workspaceRoot, path string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("'path' is required")
 	}
-	abs := path
+	cleaned := sanitizeWorkspacePath(path)
+	if cleaned == "" {
+		return "", fmt.Errorf("invalid path: cannot target root workspace directory")
+	}
+	abs := cleaned
 	if !filepath.IsAbs(abs) {
-		abs = filepath.Join(workspaceRoot, path)
+		abs = filepath.Join(workspaceRoot, cleaned)
 	}
 	if err := ValidateSandboxedPath(abs, workspaceRoot); err != nil {
 		return "", err
@@ -75,7 +98,12 @@ func DocumentTools(workspaceRoot string) map[string]ToolDef {
 				if err := writeZip(abs, buildDocx(content)); err != nil {
 					return "error writing docx: " + err.Error()
 				}
-				return fmt.Sprintf("Created %s (%d bytes). Open it directly in Word, Google Docs, or LibreOffice.", abs, fileSizeOrZero(abs))
+				relPath, _ := filepath.Rel(workspaceRoot, abs)
+				if relPath == "" || strings.HasPrefix(relPath, "..") {
+					relPath = filepath.Base(abs)
+				}
+				downloadURL := fmt.Sprintf("/api/workspace/download?path=%s", url.QueryEscape(relPath))
+				return fmt.Sprintf("Created file **[%s](%s)** (%d bytes). You can [download it directly](%s) or open it in Word / Google Docs / LibreOffice.", filepath.Base(abs), downloadURL, fileSizeOrZero(abs), downloadURL)
 			},
 		},
 		"docx_read": {
@@ -181,7 +209,12 @@ func DocumentTools(workspaceRoot string) map[string]ToolDef {
 				for _, s := range sheets {
 					total += len(s.Rows)
 				}
-				return fmt.Sprintf("Created %s — %d sheet(s), %d rows total.", abs, len(sheets), total)
+				relPath, _ := filepath.Rel(workspaceRoot, abs)
+				if relPath == "" || strings.HasPrefix(relPath, "..") {
+					relPath = filepath.Base(abs)
+				}
+				downloadURL := fmt.Sprintf("/api/workspace/download?path=%s", url.QueryEscape(relPath))
+				return fmt.Sprintf("Created file **[%s](%s)** — %d sheet(s), %d rows total. You can [download it directly](%s) or open it in Excel / Google Sheets.", filepath.Base(abs), downloadURL, len(sheets), total, downloadURL)
 			},
 		},
 		"xlsx_read": {
@@ -248,7 +281,12 @@ func DocumentTools(workspaceRoot string) map[string]ToolDef {
 				if err := writeZip(abs, buildPptx(slides)); err != nil {
 					return "error writing pptx: " + err.Error()
 				}
-				return fmt.Sprintf("Created %s — %d slides. Open it in PowerPoint, Google Slides, or LibreOffice Impress.", abs, len(slides))
+				relPath, _ := filepath.Rel(workspaceRoot, abs)
+				if relPath == "" || strings.HasPrefix(relPath, "..") {
+					relPath = filepath.Base(abs)
+				}
+				downloadURL := fmt.Sprintf("/api/workspace/download?path=%s", url.QueryEscape(relPath))
+				return fmt.Sprintf("Created file **[%s](%s)** — %d slides. You can [download it directly](%s) or open it in PowerPoint / Google Slides.", filepath.Base(abs), downloadURL, len(slides), downloadURL)
 			},
 		},
 	}
@@ -294,7 +332,12 @@ func VisualTools(workspaceRoot string) map[string]ToolDef {
 				if err := os.WriteFile(abs, []byte(svg), 0644); err != nil {
 					return "error writing image: " + err.Error()
 				}
-				return fmt.Sprintf("Generated %s (%s variant, %d bytes). Vector output — crisp at any size.", abs, variant, fileSizeOrZero(abs))
+				relPath, _ := filepath.Rel(workspaceRoot, abs)
+				if relPath == "" || strings.HasPrefix(relPath, "..") {
+					relPath = filepath.Base(abs)
+				}
+				downloadURL := fmt.Sprintf("/api/workspace/download?path=%s", url.QueryEscape(relPath))
+				return fmt.Sprintf("Generated **[%s](%s)** (%s variant, %d bytes). [Download image](%s).", filepath.Base(abs), downloadURL, variant, fileSizeOrZero(abs), downloadURL)
 			},
 		},
 		"slides_create": {
@@ -323,7 +366,12 @@ func VisualTools(workspaceRoot string) map[string]ToolDef {
 				if err := os.WriteFile(abs, []byte(html), 0644); err != nil {
 					return "error writing deck: " + err.Error()
 				}
-				return fmt.Sprintf("Created %s — %d slides. Open in a browser; use ←/→ keys to navigate.", abs, len(parsed))
+				relPath, _ := filepath.Rel(workspaceRoot, abs)
+				if relPath == "" || strings.HasPrefix(relPath, "..") {
+					relPath = filepath.Base(abs)
+				}
+				downloadURL := fmt.Sprintf("/api/workspace/download?path=%s", url.QueryEscape(relPath))
+				return fmt.Sprintf("Created presentation **[%s](%s)** — %d slides. [Open or download deck](%s).", filepath.Base(abs), downloadURL, len(parsed), downloadURL)
 			},
 		},
 	}
@@ -397,8 +445,8 @@ func MotionTools(workspaceRoot string) map[string]ToolDef {
 		},
 		"motion_hyperframe": {
 			Name:        "motion_hyperframe",
-			Description: "Generates a single-file HyperFrames .motion.html animation (1920×1080 stage, GSAP master timeline loaded from CDN) from a scene list. Render to MP4 with the bundled open-design-hyperframes renderer (node skills/19-open-design-hyperframes/tools/render_motion.js).",
-			Signature:   `{"path": "string", "title": "string", "scenes": "array of {text, durationSeconds}", "accent": "hex color (optional)"}`,
+			Description: "Generates a single-file HyperFrames .motion.html animation (1920×1080 stage, GSAP master timeline loaded from CDN) from a scene list. Call this whenever the user asks for motion graphics, video teaser, 60fps animation, GSAP timeline, or product animation. NEVER output raw HTML code in your reply when this tool is available — ALWAYS call motion_hyperframe to create the animation file.",
+			Signature:   `{"path": "string (e.g. teaser.motion.html)", "title": "string", "scenes": "array of {text: string, durationSeconds: float}", "accent": "hex color (optional)"}`,
 			Category:    "Motion",
 			Execute: func(ctx context.Context, args map[string]interface{}) string {
 				path, _ := args["path"].(string)
@@ -406,8 +454,8 @@ func MotionTools(workspaceRoot string) map[string]ToolDef {
 				if err != nil {
 					return "error: " + err.Error()
 				}
-				if !strings.HasSuffix(strings.ToLower(abs), ".html") {
-					abs += ".html"
+				if !strings.HasSuffix(strings.ToLower(abs), ".motion.html") && !strings.HasSuffix(strings.ToLower(abs), ".html") {
+					abs += ".motion.html"
 				}
 				var spec struct {
 					Title  string       `json:"title"`
@@ -433,8 +481,12 @@ func MotionTools(workspaceRoot string) map[string]ToolDef {
 						total += 3
 					}
 				}
-				return fmt.Sprintf("Generated %s — %d scenes, %.1fs total. Preview in a browser, or render: node skills/19-open-design-hyperframes/tools/render_motion.js --input=%s --output=motion.mp4",
-					abs, len(spec.Scenes), total, abs)
+				relPath, _ := filepath.Rel(workspaceRoot, abs)
+				if relPath == "" || strings.HasPrefix(relPath, "..") {
+					relPath = filepath.Base(abs)
+				}
+				downloadURL := fmt.Sprintf("/api/workspace/download?path=%s", url.QueryEscape(relPath))
+				return fmt.Sprintf("Generated motion animation **[%s](%s)** — %d scenes, %.1fs total. [Open or download motion file](%s).", filepath.Base(abs), downloadURL, len(spec.Scenes), total, downloadURL)
 			},
 		},
 	}

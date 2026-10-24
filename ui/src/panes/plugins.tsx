@@ -27,10 +27,8 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { SkillItem } from '../types';
-import { navigate } from '../router';
-import { usePluginCatalog } from '../components/shell/PluginCatalog';
+import { navigate, navigateSettings } from '../router';
 import { PaneToolbar, PaneToolbarFilters, PaneToolbarActions } from '../components/settings/settingsPrimitives';
-import { HardDrive, Cloud } from 'lucide-react';
 
 interface PluginToolDef {
   name: string;
@@ -199,7 +197,7 @@ const DISCOVERY_CATALOG: CatalogSkill[] = [
 
 export const PluginsPane: React.FC = () => {
   const { createSession, activeAgent } = useAppStore();
-  const [activeTab, setActiveTab] = useState<'plugins' | 'skills' | 'discover'>('plugins');
+  const [activeTab, setActiveTab] = useState<'plugins' | 'discover'>('plugins');
 
   const [pluginsList, setPluginsList] = useState<Plugin[]>([]);
   const [skillsList, setSkillsList] = useState<SkillItem[]>([]);
@@ -250,13 +248,6 @@ export const PluginsPane: React.FC = () => {
   useEffect(() => {
     loadData();
   }, [loadData]);
-
-  // Initial selection
-  useEffect(() => {
-    if (!selectedPlugin && pluginsList.length > 0) {
-      setSelectedPlugin(pluginsList[0]);
-    }
-  }, [pluginsList, selectedPlugin]);
 
   const handleToggle = async (pluginId: string, currentEnabled: boolean) => {
     setPluginsList((prev) =>
@@ -420,67 +411,44 @@ export const PluginsPane: React.FC = () => {
         <PaneToolbarFilters className="overflow-x-auto scrollbar-none flex-nowrap sm:flex-wrap">
           <button
             type="button"
-            onClick={() => {
-              setActiveTab('plugins');
-              if (pluginsList.length > 0) setSelectedPlugin(pluginsList[0]);
-            }}
-            className={`flex shrink-0 items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+            onClick={() => setActiveTab('plugins')}
+            className={`flex shrink-0 items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
               activeTab === 'plugins'
-                ? 'bg-foreground text-white dark:bg-white dark:text-black'
-                : 'text-muted-foreground hover:bg-foreground/5'
+                ? 'bg-foreground text-background shadow-2xs'
+                : 'text-muted-foreground hover:bg-foreground/5 hover:text-foreground'
             }`}
           >
             <Puzzle size={14} />
-            <span>Plugins ({pluginsList.length})</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab('skills');
-              if (skillsList.length > 0) setSelectedSkill(skillsList[0]);
-            }}
-            className={`flex shrink-0 items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-              activeTab === 'skills'
-                ? 'bg-foreground text-white dark:bg-white dark:text-black'
-                : 'text-muted-foreground hover:bg-foreground/5'
-            }`}
-          >
-            <Brain size={14} />
-            <span>Skills ({skillsList.length})</span>
+            <span>Installed Plugins ({pluginsList.length})</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('discover')}
-            className={`flex shrink-0 items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+            className={`flex shrink-0 items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
               activeTab === 'discover'
-                ? 'bg-foreground text-white dark:bg-white dark:text-black'
-                : 'text-muted-foreground hover:bg-foreground/5'
+                ? 'bg-foreground text-background shadow-2xs'
+                : 'text-muted-foreground hover:bg-foreground/5 hover:text-foreground'
             }`}
           >
             <Globe size={14} />
-            <span>Discover ({DISCOVERY_CATALOG.length})</span>
+            <span>Discovery Catalog ({DISCOVERY_CATALOG.length})</span>
           </button>
         </PaneToolbarFilters>
 
         <PaneToolbarActions>
-          <span className="hidden md:inline-flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
-            <Wrench size={13} className="text-primary" />
-            <span>{totalExportedTools} tools</span>
-          </span>
           <button
             type="button"
             onClick={loadData}
             title="Scan & Discover capabilities from disk"
-            className="p-2 rounded-lg border border-border text-muted-foreground hover:text-foreground bg-card hover:bg-accent/60 transition-colors cursor-pointer"
+            className="p-2 rounded-lg border border-border text-muted-foreground hover:text-foreground bg-card hover:bg-surface-hover transition-colors cursor-pointer"
           >
             <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
           </button>
           <button
             type="button"
             onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-foreground text-background text-xs font-bold rounded-lg hover:bg-black/90 dark:hover:bg-neutral-200 transition-all shadow-xs cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-foreground text-background text-xs font-bold rounded-lg hover:bg-foreground/90 transition-all shadow-2xs cursor-pointer"
           >
             <Plus size={13} />
             <span>Create Plugin</span>
@@ -488,20 +456,15 @@ export const PluginsPane: React.FC = () => {
         </PaneToolbarActions>
       </PaneToolbar>
 
-      {/* Default Capability Plugins catalog — checkboxes live per agent in Profile → Plugins */}
-      <DefaultCapabilityCatalog />
-
       {actionError && (
-        <div className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 text-xs rounded-lg flex items-center gap-2">
+        <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-ui-xs rounded-xl flex items-center gap-2">
           <AlertCircle size={14} className="shrink-0" />
           <span>{actionError}</span>
         </div>
       )}
 
-      {/* Main Content Layout */}
-      <div className="flex-1 w-full flex flex-col lg:flex-row gap-5 items-start">
-        {/* Left Column: List Section */}
-        <div className="flex-1 w-full flex flex-col gap-3.5 min-w-0">
+      {/* Main Content Layout (Full Width, Spacious) */}
+      <div className="w-full flex flex-col gap-4 min-w-0">
           {/* Search & Category Filter */}
           <div className="flex flex-col sm:flex-row gap-2 items-center justify-between">
             <div className="w-full relative">
@@ -511,17 +474,15 @@ export const PluginsPane: React.FC = () => {
                 placeholder={
                   activeTab === 'plugins'
                     ? 'Search plugins by name, ID, or tool...'
-                    : activeTab === 'skills'
-                    ? 'Search skills by name, description, or keyword...'
                     : 'Discover available capabilities & tools...'
                 }
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-card border border-border rounded-lg text-ui-sm text-black dark:text-white placeholder-[#8A8A85] focus:outline-none focus:border-foreground/60 dark:focus:border-white transition-all"
+                className="w-full pl-9 pr-4 py-2 bg-card border border-border rounded-lg text-ui-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-all"
               />
             </div>
 
-            {(activeTab === 'skills' || activeTab === 'discover') && (
+            {activeTab === 'discover' && (
               <div className="flex items-center gap-1 shrink-0 overflow-x-auto custom-scrollbar w-full sm:w-auto py-1">
                 {['all', 'DevOps & SRE', 'Networking', 'Research & AI', 'Developer Tools', 'Frontend & UI', 'Knowledge & Memory'].map(
                   (cat) => (
@@ -664,74 +625,7 @@ export const PluginsPane: React.FC = () => {
             </div>
           )}
 
-          {/* TAB 2: SKILLS LIBRARY */}
-          {activeTab === 'skills' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {filteredSkills.length === 0 ? (
-                <div className="col-span-full p-10 text-center bg-white dark:bg-card border border-dashed border-border rounded-xl flex flex-col items-center justify-center gap-2">
-                  <Brain size={28} className="text-muted-foreground" />
-                  <h3 className="text-ui-sm font-bold text-black dark:text-white">
-                    No Skills Found
-                  </h3>
-                  <p className="text-ui-xs text-muted-foreground max-w-sm">
-                    Skills are modular folders in <code className="font-mono">skills/</code> with SKILL.md instructions and executable tools.
-                  </p>
-                </div>
-              ) : (
-                filteredSkills.map((skill) => {
-                  const isSelected = selectedSkill?.id === skill.id;
-                  const toolCount = skill.tools ? skill.tools.length : 0;
-
-                  return (
-                    <div
-                      key={skill.id}
-                      onClick={() => {
-                        setSelectedSkill(skill);
-                        setSelectedPlugin(null);
-                      }}
-                      className={`p-3.5 bg-white dark:bg-card border ${
-                        isSelected
-                          ? 'border-primary ring-1 ring-[#007AFF] shadow-xs'
-                          : 'border-border hover:border-gray-300 dark:hover:border-neutral-600'
-                      } rounded-xl cursor-pointer space-y-2 transition-all`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-primary flex items-center justify-center shrink-0">
-                            <Brain size={15} />
-                          </div>
-                          <span className="font-bold text-ui-sm text-black dark:text-white truncate">
-                            {skill.name}
-                          </span>
-                        </div>
-
-                        {skill.category && (
-                          <span className="text-ui-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 shrink-0">
-                            {skill.category}
-                          </span>
-                        )}
-                      </div>
-
-                      <p className="text-ui-xs text-muted-foreground line-clamp-2 leading-relaxed">
-                        {skill.description}
-                      </p>
-
-                      <div className="flex items-center justify-between pt-1 border-t border-gray-100 dark:border-neutral-800 text-ui-xs font-mono text-gray-400">
-                        <span className="truncate">{skill.path || `skills/${skill.id}`}</span>
-                        {toolCount > 0 && (
-                          <span className="text-primary font-bold shrink-0">
-                            {toolCount} tool{toolCount > 1 ? 's' : ''}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          )}
-
-          {/* TAB 3: DISCOVERY & CATALOG */}
+          {/* TAB 2: DISCOVERY & CATALOG */}
           {activeTab === 'discover' && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               {filteredCatalog.map((item) => {
@@ -795,8 +689,7 @@ export const PluginsPane: React.FC = () => {
                         onClick={() => {
                           const matched = skillsList.find((s) => s.id === item.id);
                           if (matched) {
-                            setSelectedSkill(matched);
-                            setActiveTab('skills');
+                            navigateSettings('skills');
                           } else {
                             handlePromptAgent(`Tolong aktifkan dan pasang skill ${item.name} (${item.id}).`);
                           }
@@ -813,212 +706,221 @@ export const PluginsPane: React.FC = () => {
           )}
         </div>
 
-        {/* Right Column: Live Inspector & Detail Panel (NO DUMMY DATA!) */}
-        <div className="w-full lg:w-[400px] shrink-0 bg-white dark:bg-card border border-border rounded-xl p-5 flex flex-col gap-4 shadow-sm sticky top-5">
-          {selectedPlugin ? (
-            <>
-              {/* Plugin Inspector Header */}
-              <div className="flex items-start justify-between gap-2 border-b border-gray-100 dark:border-neutral-800 pb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-lg bg-warning/10 dark:bg-amber-950/40 text-agentorange flex items-center justify-center shrink-0">
-                    <Puzzle size={18} />
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-bold text-black dark:text-white">
-                      {selectedPlugin.name}
-                    </h2>
-                    <span className="text-ui-xs text-gray-400 font-mono">
-                      ID: {selectedPlugin.id} • v{selectedPlugin.version}
-                    </span>
-                  </div>
-                </div>
-
-                <span
-                  className={`text-ui-xs px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
-                    selectedPlugin.enabled
-                      ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400'
-                      : 'bg-gray-100 text-gray-500 dark:bg-gray-800'
-                  }`}
-                >
-                  {selectedPlugin.enabled ? 'Active' : 'Disabled'}
-                </span>
-              </div>
-
-              <p className="text-xs text-muted-foreground dark:text-subtle-fg leading-relaxed">
-                {selectedPlugin.description}
-              </p>
-
-              {/* Tools Exported */}
-              <div className="space-y-2">
-                <span className="text-ui-xs font-bold text-black dark:text-white flex items-center gap-1.5">
-                  <Terminal size={13} className="text-primary" />
-                  Exported Tools ({selectedPlugin.tools?.length || 0})
-                </span>
-                <div className="space-y-1.5">
-                  {(selectedPlugin.tools || []).map((t) => (
-                    <div
-                      key={t.name}
-                      className="p-2 bg-gray-50 dark:bg-neutral-900 rounded-lg border border-gray-200/60 dark:border-neutral-800 space-y-1"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-mono text-xs font-bold text-primary">{t.name}</span>
-                        <span className="text-ui-xs uppercase px-1.5 py-0.5 rounded bg-gray-200 dark:bg-neutral-800 text-gray-600 dark:text-gray-400 font-mono">
-                          {t.handler_type}
-                        </span>
-                      </div>
-                      <p className="text-ui-xs text-gray-500 leading-tight">{t.description}</p>
-                      {t.command && (
-                        <div className="text-ui-xs font-mono text-gray-600 dark:text-gray-400 bg-white dark:bg-black/40 p-1 rounded border border-gray-100 dark:border-neutral-800 truncate">
-                          $ {t.command}
-                        </div>
-                      )}
+      {/* Slide-over Drawer for Plugin & Skill Inspection (Zero Screen Crushing!) */}
+      {(selectedPlugin || selectedSkill) && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex justify-end animate-in fade-in duration-200">
+          <div
+            className="fixed inset-0"
+            onClick={() => {
+              setSelectedPlugin(null);
+              setSelectedSkill(null);
+            }}
+          />
+          <aside className="relative w-full max-w-lg bg-card border-l border-border h-full shadow-2xl p-6 flex flex-col gap-4 overflow-y-auto animate-in slide-in-from-right duration-200 z-10">
+            {selectedPlugin ? (
+              <>
+                <div className="flex items-start justify-between gap-3 border-b border-border pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-warning/10 text-agentorange border border-warning/20 flex items-center justify-center shrink-0">
+                      <Puzzle size={20} />
                     </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* File Location */}
-              {selectedPlugin.path && (
-                <div className="space-y-1">
-                  <span className="text-ui-xs font-bold text-gray-400 uppercase tracking-wider">Manifest Path</span>
-                  <div className="text-ui-xs font-mono text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-neutral-900 p-2 rounded border border-gray-200 dark:border-neutral-800 break-all">
-                    {selectedPlugin.path}
-                  </div>
-                </div>
-              )}
-
-              {/* Action Buttons */}
-              <div className="pt-2 border-t border-gray-100 dark:border-neutral-800 flex flex-col gap-2">
-                <button
-                  type="button"
-                  onClick={() =>
-                    handlePromptAgent(
-                      `Gunakan tool dari plugin "${selectedPlugin.name}" (${selectedPlugin.id}) untuk membantu pekerjaan saya.`
-                    )
-                  }
-                  className="w-full py-2 px-3 bg-foreground text-background text-xs font-bold rounded-lg hover:bg-black/90 flex items-center justify-center gap-2 cursor-pointer transition-colors"
-                >
-                  <MessageSquare size={13} />
-                  <span>Prompt Agent with Plugin</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleCopy(JSON.stringify(selectedPlugin, null, 2))}
-                  className="w-full py-1.5 px-3 bg-gray-100 dark:bg-neutral-800 hover:bg-gray-200 text-black dark:text-white text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
-                >
-                  <Copy size={12} />
-                  <span>{copiedText ? 'Copied to Clipboard!' : 'Copy Manifest JSON'}</span>
-                </button>
-              </div>
-            </>
-          ) : selectedSkill ? (
-            <>
-              {/* Skill Inspector Header */}
-              <div className="flex items-start justify-between gap-2 border-b border-gray-100 dark:border-neutral-800 pb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-primary flex items-center justify-center shrink-0">
-                    <Brain size={18} />
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-bold text-black dark:text-white">
-                      {selectedSkill.name}
-                    </h2>
-                    <span className="text-ui-xs text-gray-400 font-mono">
-                      {selectedSkill.path || selectedSkill.id}
-                    </span>
-                  </div>
-                </div>
-
-                {selectedSkill.category && (
-                  <span className="text-ui-xs font-semibold px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/40 text-primary">
-                    {selectedSkill.category}
-                  </span>
-                )}
-              </div>
-
-              <p className="text-xs text-muted-foreground dark:text-subtle-fg leading-relaxed">
-                {selectedSkill.description}
-              </p>
-
-              {/* Tools list */}
-              {selectedSkill.tools && selectedSkill.tools.length > 0 && (
-                <div className="space-y-1.5">
-                  <span className="text-ui-xs font-bold text-black dark:text-white flex items-center gap-1.5">
-                    <Terminal size={13} className="text-primary" />
-                    Executable Scripts ({selectedSkill.tools.length})
-                  </span>
-                  <div className="flex flex-wrap gap-1">
-                    {selectedSkill.tools.map((t) => (
-                      <span
-                        key={t}
-                        className="text-ui-xs font-mono px-2 py-0.5 rounded bg-gray-100 dark:bg-neutral-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-neutral-700"
-                      >
-                        tools/{t}
+                    <div>
+                      <h2 className="text-ui-base font-bold text-foreground">
+                        {selectedPlugin.name}
+                      </h2>
+                      <span className="text-ui-xs text-muted-foreground font-mono">
+                        ID: {selectedPlugin.id} • v{selectedPlugin.version}
                       </span>
-                    ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`text-ui-xs px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                        selectedPlugin.enabled
+                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                          : 'bg-zinc-500/10 text-zinc-400 border border-zinc-500/20'
+                      }`}
+                    >
+                      {selectedPlugin.enabled ? 'Active' : 'Disabled'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedPlugin(null);
+                        setSelectedSkill(null);
+                      }}
+                      className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-surface-hover transition-colors cursor-pointer"
+                    >
+                      <X size={18} />
+                    </button>
                   </div>
                 </div>
-              )}
 
-              {/* Instructions Preview */}
-              <div className="space-y-1.5">
-                <span className="text-ui-xs font-bold text-black dark:text-white flex items-center gap-1.5">
-                  <FileText size={13} className="text-primary" />
-                  Skill Directive (SKILL.md)
-                </span>
-                <div className="bg-gray-50 dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800 rounded-lg p-2.5 text-ui-xs font-mono text-gray-600 dark:text-gray-300 max-h-48 overflow-y-auto custom-scrollbar whitespace-pre-wrap">
-                  {selectedSkill.content ||
-                    `# ${selectedSkill.name}\n${selectedSkill.description}\n\nPath: ${selectedSkill.path || selectedSkill.id}\nLoaded lazily upon intent match.`}
+                <p className="text-ui-sm text-foreground-subtle leading-relaxed">
+                  {selectedPlugin.description}
+                </p>
+
+                {/* Tools Exported */}
+                <div className="space-y-2">
+                  <span className="text-ui-xs font-bold text-foreground flex items-center gap-1.5">
+                    <Terminal size={13} className="text-primary" />
+                    Exported Tools ({selectedPlugin.tools?.length || 0})
+                  </span>
+                  <div className="space-y-2">
+                    {selectedPlugin.tools && selectedPlugin.tools.length > 0 ? (
+                      selectedPlugin.tools.map((tool) => (
+                        <div
+                          key={tool.name}
+                          className="p-3 bg-surface-muted/50 border border-border rounded-xl space-y-1.5"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-mono text-ui-xs font-bold text-primary">
+                              {tool.name}()
+                            </span>
+                            <span className="text-3xs uppercase font-mono px-1.5 py-0.5 rounded bg-surface border border-border text-muted-foreground">
+                              {tool.handler_type || 'command'}
+                            </span>
+                          </div>
+                          <p className="text-ui-xs text-foreground-subtle">
+                            {tool.description}
+                          </p>
+                          {tool.command && (
+                            <div className="text-3xs font-mono bg-surface p-2 rounded-lg border border-border text-muted-foreground overflow-x-auto">
+                              {tool.command}
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-3 bg-surface-muted border border-dashed border-border rounded-xl text-ui-xs text-muted-foreground text-center">
+                        No tools defined in manifest.
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              {/* Action Buttons */}
-              <div className="pt-2 border-t border-gray-100 dark:border-neutral-800 flex flex-col gap-2">
-                <button
-                  type="button"
-                  onClick={() =>
-                    handlePromptAgent(
-                      `Gunakan skill "${selectedSkill.name}" (${selectedSkill.id}) untuk mengeksekusi instruksi.`
-                    )
-                  }
-                  className="w-full py-2 px-3 bg-foreground text-background text-xs font-bold rounded-lg hover:bg-black/90 flex items-center justify-center gap-2 cursor-pointer transition-colors"
-                >
-                  <MessageSquare size={13} />
-                  <span>Execute Skill in Chat</span>
-                </button>
+                {/* Manifest Details */}
+                <div className="space-y-1.5">
+                  <span className="text-ui-xs font-bold text-foreground flex items-center gap-1.5">
+                    <FileText size={13} className="text-primary" />
+                    Manifest Location
+                  </span>
+                  <div className="font-mono text-3xs bg-surface p-2.5 rounded-xl border border-border text-muted-foreground break-all">
+                    {selectedPlugin.path || selectedPlugin.dir || `~/.kendaliai/plugins/${selectedPlugin.id}/plugin.json`}
+                  </div>
+                </div>
 
-                <button
-                  type="button"
-                  onClick={() => navigate('editor')}
-                  className="w-full py-1.5 px-3 bg-gray-100 dark:bg-neutral-800 hover:bg-gray-200 text-black dark:text-white text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
-                >
-                  <Code2 size={12} />
-                  <span>Open Folder in Code Editor</span>
-                </button>
-              </div>
-            </>
-          ) : (
-            /* Empty selection state */
-            <div className="py-8 px-2 text-center space-y-3">
-              <div className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-950/40 text-primary mx-auto flex items-center justify-center">
-                <Sparkles size={20} />
-              </div>
-              <h3 className="text-sm font-bold text-black dark:text-white">
-                Inspect Capabilities
-              </h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-                Select any plugin or skill from the list to view its exported tools, file paths, and live execution directives.
-              </p>
-              <div className="p-3 bg-gray-50 dark:bg-neutral-900 rounded-lg border border-gray-200/60 dark:border-neutral-800 text-left text-ui-xs text-gray-600 dark:text-gray-300 space-y-1 font-mono">
-                <div className="font-bold text-black dark:text-white font-sans">⚡ Chat Automation Tip:</div>
-                <div>"Create a plugin for &lt;task&gt;"</div>
-                <div>"Install skill for &lt;topic&gt;"</div>
-              </div>
-            </div>
-          )}
+                {/* Action Buttons */}
+                <div className="pt-4 border-t border-border flex flex-col gap-2 mt-auto">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handlePromptAgent(
+                        `Jalankan tool dari plugin "${selectedPlugin.name}" (${selectedPlugin.id}) untuk membantu task saat ini.`
+                      )
+                    }
+                    className="w-full py-2.5 px-3 bg-foreground text-background text-ui-xs font-bold rounded-xl hover:bg-foreground/90 flex items-center justify-center gap-2 cursor-pointer transition-colors"
+                  >
+                    <MessageSquare size={13} />
+                    <span>Prompt Plugin in Chat</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(JSON.stringify(selectedPlugin, null, 2))}
+                    className="w-full py-2 px-3 bg-surface-muted hover:bg-surface-hover text-foreground text-ui-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 cursor-pointer border border-border transition-colors"
+                  >
+                    <Copy size={12} />
+                    <span>{copiedText ? 'Copied to Clipboard!' : 'Copy Manifest JSON'}</span>
+                  </button>
+                </div>
+              </>
+            ) : selectedSkill ? (
+              <>
+                <div className="flex items-start justify-between gap-3 border-b border-border pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary border border-primary/20 flex items-center justify-center shrink-0">
+                      <Brain size={20} />
+                    </div>
+                    <div>
+                      <h2 className="text-ui-base font-bold text-foreground">
+                        {selectedSkill.name}
+                      </h2>
+                      <span className="text-ui-xs text-muted-foreground font-mono">
+                        {selectedSkill.path || selectedSkill.id}
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedPlugin(null);
+                      setSelectedSkill(null);
+                    }}
+                    className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-surface-hover transition-colors cursor-pointer"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <p className="text-ui-sm text-foreground-subtle leading-relaxed">
+                  {selectedSkill.description}
+                </p>
+
+                {/* Tools list */}
+                {selectedSkill.tools && selectedSkill.tools.length > 0 && (
+                  <div className="space-y-1.5">
+                    <span className="text-ui-xs font-bold text-foreground flex items-center gap-1.5">
+                      <Terminal size={13} className="text-primary" />
+                      Executable Scripts ({selectedSkill.tools.length})
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedSkill.tools.map((t) => (
+                        <span
+                          key={t}
+                          className="text-ui-xs font-mono px-2 py-0.5 rounded bg-surface-muted text-foreground-subtle border border-border"
+                        >
+                          tools/{t}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Instructions Preview */}
+                <div className="space-y-1.5">
+                  <span className="text-ui-xs font-bold text-foreground flex items-center gap-1.5">
+                    <FileText size={13} className="text-primary" />
+                    Skill Directive (SKILL.md)
+                  </span>
+                  <div className="bg-surface p-3 border border-border rounded-xl text-3xs font-mono text-foreground-subtle max-h-48 overflow-y-auto whitespace-pre-wrap">
+                    {selectedSkill.content ||
+                      `# ${selectedSkill.name}\n${selectedSkill.description}\n\nPath: ${selectedSkill.path || selectedSkill.id}\nLoaded lazily upon intent match.`}
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="pt-4 border-t border-border flex flex-col gap-2 mt-auto">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handlePromptAgent(
+                        `Gunakan skill "${selectedSkill.name}" (${selectedSkill.id}) untuk mengeksekusi instruksi.`
+                      )
+                    }
+                    className="w-full py-2.5 px-3 bg-foreground text-background text-ui-xs font-bold rounded-xl hover:bg-foreground/90 flex items-center justify-center gap-2 cursor-pointer transition-colors"
+                  >
+                    <MessageSquare size={13} />
+                    <span>Execute Skill in Chat</span>
+                  </button>
+                </div>
+              </>
+            ) : null}
+          </aside>
         </div>
-      </div>
+      )}
 
       {/* Create Plugin Modal */}
       {showAddModal && (
@@ -1133,60 +1035,4 @@ export const PluginsPane: React.FC = () => {
   );
 };
 
-// ============================================================================
-// Default Capability Plugins — read-only catalog of the built-in plugin system
-// (documents / visual / motion / Google Workspace). Checkboxes live per agent
-// in Profile → Plugins.
-// ============================================================================
 
-const DefaultCapabilityCatalog: React.FC = () => {
-  const catalog = usePluginCatalog();
-  if (!catalog || catalog.plugins.length === 0) return null;
-
-  return (
-    <div className="w-full rounded-xl border border-border bg-card px-4 py-3.5">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-2">
-          <Layers size={14} className="text-primary" />
-          <span className="text-xs font-bold text-foreground">Default Capability Plugins</span>
-          <span className="text-ui-xs text-muted-foreground">
-            — enable per agent in <span className="font-semibold text-foreground/80">Profile → Plugins</span>
-          </span>
-        </div>
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {catalog.plugins.map((p) => (
-            <span
-              key={p.id}
-              title={`${p.description}\nTools: ${p.tools.join(', ')}`}
-              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-ui-xs font-medium cursor-default ${
-                p.defaultOn
-                  ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400'
-                  : 'border-border bg-accent/40 text-muted-foreground'
-              }`}
-            >
-              {p.engine === 'local' ? <HardDrive size={11} /> : <Cloud size={11} />}
-              {p.name}
-              {p.defaultOn && <Check size={11} />}
-            </span>
-          ))}
-        </div>
-      </div>
-      {catalog.google && !catalog.google.connected && (
-        <p className="mt-2 text-ui-xs text-muted-foreground">
-          Google Workspace plugin needs a Composio API key and a connected Google account — set it up in{' '}
-          <a
-            href="#/settings?section=connections"
-            onClick={(e) => {
-              e.preventDefault();
-              navigate('connections');
-            }}
-            className="text-primary underline underline-offset-2 cursor-pointer"
-          >
-            Connections
-          </a>
-          .
-        </p>
-      )}
-    </div>
-  );
-};

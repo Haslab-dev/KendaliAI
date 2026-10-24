@@ -113,7 +113,7 @@ export const AgentRail: React.FC<AgentRailProps> = ({
     if (onOpenCreateAgent) {
       onOpenCreateAgent();
     } else {
-      setActiveNavTab('agent');
+      setActiveNavTab('chat');
     }
   };
 
@@ -124,7 +124,7 @@ export const AgentRail: React.FC<AgentRailProps> = ({
   };
 
   return (
-    <aside className="w-16 shrink-0 h-full bg-chrome border-r border-sidebar-border flex flex-col items-center py-3 select-none z-20">
+    <aside className="hidden md:flex w-16 shrink-0 h-full bg-chrome border-r border-sidebar-border flex-col items-center py-3 select-none z-20">
       {/* Brand Spark Glyph */}
       <div
         className="w-11 h-11 rounded-xl bg-transparent flex items-center justify-center text-primary font-bold mb-3 cursor-pointer hover:scale-105 transition-transform"

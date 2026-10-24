@@ -5,8 +5,6 @@ import {
   Trash2,
   RefreshCw,
   AlertCircle,
-  Puzzle,
-  PlugZap,
   CheckCircle2,
   Eye,
   EyeOff,
@@ -19,12 +17,13 @@ import {
   Globe,
   Sliders,
   Sparkles,
-  Key,
+  Bot,
+  Cable,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
-import { ApiKeyModal } from '../components/ApiKeyModal';
+import { useAgentStore } from '../store/useAgentStore';
 import { PaneToolbar, PaneToolbarFilters, PaneToolbarActions, StatChip } from '../components/settings/settingsPrimitives';
-import { ProviderConfig, MCPServerConfig, ModelItem, isReasoningModel } from '../types';
+import { ProviderConfig, ModelItem, isReasoningModel } from '../types';
 
 interface ExtendedProvider {
   id: string;
@@ -39,183 +38,13 @@ interface ExtendedProvider {
   meta?: string;
 }
 
-const DEFAULT_FALLBACK_PROVIDERS: ExtendedProvider[] = [
-  {
-    id: 'openai',
-    name: 'OpenAI Compatible',
-    endpoint: 'https://api.openai.com/v1',
-    type: 'openai',
-    models: [
-      { id: 'gpt-6-astra', name: 'GPT-6 Astra (1.05M)', enabled: true },
-      { id: 'gpt-5-6-luna', name: 'GPT-5.6 Luna (1.05M)', enabled: true },
-      { id: 'gpt-oss-120b', name: 'GPT-OSS 120B (128K)', enabled: true },
-      { id: 'gpt-4o', name: 'GPT-4o (128K)', enabled: true },
-      { id: 'gpt-4o-mini', name: 'GPT-4o Mini', enabled: true },
-      { id: 'o3-mini', name: 'o3-mini (Reasoning)', enabled: true },
-    ],
-    isDefault: true,
-    enabled: true,
-    status: 'connected',
-    meta: 'OpenAI Official / Long-Context Proxy',
-  },
-  {
-    id: 'deepseek',
-    name: 'DeepSeek',
-    endpoint: 'https://api.deepseek.com',
-    type: 'deepseek',
-    models: [
-      { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash (1M)', enabled: true },
-      { id: 'deepseek-v4-1-flash', name: 'DeepSeek V4.1 Flash (1M)', enabled: true },
-      { id: 'deepseek-chat', name: 'DeepSeek V3 (64K)', enabled: true },
-      { id: 'deepseek-reasoner', name: 'DeepSeek R1 (Reasoning)', enabled: true },
-      { id: 'deepseek-r1-distill-llama-70b', name: 'DeepSeek R1 Distill 70B (128K)', enabled: true },
-    ],
-    isDefault: false,
-    enabled: true,
-    status: 'connected',
-    meta: 'V4 Flash 1M · V3 & R1',
-  },
-  {
-    id: 'zhipu-glm',
-    name: 'Zhipu GLM',
-    endpoint: 'https://open.bigmodel.cn/api/paas/v4',
-    type: 'openai',
-    models: [
-      { id: 'glm-5-3-flash', name: 'GLM 5.3 Flash (1M)', enabled: true },
-    ],
-    isDefault: false,
-    enabled: true,
-    status: 'connected',
-    meta: 'GLM-5 1M Long Context',
-  },
-  {
-    id: 'nvidia-nim',
-    name: 'NVIDIA NIM',
-    endpoint: 'https://integrate.api.nvidia.com/v1',
-    type: 'openai',
-    models: [
-      { id: 'nemotron-3-super-120b-a12b', name: 'Nemotron 3 Super 120B (1M)', enabled: true },
-      { id: 'nemotron-3-ultra-550b-a55b', name: 'Nemotron 3 Ultra 550B (1M)', enabled: true },
-      { id: 'nemotron-3.5-lightning-30b-a3b', name: 'Nemotron 3.5 Lightning (128K)', enabled: true },
-      { id: 'nemotron-3-nano-omni-30b-a3b', name: 'Nemotron 3 Nano Omni (128K)', enabled: true },
-      { id: 'nemotron-4-340b-instruct', name: 'Nemotron 4 340B Instruct (128K)', enabled: true },
-    ],
-    isDefault: false,
-    enabled: true,
-    status: 'connected',
-    meta: 'NVIDIA Nemotron 3 / 3.5 / 4',
-  },
-  {
-    id: 'anthropic',
-    name: 'Anthropic Claude',
-    endpoint: 'https://api.anthropic.com/v1',
-    type: 'anthropic',
-    models: [
-      { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet (Thinking)', enabled: true },
-      { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', enabled: true },
-      { id: 'claude-3-5-haiku', name: 'Claude 3.5 Haiku', enabled: true },
-    ],
-    isDefault: false,
-    enabled: true,
-    status: 'connected',
-    meta: 'Claude 3.7 / 3.5',
-  },
-  {
-    id: 'ollama',
-    name: 'Ollama Local / Open-Weights',
-    endpoint: 'http://localhost:11434',
-    type: 'ollama',
-    models: [
-      { id: 'gemma-4-31b', name: 'Gemma 4 31B (256K)', enabled: true },
-      { id: 'qwen-3.8-27b', name: 'Qwen 3.8 27B (128K)', enabled: true },
-      { id: 'qwen3.7-flash-2026-07-15', name: 'Qwen 3.7 Flash (128K)', enabled: true },
-      { id: 'qwen2.5-coder:latest', name: 'Qwen 2.5 Coder', enabled: true },
-      { id: 'llama3.3:latest', name: 'Llama 3.3', enabled: true },
-    ],
-    isDefault: false,
-    enabled: true,
-    status: 'local',
-    meta: 'Local · Offline mode',
-  },
-  {
-    id: 'openrouter',
-    name: 'OpenRouter Gateway',
-    endpoint: 'https://openrouter.ai/api/v1',
-    type: 'openrouter',
-    models: [
-      { id: 'mimo-v2-5', name: 'MiMo-V2.5 (1M)', enabled: true },
-      { id: 'codestral-latest', name: 'Codestral Latest (256K)', enabled: true },
-      { id: 'MiniMax-M2.7-highspeed', name: 'MiniMax M2.7 HighSpeed (128K)', enabled: true },
-      { id: 'mistral-small-latest', name: 'Mistral Small Latest (128K)', enabled: true },
-      { id: 'phi-3.5-moe-instruct', name: 'Phi 3.5 MoE (128K)', enabled: true },
-      { id: 'laguna-s-2.1', name: 'Laguna S 2.1 (128K)', enabled: true },
-      { id: 'ling-3.0-flash-fin', name: 'Ling 3.0 Flash Fin (128K)', enabled: true },
-      { id: 'north-mini-code', name: 'North Mini Code (128K)', enabled: true },
-      { id: 'muse-spark-1.3-contributor', name: 'Muse Spark 1.3 (128K)', enabled: true },
-      { id: 'kira-3.5-flash', name: 'Kira 3.5 Flash (128K)', enabled: true },
-      { id: 'agnes-2-5-flash', name: 'Agnes 2.5 Flash (128K)', enabled: true },
-    ],
-    isDefault: false,
-    enabled: true,
-    status: 'connected',
-    meta: 'Unified LLM routing & multi-model',
-  },
-];
-
-interface ShowcaseMCP {
-  id: string;
-  name: string;
-  transport: 'stdio' | 'sse' | 'http';
-  commandOrUrl: string;
-  toolsCount: number;
-  status: 'connected' | 'cached' | 'error';
-  enabled?: boolean;
-  toolsCached?: { name: string; description: string }[];
-}
-
-const DEFAULT_SHOWCASE_MCPS: ShowcaseMCP[] = [
-  {
-    id: 'exa',
-    name: 'exa',
-    transport: 'http',
-    commandOrUrl: 'https://mcp.exa.ai/mcp',
-    toolsCount: 3,
-    status: 'connected',
-    enabled: true,
-    toolsCached: [
-      { name: 'web_search_exa', description: 'Neural web search across latest web and news' },
-      { name: 'web_fetch_exa', description: 'Extract clean page content and markdown from URLs' },
-      { name: 'agent_run', description: 'Run deep multi-step Exa research agent' },
-    ],
-  },
-  {
-    id: 'firecrawl',
-    name: 'firecrawl',
-    transport: 'http',
-    commandOrUrl: 'https://mcp.firecrawl.dev/v2/mcp',
-    toolsCount: 3,
-    status: 'connected',
-    enabled: true,
-    toolsCached: [
-      { name: 'firecrawl_scrape', description: 'Retrieve and extract clean markdown content from any URL' },
-      { name: 'firecrawl_search', description: 'Search web sources and return ranked results with markdown snippets' },
-      { name: 'firecrawl_parse', description: 'Parse documents (PDF, DOCX, HTML) into markdown' },
-    ],
-  },
-];
-
 export const ProvidersPane: React.FC = () => {
   const { loadProviders: reloadGlobalProviders, loadModels } = useAppStore();
+  const { acpAgents, acpSessions } = useAgentStore();
 
-  const [providers, setProviders] = useState<ExtendedProvider[]>(DEFAULT_FALLBACK_PROVIDERS);
-  const [mcps, setMcps] = useState<ShowcaseMCP[]>(DEFAULT_SHOWCASE_MCPS);
+  const [providers, setProviders] = useState<ExtendedProvider[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [activeDefaultId, setActiveDefaultId] = useState<string>('openai');
-  const [activeTab, setActiveTab] = useState<'providers' | 'mcps'>('providers');
-
-  const totalMcpTools = useMemo(() => {
-    return mcps.reduce((acc, m) => acc + (m.toolsCount || m.toolsCached?.length || 0), 0);
-  }, [mcps]);
+  const [activeDefaultId, setActiveDefaultId] = useState<string | null>(null);
 
   // Notification Toast
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -224,8 +53,6 @@ export const ProvidersPane: React.FC = () => {
   const [showProviderModal, setShowProviderModal] = useState(false);
   const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
-  const [showMcpModal, setShowMcpModal] = useState(false);
-  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
 
   // Provider Form State
   const [pName, setPName] = useState('');
@@ -242,21 +69,14 @@ export const ProvidersPane: React.FC = () => {
   const [probeNotice, setProbeNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isTesting, setIsTesting] = useState(false);
 
-  // MCP Form
-  const [mName, setMName] = useState('');
-  const [mTransport, setMTransport] = useState<'stdio' | 'sse' | 'http'>('stdio');
-  const [mCommand, setMCommand] = useState('npx');
-  const [mArgs, setMArgs] = useState('');
-  const [mUrl, setMUrl] = useState('');
-
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      // 1. Load Providers from API
+      // Load Providers from API
       const pRes = await fetch('/api/providers');
       if (pRes.ok) {
         const pData: ProviderConfig[] = await pRes.json();
-        if (Array.isArray(pData) && pData.length > 0) {
+        if (Array.isArray(pData)) {
           const mapped: ExtendedProvider[] = pData.map((p) => {
             const parsedModels: ModelItem[] = Array.isArray(p.models)
               ? p.models.map((m: any) =>
@@ -267,6 +87,17 @@ export const ProvidersPane: React.FC = () => {
               : [];
 
             const activeCount = parsedModels.filter((m) => m.enabled).length;
+            const isLocal =
+              p.type === 'ollama' ||
+              (p.endpoint &&
+                (p.endpoint.includes('localhost') || p.endpoint.includes('127.0.0.1')));
+            const status: 'connected' | 'local' | 'disconnected' = !p.enabled
+              ? 'disconnected'
+              : isLocal
+              ? 'local'
+              : p.apiKey && p.apiKey.trim().length > 0
+              ? 'connected'
+              : 'disconnected';
 
             return {
               id: p.id || p.name.toLowerCase().replace(/\s+/g, '-'),
@@ -277,37 +108,18 @@ export const ProvidersPane: React.FC = () => {
               models: parsedModels,
               isDefault: !!p.isDefault,
               enabled: p.enabled !== false,
-              status: p.type === 'ollama' ? 'local' : p.enabled ? 'connected' : 'disconnected',
+              status,
               meta: `${activeCount} of ${parsedModels.length} models active`,
             };
           });
 
           const def = mapped.find((p) => p.isDefault);
-          if (def) setActiveDefaultId(def.id);
+          setActiveDefaultId(def ? def.id : mapped.length > 0 ? mapped[0].id : null);
           setProviders(mapped);
         }
       }
-
-      // 2. Load MCPs
-      const mRes = await fetch('/api/mcps');
-      if (mRes.ok) {
-        const mData: MCPServerConfig[] = await mRes.json();
-        if (Array.isArray(mData) && mData.length > 0) {
-          const mappedMcp: ShowcaseMCP[] = mData.map((m) => ({
-            id: m.id || m.name.toLowerCase(),
-            name: m.name,
-            transport: m.transport || 'stdio',
-            commandOrUrl: (m.transport === 'sse' || m.transport === 'http') ? m.url || '' : `${m.command} ${(m.args || []).join(' ')}`,
-            toolsCount: Array.isArray(m.toolsCached) ? m.toolsCached.length : 0,
-            status: 'connected',
-            enabled: m.enabled !== false,
-            toolsCached: m.toolsCached || [],
-          }));
-          setMcps(mappedMcp);
-        }
-      }
     } catch (err) {
-      console.warn('Using existing provider data:', err);
+      console.warn('Failed to load providers:', err);
     } finally {
       setIsLoading(false);
     }
@@ -326,12 +138,9 @@ export const ProvidersPane: React.FC = () => {
     setPEndpoint('https://api.openai.com/v1');
     setPApiKey('');
     setPEnabled(true);
-    setPIsDefault(false);
+    setPIsDefault(providers.length === 0);
     setShowKey(false);
-    setModelsList([
-      { id: 'gpt-4o', name: 'GPT-4o', enabled: true },
-      { id: 'gpt-4o-mini', name: 'GPT-4o Mini', enabled: true },
-    ]);
+    setModelsList([]);
     setModelSearch('');
     setCustomModelInput('');
     setProbeNotice(null);
@@ -571,10 +380,11 @@ export const ProvidersPane: React.FC = () => {
       }))
     );
     try {
-      await fetch(`/api/providers/${id}/default`, { method: 'POST' });
+      await fetch(`/api/providers/${encodeURIComponent(id)}/default`, { method: 'POST' });
       setToast({ type: 'success', message: 'Default provider updated.' });
       await reloadGlobalProviders();
       await loadModels(true);
+      await loadData();
     } catch (err) {
       console.warn('Set default error:', err);
     }
@@ -586,13 +396,24 @@ export const ProvidersPane: React.FC = () => {
       return;
     }
     setProviders((prev) => prev.filter((p) => p.id !== id));
+    if (activeDefaultId === id) {
+      setActiveDefaultId(null);
+    }
     try {
-      await fetch(`/api/providers/${id}`, { method: 'DELETE' });
+      let res = await fetch(`/api/providers/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (!res.ok) {
+        res = await fetch(`/api/providers?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      }
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
       setToast({ type: 'success', message: `Deleted provider "${name}".` });
       await reloadGlobalProviders();
       await loadModels(true);
+      await loadData();
     } catch (err: any) {
       setToast({ type: 'error', message: `Delete failed: ${err.message}` });
+      await loadData();
     }
   };
 
@@ -619,70 +440,6 @@ export const ProvidersPane: React.FC = () => {
       setToast({ type: 'success', message: `✓ Endpoint responded for ${p.name}.` });
     } finally {
       setIsTesting(false);
-    }
-  };
-
-  // MCP Save
-  const handleSaveMCP = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!mName.trim()) return;
-
-    const newM: ShowcaseMCP = {
-      id: mName.toLowerCase().replace(/\s+/g, '-'),
-      name: mName.trim(),
-      transport: mTransport,
-      commandOrUrl: (mTransport === 'sse' || mTransport === 'http') ? mUrl : `${mCommand} ${mArgs}`.trim(),
-      toolsCount: 3,
-      status: 'connected',
-    };
-
-    setMcps((prev) => [...prev, newM]);
-    setShowMcpModal(false);
-    setMName('');
-    setMCommand('npx');
-    setMArgs('');
-    setMUrl('');
-
-    try {
-      await fetch('/api/mcps', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newM.name,
-          transport: newM.transport,
-          command: mCommand,
-          args: mArgs ? mArgs.split(' ') : [],
-          url: mUrl,
-          enabled: true,
-        }),
-      });
-      setToast({ type: 'success', message: `Connected MCP Server "${newM.name}".` });
-    } catch (err) {
-      console.warn('MCP registered locally:', err);
-    }
-  };
-
-  const handleDeleteMcp = async (id: string) => {
-    setMcps((prev) => prev.filter((m) => m.id !== id));
-    try {
-      await fetch(`/api/mcps?id=${id}`, { method: 'DELETE' });
-    } catch (err) {
-      console.warn('MCP deleted locally:', err);
-    }
-  };
-
-  const handleToggleMcpEnabled = async (id: string, newEnabled: boolean) => {
-    setMcps((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, enabled: newEnabled } : m))
-    );
-    try {
-      await fetch('/api/mcps', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, enabled: newEnabled }),
-      });
-    } catch (err) {
-      console.warn('Failed to toggle MCP:', err);
     }
   };
 
@@ -811,15 +568,23 @@ export const ProvidersPane: React.FC = () => {
                     <div className="flex items-center gap-1.5 px-2 py-1 bg-black/5 dark:bg-white/5 rounded-md text-ui-xs font-sans mr-1">
                       <span
                         className={`w-2 h-2 rounded-full ${
-                          p.status === 'connected' && p.enabled
+                          !p.enabled
+                            ? 'bg-zinc-400'
+                            : p.status === 'connected'
                             ? 'bg-emerald-500'
-                            : p.status === 'local' && p.enabled
+                            : p.status === 'local'
                             ? 'bg-amber-500'
-                            : 'bg-gray-400'
+                            : 'bg-zinc-400'
                         }`}
                       />
                       <span className="text-muted-foreground font-medium capitalize">
-                        {p.enabled ? p.status : 'disabled'}
+                        {!p.enabled
+                          ? 'disabled'
+                          : p.status === 'connected'
+                          ? 'connected'
+                          : p.status === 'local'
+                          ? 'local'
+                          : 'no key'}
                       </span>
                     </div>
 
@@ -878,51 +643,36 @@ export const ProvidersPane: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Models Tag Row on Card */}
-                <div className="pt-2 border-t border-gray-100 dark:border-gray-800 flex flex-col gap-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground font-sans">
-                      Models ({activeModels.length} active of {p.models.length}):
+                {/* Models Summary Row */}
+                <div className="pt-2.5 border-t border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-ui-xs">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-muted-foreground">Models:</span>
+                    <span className="font-semibold text-foreground font-mono">
+                      {activeModels.length} of {p.models.length} active
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => handleOpenEditModal(p)}
-                      className="text-ui-xs font-bold text-primary hover:underline cursor-pointer flex items-center gap-1"
-                    >
-                      <Sliders size={12} />
-                      <span>Select Models</span>
-                    </button>
+                    {activeModels.slice(0, 3).map((m) => (
+                      <span
+                        key={m.id}
+                        className="text-3xs font-mono px-2 py-0.5 rounded-md bg-surface-muted border border-border text-foreground-subtle truncate max-w-[140px]"
+                      >
+                        {m.name || m.id}
+                      </span>
+                    ))}
+                    {activeModels.length > 3 && (
+                      <span className="text-3xs text-muted-foreground font-mono">
+                        +{activeModels.length - 3} more
+                      </span>
+                    )}
                   </div>
 
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {p.models.length === 0 ? (
-                      <span className="text-xs text-muted-foreground italic">
-                        No models configured. Click "Select Models" to probe or add.
-                      </span>
-                    ) : (
-                      p.models.slice(0, 7).map((m) => (
-                        <span
-                          key={m.id}
-                          className={`text-ui-xs font-mono px-2 py-0.5 rounded-md border flex items-center gap-1 ${
-                            m.enabled
-                              ? 'bg-blue-50/60 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900 text-primary'
-                              : 'bg-gray-100/60 dark:bg-gray-800/40 border-gray-200 dark:border-gray-700 text-muted-foreground line-through opacity-60'
-                          }`}
-                        >
-                          <span className="truncate max-w-[140px]">{m.name || m.id}</span>
-                          {isReasoningModel(m.id) && <Sparkles size={10} className="text-purple-500 shrink-0" />}
-                        </span>
-                      ))
-                    )}
-                    {p.models.length > 7 && (
-                      <button
-                        onClick={() => handleOpenEditModal(p)}
-                        className="text-ui-xs font-mono px-2 py-0.5 rounded-md bg-black/5 dark:bg-white/5 text-muted-foreground hover:text-foreground"
-                      >
-                        +{p.models.length - 7} more
-                      </button>
-                    )}
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEditModal(p)}
+                    className="inline-flex items-center gap-1.5 text-ui-xs font-semibold text-primary hover:underline cursor-pointer shrink-0 self-start sm:self-auto"
+                  >
+                    <Sliders size={12} />
+                    <span>Manage Models ({p.models.length})</span>
+                  </button>
                 </div>
               </div>
             );
@@ -949,6 +699,76 @@ export const ProvidersPane: React.FC = () => {
             </div>
           </div>
           )}
+
+          {/* ACP External Runners Card (Clean & Compact) */}
+          <div className="w-full bg-card rounded-xl p-5 flex flex-col gap-3.5 border border-border shadow-2xs mt-1">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-surface border border-border text-primary">
+                  <Cable className="size-4" />
+                </div>
+                <div>
+                  <h3 className="text-ui-sm font-semibold text-foreground flex items-center gap-2">
+                    ACP External CLI Runners
+                    <span className="inline-flex items-center gap-1 text-3xs font-mono font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                      <span className="size-1.5 rounded-full bg-emerald-400" />
+                      ws://localhost:18889
+                    </span>
+                  </h3>
+                  <p className="text-ui-xs text-muted-foreground mt-0.5">
+                    External command-line agents connected via the Agent Client Protocol.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 text-ui-xs text-muted-foreground font-mono self-start sm:self-auto">
+                <span className="px-2.5 py-1 rounded-lg bg-surface border border-border">
+                  {acpAgents.length} runner{acpAgents.length === 1 ? '' : 's'} registered
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-surface border border-border">
+                  {Object.keys(acpSessions).length} live session{Object.keys(acpSessions).length === 1 ? '' : 's'}
+                </span>
+              </div>
+            </div>
+
+            {acpAgents.length > 0 ? (
+              <div className="divide-y divide-border/50 rounded-xl border border-border/60 bg-surface overflow-hidden">
+                {acpAgents.map((ag) => {
+                  const modelCount = ag.supportedModels?.length || 0;
+                  return (
+                    <div key={ag.id} className="flex items-center justify-between gap-3 p-3 text-ui-xs">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <Bot className="size-4 text-primary shrink-0" />
+                        <div className="flex items-center gap-1.5 truncate">
+                          <span className="font-semibold text-foreground font-mono">{ag.name || ag.id}</span>
+                          <span className="text-3xs text-muted-foreground font-mono">({ag.id})</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className="text-3xs text-muted-foreground font-mono">
+                          {modelCount > 0 ? `${modelCount} model${modelCount === 1 ? '' : 's'} available` : 'Standard runner'}
+                        </span>
+                        <span
+                          className={`inline-flex items-center gap-1 text-3xs font-semibold px-2 py-0.5 rounded-full ${
+                            ag.available
+                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                              : 'bg-zinc-500/10 text-muted-foreground border border-border'
+                          }`}
+                        >
+                          {ag.available ? 'Ready' : 'Not installed'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-border/70 p-4 text-center text-ui-xs text-muted-foreground">
+                External CLI runners (such as Claude Code or custom agents running with <code className="font-mono bg-surface-muted px-1.5 py-0.5 rounded text-foreground">--acp</code>) register here automatically.
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1269,150 +1089,6 @@ export const ProvidersPane: React.FC = () => {
           </div>
         </div>
       )}
-
-      {/* ------------------------------------------------------------- */}
-      {/* CONNECT MCP MODAL                                             */}
-      {/* ------------------------------------------------------------- */}
-      {showMcpModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-          <div className="bg-card rounded-2xl border border-border shadow-xl w-full max-w-lg p-5 flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-foreground text-background flex items-center justify-center">
-                  <Puzzle size={16} />
-                </div>
-                <div>
-                  <h3 className="text-ui-base font-bold text-foreground font-sans">
-                    Connect MCP Server
-                  </h3>
-                  <p className="text-ui-xs text-muted-foreground font-sans">
-                    Standard Model Context Protocol client connection
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowMcpModal(false)}
-                className="text-muted-foreground hover:text-foreground p-1 rounded transition-colors cursor-pointer"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveMCP} className="flex flex-col gap-3.5">
-              <div className="flex flex-col gap-1">
-                <label className="text-ui-xs font-bold text-foreground">Server Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. filesystem, github, postgres"
-                  value={mName}
-                  onChange={(e) => setMName(e.target.value)}
-                  className="border border-border bg-card rounded-lg px-3 py-1.5 text-xs text-foreground focus:outline-none focus:border-primary/60"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-ui-xs font-bold text-foreground">Transport Type</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setMTransport('stdio')}
-                    className={`py-1.5 px-3 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
-                      mTransport === 'stdio'
-                        ? 'bg-primary text-white border-primary'
-                        : 'bg-card text-muted-foreground border-border'
-                    }`}
-                  >
-                    stdio (local process)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMTransport('sse')}
-                    className={`py-1.5 px-3 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
-                      mTransport === 'sse'
-                        ? 'bg-primary text-white border-primary'
-                        : 'bg-card text-muted-foreground border-border'
-                    }`}
-                  >
-                    SSE (stream)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMTransport('http')}
-                    className={`py-1.5 px-3 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
-                      mTransport === 'http'
-                        ? 'bg-primary text-white border-primary'
-                        : 'bg-card text-muted-foreground border-border'
-                    }`}
-                  >
-                    HTTP (streamable)
-                  </button>
-                </div>
-              </div>
-
-              {mTransport === 'stdio' ? (
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="flex flex-col gap-1">
-                    <label className="text-ui-xs font-bold text-foreground">Command</label>
-                    <input
-                      type="text"
-                      value={mCommand}
-                      onChange={(e) => setMCommand(e.target.value)}
-                      placeholder="npx or python"
-                      className="border border-border bg-card rounded-lg px-3 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:border-primary/60"
-                    />
-                  </div>
-                  <div className="col-span-2 flex flex-col gap-1">
-                    <label className="text-ui-xs font-bold text-foreground">Arguments</label>
-                    <input
-                      type="text"
-                      value={mArgs}
-                      onChange={(e) => setMArgs(e.target.value)}
-                      placeholder="-y @modelcontextprotocol/server-..."
-                      className="border border-border bg-card rounded-lg px-3 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:border-primary/60"
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-1">
-                  <label className="text-ui-xs font-bold text-foreground">
-                    {mTransport === 'http' ? 'HTTP Endpoint URL' : 'SSE Endpoint URL'}
-                  </label>
-                  <input
-                    type="text"
-                    value={mUrl}
-                    onChange={(e) => setMUrl(e.target.value)}
-                    placeholder={mTransport === 'http' ? 'https://mcp.domain.com/mcp' : 'https://mcp.domain.com/sse'}
-                    className="border border-border bg-card rounded-lg px-3 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:border-primary/60"
-                  />
-                </div>
-              )}
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
-                <button
-                  type="button"
-                  onClick={() => setShowMcpModal(false)}
-                  className="px-3.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 bg-primary hover:bg-primary/85 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
-                >
-                  Connect Server
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      <ApiKeyModal
-        isOpen={showApiKeyModal}
-        onClose={() => setShowApiKeyModal(false)}
-        onSuccess={loadData}
-      />
     </div>
   );
 };

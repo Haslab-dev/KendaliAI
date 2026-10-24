@@ -172,9 +172,15 @@ function enhanceMarkdownContainer(el: HTMLDivElement | null) {
 
   const links = el.querySelectorAll('a');
   links.forEach((a) => {
-    a.setAttribute('target', '_blank');
-    a.setAttribute('rel', 'noopener noreferrer');
-    a.className = 'text-blue-500 hover:text-blue-400 underline underline-offset-2 font-medium';
+    const href = a.getAttribute('href') || '';
+    if (href.startsWith('/api/workspace/download') || href.includes('download')) {
+      a.setAttribute('download', '');
+      a.className = 'inline-flex items-center gap-1 text-primary hover:text-primary/80 font-semibold underline underline-offset-2';
+    } else {
+      a.setAttribute('target', '_blank');
+      a.setAttribute('rel', 'noopener noreferrer');
+      a.className = 'text-blue-500 hover:text-blue-400 underline underline-offset-2 font-medium';
+    }
   });
 }
 

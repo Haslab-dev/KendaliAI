@@ -4,7 +4,7 @@ import { useSessionStore } from '../../store/useSessionStore';
 import { MarkdownView } from '../MarkdownView';
 import { ToolExecutionCard, ToolExecution } from '../agent/ToolBlockViews';
 import { WorkLogList } from '../agent/WorkLog';
-import { ChatTopControls } from '../shell/ChatTopControls';
+import { ChatTopControls, MobileDrawerTrigger } from '../shell/ChatTopControls';
 import {
   ArrowUp,
   Plus,
@@ -207,6 +207,9 @@ export const GroupChatThread: React.FC = () => {
 
   return (
     <div className="flex-1 h-full flex flex-col min-w-0 bg-background relative overflow-hidden">
+      {/* Mobile Drawer Trigger (hamburger with active dot, Muse AI parity) */}
+      <MobileDrawerTrigger scrolled={headerScrolled} />
+
       {/* Floating controls (no header bar): top-right cluster + top-center group identity */}
       <ChatTopControls scrolled={headerScrolled}>
         <button
@@ -588,7 +591,7 @@ export const GroupChatThread: React.FC = () => {
       )}
 
       {/* Floating Bottom Composer */}
-      <div className="p-4 bg-gradient-to-t from-background via-background to-transparent shrink-0">
+      <div className="p-4 pb-20 md:pb-4 bg-gradient-to-t from-background via-background to-transparent shrink-0">
         <form
           onSubmit={handleSubmit}
           className="max-w-3xl mx-auto w-full rounded-2xl bg-card border border-border/60 hover:border-border focus-within:border-primary/60 transition-colors shadow-2xl p-3 flex flex-col gap-2"

@@ -14,7 +14,9 @@ export type RouteName = (typeof ROUTES)[number];
 export type SettingsSection =
   | 'dashboard'
   | 'general'
+  | 'appearance'
   | 'providers'
+  | 'capabilities'
   | 'mcps'
   | 'agents'
   | 'skills'
@@ -28,28 +30,35 @@ export type SettingsSection =
   | 'sessions'
   | 'logs'
   | 'connections'
+  | 'integrations'
   | 'automations';
 
 /** Legacy hash → new route (+ settings section where applicable). */
 const LEGACY_MAP: Record<string, { route: RouteName; settings?: SettingsSection }> = {
   chat: { route: 'assistant' },
   dashboard: { route: 'settings', settings: 'dashboard' },
+  general: { route: 'settings', settings: 'general' },
+  appearance: { route: 'settings', settings: 'appearance' },
   providers: { route: 'settings', settings: 'providers' },
-  mcps: { route: 'settings', settings: 'mcps' },
-  agents: { route: 'settings', settings: 'agents' },
-  agency: { route: 'settings', settings: 'agents' },
-  skills: { route: 'settings', settings: 'skills' },
+  capabilities: { route: 'settings', settings: 'capabilities' },
+  integrations: { route: 'settings', settings: 'integrations' },
+  model: { route: 'settings', settings: 'providers' },
+  mcps: { route: 'settings', settings: 'capabilities' },
+  agents: { route: 'settings', settings: 'providers' },
+  agency: { route: 'settings', settings: 'providers' },
+  acpAgents: { route: 'settings', settings: 'providers' },
+  skills: { route: 'settings', settings: 'capabilities' },
   tools: { route: 'settings', settings: 'tools' },
-  scheduler: { route: 'settings', settings: 'scheduler' },
-  docs: { route: 'settings', settings: 'docs' },
-  channels: { route: 'settings', settings: 'channels' },
-  telegram: { route: 'settings', settings: 'channels' },
-  connections: { route: 'settings', settings: 'connections' },
+  scheduler: { route: 'settings', settings: 'automations' },
+  docs: { route: 'settings', settings: 'general' },
+  channels: { route: 'settings', settings: 'integrations' },
+  telegram: { route: 'settings', settings: 'integrations' },
+  connections: { route: 'settings', settings: 'integrations' },
   automations: { route: 'settings', settings: 'automations' },
-  plugins: { route: 'settings', settings: 'plugins' },
-  worktrees: { route: 'settings', settings: 'worktrees' },
-  sessions: { route: 'settings', settings: 'sessions' },
-  logs: { route: 'settings', settings: 'logs' },
+  plugins: { route: 'settings', settings: 'capabilities' },
+  worktrees: { route: 'settings', settings: 'general' },
+  sessions: { route: 'settings', settings: 'general' },
+  logs: { route: 'settings', settings: 'dashboard' },
   editor: { route: 'assistant' },
   agent: { route: 'agent' },
   assistant: { route: 'assistant' },
@@ -70,8 +79,11 @@ export function parseHash(): ParsedRoute {
     // Settings sections arrive via ?section=…
     let section = mapped.settings || 'general';
     if (mapped.route === 'settings' && query) {
-      const m = query.match(/section=([a-z]+)/);
-      if (m) section = m[1] as SettingsSection;
+      const m = query.match(/section=([a-zA-Z0-9_-]+)/);
+      if (m) {
+        const rawSec = m[1];
+        section = (LEGACY_MAP[rawSec]?.settings || rawSec) as SettingsSection;
+      }
     }
     return { route: mapped.route, settingsSection: section };
   }

@@ -19,6 +19,7 @@ import {
   X,
   Cpu,
   Sparkles,
+  Mic,
 } from 'lucide-react';
 import { cn } from '../../lib/cn';
 import {
@@ -189,9 +190,18 @@ export const AgentTaskInputBar: React.FC<AgentTaskInputBarProps> = ({
   const [isEngineOpen, setIsEngineOpen] = useState(false);
   const [isModelOpen, setIsModelOpen] = useState(false);
   const [isEffortOpen, setIsEffortOpen] = useState(false);
+  const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const mobileTextareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (mobileTextareaRef.current) {
+      mobileTextareaRef.current.style.height = 'auto';
+      mobileTextareaRef.current.style.height = `${Math.min(mobileTextareaRef.current.scrollHeight, 120)}px`;
+    }
+  }, [prompt]);
 
   // Dynamic merged engines: Rakit Kode & ACP's
   const engines: AgentEngineOption[] = useMemo(() => {
@@ -392,9 +402,59 @@ export const AgentTaskInputBar: React.FC<AgentTaskInputBarProps> = ({
         </div>
       )}
 
-      {/* Main Composer Glass Surface */}
+      {/* 1. Mobile Pill Composer (Muse AI parity) */}
+      <div className="flex sm:hidden items-center gap-2 w-full bg-card/95 border border-border/80 shadow-lg rounded-full px-3 py-1.5 backdrop-blur-xl focus-within:ring-2 focus-within:ring-primary/30 transition-all">
+        {/* [+] Trigger Button */}
+        <button
+          type="button"
+          onClick={() => setIsMobileSheetOpen(true)}
+          className="flex size-8 shrink-0 items-center justify-center rounded-full bg-surface text-foreground hover:bg-surface-hover active:scale-95 transition-all cursor-pointer"
+          title="Add context, switch engine or model"
+        >
+          <Plus className="size-4" />
+        </button>
+
+        {/* Mobile Input */}
+        <textarea
+          ref={mobileTextareaRef}
+          rows={1}
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={isStreaming ? 'Thinking…' : placeholder}
+          className="flex-1 min-w-0 bg-transparent border-0 font-sans leading-snug text-foreground placeholder:text-muted-foreground/60 focus:outline-none text-sm py-1 resize-none max-h-24"
+        />
+
+        {/* Send or Stop */}
+        {isStreaming ? (
+          <button
+            type="button"
+            onClick={() => stopSession()}
+            className="flex size-8 shrink-0 items-center justify-center rounded-full bg-destructive text-white shadow-xs active:scale-95 cursor-pointer"
+          >
+            <Square className="size-3.5 fill-current" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={!prompt.trim()}
+            className={cn(
+              'flex size-8 shrink-0 items-center justify-center rounded-full shadow-xs transition-all cursor-pointer active:scale-95',
+              prompt.trim()
+                ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                : 'bg-surface text-muted-foreground/40 cursor-default'
+            )}
+            title="Send"
+          >
+            <ArrowUp className="size-4 stroke-[2.5]" />
+          </button>
+        )}
+      </div>
+
+      {/* 2. Desktop Surface */}
       <div className={cn(
-        'chat-composer-surface relative flex flex-col',
+        'hidden sm:flex chat-composer-surface relative flex-col',
         headerNode && 'rounded-t-none'
       )}>
         <div className={cn('flex flex-col px-3.5', isCompact ? 'pt-2 pb-1' : 'pt-3.5 pb-2')}>
@@ -733,6 +793,198 @@ export const AgentTaskInputBar: React.FC<AgentTaskInputBarProps> = ({
           </div>
         </div>
       </div>
+
+      {/* 3. Mobile Options Bottom Sheet */}
+      {isMobileSheetOpen && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end sm:hidden select-none">
+          <div
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150"
+            onClick={() => setIsMobileSheetOpen(false)}
+          />
+          <div className="relative z-10 bg-card/98 backdrop-blur-2xl border-t border-border rounded-t-3xl p-4 shadow-2xl max-h-[82vh] overflow-y-auto space-y-4 animate-in slide-in-from-bottom duration-200">
+            <div className="flex items-center justify-between pb-2 border-b border-border/40">
+              <h3 className="text-ui-base font-bold text-foreground">Task Settings</h3>
+              <button
+                type="button"
+                onClick={() => setIsMobileSheetOpen(false)}
+                className="size-7 rounded-lg text-muted-foreground hover:bg-surface flex items-center justify-center cursor-pointer"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            {/* Engine Selection */}
+            <div className="space-y-1.5">
+              <label className="text-3xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Agent Engine
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {engines.map((eng) => (
+                  <button
+                    key={eng.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedEngineId(eng.id);
+                      setComposerTarget({ kind: eng.kind, id: eng.id });
+                      if (eng.supportedModels?.length) setSelectedModel(eng.supportedModels[0]);
+                    }}
+                    className={cn(
+                      'px-2.5 py-1.5 rounded-xl text-xs font-medium border flex items-center gap-1.5 transition-all cursor-pointer',
+                      eng.id === activeEngine.id
+                        ? 'border-primary bg-primary/10 text-primary font-semibold'
+                        : 'border-border/60 bg-surface/60 text-muted-foreground'
+                    )}
+                  >
+                    <ProviderIcon provider={eng.id} size={14} />
+                    <span>{eng.name}</span>
+                    <span className="text-4xs px-1 py-0.2 rounded bg-surface border border-border">
+                      {eng.badge}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Model Selection */}
+            <div className="space-y-1.5">
+              <label className="text-3xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Model
+              </label>
+              <div className="grid grid-cols-1 gap-1 max-h-36 overflow-y-auto p-0.5">
+                {modelOptions.map((m) => {
+                  const isSelected = m === effectiveModel || m.split('/').pop() === effectiveModel;
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setSelectedModel(m)}
+                      className={cn(
+                        'w-full flex items-center justify-between px-3 py-1.5 rounded-xl text-xs font-mono border transition-all cursor-pointer text-left',
+                        isSelected
+                          ? 'border-primary bg-primary/10 text-primary font-semibold'
+                          : 'border-border/40 bg-surface/40 text-muted-foreground hover:bg-surface'
+                      )}
+                    >
+                      <span className="truncate">{m}</span>
+                      {isSelected && <ComposerMenuCheck />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Permissions / Execution Mode */}
+            <div className="space-y-1.5">
+              <label className="text-3xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Permissions
+              </label>
+              <div className="grid grid-cols-2 gap-1.5">
+                {MODES.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setExecutionMode(m.id)}
+                    className={cn(
+                      'px-2.5 py-2 rounded-xl text-xs font-medium border flex items-center gap-2 transition-all text-left cursor-pointer',
+                      executionMode === m.id
+                        ? 'border-primary bg-primary/10 text-primary font-semibold'
+                        : 'border-border/60 bg-surface/60 text-muted-foreground'
+                    )}
+                  >
+                    <m.icon className="size-4 shrink-0" />
+                    <div className="truncate">{m.label}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Reasoning Effort */}
+            <div className="space-y-1.5">
+              <label className="text-3xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Thinking Budget
+              </label>
+              <div className="flex gap-1.5">
+                {REASONING_LEVELS.map((r) => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => setReasoningLevel(r.id)}
+                    className={cn(
+                      'flex-1 py-1.5 rounded-xl text-xs font-medium border text-center transition-all cursor-pointer',
+                      reasoningLevel === r.id
+                        ? 'border-primary bg-primary/10 text-primary font-semibold'
+                        : 'border-border/60 bg-surface/60 text-muted-foreground'
+                    )}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Attachments / Context */}
+            <div className="space-y-1.5 pt-1">
+              <label className="text-3xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Add Context
+              </label>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrompt((p) => p + ' @files ');
+                    setIsMobileSheetOpen(false);
+                  }}
+                  className="p-2.5 rounded-xl border border-border/60 bg-surface/60 text-xs text-foreground flex items-center gap-2 cursor-pointer hover:bg-surface"
+                >
+                  <FileText className="size-3.5 text-primary" />
+                  <span>@files</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrompt((p) => p + ' $skills ');
+                    setIsMobileSheetOpen(false);
+                  }}
+                  className="p-2.5 rounded-xl border border-border/60 bg-surface/60 text-xs text-foreground flex items-center gap-2 cursor-pointer hover:bg-surface"
+                >
+                  <Bot className="size-3.5 text-primary" />
+                  <span>$skills</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    fileInputRef.current?.click();
+                    setIsMobileSheetOpen(false);
+                  }}
+                  className="p-2.5 rounded-xl border border-border/60 bg-surface/60 text-xs text-foreground flex items-center gap-2 cursor-pointer hover:bg-surface"
+                >
+                  <Upload className="size-3.5 text-primary" />
+                  <span>Upload File</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrompt((p) => p + ' /commands ');
+                    setIsMobileSheetOpen(false);
+                  }}
+                  className="p-2.5 rounded-xl border border-border/60 bg-surface/60 text-xs text-foreground flex items-center gap-2 cursor-pointer hover:bg-surface"
+                >
+                  <Terminal className="size-3.5 text-primary" />
+                  <span>/commands</span>
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsMobileSheetOpen(false)}
+              className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold text-xs mt-2 cursor-pointer"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

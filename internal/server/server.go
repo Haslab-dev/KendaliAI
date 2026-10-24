@@ -333,6 +333,7 @@ func (s *Server) routes() {
 	s.router.HandleFunc("/api/workspace/files", s.handleWorkspaceFiles())
 	s.router.HandleFunc("/api/workspace/tree", s.handleWorkspaceTree())
 	s.router.HandleFunc("/api/workspace/file", s.handleWorkspaceFile())
+	s.router.HandleFunc("/api/workspace/download", s.handleWorkspaceDownload())
 	s.router.HandleFunc("/api/workspace/mkdir", s.handleWorkspaceMkdir())
 
 	// Terminal
@@ -1552,6 +1553,16 @@ func (s *Server) handleMCPFetchTools() http.HandlerFunc {
 				}
 				m.Status = "ready"
 				_ = s.store.SaveMCPServer(m)
+			} else if strings.EqualFold(m.Name, "composio") || strings.EqualFold(m.ID, "composio") {
+				m.ToolsCached = []gateway.ToolCachedInfo{
+					{Name: "COMPOSIO_SEARCH_TOOLS", Description: "Search tools across 1000+ Composio apps"},
+					{Name: "COMPOSIO_GET_TOOL_SCHEMAS", Description: "Retrieve input schemas for tools by slug"},
+					{Name: "COMPOSIO_MANAGE_CONNECTIONS", Description: "Create or manage connections to user apps"},
+					{Name: "COMPOSIO_MULTI_EXECUTE_TOOL", Description: "Fast and parallel tool executor for Composio tools"},
+					{Name: "COMPOSIO_WAIT_FOR_CONNECTIONS", Description: "Wait for user auth to finish on app connections"},
+				}
+				m.Status = "ready"
+				_ = s.store.SaveMCPServer(m)
 			} else if len(m.ToolsCached) == 0 {
 				m.Status = "configured"
 				_ = s.store.SaveMCPServer(m)
@@ -2249,7 +2260,7 @@ func (s *Server) handleHealth() http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{
 			"status":  "ok",
-			"version": "0.5.0",
+			"version": "0.6.1",
 		})
 	}
 }
@@ -2280,7 +2291,7 @@ func (s *Server) handleStatus() http.HandlerFunc {
 			"sessions":       len(sessions),
 			"agents":         len(agents),
 			"telegramBots":   runningBots,
-			"version":        "0.5.0",
+			"version":        "0.6.1",
 			"metrics":        metrics,
 		})
 	}
@@ -2921,6 +2932,95 @@ func (s *Server) handleWorkspaceFile() http.HandlerFunc {
 		default:
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
+	}
+}
+
+func (s *Server) handleWorkspaceDownload() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		filePath := r.URL.Query().Get("path")
+		if filePath == "" {
+			filePath = r.URL.Query().Get("file")
+		}
+		if filePath == "" {
+			http.Error(w, "missing path query param", http.StatusBadRequest)
+			return
+		}
+
+		base := s.explorer.GetBaseDir()
+
+		// Strip synthetic LLM prefixes
+		cleaned := strings.TrimSpace(filePath)
+		for _, prefix := range []string{
+			"/workspaces/", "workspaces/",
+			"/workspace/", "workspace/",
+			"~/workspaces/", "~/workspace/",
+			"~/",
+		} {
+			if strings.HasPrefix(cleaned, prefix) {
+				cleaned = strings.TrimPrefix(cleaned, prefix)
+				break
+			}
+		}
+
+		fullPath := cleaned
+		if !filepath.IsAbs(fullPath) {
+			fullPath = filepath.Join(base, cleaned)
+		}
+
+		rel, err := filepath.Rel(base, fullPath)
+		if err != nil || strings.HasPrefix(rel, "..") {
+			http.Error(w, "access denied: path outside workspace", http.StatusForbidden)
+			return
+		}
+
+		fi, err := os.Stat(fullPath)
+		if err != nil {
+			http.Error(w, "file not found", http.StatusNotFound)
+			return
+		}
+		if fi.IsDir() {
+			http.Error(w, "cannot download directory", http.StatusBadRequest)
+			return
+		}
+
+		ext := strings.ToLower(filepath.Ext(fullPath))
+		contentType := "application/octet-stream"
+		switch ext {
+		case ".docx":
+			contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+		case ".xlsx":
+			contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+		case ".pptx":
+			contentType = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+		case ".pdf":
+			contentType = "application/pdf"
+		case ".png":
+			contentType = "image/png"
+		case ".jpg", ".jpeg":
+			contentType = "image/jpeg"
+		case ".gif":
+			contentType = "image/gif"
+		case ".webp":
+			contentType = "image/webp"
+		case ".svg":
+			contentType = "image/svg+xml"
+		case ".json":
+			contentType = "application/json"
+		case ".txt", ".md", ".csv":
+			contentType = "text/plain; charset=utf-8"
+		case ".html":
+			contentType = "text/html; charset=utf-8"
+		case ".zip":
+			contentType = "application/zip"
+		case ".mp4":
+			contentType = "video/mp4"
+		}
+
+		w.Header().Set("Content-Type", contentType)
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filepath.Base(fullPath)))
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", fi.Size()))
+
+		http.ServeFile(w, r, fullPath)
 	}
 }
 

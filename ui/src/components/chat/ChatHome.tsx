@@ -10,7 +10,7 @@ import {
   Search,
 } from 'lucide-react';
 import { AgentTaskInputBar, PromptSubmitOptions } from '../common/AgentTaskInputBar';
-import { ChatTopControls } from '../shell/ChatTopControls';
+import { ChatTopControls, MobileDrawerTrigger } from '../shell/ChatTopControls';
 import { AgentIcon } from '../shell/AgentIcon';
 import { cn } from '../../lib/cn';
 
@@ -138,12 +138,14 @@ export const ChatHome: React.FC = () => {
 
   return (
     <div className="flex-1 h-full bg-background text-foreground flex flex-col relative overflow-hidden select-none transition-colors">
+      {/* Mobile Drawer Trigger on top-left (matches Muse AI) */}
+      <MobileDrawerTrigger />
       {/* Floating top-right controls (no header bar) */}
       <ChatTopControls />
 
       {/* Centered Landing Content */}
       <div className="flex flex-1 flex-col items-center justify-center px-4 z-10 min-h-0">
-        <div className="flex w-full max-w-[var(--chat-content-max-width,46rem)] flex-col items-center justify-center gap-7 my-auto pb-12">
+        <div className="flex w-full max-w-[var(--chat-content-max-width,46rem)] flex-col items-center justify-center gap-7 my-auto pb-20 sm:pb-12">
           {/* Enlarged agent avatar + name beneath (click → profile panel); hides while the profile panel is open */}
           <div
             className={cn(

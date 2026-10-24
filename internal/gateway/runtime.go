@@ -784,6 +784,17 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 
 	// 5. Build System Prompt & Skills
 	sysPrompt := fmt.Sprintf("You are %s. You speak and act strictly as %s. Never adopt, impersonate, or prepend any other agent persona or name.\n\n%s", agentConfig.Name, agentConfig.Name, agentConfig.SystemPrompt)
+
+	now := time.Now()
+	tzName, tzOffset := now.Zone()
+	sysPrompt += fmt.Sprintf("\n\n## ENVIRONMENT & TEMPORAL CONTEXT:\n- Current Date & Time: %s (%s, UTC%+03d:%02d)\n- Today: %s\n- Workspace Root: %s\n",
+		now.Format("2006-01-02 15:04:05 MST"),
+		tzName,
+		tzOffset/3600,
+		(tzOffset%3600)/60,
+		now.Format("Monday, 02 January 2006"),
+		r.workRoot,
+	)
 	activeBotMode := botmode.ExtractSessionMode(sess.Metadata)
 	sysPrompt += "\n\n" + botmode.PersonaPrompt(activeBotMode)
 	if len(agentConfig.Skills) > 0 {
@@ -904,12 +915,27 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 	}
 
 	// Composio app integrations hint: tell the model which apps are authorized
-	// so it reaches for composio_call instead of saying it cannot.
-	if activeComposio := composioActiveApps(r.store.db); len(activeComposio) > 0 {
-		sysPrompt += "\n\n## CONNECTED APPS (Composio):\n"
-		sysPrompt += "The user has authorized these external apps: " + strings.Join(activeComposio, ", ") + ".\n"
-		sysPrompt += "You can act on them: tool: composio_actions({\"toolkit\": \"APP\"}) to discover actions, then tool: composio_call({\"action\": \"APP_ACTION\", \"arguments\": {...}}).\n"
-		sysPrompt += "To request a new app connection: tool: composio_connections({\"connect_slug\": \"app-slug\"}) and share the returned redirectUrl with the user.\n"
+	// and how to seamlessly interact with any external integration.
+	if cKey := composioAPIKey(r.store.db); cKey != "" {
+		activeComposio := composioActiveApps(r.store.db)
+		sysPrompt += "\n\n## CONNECTED APPS & COMPOSIO INTEGRATIONS:\n"
+		if len(activeComposio) > 0 {
+			sysPrompt += "The user has authorized these external apps: " + strings.Join(activeComposio, ", ") + ".\n"
+		} else {
+			sysPrompt += "Composio is active, but no external app accounts are authorized yet.\n"
+		}
+		sysPrompt += "How to operate integrations:\n"
+		sysPrompt += "1. GitHub: use `github_list_repos` (list user repos, latest active), `github_get_user` (get authenticated profile), `github_create_issue` (create issue), `github_list_issues` (view issues). NEVER scrape github.com on the web when GitHub integration is active.\n"
+		sysPrompt += "2. Google Calendar: use `gcalendar_list_events` (list schedule), `gcalendar_create_event` (schedule meeting), `gcalendar_find_event` (search).\n"
+		sysPrompt += "3. Google Workspace & Gmail: use `gdocs_create`, `gsheet_create`, `gslides_create`, `gmail_list_messages`, `gmail_send_message`.\n"
+		sysPrompt += "4. Slack: use `composio_call({\"action\": \"SLACK_SEND_MESSAGE\", ...})` or `composio_actions({\"toolkit\": \"slack\"})`.\n"
+		sysPrompt += "5. Jira: use `composio_call({\"action\": \"JIRA_CREATE_AN_ISSUE\", ...})` or `composio_actions({\"toolkit\": \"jira\"})`.\n"
+		sysPrompt += "6. Notion: use `composio_call({\"action\": \"NOTION_SEARCH_NOTION_PAGE\", ...})` or `composio_actions({\"toolkit\": \"notion\"})`.\n"
+		sysPrompt += "7. All other services (Linear, Asana, Trello, GitLab, Discord, etc.):\n"
+		sysPrompt += "   - To discover available actions and parameters: `composio_actions({\"toolkit\": \"<slug>\"})` (e.g. 'linear', 'trello', 'asana').\n"
+		sysPrompt += "   - To execute an action: `composio_call({\"action\": \"<ACTION_SLUG>\", \"arguments\": {...}})`.\n"
+		sysPrompt += "8. Connecting new apps: If the user requests an integration that is not yet authorized, call `composio_connections({\"connect_slug\": \"<slug>\"})` or `composio_call` — it returns an OAuth authorization URL. Share this link directly with the user so they can click and authorize in 1 step.\n"
+		sysPrompt += "CRITICAL: When the user asks about their own account, repos, calendar, emails, or messages, ALWAYS query via the connected tool. NEVER scrape public web URLs or guess usernames.\n"
 	}
 
 	// OpenUI generative-UI capability: the web UI renders ```opui fenced
@@ -999,10 +1025,28 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 	prunedToolDefs := toolDefs
 	if nativeToolsEnabled && len(toolDefs) > 6 && panduDec.Category != "" {
 		var salient []agent.ToolDefinition
+		lowerPrompt := strings.ToLower(cleanPrompt)
 		for _, td := range toolDefs {
 			name := td.Name
 			// Universal essential tools always available
 			if name == "exec" || name == "read_file" || name == "write_file" || name == "list_files" || name == "search_files" {
+				salient = append(salient, td)
+				continue
+			}
+			// Capability plugin tools matched by user prompt intent
+			if strings.Contains(name, "motion") && (strings.Contains(lowerPrompt, "motion") || strings.Contains(lowerPrompt, "animasi") || strings.Contains(lowerPrompt, "video") || strings.Contains(lowerPrompt, "teaser") || strings.Contains(lowerPrompt, "gsap") || strings.Contains(lowerPrompt, "60fps")) {
+				salient = append(salient, td)
+				continue
+			}
+			if strings.Contains(name, "slide") && (strings.Contains(lowerPrompt, "slide") || strings.Contains(lowerPrompt, "presentasi") || strings.Contains(lowerPrompt, "deck")) {
+				salient = append(salient, td)
+				continue
+			}
+			if (strings.Contains(name, "docx") || strings.Contains(name, "word")) && (strings.Contains(lowerPrompt, "doc") || strings.Contains(lowerPrompt, "word") || strings.Contains(lowerPrompt, "surat") || strings.Contains(lowerPrompt, "laporan")) {
+				salient = append(salient, td)
+				continue
+			}
+			if (strings.Contains(name, "xlsx") || strings.Contains(name, "excel") || strings.Contains(name, "sheet")) && (strings.Contains(lowerPrompt, "xls") || strings.Contains(lowerPrompt, "excel") || strings.Contains(lowerPrompt, "sheet") || strings.Contains(lowerPrompt, "tabel") || strings.Contains(lowerPrompt, "anggaran")) {
 				salient = append(salient, td)
 				continue
 			}
@@ -1326,7 +1370,18 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		reqs := agent.ParseActionPlan(content)
 		if len(reqs) == 0 {
 			// Final answer reached!
-			finalContent = content
+			if strings.TrimSpace(content) == "" && finalThought.Len() > 0 {
+				finalContent = strings.TrimSpace(finalThought.String())
+				r.bus.Publish(messaging.Event{
+					Type:      messaging.EventAgentTextDelta,
+					SessionID: sessionID,
+					AgentID:   agentConfig.ID,
+					Channel:   channel,
+					Payload:   messaging.TextDeltaPayload{Delta: finalContent},
+				})
+			} else {
+				finalContent = content
+			}
 			break
 		}
 
@@ -1351,14 +1406,18 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 	// results are already attached to this message and rendered as
 	// ToolExecutionCards by the UI; keep the text human-readable.
 	if finalContent == "" && len(recordedToolCalls) > 0 {
-		toolNames := make([]string, 0, len(recordedToolCalls))
-		for _, tc := range recordedToolCalls {
-			toolNames = append(toolNames, tc.Tool)
+		if finalThought.Len() > 0 {
+			finalContent = strings.TrimSpace(finalThought.String())
+		} else {
+			toolNames := make([]string, 0, len(recordedToolCalls))
+			for _, tc := range recordedToolCalls {
+				toolNames = append(toolNames, tc.Tool)
+			}
+			finalContent = fmt.Sprintf(
+				"I ran %d tool call(s) — %s — but hit the turn limit before composing a summary. The raw results are in the tool cards above; ask me to continue and I'll analyze them.",
+				len(recordedToolCalls), strings.Join(toolNames, ", "),
+			)
 		}
-		finalContent = fmt.Sprintf(
-			"I ran %d tool call(s) — %s — but hit the turn limit before composing a summary. The raw results are in the tool cards above; ask me to continue and I'll analyze them.",
-			len(recordedToolCalls), strings.Join(toolNames, ", "),
-		)
 		r.bus.Publish(messaging.Event{
 			Type:      messaging.EventAgentTextDelta,
 			SessionID: sessionID,
@@ -1477,6 +1536,7 @@ func (r *Runtime) executeToolCall(
 	nativeMode bool,
 	recordedToolCalls *[]ToolCallRecord,
 ) agent.Message {
+	call.Name = agent.SanitizeToolName(call.Name)
 	toolCallID := call.ID
 	if toolCallID == "" {
 		toolCallID = uuid.New().String()[:8]
@@ -1528,6 +1588,53 @@ func (r *Runtime) executeToolCall(
 	// Execute tool
 	startExec := time.Now()
 	toolDef, exists := toolRegistry[call.Name]
+	if !exists {
+		// Case-insensitive match
+		for k, v := range toolRegistry {
+			if strings.EqualFold(k, call.Name) {
+				toolDef = v
+				exists = true
+				call.Name = k
+				break
+			}
+		}
+	}
+	if !exists {
+		aliases := map[string]string{
+			"google_calendar_list_events":  "gcalendar_list_events",
+			"googlecalendar_events_list":   "gcalendar_list_events",
+			"google_calendar_create_event": "gcalendar_create_event",
+			"googlecalendar_create_event":  "gcalendar_create_event",
+			"google_calendar_find_event":   "gcalendar_find_event",
+			"googlecalendar_find_event":    "gcalendar_find_event",
+			"google_docs_create":           "gdocs_create",
+			"google_doc_create":            "gdocs_create",
+			"google_sheets_create":         "gsheet_create",
+			"google_sheet_create":          "gsheet_create",
+			"google_slides_create":         "gslides_create",
+			"google_slide_create":          "gslides_create",
+			"gmail_fetch_emails":           "gmail_list_messages",
+			"gmail_list_emails":            "gmail_list_messages",
+			"gmail_get_messages":           "gmail_list_messages",
+			"google_mail_list_messages":    "gmail_list_messages",
+			"gmail_send_email":             "gmail_send_message",
+			"google_mail_send_message":     "gmail_send_message",
+			"github_get_repos":             "github_list_repos",
+			"github_repositories":          "github_list_repos",
+			"github_list_repositories":     "github_list_repos",
+			"github_user":                  "github_get_user",
+			"github_profile":               "github_get_user",
+			"github_get_authenticated_user": "github_get_user",
+			"github_new_issue":             "github_create_issue",
+		}
+		if target, ok := aliases[strings.ToLower(call.Name)]; ok {
+			if def, ok2 := toolRegistry[target]; ok2 {
+				toolDef = def
+				exists = true
+				call.Name = target
+			}
+		}
+	}
 	var toolOutput string
 	var status string = "success"
 

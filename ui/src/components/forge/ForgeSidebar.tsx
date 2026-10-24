@@ -698,10 +698,10 @@ export const ForgeSidebar: React.FC = () => {
 
         <div className="flex items-center gap-1.5">
           <span
-            title="KendaliAI v0.6.0"
+            title="KendaliAI v0.6.1"
             className="cursor-default select-none rounded border border-border/50 bg-surface px-1.5 py-0.5 font-mono text-ui-xs font-medium text-foreground-subtle transition-colors hover:text-foreground"
           >
-            v0.6.0
+            v0.6.1
           </span>
           <button
             type="button"

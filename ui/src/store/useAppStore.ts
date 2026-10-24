@@ -1085,11 +1085,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (res.ok) {
         const data = await res.json();
         const models: GlobalModelOption[] = data.models || [];
-        const defMdl = data.defaultModel || (models.length > 0 ? models[0].id : 'gpt-4o');
+        const defMdl = data.defaultModel || (models.length > 0 ? models[0].id : '');
 
         let curActive = get().activeModel;
         if (!curActive) {
           curActive = localStorage.getItem('kendali_active_model') || defMdl;
+        }
+        if (curActive && !models.some((m) => m.id === curActive)) {
+          curActive = defMdl;
         }
 
         set({

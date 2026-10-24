@@ -176,7 +176,7 @@ export const McpsPane: React.FC = () => {
             type="button"
             onClick={() => handleFetchTools()}
             disabled={isFetchingTools}
-            className="px-2.5 py-1.5 bg-raised hover:bg-hoverbg border border-line rounded-lg text-xs font-semibold text-hi flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-60"
+            className="px-2.5 py-1.5 bg-card hover:bg-accent border border-border rounded-lg text-xs font-semibold text-foreground flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-60"
             title="Probe and update cached tools for all servers"
           >
             <RefreshCw size={13} className={isFetchingTools ? 'animate-spin' : ''} />
@@ -219,15 +219,15 @@ export const McpsPane: React.FC = () => {
           return (
             <div
               key={m.id}
-              className={`p-4 bg-raised border rounded-xl space-y-2.5 transition-all ${
-                isEnabled ? 'border-line' : 'border-line/40 opacity-70'
+              className={`p-4 bg-card border rounded-xl space-y-2.5 transition-all shadow-2xs ${
+                isEnabled ? 'border-border' : 'border-border/40 opacity-70'
               }`}
             >
               <div className="flex items-center justify-between">
-                <div className="font-semibold text-sm text-hi flex items-center gap-1.5">
-                  <Plug size={15} className={isEnabled ? 'text-hi' : 'text-lo'} />
+                <div className="font-semibold text-sm text-foreground flex items-center gap-1.5">
+                  <Plug size={15} className={isEnabled ? 'text-primary' : 'text-foreground-subtle'} />
                   <span>{m.name}</span>
-                  <span className="text-ui-xs px-1.5 py-0.5 rounded bg-foreground/10 text-mid uppercase font-mono">
+                  <span className="text-ui-xs px-1.5 py-0.5 rounded bg-surface-muted text-muted-foreground uppercase font-mono border border-border/40">
                     {m.transport || 'stdio'}
                   </span>
                 </div>
@@ -250,7 +250,7 @@ export const McpsPane: React.FC = () => {
 
                   <button
                     onClick={() => handleDelete(m.id)}
-                    className="text-lo hover:text-red-400 p-1 transition-colors cursor-pointer"
+                    className="text-foreground-subtle hover:text-destructive p-1 transition-colors cursor-pointer"
                     title="Delete MCP Server"
                   >
                     <Trash2 size={13} />
@@ -259,17 +259,17 @@ export const McpsPane: React.FC = () => {
               </div>
 
               {m.transport === 'http' || m.transport === 'sse' ? (
-                <div className="text-xs text-mid font-mono truncate" title={m.url}>
-                  <span className="text-lo font-sans">URL: </span>{m.url || 'No URL configured'}
+                <div className="text-xs text-muted-foreground font-mono truncate" title={m.url}>
+                  <span className="text-foreground-subtle font-sans">URL: </span>{m.url || 'No URL configured'}
                 </div>
               ) : (
-                <div className="text-xs text-mid font-mono truncate">
+                <div className="text-xs text-muted-foreground font-mono truncate">
                   {m.command} {(m.args || []).join(' ')}
                 </div>
               )}
 
               {/* Key status and quick configure button */}
-              <div className="flex items-center justify-between pt-1 border-t border-line/60">
+              <div className="flex items-center justify-between pt-1 border-t border-border/60">
                 <div className="flex items-center gap-1.5">
                   {isFc || isEx ? (
                     isConfigured ? (
@@ -282,7 +282,7 @@ export const McpsPane: React.FC = () => {
                       </span>
                     )
                   ) : m.headers && Object.keys(m.headers).length > 0 ? (
-                    <span className="text-ui-xs px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono">
+                    <span className="text-ui-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-mono">
                       {Object.keys(m.headers).length} Header{Object.keys(m.headers).length > 1 ? 's' : ''}
                     </span>
                   ) : null}
@@ -293,10 +293,10 @@ export const McpsPane: React.FC = () => {
                     type="button"
                     onClick={() => handleFetchTools(m.id)}
                     disabled={isFetchingTools}
-                    className="text-ui-xs text-mid hover:text-hi font-medium flex items-center gap-1 cursor-pointer transition-colors"
+                    className="text-ui-xs text-muted-foreground hover:text-foreground font-medium flex items-center gap-1 cursor-pointer transition-colors"
                     title="Fetch / Refresh tools from this server"
                   >
-                    <RefreshCw size={11} className={isFetchingTools ? 'animate-spin' : ''} />
+                    <RefreshCw size={11} className={isFetchingTools ? 'animate-spin text-primary' : ''} />
                     <span>{m.toolsCached?.length || 0} tools</span>
                   </button>
 
@@ -306,7 +306,7 @@ export const McpsPane: React.FC = () => {
                       setApiKeyTarget(isFc ? 'firecrawl' : isEx ? 'exa' : 'all');
                       setShowApiKeyModal(true);
                     }}
-                    className="text-ui-xs text-blue-400 hover:text-blue-300 font-medium flex items-center gap-1 cursor-pointer transition-colors"
+                    className="text-ui-xs text-primary hover:text-primary/80 font-medium flex items-center gap-1 cursor-pointer transition-colors"
                   >
                     <Key size={11} />
                     <span>Configure Key</span>
@@ -319,7 +319,7 @@ export const McpsPane: React.FC = () => {
                   {m.toolsCached.map((t) => (
                     <span
                       key={t.name}
-                      className="text-ui-xs px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono"
+                      className="text-ui-xs px-1.5 py-0.5 rounded bg-surface-muted text-foreground-subtle border border-border/50 font-mono"
                       title={t.description}
                     >
                       {t.name}
@@ -333,17 +333,17 @@ export const McpsPane: React.FC = () => {
       </div>
 
       {/* Discovered MCP Tools Section */}
-      <div className="border-t border-line pt-6 space-y-4">
+      <div className="border-t border-border/60 pt-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <div className="flex items-center gap-2">
-              <Wrench size={16} className="text-blue-500" />
-              <h4 className="text-sm font-bold text-hi">
+              <Wrench size={16} className="text-primary" />
+              <h4 className="text-sm font-bold text-foreground">
                 Discovered MCP Tools ({filteredMcpTools.length}
                 {filteredMcpTools.length !== allMcpTools.length ? ` of ${allMcpTools.length}` : ''})
               </h4>
             </div>
-            <p className="text-xs text-mid mt-0.5">
+            <p className="text-xs text-muted-foreground mt-0.5">
               Callable functions exposed by connected Model Context Protocol servers to agents and routines.
             </p>
           </div>
@@ -353,9 +353,9 @@ export const McpsPane: React.FC = () => {
             type="button"
             onClick={() => handleFetchTools()}
             disabled={isFetchingTools}
-            className="text-xs font-semibold px-2.5 py-1.5 bg-raised hover:bg-hoverbg border border-line rounded-lg text-hi flex items-center gap-1.5 self-start sm:self-auto cursor-pointer transition-colors"
+            className="text-xs font-semibold px-2.5 py-1.5 bg-card hover:bg-accent border border-border rounded-lg text-foreground flex items-center gap-1.5 self-start sm:self-auto cursor-pointer transition-colors"
           >
-            <RefreshCw size={12} className={isFetchingTools ? 'animate-spin' : ''} />
+            <RefreshCw size={12} className={isFetchingTools ? 'animate-spin text-primary' : ''} />
             <span>Re-probe Tools</span>
           </button>
         </div>
@@ -363,13 +363,13 @@ export const McpsPane: React.FC = () => {
         {/* Filter bar: Search & Server Badges */}
         <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between">
           <div className="relative flex-1">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-mid" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
               placeholder="Search tools by name, description, or server..."
               value={toolSearch}
               onChange={(e) => setToolSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi placeholder-mid outline-none focus:border-hi transition-colors"
+              className="w-full pl-9 pr-4 py-2 bg-surface-muted border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary transition-colors"
             />
           </div>
 
@@ -379,8 +379,8 @@ export const McpsPane: React.FC = () => {
               onClick={() => setSelectedServer('all')}
               className={`text-ui-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap transition-colors cursor-pointer ${
                 selectedServer === 'all'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-raised text-mid border border-line hover:bg-hoverbg'
+                  ? 'bg-primary text-white'
+                  : 'bg-card text-muted-foreground border border-border hover:bg-accent'
               }`}
             >
               All Servers ({allMcpTools.length})
@@ -394,8 +394,8 @@ export const McpsPane: React.FC = () => {
                   onClick={() => setSelectedServer(m.id || m.name)}
                   className={`text-ui-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap transition-colors cursor-pointer ${
                     selectedServer === m.id || selectedServer === m.name
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-raised text-mid border border-line hover:bg-hoverbg'
+                      ? 'bg-primary text-white'
+                      : 'bg-card text-muted-foreground border border-border hover:bg-accent'
                   }`}
                 >
                   {m.name} ({count})
@@ -407,14 +407,14 @@ export const McpsPane: React.FC = () => {
 
         {/* Tools Listing Table / Cards */}
         {filteredMcpTools.length === 0 ? (
-          <div className="p-8 bg-raised border border-dashed border-line rounded-xl text-center flex flex-col items-center justify-center gap-2">
-            <Wrench size={24} className="text-mid" />
-            <span className="text-xs font-semibold text-hi">
+          <div className="p-8 bg-card border border-dashed border-border rounded-xl text-center flex flex-col items-center justify-center gap-2">
+            <Wrench size={24} className="text-muted-foreground" />
+            <span className="text-xs font-semibold text-foreground">
               {allMcpTools.length === 0
                 ? 'No MCP Tools Discovered Yet'
                 : 'No MCP tools match your search filter'}
             </span>
-            <p className="text-ui-xs text-mid max-w-sm">
+            <p className="text-ui-xs text-muted-foreground max-w-sm">
               {allMcpTools.length === 0
                 ? 'Make sure your MCP servers are configured with valid API keys or commands, then click "Sync All Tools".'
                 : 'Try clearing the search query or selecting "All Servers".'}
@@ -424,7 +424,7 @@ export const McpsPane: React.FC = () => {
                 type="button"
                 onClick={() => handleFetchTools()}
                 disabled={isFetchingTools}
-                className="mt-2 px-3 py-1.5 bg-blue-600 hover:bg-primary/100 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 cursor-pointer"
+                className="mt-2 px-3 py-1.5 bg-primary hover:bg-primary/90 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 cursor-pointer shadow-xs"
               >
                 <RefreshCw size={12} className={isFetchingTools ? 'animate-spin' : ''} />
                 <span>Probe & Discover Tools</span>
@@ -432,30 +432,30 @@ export const McpsPane: React.FC = () => {
             )}
           </div>
         ) : (
-          <div className="border border-line rounded-xl overflow-hidden divide-y divide-line bg-raised">
+          <div className="border border-border rounded-xl overflow-hidden divide-y divide-border/60 bg-card shadow-2xs">
             {filteredMcpTools.map((tool) => {
               const isCopied = copiedTool === tool.name;
               return (
                 <div
                   key={`${tool.serverId}-${tool.name}`}
-                  className="p-3.5 hover:bg-hoverbg/50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  className="p-3.5 hover:bg-accent/40 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                 >
                   <div className="space-y-1 min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono text-xs font-bold text-blue-500">
+                      <span className="font-mono text-xs font-bold text-primary">
                         {tool.name}
                       </span>
 
                       <button
                         type="button"
                         onClick={() => copyTool(tool.name)}
-                        className="p-1 text-lo hover:text-hi transition-colors cursor-pointer"
+                        className="p-1 text-foreground-subtle hover:text-foreground transition-colors cursor-pointer"
                         title="Copy tool name"
                       >
                         {isCopied ? <Check size={11} className="text-emerald-500" /> : <Copy size={11} />}
                       </button>
 
-                      <span className="text-ui-xs px-1.5 py-0.5 rounded bg-foreground/10 text-mid uppercase font-mono">
+                      <span className="text-ui-xs px-1.5 py-0.5 rounded bg-surface-muted text-muted-foreground uppercase font-mono border border-border/40">
                         {tool.serverName} · {tool.serverTransport}
                       </span>
 
@@ -470,7 +470,7 @@ export const McpsPane: React.FC = () => {
                       </span>
                     </div>
 
-                    <p className="text-xs text-mid line-clamp-2">
+                    <p className="text-xs text-muted-foreground line-clamp-2">
                       {tool.description || 'No description provided by MCP schema.'}
                     </p>
                   </div>
@@ -482,7 +482,7 @@ export const McpsPane: React.FC = () => {
                         copyTool(tool.name);
                         navigate('chat');
                       }}
-                      className="px-2.5 py-1 bg-inputbg hover:bg-line border border-line rounded text-ui-xs font-medium text-hi flex items-center gap-1 transition-colors cursor-pointer"
+                      className="px-2.5 py-1 bg-surface hover:bg-surface-hover border border-border rounded text-ui-xs font-medium text-foreground flex items-center gap-1 transition-colors cursor-pointer"
                       title="Copy tool name and open Chat"
                     >
                       <ExternalLink size={11} />
@@ -496,23 +496,23 @@ export const McpsPane: React.FC = () => {
         )}
       </div>
 
-      <div className="border-t border-line pt-5 space-y-3">
-        <h4 className="text-sm font-semibold text-hi">Register New MCP Server</h4>
+      <div className="border-t border-border/60 pt-5 space-y-3">
+        <h4 className="text-sm font-semibold text-foreground">Register New MCP Server</h4>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label className="text-ui-xs font-semibold text-mid uppercase">Name</label>
+            <label className="text-ui-xs font-semibold text-muted-foreground uppercase">Name</label>
             <input
               type="text"
-              className="w-full mt-1 px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi outline-none"
+              className="w-full mt-1 px-3 py-2 bg-surface-muted border border-border rounded-lg text-xs text-foreground outline-none focus:border-primary"
               placeholder="e.g. firecrawl, exa, github"
               value={form.name || ''}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
             />
           </div>
           <div>
-            <label className="text-ui-xs font-semibold text-mid uppercase">Transport</label>
+            <label className="text-ui-xs font-semibold text-muted-foreground uppercase">Transport</label>
             <select
-              className="w-full mt-1 px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi outline-none"
+              className="w-full mt-1 px-3 py-2 bg-surface-muted border border-border rounded-lg text-xs text-foreground outline-none focus:border-primary cursor-pointer"
               value={form.transport || 'stdio'}
               onChange={(e) => setForm({ ...form, transport: e.target.value as any })}
             >
@@ -525,28 +525,28 @@ export const McpsPane: React.FC = () => {
           {form.transport === 'http' || form.transport === 'sse' ? (
             <>
               <div className="sm:col-span-2">
-                <label className="text-ui-xs font-semibold text-mid uppercase">Endpoint URL</label>
+                <label className="text-ui-xs font-semibold text-muted-foreground uppercase">Endpoint URL</label>
                 <input
                   type="text"
-                  className="w-full mt-1 px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi outline-none font-mono"
+                  className="w-full mt-1 px-3 py-2 bg-surface-muted border border-border rounded-lg text-xs text-foreground outline-none font-mono focus:border-primary"
                   placeholder="https://mcp.firecrawl.dev/v2/mcp or https://mcp.exa.ai/mcp"
                   value={form.url || ''}
                   onChange={(e) => setForm({ ...form, url: e.target.value })}
                 />
               </div>
               <div className="sm:col-span-2">
-                <label className="text-ui-xs font-semibold text-mid uppercase">HTTP Headers (API Key)</label>
+                <label className="text-ui-xs font-semibold text-muted-foreground uppercase">HTTP Headers (API Key)</label>
                 <div className="flex gap-2 mt-1">
                   <input
                     type="text"
-                    className="w-1/3 px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi outline-none font-mono"
+                    className="w-1/3 px-3 py-2 bg-surface-muted border border-border rounded-lg text-xs text-foreground outline-none font-mono focus:border-primary"
                     placeholder="Header (e.g. Authorization or x-api-key)"
                     value={headerKey}
                     onChange={(e) => setHeaderKey(e.target.value)}
                   />
                   <input
                     type="text"
-                    className="flex-1 px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi outline-none font-mono"
+                    className="flex-1 px-3 py-2 bg-surface-muted border border-border rounded-lg text-xs text-foreground outline-none font-mono focus:border-primary"
                     placeholder="Value (e.g. Bearer fc-xxx or exa-xxx)"
                     value={headerVal}
                     onChange={(e) => setHeaderVal(e.target.value)}
@@ -562,7 +562,7 @@ export const McpsPane: React.FC = () => {
                       setHeaderKey('');
                       setHeaderVal('');
                     }}
-                    className="px-3 py-2 bg-raised border border-line rounded-lg text-xs text-hi font-medium"
+                    className="px-3 py-2 bg-card hover:bg-accent border border-border rounded-lg text-xs text-foreground font-medium transition-colors cursor-pointer"
                   >
                     Add
                   </button>
@@ -570,7 +570,7 @@ export const McpsPane: React.FC = () => {
                 {form.headers && Object.keys(form.headers).length > 0 && (
                   <div className="mt-2 space-y-1">
                     {Object.entries(form.headers).map(([k, v]) => (
-                      <div key={k} className="flex items-center justify-between px-2.5 py-1 bg-inputbg border border-line rounded text-ui-xs font-mono text-mid">
+                      <div key={k} className="flex items-center justify-between px-2.5 py-1 bg-surface-muted border border-border rounded text-ui-xs font-mono text-muted-foreground">
                         <span>{k}: {v.slice(0, 12)}...</span>
                         <button
                           type="button"
@@ -579,7 +579,7 @@ export const McpsPane: React.FC = () => {
                             delete newH[k];
                             setForm({ ...form, headers: newH });
                           }}
-                          className="text-red-400 text-xs hover:underline"
+                          className="text-destructive text-xs hover:underline cursor-pointer"
                         >
                           Remove
                         </button>
@@ -592,20 +592,20 @@ export const McpsPane: React.FC = () => {
           ) : (
             <>
               <div>
-                <label className="text-ui-xs font-semibold text-mid uppercase">Command</label>
+                <label className="text-ui-xs font-semibold text-muted-foreground uppercase">Command</label>
                 <input
                   type="text"
-                  className="w-full mt-1 px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi outline-none"
+                  className="w-full mt-1 px-3 py-2 bg-surface-muted border border-border rounded-lg text-xs text-foreground outline-none focus:border-primary"
                   placeholder="npx"
                   value={form.command || ''}
                   onChange={(e) => setForm({ ...form, command: e.target.value })}
                 />
               </div>
               <div>
-                <label className="text-ui-xs font-semibold text-mid uppercase">Arguments</label>
+                <label className="text-ui-xs font-semibold text-muted-foreground uppercase">Arguments</label>
                 <input
                   type="text"
-                  className="w-full mt-1 px-3 py-2 bg-inputbg border border-line rounded-lg text-xs text-hi outline-none"
+                  className="w-full mt-1 px-3 py-2 bg-surface-muted border border-border rounded-lg text-xs text-foreground outline-none focus:border-primary"
                   placeholder="-y @modelcontextprotocol/server-github"
                   value={(form.args || []).join(' ')}
                   onChange={(e) =>
@@ -618,7 +618,7 @@ export const McpsPane: React.FC = () => {
         </div>
         <button
           onClick={handleSave}
-          className="px-4 py-2 bg-hi hover:bg-hi text-app rounded-lg text-xs font-semibold cursor-pointer"
+          className="px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
         >
           Save MCP Server
         </button>

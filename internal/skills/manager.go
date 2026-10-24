@@ -256,6 +256,7 @@ func (m *Manager) List() ([]SkillSpec, error) {
 
 	homeDir, _ := os.UserHomeDir()
 	dirs := []string{
+		m.basePath,
 		filepath.Join(m.basePath, "generated"),
 		filepath.Join(homeDir, ".kendaliai", "skills", "generated"),
 		"skills",

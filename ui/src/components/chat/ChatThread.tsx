@@ -7,7 +7,7 @@ import { WorkLogList } from '../agent/WorkLog';
 import { ApprovalCard } from '../agentui/ApprovalCard';
 import { AgentTaskInputBar, PromptSubmitOptions } from '../common/AgentTaskInputBar';
 import { ProfileBadge } from '../shell/ProfileBadge';
-import { ChatTopControls } from '../shell/ChatTopControls';
+import { ChatTopControls, MobileDrawerTrigger } from '../shell/ChatTopControls';
 import {
   Copy,
   Check,
@@ -58,6 +58,16 @@ function mapToolCallRecord(tc: ToolCallRecord): ToolExecution {
     status,
     durationMs: tc.durationMs,
   };
+}
+
+function formatMessageTime(ts?: number): string {
+  if (!ts) return '';
+  const d = new Date(ts);
+  return (
+    d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) +
+    ', ' +
+    d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  );
 }
 
 export const ChatThread: React.FC<ChatThreadProps> = () => {
@@ -164,6 +174,8 @@ export const ChatThread: React.FC<ChatThreadProps> = () => {
 
   return (
     <div className="flex-1 h-full flex flex-col bg-background text-foreground select-none relative overflow-hidden">
+      {/* Mobile Drawer Trigger (hamburger with active dot, Muse AI parity) */}
+      <MobileDrawerTrigger scrolled={headerScrolled} />
       {/* Floating controls (no header bar): top-right cluster + top-center profile */}
       <ChatTopControls showSessionMenu scrolled={headerScrolled} />
       <ProfileBadge scrolled={headerScrolled} />
@@ -172,7 +184,7 @@ export const ChatThread: React.FC<ChatThreadProps> = () => {
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-4 sm:px-6 pt-24 pb-6 scrollbar-thin scrollbar-thumb-border"
+        className="flex-1 overflow-y-auto px-3 sm:px-6 pt-24 pb-4 scrollbar-thin scrollbar-thumb-border"
       >
         <div className="chat-content-lane space-y-6">
           {isLoadingMessages && messages.length === 0 ? (
@@ -195,31 +207,43 @@ export const ChatThread: React.FC<ChatThreadProps> = () => {
                 const isMsgLiked = likedMap[msg.id];
                 const isCopied = copiedId === msg.id;
 
+                const prevMsg = index > 0 ? messages[index - 1] : null;
+                const showTimestamp =
+                  !prevMsg ||
+                  (msg.createdAt && prevMsg.createdAt && msg.createdAt - prevMsg.createdAt > 15 * 60 * 1000);
+
                 if (isUser) {
                   return (
-                    /* User Message Bubble (Kybern style: 80% width max, rounded squircle, message theme color) */
-                    <div key={msg.id || index} className="group/user-row flex flex-col items-end w-full gap-1">
-                      <div className="relative max-w-[80%] rounded-2xl bg-message px-4 py-3 text-message-foreground shadow-xs select-text">
-                        <p className="whitespace-pre-wrap break-words text-ui-sm leading-relaxed [overflow-wrap:anywhere] select-text">
-                          {msg.content}
-                        </p>
+                    <React.Fragment key={msg.id || index}>
+                      {showTimestamp && (
+                        <div className="w-full flex items-center justify-center my-3 text-3xs font-medium text-muted-foreground/60 select-none">
+                          <span>{formatMessageTime(msg.createdAt)}</span>
+                        </div>
+                      )}
+                      {/* User Message Bubble (Muse AI style: vibrant blue pill with white text) */}
+                      <div className="group/user-row flex flex-col items-end w-full gap-1">
+                        <div className="relative max-w-[85%] sm:max-w-[75%] rounded-[20px] rounded-br-[4px] bg-[#0084ff] px-4 py-2.5 text-white shadow-sm select-text">
+                          <p className="whitespace-pre-wrap break-words text-ui-sm leading-relaxed [overflow-wrap:anywhere] select-text font-normal">
+                            {msg.content}
+                          </p>
+                        </div>
+                        <div className="flex w-full max-w-[85%] sm:max-w-[75%] items-center justify-end gap-2 pr-1 text-2xs tabular-nums opacity-0 transition-opacity duration-200 group-hover/user-row:opacity-100 text-muted-foreground">
+                          <span>{relativeTime(msg.createdAt)}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopy(msg.content, msg.id || `u-${index}`)}
+                            className="rounded p-1 hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
+                            title="Copy message"
+                          >
+                            {copiedId === (msg.id || `u-${index}`) ? (
+                              <Check className="size-3 text-emerald-500" />
+                            ) : (
+                              <Copy className="size-3" />
+                            )}
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex w-full max-w-[80%] items-center justify-end gap-2 pr-1 text-2xs tabular-nums opacity-0 transition-opacity duration-200 group-hover/user-row:opacity-100 text-muted-foreground">
-                        <span>{relativeTime(msg.createdAt)}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleCopy(msg.content, msg.id || `u-${index}`)}
-                          className="rounded p-1 hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
-                          title="Copy message"
-                        >
-                          {copiedId === (msg.id || `u-${index}`) ? (
-                            <Check className="size-3 text-emerald-500" />
-                          ) : (
-                            <Copy className="size-3" />
-                          )}
-                        </button>
-                      </div>
-                    </div>
+                    </React.Fragment>
                   );
                 }
 
@@ -315,15 +339,15 @@ export const ChatThread: React.FC<ChatThreadProps> = () => {
                       </div>
                     )}
 
-                    {/* Markdown Assistant Content (OUTSIDE the accordion) */}
+                    {/* Markdown Assistant Content (Muse AI parity: speech bubble card on mobile) */}
                     {msg.content && (
-                      <div className="w-full text-ui-base leading-relaxed text-foreground select-text py-0.5">
+                      <div className="w-full text-ui-base leading-relaxed text-foreground select-text py-0.5 rounded-[20px] rounded-tl-[4px] bg-card/60 sm:bg-transparent border sm:border-0 border-border/40 p-3.5 sm:p-0 shadow-xs sm:shadow-none">
                         <MarkdownView content={msg.content} />
                       </div>
                     )}
 
                     {/* Message Action Footer Row */}
-                    <div className="flex w-full items-center gap-1 opacity-0 group-hover/msg:opacity-100 transition-opacity duration-200">
+                    <div className="flex w-full items-center gap-1 opacity-70 sm:opacity-0 sm:group-hover/msg:opacity-100 transition-opacity duration-200">
                       <button
                         type="button"
                         onClick={() => handleCopy(msg.content, msg.id)}
@@ -439,7 +463,7 @@ export const ChatThread: React.FC<ChatThreadProps> = () => {
       </div>
 
       {/* Docked Floating Bottom Composer + Approval Card */}
-      <div className="pt-2 pb-5 px-4 sm:px-6 bg-background transition-colors w-full shrink-0">
+      <div className="pt-2 pb-20 md:pb-5 px-3 sm:px-6 bg-background transition-colors w-full shrink-0">
         {activeSession?.id && <ApprovalCard sessionId={activeSession.id} />}
         <AgentTaskInputBar
           placeholder="Ask for follow-up changes"

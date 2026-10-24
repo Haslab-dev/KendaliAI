@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/kendaliai/app/internal/composio"
+	"github.com/kendaliai/app/internal/gateway"
 )
 
 const composioKeySetting = "composio_api_key"
@@ -37,13 +38,36 @@ func (s *Server) handleComposioKey() http.HandlerFunc {
 				http.Error(w, "apiKey is required", http.StatusBadRequest)
 				return
 			}
-			if err := s.store.SetSetting(composioKeySetting, strings.TrimSpace(req.APIKey)); err != nil {
+			cleanedKey := strings.TrimSpace(req.APIKey)
+			if err := s.store.SetSetting(composioKeySetting, cleanedKey); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
+			}
+			// When a Composio Connect (MCP) key (ck_...) is provided, auto-configure Composio MCP server
+			if strings.HasPrefix(cleanedKey, "ck_") {
+				_ = s.store.SaveMCPServer(gateway.MCPServerConfig{
+					ID:        "composio",
+					Name:      "Composio",
+					Transport: "http",
+					URL:       "https://connect.composio.dev/mcp",
+					Env: map[string]string{
+						"header:x-consumer-api-key": cleanedKey,
+						"header:Accept":             "application/json, text/event-stream",
+					},
+					Enabled: true,
+					Status:  "ready",
+					ToolsCached: []gateway.ToolCachedInfo{
+						{Name: "COMPOSIO_SEARCH_TOOLS", Description: "Search tools across 1000+ Composio apps"},
+						{Name: "COMPOSIO_GET_TOOL_SCHEMAS", Description: "Retrieve input schemas for tools by slug"},
+						{Name: "COMPOSIO_MANAGE_CONNECTIONS", Description: "Create or manage connections to user apps"},
+						{Name: "COMPOSIO_MULTI_EXECUTE_TOOL", Description: "Fast and parallel tool executor for Composio tools"},
+					},
+				})
 			}
 			json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 		case http.MethodDelete:
 			_ = s.store.SetSetting(composioKeySetting, "")
+			_ = s.store.DeleteMCPServer("composio")
 			json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -57,6 +81,7 @@ type toolkitView struct {
 	Name              string `json:"name"`
 	Description       string `json:"description"`
 	LogoURL           string `json:"logoUrl,omitempty"`
+	Category          string `json:"category,omitempty"`
 	Connected         bool   `json:"connected"`
 	ConnectedAccountID string `json:"connectedAccountId,omitempty"`
 	Status            string `json:"status,omitempty"`
@@ -147,7 +172,13 @@ func (s *Server) listConnectors(w http.ResponseWriter, r *http.Request) {
 
 	out := make([]toolkitView, 0, len(catalog))
 	for _, t := range catalog {
-		view := toolkitView{Slug: t.Slug, Name: t.Name, Description: t.Description, LogoURL: t.Logo}
+		view := toolkitView{
+			Slug:        t.Slug,
+			Name:        t.Name,
+			Description: t.Description,
+			LogoURL:     t.Logo,
+			Category:    t.Category,
+		}
 		if acc, ok := connected[t.Slug]; ok {
 			view.Connected = acc.Status == "ACTIVE"
 			view.ConnectedAccountID = acc.ID

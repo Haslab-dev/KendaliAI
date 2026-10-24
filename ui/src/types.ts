@@ -163,6 +163,7 @@ export interface ComposioToolkit {
   name: string;
   description: string;
   logoUrl?: string;
+  category?: string;
   connected: boolean;
   connectedAccountId?: string;
   status?: string;

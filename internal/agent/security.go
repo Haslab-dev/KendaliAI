@@ -135,11 +135,24 @@ func ValidateSandboxedPath(targetPath string, workspaceRoot string) error {
 		return err
 	}
 
+	cleaned := strings.TrimSpace(targetPath)
+	for _, prefix := range []string{
+		"/workspaces/", "workspaces/",
+		"/workspace/", "workspace/",
+		"~/workspaces/", "~/workspace/",
+		"~/",
+	} {
+		if strings.HasPrefix(cleaned, prefix) {
+			cleaned = strings.TrimPrefix(cleaned, prefix)
+			break
+		}
+	}
+
 	var absTarget string
-	if filepath.IsAbs(targetPath) {
-		absTarget, err = filepath.Abs(targetPath)
+	if filepath.IsAbs(cleaned) {
+		absTarget, err = filepath.Abs(cleaned)
 	} else {
-		absTarget, err = filepath.Abs(filepath.Join(absRoot, targetPath))
+		absTarget, err = filepath.Abs(filepath.Join(absRoot, cleaned))
 	}
 	if err != nil {
 		return err

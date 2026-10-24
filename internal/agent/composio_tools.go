@@ -12,6 +12,18 @@ import (
 	"github.com/kendaliai/app/internal/composio"
 )
 
+func matchToolkit(actionToolkit, accountToolkit string) bool {
+	at := strings.ToLower(actionToolkit)
+	act := strings.ToLower(accountToolkit)
+	if at == act {
+		return true
+	}
+	if isGoogleToolkit(at) && isGoogleToolkit(act) {
+		return true
+	}
+	return false
+}
+
 // ComposioTools exposes Composio-managed app integrations (OAuth connections
 // to GitHub, Gmail, Slack, ...) as agent tools. The Composio project API key
 // lives in system_settings (set from the Connections UI).
@@ -32,18 +44,12 @@ func ComposioTools(db *sql.DB) map[string]ToolDef {
 
 				// Optional: initiate a new OAuth connection.
 				if slug, _ := args["connect_slug"].(string); strings.TrimSpace(slug) != "" {
-					acc, err := client.Connect(ctx, strings.TrimSpace(slug))
+					slug = strings.TrimSpace(slug)
+					acc, err := client.Connect(ctx, slug)
 					if err != nil {
 						return fmt.Sprintf("Failed to start connection for %s: %v", slug, err)
 					}
-					out, _ := json.MarshalIndent(map[string]interface{}{
-						"toolkit":          slug,
-						"connectedAccount": acc.ID,
-						"status":           acc.Status,
-						"redirectUrl":      acc.RedirectURL,
-						"note":             "Ask the user to open redirectUrl and finish authorization, then re-check composio_connections.",
-					}, "", "  ")
-					return string(out)
+					return fmt.Sprintf("Authorization required for %s.\nPlease ask the user to open this authorization URL to connect their account:\n%s\n\nStatus: %s (Account ID: %s)\nOnce authorized, retry the requested operation.", slug, acc.RedirectURL, acc.Status, acc.ID)
 				}
 
 				accounts, err := client.Accounts(ctx)
@@ -62,16 +68,23 @@ func ComposioTools(db *sql.DB) map[string]ToolDef {
 				}
 				sort.Strings(active)
 				sort.Strings(pending)
-				if len(active) == 0 && len(pending) == 0 {
-					return "No apps connected yet. Use the Connections page (or composio_connections with connect_slug) to authorize one."
+
+				var b strings.Builder
+				if len(active) > 0 {
+					b.WriteString(fmt.Sprintf("Connected & Active Apps: %s\n", strings.Join(active, ", ")))
+				} else {
+					b.WriteString("No apps connected yet.\n")
 				}
-				return fmt.Sprintf("Connected apps (usable via composio_call): %s\nPending authorization: %s",
-					strings.Join(active, ", "), strings.Join(pending, ", "))
+				if len(pending) > 0 {
+					b.WriteString(fmt.Sprintf("Pending Authorization: %s\n", strings.Join(pending, ", ")))
+				}
+				b.WriteString("\nAvailable Integrations (usable via composio_connections with connect_slug): Google Calendar, Gmail, Google Workspace, GitHub, Jira, Notion, Slack, Linear, Asana, Trello, GitLab, Discord, HubSpot, Stripe.")
+				return b.String()
 			},
 		},
 		"composio_actions": {
 			Name:        "composio_actions",
-			Description: "Lists the actions (API operations) available for a connected app, e.g. toolkit 'github' returns GITHUB_CREATE_ISSUE, GITHUB_LIST_REPOS, ... Use before composio_call to find the right action slug and its parameters.",
+			Description: "Lists the actions (API operations) and parameter schemas available for a connected app, e.g. toolkit 'github' returns GITHUB_CREATE_ISSUE, GITHUB_LIST_REPOS, ... Use before composio_call to find the right action slug and its parameters.",
 			Signature:   `{"toolkit": "string"}`,
 			Category:    "Integration",
 			Execute: func(ctx context.Context, args map[string]interface{}) string {
@@ -93,7 +106,19 @@ func ComposioTools(db *sql.DB) map[string]ToolDef {
 				var b strings.Builder
 				fmt.Fprintf(&b, "Actions for %s (%d):\n", slug, len(toolsList))
 				for _, t := range toolsList {
-					fmt.Fprintf(&b, "- %s: %s\n", t.Slug, t.Description)
+					paramList := ""
+					if props, ok := t.Parameters["properties"].(map[string]interface{}); ok && len(props) > 0 {
+						var pNames []string
+						for pName := range props {
+							pNames = append(pNames, pName)
+						}
+						sort.Strings(pNames)
+						if len(pNames) > 8 {
+							pNames = append(pNames[:8], "...")
+						}
+						paramList = fmt.Sprintf(" (params: %s)", strings.Join(pNames, ", "))
+					}
+					fmt.Fprintf(&b, "- %s: %s%s\n", t.Slug, t.Description, paramList)
 				}
 				return b.String()
 			},
@@ -124,22 +149,33 @@ func ComposioTools(db *sql.DB) map[string]ToolDef {
 					// follow TOOLKIT_ACTION (e.g. GITHUB_CREATE_ISSUE → github).
 					toolkit := strings.ToLower(strings.SplitN(action, "_", 2)[0])
 					accounts, err := client.Accounts(ctx)
-					if err != nil {
-						return fmt.Sprintf("Failed to resolve connected accounts: %v", err)
-					}
-					for _, acc := range accounts {
-						if strings.EqualFold(acc.ToolkitSlug, toolkit) && acc.Status == "ACTIVE" {
-							accountID = acc.ID
-							break
+					if err == nil {
+						for _, acc := range accounts {
+							if matchToolkit(toolkit, acc.ToolkitSlug) && acc.Status == "ACTIVE" {
+								accountID = acc.ID
+								break
+							}
 						}
 					}
-					if accountID == "" {
+					if accountID == "" && !strings.HasPrefix(client.APIKey(), "ck_") {
+						// Auto-initiate OAuth connection so user gets a direct link
+						acc, err := client.Connect(ctx, toolkit)
+						if err == nil && acc != nil && acc.RedirectURL != "" {
+							return fmt.Sprintf("App %q is not authorized yet.\nPlease ask the user to open this authorization URL to connect their account:\n%s\nOnce authorized, you can re-run this action.", toolkit, acc.RedirectURL)
+						}
 						return fmt.Sprintf("No ACTIVE connection found for app %q. Connect it first (Connections page or composio_connections with connect_slug).", toolkit)
 					}
 				}
 
 				data, err := client.Execute(ctx, action, accountID, callArgs)
 				if err != nil {
+					if strings.Contains(err.Error(), "No active connection") || strings.Contains(err.Error(), "establish a connection") {
+						toolkit := strings.ToLower(strings.SplitN(action, "_", 2)[0])
+						acc, cErr := client.Connect(ctx, toolkit)
+						if cErr == nil && acc != nil && acc.RedirectURL != "" {
+							return fmt.Sprintf("App %q is not connected yet.\nPlease open this link to authorize your %s account:\n%s\n\nOnce authorized, retry this action.", toolkit, strings.Title(toolkit), acc.RedirectURL)
+						}
+					}
 					return fmt.Sprintf("Composio action %s failed: %v", action, err)
 				}
 				out, _ := json.MarshalIndent(data, "", "  ")

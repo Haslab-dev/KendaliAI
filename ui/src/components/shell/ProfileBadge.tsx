@@ -62,25 +62,25 @@ export const ProfileBadge: React.FC<ProfileBadgeProps> = ({ scrolled }) => {
         aria-label="Open agent profile"
         title={`${profileAgent?.name || 'Agent'} — profile`}
         className={cn(
-          'absolute left-1/2 top-4 -translate-x-1/2 z-30 flex flex-col items-center gap-1.5 rounded-2xl px-4 py-1.5 transition-all duration-300 cursor-pointer select-none',
-          hidden ? 'pointer-events-none -translate-y-2 opacity-0' : 'opacity-100 hover:bg-accent/40'
+          'absolute left-1/2 top-3 sm:top-4 -translate-x-1/2 z-30 flex flex-col items-center transition-all duration-300 cursor-pointer select-none active:scale-95',
+          hidden ? 'pointer-events-none -translate-y-2 opacity-0' : 'opacity-100'
         )}
       >
-        <div className="size-14 shrink-0 overflow-hidden rounded-full bg-background ring-2 ring-foreground/10">
+        <div className="size-14 sm:size-16 shrink-0 overflow-hidden rounded-full bg-background ring-2 ring-primary/20 shadow-md">
           {isAcp ? (
-            <ProviderIcon provider={resolvedAcp} size={56} />
+            <ProviderIcon provider={resolvedAcp} size={64} />
           ) : (
             profileAgent && (
               <AgentIcon
                 id={profileAgent.id}
                 name={profileAgent.name}
                 avatar={profileAgent.avatar}
-                size={56}
+                size={64}
               />
             )
           )}
         </div>
-        <span className="max-w-44 truncate rounded-full border border-border/40 bg-foreground/10 px-3 py-0.5 text-ui-xs font-semibold text-foreground backdrop-blur-md">
+        <span className="-mt-3 z-10 max-w-44 truncate rounded-full border border-border/80 bg-card/95 shadow-md px-3 py-0.5 text-ui-xs font-bold text-foreground backdrop-blur-md">
           {profileAgent?.name || 'Agent'}
         </span>
       </button>

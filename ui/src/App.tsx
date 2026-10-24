@@ -9,7 +9,6 @@ import { useRoute, navigate, navigateSettings } from './router';
 import { AgentRail } from './components/layout/AgentRail';
 import { ChatHome } from './components/chat/ChatHome';
 import { ChatThread } from './components/chat/ChatThread';
-import { AgentProfileDetail } from './components/agent/AgentProfileDetail';
 import { GroupList } from './components/groups/GroupList';
 import { GroupChatThread } from './components/chat/GroupChatThread';
 import { ControlCenterView } from './components/settings/ControlCenterView';
@@ -21,6 +20,8 @@ import { SimpleEditorView } from './components/editor/SimpleEditorView';
 import { FeedView } from './components/feed/FeedView';
 import { SessionsPanel } from './components/shell/SessionsPanel';
 import { ProfilePanel } from './components/shell/ProfilePanel';
+import { BottomNav } from './components/BottomNav';
+import { MobileAgentDrawer } from './components/layout/MobileAgentDrawer';
 
 type AuthState = 'checking' | 'ok' | 'login';
 
@@ -122,6 +123,8 @@ export const App: React.FC = () => {
   const effectiveTab: typeof activeNavTab =
     activeNavTab === 'connections' || activeNavTab === 'automations'
       ? 'settings'
+      : (activeNavTab as string) === 'agent'
+      ? 'chat'
       : activeNavTab;
   const isSettingsRoute = route === 'settings' || effectiveTab === 'settings';
 
@@ -140,9 +143,6 @@ export const App: React.FC = () => {
 
       case 'git':
         return <GitClientView />;
-
-      case 'agent':
-        return <AgentProfileDetail />;
 
       case 'groups':
         // If in a group session or active group selected, show GroupChatThread, otherwise list groups
@@ -186,6 +186,10 @@ export const App: React.FC = () => {
       {/* 3. Floating right panels (session history & profile) */}
       <SessionsPanel />
       <ProfilePanel />
+
+      {/* 4. Mobile Drawer & Mobile Bottom Nav */}
+      <MobileAgentDrawer onOpenCreateAgent={() => setIsNewAgentModalOpen(true)} />
+      <BottomNav />
 
       {/* New Agent Modal */}
       <NewAgentModal

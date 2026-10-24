@@ -82,17 +82,37 @@ func Catalog() []CatalogPlugin {
 			Engine:      "local",
 			Tools:       []string{"motion_hyperframe"},
 			SkillHint:   "open-design-hyperframes",
-			DefaultOn:   false,
+			DefaultOn:   true,
 		},
 		{
 			ID:          "google-workspace",
 			Name:        "Google Workspace",
-			Description: "Create Google Docs, Sheets, and Slides directly in the connected account via Composio. Requires a Composio API key (Connections) and an authorized Google account.",
+			Description: "Create Google Docs, Sheets, Slides, Gmail, and manage Calendar directly in the connected account via Composio. Requires a Composio API key (Connections) and an authorized Google account.",
 			Category:    "cloud",
 			Engine:      "composio",
-			Tools:       []string{"gdocs_create", "gsheet_create", "gslides_create"},
-			Toolkit:     "googledocs",
-			DefaultOn:   false,
+			Tools:       []string{"gcalendar_list_events", "gcalendar_create_event", "gcalendar_find_event", "gdocs_create", "gsheet_create", "gslides_create", "gmail_list_messages", "gmail_send_message"},
+			Toolkit:     "googlesuper",
+			DefaultOn:   true,
+		},
+		{
+			ID:          "google-calendar",
+			Name:        "Google Calendar",
+			Description: "Inspect schedule availability, search events, and create appointments in Google Calendar via Composio.",
+			Category:    "cloud",
+			Engine:      "composio",
+			Tools:       []string{"gcalendar_list_events", "gcalendar_create_event", "gcalendar_find_event"},
+			Toolkit:     "googlecalendar",
+			DefaultOn:   true,
+		},
+		{
+			ID:          "github-cloud",
+			Name:        "GitHub Integration",
+			Description: "Inspect repositories, track issues, and manage repositories for the authenticated GitHub user via Composio.",
+			Category:    "cloud",
+			Engine:      "composio",
+			Tools:       []string{"github_list_repos", "github_get_user", "github_create_issue", "github_list_issues"},
+			Toolkit:     "github",
+			DefaultOn:   true,
 		},
 	}
 }
@@ -120,10 +140,10 @@ func DefaultEnabledPlugins() []string {
 	return ids
 }
 
-// EffectivePlugins resolves an agent's plugin list: a nil list means the
-// defaults; an explicit list (even empty) is honored as-is.
+// EffectivePlugins resolves an agent's plugin list: nil or empty list means the
+// defaults; an explicit populated list is honored as-is.
 func EffectivePlugins(agentPlugins []string) []string {
-	if agentPlugins == nil {
+	if len(agentPlugins) == 0 {
 		return DefaultEnabledPlugins()
 	}
 	return agentPlugins

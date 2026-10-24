@@ -331,31 +331,36 @@ func (s *Store) SeedInitialData(cfg *config.Config) {
 		bot_id TEXT DEFAULT ''
 	)`)
 
-	// 1. Providers
+	// 1. Providers — first installs start with 0 providers. Users configure
+	// their own endpoints & keys via Settings → AI Models. If explicit
+	// providers are defined in config.yaml, import them.
 	providers, err := s.ListProviders()
-	if err == nil && len(providers) == 0 {
+	if err == nil && len(providers) == 0 && cfg != nil && len(cfg.ChatProviders) > 0 {
 		now := time.Now().Unix()
-		openaiKey := ""
-		if cfg != nil {
-			for _, cp := range cfg.ChatProviders {
-				if (cp.Type == "openai" || cp.Type == "custom") && openaiKey == "" {
-					openaiKey = cp.APIKey
+		for i, cp := range cfg.ChatProviders {
+			if cp.APIKey != "" || cp.Endpoint != "" {
+				id := strings.ToLower(strings.ReplaceAll(cp.Name, " ", "-"))
+				if id == "" {
+					id = cp.Type
 				}
+				models := []ModelItem{}
+				if cp.Model != "" {
+					models = append(models, ModelItem{ID: cp.Model, Name: cp.Model, Enabled: true})
+				}
+				_ = s.SaveProvider(ProviderConfig{
+					ID:        id,
+					Name:      cp.Name,
+					Type:      cp.Type,
+					APIKey:    cp.APIKey,
+					Endpoint:  cp.Endpoint,
+					Models:    models,
+					IsDefault: i == 0,
+					Enabled:   true,
+					CreatedAt: now,
+					UpdatedAt: now,
+				})
 			}
 		}
-
-		_ = s.SaveProvider(ProviderConfig{
-			ID:        "openai",
-			Name:      "OpenAI Compatible",
-			Type:      "custom",
-			APIKey:    openaiKey,
-			Endpoint:  "https://api.openai.com/v1",
-			Models:    ToModelItems([]string{"gpt-4o", "gpt-4o-mini"}),
-			IsDefault: true,
-			Enabled:   true,
-			CreatedAt: now,
-			UpdatedAt: now,
-		})
 	}
 
 	// 2. Agents — first installs no longer get pre-seeded agents. Users create

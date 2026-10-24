@@ -118,7 +118,7 @@ func ParseActionPlan(text string) []ToolRequest {
 						args["limit"] = float64(500)
 					}
 				}
-				reqs = append(reqs, ToolRequest{Name: parsed.Name, Args: args})
+				reqs = append(reqs, ToolRequest{Name: SanitizeToolName(parsed.Name), Args: args})
 			}
 		}
 		if len(reqs) > 0 {
@@ -144,7 +144,7 @@ func ParseActionPlan(text string) []ToolRequest {
 			continue
 		}
 
-		name := strings.TrimSpace(rest[:parenIdx])
+		name := SanitizeToolName(rest[:parenIdx])
 
 		content := rest[parenIdx+1:]
 		depth := 1
@@ -243,4 +243,27 @@ func fixJSONStringNewlines(s string) string {
 		out.WriteByte(ch)
 	}
 	return out.String()
+}
+
+// SanitizeToolName removes accidental prompt prefixes like `tool: ` or `functions.` emitted by LLMs.
+func SanitizeToolName(name string) string {
+	name = strings.TrimSpace(name)
+	for {
+		changed := false
+		lower := strings.ToLower(name)
+		if strings.HasPrefix(lower, "tool: ") {
+			name = strings.TrimSpace(name[6:])
+			changed = true
+		} else if strings.HasPrefix(lower, "tool:") {
+			name = strings.TrimSpace(name[5:])
+			changed = true
+		} else if strings.HasPrefix(lower, "functions.") {
+			name = strings.TrimSpace(name[10:])
+			changed = true
+		}
+		if !changed {
+			break
+		}
+	}
+	return name
 }

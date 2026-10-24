@@ -179,7 +179,7 @@ export const NewAgentModal: React.FC<NewAgentModalProps> = ({ isOpen, onClose })
       });
 
       selectAgent(created.id);
-      setActiveNavTab('agent');
+      setActiveNavTab('chat');
       onClose();
     } catch (err) {
       console.error('Failed to create agent:', err);

@@ -13,6 +13,7 @@ import {
   Code2,
   Presentation,
   Video,
+  Download,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 
@@ -142,7 +143,7 @@ export const SidebarFileExplorer: React.FC<SidebarFileExplorerProps> = ({
     }
 
     return (
-      <div key={node.path || node.name} className="select-none">
+      <div key={node.path || node.name} className="select-none group/row flex items-center">
         <button
           type="button"
           onClick={() => onSelectFile?.(node.path)}
@@ -166,6 +167,15 @@ export const SidebarFileExplorer: React.FC<SidebarFileExplorerProps> = ({
               Motion
             </span>
           )}
+          <a
+            href={`/api/workspace/download?path=${encodeURIComponent(node.path)}`}
+            download
+            onClick={(e) => e.stopPropagation()}
+            title={`Download ${node.name}`}
+            className="p-1 rounded hover:bg-white/10 text-dim hover:text-hi opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0"
+          >
+            <Download size={12} />
+          </a>
         </button>
       </div>
     );

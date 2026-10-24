@@ -9,6 +9,18 @@ import (
 	"github.com/kendaliai/app/internal/composio"
 )
 
+// composioAPIKey returns the configured Composio key if present.
+func composioAPIKey(db *sql.DB) string {
+	if db == nil {
+		return ""
+	}
+	var key string
+	if err := db.QueryRow("SELECT value FROM system_settings WHERE key = 'composio_api_key'").Scan(&key); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(key)
+}
+
 // composioActiveApps returns the slugs of apps with an ACTIVE Composio
 // connection, for the system prompt. Failures (no key, offline) yield nil.
 func composioActiveApps(db *sql.DB) []string {
