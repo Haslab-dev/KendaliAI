@@ -3,7 +3,7 @@ module github.com/kendaliai/app
 go 1.27.2
 
 require (
-	github.com/Haslab-dev/RakitKode v0.3.0
+	github.com/Haslab-dev/RakitKode v0.3.1
 	github.com/aws/aws-sdk-go-v2 v1.42.0
 	github.com/aws/aws-sdk-go-v2/config v1.32.26
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.25
