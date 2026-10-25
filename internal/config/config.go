@@ -65,6 +65,64 @@ type Config struct {
 	// gemini --experimental-acp, ...) that the UI drives as first-class
 	// tasks. Defaults live in internal/acp; entries here add or override.
 	ACP ACPConfig `json:"acp,omitempty" yaml:"acp,omitempty"`
+	// Attachments bounds chat file/image uploads.
+	Attachments AttachmentsConfig `json:"attachments,omitempty" yaml:"attachments,omitempty"`
+	// DefaultImageModel selects the model used by the generate_image tool when
+	// neither the tool argument nor a model capability flag resolves one.
+	DefaultImageModel string `json:"defaultImageModel,omitempty" yaml:"defaultImageModel,omitempty"`
+	// Orchestration bounds sub-agent fan-out.
+	Orchestration OrchestrationConfig `json:"orchestration,omitempty" yaml:"orchestration,omitempty"`
+}
+
+// AttachmentsConfig sets the chat upload limits.
+type AttachmentsConfig struct {
+	MaxFiles      int      `json:"maxFiles,omitempty" yaml:"maxFiles,omitempty"`
+	MaxFileBytes  int64    `json:"maxFileBytes,omitempty" yaml:"maxFileBytes,omitempty"`
+	MaxTotalBytes int64    `json:"maxTotalBytes,omitempty" yaml:"maxTotalBytes,omitempty"`
+	AllowedMime   []string `json:"allowedMime,omitempty" yaml:"allowedMime,omitempty"`
+}
+
+// OrchestrationConfig bounds parallel sub-agent execution.
+type OrchestrationConfig struct {
+	MaxSubagentDepth       int `json:"maxSubagentDepth,omitempty" yaml:"maxSubagentDepth,omitempty"`
+	MaxConcurrentSubagents int `json:"maxConcurrentSubagents,omitempty" yaml:"maxConcurrentSubagents,omitempty"`
+	SubagentTimeoutMinutes int `json:"subagentTimeoutMinutes,omitempty" yaml:"subagentTimeoutMinutes,omitempty"`
+}
+
+// DefaultAttachments returns the chat upload limits, applying defaults.
+func (c *Config) DefaultAttachments() AttachmentsConfig {
+	cfg := AttachmentsConfig{MaxFiles: 5, MaxFileBytes: 5 << 20, MaxTotalBytes: 20 << 20}
+	if c != nil {
+		cfg = c.Attachments
+	}
+	if cfg.MaxFiles <= 0 {
+		cfg.MaxFiles = 5
+	}
+	if cfg.MaxFileBytes <= 0 {
+		cfg.MaxFileBytes = 5 << 20
+	}
+	if cfg.MaxTotalBytes <= 0 {
+		cfg.MaxTotalBytes = 20 << 20
+	}
+	return cfg
+}
+
+// DefaultOrchestration returns sub-agent limits, applying defaults.
+func (c *Config) DefaultOrchestration() OrchestrationConfig {
+	cfg := OrchestrationConfig{}
+	if c != nil {
+		cfg = c.Orchestration
+	}
+	if cfg.MaxSubagentDepth <= 0 {
+		cfg.MaxSubagentDepth = 2
+	}
+	if cfg.MaxConcurrentSubagents <= 0 {
+		cfg.MaxConcurrentSubagents = 6
+	}
+	if cfg.SubagentTimeoutMinutes <= 0 {
+		cfg.SubagentTimeoutMinutes = 20
+	}
+	return cfg
 }
 
 // ACPConfig collects custom ACP agent launch definitions.

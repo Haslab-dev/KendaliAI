@@ -27,6 +27,10 @@ type StreamResult struct {
 	FinishReason string
 	InputTokens  int
 	OutputTokens int
+	// PromptTokens is the provider-reported size of the prompt for this step.
+	// Unlike InputTokens it is only meaningful for the latest step and is used
+	// by the composer's context gauge; it is zero when the provider omits usage.
+	PromptTokens int
 }
 
 type openaiToolCallPayload struct {
@@ -40,9 +44,45 @@ type openaiToolCallPayload struct {
 
 type openAIMsg struct {
 	Role       string                  `json:"role"`
-	Content    string                  `json:"content,omitempty"`
+	Content    any                     `json:"content,omitempty"`
 	ToolCallID string                  `json:"tool_call_id,omitempty"`
 	ToolCalls  []openaiToolCallPayload `json:"tool_calls,omitempty"`
+}
+
+// openAIContent builds the multimodal content array expected by
+// OpenAI-compatible vision endpoints.
+func openAIContent(m agent.Message) any {
+	if len(m.Images) == 0 {
+		return m.Content
+	}
+	text := m.Content
+	if strings.TrimSpace(text) == "" {
+		text = "See the attached image(s)."
+	}
+	parts := []map[string]interface{}{
+		{"type": "text", "text": text},
+	}
+	for _, img := range m.Images {
+		url := img.URL
+		if url == "" && img.Base64 != "" {
+			mimeType := img.Mime
+			if mimeType == "" {
+				mimeType = "image/png"
+			}
+			url = "data:" + mimeType + ";base64," + img.Base64
+		}
+		if url == "" {
+			continue
+		}
+		parts = append(parts, map[string]interface{}{
+			"type":      "image_url",
+			"image_url": map[string]string{"url": url},
+		})
+	}
+	if len(parts) == 1 {
+		return m.Content
+	}
+	return parts
 }
 
 type openaiFunctionDef struct {
@@ -126,6 +166,10 @@ func serializeMessages(msgs []agent.Message, native bool) []openAIMsg {
 			}
 			apiMsgs = append(apiMsgs, openAIMsg{Role: "assistant", Content: strings.Join(lines, "\n")})
 		default:
+			if len(m.Images) > 0 {
+				apiMsgs = append(apiMsgs, openAIMsg{Role: m.Role, Content: openAIContent(m)})
+				continue
+			}
 			content := m.Content
 			if content == "" && m.Role == "assistant" && len(m.ToolCalls) == 0 {
 				content = "..."
@@ -158,30 +202,54 @@ func StreamOpenAICompatible(
 	if len(tools) > 0 {
 		reqPayload["tools"] = serializeTools(tools)
 	}
-
-	bodyBytes, err := json.Marshal(reqPayload)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal payload: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", targetURL, bytes.NewReader(bodyBytes))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "text/event-stream")
-	if apiKey != "" && apiKey != "dummy-key" {
-		req.Header.Set("Authorization", "Bearer "+apiKey)
-	}
+	// Ask OpenAI-compatible endpoints to report token usage on the final SSE
+	// chunk. Not every gateway accepts the field, so a rejected request is
+	// retried once without it (see below).
+	includeUsage := true
+	reqPayload["stream_options"] = map[string]interface{}{"include_usage": true}
 
 	client := &http.Client{
 		Timeout: 4 * time.Minute,
 	}
 
-	resp, err := client.Do(req)
+	doRequest := func() (*http.Response, error) {
+		bodyBytes, err := json.Marshal(reqPayload)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal payload: %w", err)
+		}
+		req, err := http.NewRequestWithContext(ctx, "POST", targetURL, bytes.NewReader(bodyBytes))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "text/event-stream")
+		if apiKey != "" && apiKey != "dummy-key" {
+			req.Header.Set("Authorization", "Bearer "+apiKey)
+		}
+		return client.Do(req)
+	}
+
+	resp, err := doRequest()
 	if err != nil {
 		return nil, fmt.Errorf("streaming request failed: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK && includeUsage {
+		errBody, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		lower := strings.ToLower(string(errBody))
+		rejected := resp.StatusCode == http.StatusBadRequest &&
+			(strings.Contains(lower, "stream_options") || strings.Contains(lower, "unknown field") ||
+				strings.Contains(lower, "unsupported") || strings.Contains(lower, "unrecognized"))
+		if !rejected {
+			return nil, fmt.Errorf("API error (%d): %s", resp.StatusCode, string(errBody))
+		}
+		delete(reqPayload, "stream_options")
+		includeUsage = false
+		resp, err = doRequest()
+		if err != nil {
+			return nil, fmt.Errorf("streaming request failed: %w", err)
+		}
 	}
 	defer resp.Body.Close()
 
@@ -419,6 +487,7 @@ func StreamOpenAICompatible(
 		FinishReason: finishReason,
 		InputTokens:  inputTokens,
 		OutputTokens: outputTokens,
+		PromptTokens: inputTokens,
 	}, nil
 }
 

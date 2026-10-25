@@ -52,20 +52,29 @@ type Runtime struct {
 	discMu      sync.RWMutex
 	discussions map[string]*DiscussionState
 	panduMicro  *decisions.SmallNeuralEngine
+	// subagentSem caps how many delegated sub-agents run at once.
+	subagentSem chan struct{}
 }
 
 func NewRuntime(store *Store, bus *messaging.EventBus, workRoot string) *Runtime {
 	if workRoot == "" {
 		workRoot, _ = os.Getwd()
 	}
+	orch := config.Cfg.DefaultOrchestration()
 	return &Runtime{
 		store:       store,
 		bus:         bus,
 		workRoot:    workRoot,
-		taskMgr:     NewTaskManager(bus),
+		taskMgr:     NewTaskManager(bus, store),
 		discussions: make(map[string]*DiscussionState),
 		panduMicro:  decisions.NewSmallNeuralEngine(),
+		subagentSem: make(chan struct{}, orch.MaxConcurrentSubagents),
 	}
+}
+
+// orchestrationLimits resolves the configured sub-agent bounds.
+func (r *Runtime) orchestrationLimits() config.OrchestrationConfig {
+	return config.Cfg.DefaultOrchestration()
 }
 
 // GetPanduMicro returns the embedded Pandu-Micro neural decisions engine.
@@ -353,7 +362,19 @@ func (r *Runtime) ExecuteTurn(ctx context.Context, sessionID, agentID, userPromp
 	return r.ExecuteTurnWithModel(ctx, sessionID, agentID, userPrompt, channel, "")
 }
 
+// TurnInput carries per-turn options that are not part of the prompt text.
+type TurnInput struct {
+	Model       string
+	Attachments []Attachment
+}
+
 func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, userPrompt, channel, modelOverride string) (*SessionMessage, error) {
+	return r.ExecuteTurnWithInput(ctx, sessionID, agentID, userPrompt, channel, TurnInput{Model: modelOverride})
+}
+
+func (r *Runtime) ExecuteTurnWithInput(ctx context.Context, sessionID, agentID, userPrompt, channel string, input TurnInput) (*SessionMessage, error) {
+	modelOverride := input.Model
+	attachments := input.Attachments
 	// 1. Ensure Session exists
 	sess, err := r.store.GetSession(sessionID)
 	if err != nil {
@@ -608,16 +629,17 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 	// 2. Save User Message (skip if channel is agent_chain to prevent fake user bubbles in group chat)
 	if channel != "agent_chain" {
 		userMsg := SessionMessage{
-			ID:         uuid.New().String(),
-			SessionID:  sessionID,
-			AgentID:    activeAgentID,
-			Channel:    channel,
-			Role:       "user",
-			SenderType: "user",
-			SenderID:   "user",
-			SenderName: "User",
-			Content:    rawPrompt,
-			CreatedAt:  time.Now().UnixMilli(),
+			ID:          uuid.New().String(),
+			SessionID:   sessionID,
+			AgentID:     activeAgentID,
+			Channel:     channel,
+			Role:        "user",
+			SenderType:  "user",
+			SenderID:    "user",
+			SenderName:  "User",
+			Content:     rawPrompt,
+			Attachments: attachments,
+			CreatedAt:   time.Now().UnixMilli(),
 		}
 
 		// Auto emoji reactions in group chat or humor (e.g. "haha", "wkwk", praise, deploy, incident, test)
@@ -847,7 +869,6 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 			"Inform the user in 1-2 friendly sentences that a background worker has been dispatched, and let the worker deliver the full report into the chat.\n"
 	}
 
-
 	// Inject configured MCP servers from store and config.json
 	allMCPs, _ := r.store.ListMCPServers()
 	if config.Cfg != nil && config.Cfg.MCPServers != nil {
@@ -958,6 +979,9 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 	// Out-of-chat sub-agent delegation, bound to this turn's parent session.
 	toolRegistry["spawn_subagent"] = r.SpawnSubagentTool(sessionID)
 	toolRegistry["deep_search"] = r.DeepSearchTool(sessionID)
+	toolRegistry["subagent_status"] = r.SubagentStatusTool(sessionID)
+	toolRegistry["cancel_subagent"] = r.CancelSubagentTool(sessionID)
+	toolRegistry["generate_image"] = r.ImageGenTool(sessionID)
 
 	// Default capability plugins (documents / visual / motion / Google
 	// Workspace): nil means the defaults, an explicit list is honored as-is.
@@ -965,7 +989,8 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 	effectivePlugins := plugins.EffectivePlugins(agentConfig.Plugins)
 	pluginTools := plugins.ToolsForPlugins(effectivePlugins)
 	toolAllowed := func(name string) bool {
-		if name == "spawn_subagent" || name == "deep_search" {
+		switch name {
+		case "spawn_subagent", "deep_search", "subagent_status", "cancel_subagent", "generate_image":
 			return true
 		}
 		return pluginTools[name] || r.isToolAllowed(name, agentConfig.Tools)
@@ -1028,8 +1053,12 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		lowerPrompt := strings.ToLower(cleanPrompt)
 		for _, td := range toolDefs {
 			name := td.Name
-			// Universal essential tools always available
-			if name == "exec" || name == "read_file" || name == "write_file" || name == "list_files" || name == "search_files" {
+			// Universal essential tools always available. Orchestration and
+			// generation tools must survive pruning so delegation and image
+			// generation are always reachable.
+			if name == "exec" || name == "read_file" || name == "write_file" || name == "list_files" || name == "search_files" ||
+				name == "spawn_subagent" || name == "deep_search" || name == "subagent_status" || name == "cancel_subagent" ||
+				name == "generate_image" || name == "image_generate" {
 				salient = append(salient, td)
 				continue
 			}
@@ -1171,6 +1200,26 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		}
 	}
 
+	// Attachments: images become inline vision parts (vision-capable models
+	// only); text and PDFs are extracted into the prompt; other binaries are
+	// referenced by name and URL.
+	if len(attachments) > 0 {
+		images, notes := prepareAttachmentContext(provCfg, modelToUse, attachments)
+		if len(notes) > 0 {
+			block := "\n\n### Attached files\n" + strings.Join(notes, "\n\n")
+			if n := len(conversationMsgs); n > 0 && conversationMsgs[n-1].Role == "user" {
+				conversationMsgs[n-1].Content += block
+			} else {
+				conversationMsgs = append(conversationMsgs, agent.Message{Role: "user", Content: block})
+			}
+		}
+		if len(images) > 0 {
+			if n := len(conversationMsgs); n > 0 && conversationMsgs[n-1].Role == "user" {
+				conversationMsgs[n-1].Images = append(conversationMsgs[n-1].Images, images...)
+			}
+		}
+	}
+
 	if channel == "agent_chain" {
 		conversationMsgs = append(conversationMsgs, agent.Message{
 			Role:    "user",
@@ -1183,6 +1232,7 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 	var finalContent string
 	var finalThought strings.Builder
 	var totalTokens int
+	var lastPromptTokens int
 
 	endpoint := ""
 	apiKey := ""
@@ -1345,10 +1395,14 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 				FinishReason: resp.FinishReason,
 				InputTokens:  resp.InputTokens,
 				OutputTokens: resp.OutputTokens,
+				PromptTokens: resp.InputTokens,
 			}
 		}
 
 		totalTokens += streamRes.InputTokens + streamRes.OutputTokens
+		if streamRes.PromptTokens > 0 {
+			lastPromptTokens = streamRes.PromptTokens
+		}
 
 		// Native tool calls requested by the model (Gate-1).
 		if len(streamRes.ToolCalls) > 0 {
@@ -1357,10 +1411,8 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 				Content:   streamRes.Content,
 				ToolCalls: streamRes.ToolCalls,
 			})
-			for _, tc := range streamRes.ToolCalls {
-				followUp := r.executeToolCall(ctx, sessionID, channel, agentConfig, tc, toolRegistry, true, &recordedToolCalls)
-				conversationMsgs = append(conversationMsgs, followUp)
-			}
+			followUps := r.executeToolCalls(ctx, sessionID, channel, agentConfig, streamRes.ToolCalls, toolRegistry, true, &recordedToolCalls)
+			conversationMsgs = append(conversationMsgs, followUps...)
 			continue
 		}
 
@@ -1394,11 +1446,12 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		// Tool calls detected
 		conversationMsgs = append(conversationMsgs, agent.Message{Role: "assistant", Content: content})
 
+		textCalls := make([]agent.ToolCall, 0, len(reqs))
 		for _, req := range reqs {
-			tc := agent.ToolCall{ID: uuid.New().String()[:8], Name: req.Name, Args: req.Args}
-			followUp := r.executeToolCall(ctx, sessionID, channel, agentConfig, tc, toolRegistry, false, &recordedToolCalls)
-			conversationMsgs = append(conversationMsgs, followUp)
+			textCalls = append(textCalls, agent.ToolCall{ID: uuid.New().String()[:8], Name: req.Name, Args: req.Args})
 		}
+		followUps := r.executeToolCalls(ctx, sessionID, channel, agentConfig, textCalls, toolRegistry, false, &recordedToolCalls)
+		conversationMsgs = append(conversationMsgs, followUps...)
 	}
 
 	// The model never produced a textual answer (step cap reached after tool
@@ -1489,6 +1542,33 @@ func (r *Runtime) ExecuteTurnWithModel(ctx context.Context, sessionID, agentID, 
 		Payload:   assistantMsg,
 	})
 	r.taskMgr.Complete(bgTask.ID, assistantMsg.Content)
+
+	// Report context utilization for the composer gauge. Prefer the provider's
+	// reported prompt size; fall back to a character-based estimate when the
+	// endpoint does not return usage.
+	usedTokens := lastPromptTokens
+	if usedTokens <= 0 {
+		usedTokens = EstimateMessagesTokens(conversationMsgs)
+	}
+	contextWindow := ModelContextCapacity(modelToUse)
+	if contextWindow > 0 && usedTokens > contextWindow {
+		usedTokens = contextWindow
+	}
+	r.bus.Publish(messaging.Event{
+		Type:      messaging.EventAgentUsage,
+		SessionID: sessionID,
+		AgentID:   agentConfig.ID,
+		Channel:   targetChan,
+		Payload: messaging.UsagePayload{
+			SessionID:     sessionID,
+			Model:         modelToUse,
+			UsedTokens:    usedTokens,
+			ContextWindow: contextWindow,
+			Percent:       UsagePercent(usedTokens, contextWindow),
+			InputTokens:   lastPromptTokens,
+			OutputTokens:  totalTokens,
+		},
+	})
 
 	// 10. Multi-Agent Autonomous Chaining in Group Sessions
 	if sess.Type == "group" && !r.IsDiscussionStopped(sessionID) {
@@ -1601,31 +1681,31 @@ func (r *Runtime) executeToolCall(
 	}
 	if !exists {
 		aliases := map[string]string{
-			"google_calendar_list_events":  "gcalendar_list_events",
-			"googlecalendar_events_list":   "gcalendar_list_events",
-			"google_calendar_create_event": "gcalendar_create_event",
-			"googlecalendar_create_event":  "gcalendar_create_event",
-			"google_calendar_find_event":   "gcalendar_find_event",
-			"googlecalendar_find_event":    "gcalendar_find_event",
-			"google_docs_create":           "gdocs_create",
-			"google_doc_create":            "gdocs_create",
-			"google_sheets_create":         "gsheet_create",
-			"google_sheet_create":          "gsheet_create",
-			"google_slides_create":         "gslides_create",
-			"google_slide_create":          "gslides_create",
-			"gmail_fetch_emails":           "gmail_list_messages",
-			"gmail_list_emails":            "gmail_list_messages",
-			"gmail_get_messages":           "gmail_list_messages",
-			"google_mail_list_messages":    "gmail_list_messages",
-			"gmail_send_email":             "gmail_send_message",
-			"google_mail_send_message":     "gmail_send_message",
-			"github_get_repos":             "github_list_repos",
-			"github_repositories":          "github_list_repos",
-			"github_list_repositories":     "github_list_repos",
-			"github_user":                  "github_get_user",
-			"github_profile":               "github_get_user",
+			"google_calendar_list_events":   "gcalendar_list_events",
+			"googlecalendar_events_list":    "gcalendar_list_events",
+			"google_calendar_create_event":  "gcalendar_create_event",
+			"googlecalendar_create_event":   "gcalendar_create_event",
+			"google_calendar_find_event":    "gcalendar_find_event",
+			"googlecalendar_find_event":     "gcalendar_find_event",
+			"google_docs_create":            "gdocs_create",
+			"google_doc_create":             "gdocs_create",
+			"google_sheets_create":          "gsheet_create",
+			"google_sheet_create":           "gsheet_create",
+			"google_slides_create":          "gslides_create",
+			"google_slide_create":           "gslides_create",
+			"gmail_fetch_emails":            "gmail_list_messages",
+			"gmail_list_emails":             "gmail_list_messages",
+			"gmail_get_messages":            "gmail_list_messages",
+			"google_mail_list_messages":     "gmail_list_messages",
+			"gmail_send_email":              "gmail_send_message",
+			"google_mail_send_message":      "gmail_send_message",
+			"github_get_repos":              "github_list_repos",
+			"github_repositories":           "github_list_repos",
+			"github_list_repositories":      "github_list_repos",
+			"github_user":                   "github_get_user",
+			"github_profile":                "github_get_user",
 			"github_get_authenticated_user": "github_get_user",
-			"github_new_issue":             "github_create_issue",
+			"github_new_issue":              "github_create_issue",
 		}
 		if target, ok := aliases[strings.ToLower(call.Name)]; ok {
 			if def, ok2 := toolRegistry[target]; ok2 {
@@ -1681,6 +1761,94 @@ func (r *Runtime) executeToolCall(
 	})
 
 	return toolResultMessage(nativeMode, call, toolOutput)
+}
+
+// parallelSafeTools may run concurrently inside one model step. Read-only and
+// orchestration tools are safe; mutating tools (write/exec/git) stay strictly
+// ordered.
+var parallelSafeTools = map[string]bool{
+	"spawn_subagent":  true,
+	"deep_search":     true,
+	"subagent_status": true,
+	"cancel_subagent": true,
+	"generate_image":  true,
+	"image_generate":  true,
+	"read_file":       true,
+	"search_files":    true,
+	"list_files":      true,
+	"analyze_project": true,
+	"resolve_symbol":  true,
+	"search_code":     true,
+	"get_imports":     true,
+	"fetch_url":       true,
+	"web_search":      true,
+	"web_scrape":      true,
+	"mcp_call":        true,
+}
+
+func canParallelizeTools(calls []agent.ToolCall) bool {
+	if len(calls) < 2 {
+		return false
+	}
+	for _, c := range calls {
+		if !parallelSafeTools[agent.SanitizeToolName(c.Name)] {
+			return false
+		}
+	}
+	return true
+}
+
+// executeToolCalls runs a batch of tool calls and returns follow-up messages
+// plus records in the model's original call order. Independent, read-only and
+// orchestration calls run concurrently (up to 4 at a time); anything else is
+// executed sequentially.
+func (r *Runtime) executeToolCalls(
+	ctx context.Context,
+	sessionID, channel string,
+	agentConfig *AgentConfig,
+	calls []agent.ToolCall,
+	toolRegistry map[string]agent.ToolDef,
+	nativeMode bool,
+	recordedToolCalls *[]ToolCallRecord,
+) []agent.Message {
+	if len(calls) == 0 {
+		return nil
+	}
+
+	if !canParallelizeTools(calls) {
+		messages := make([]agent.Message, 0, len(calls))
+		for _, tc := range calls {
+			messages = append(messages, r.executeToolCall(ctx, sessionID, channel, agentConfig, tc, toolRegistry, nativeMode, recordedToolCalls))
+		}
+		return messages
+	}
+
+	messages := make([]agent.Message, len(calls))
+	records := make([]ToolCallRecord, len(calls))
+	sem := make(chan struct{}, 4)
+	var wg sync.WaitGroup
+	for i, tc := range calls {
+		i, tc := i, tc
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			var local []ToolCallRecord
+			messages[i] = r.executeToolCall(ctx, sessionID, channel, agentConfig, tc, toolRegistry, nativeMode, &local)
+			if len(local) > 0 {
+				records[i] = local[0]
+			}
+		}()
+	}
+	wg.Wait()
+
+	for _, rec := range records {
+		if rec.ID != "" {
+			*recordedToolCalls = append(*recordedToolCalls, rec)
+		}
+	}
+	return messages
 }
 
 // toolResultMessage builds the conversation follow-up for a finished tool
@@ -1807,13 +1975,13 @@ func CleanSessionTitle(aiTitle, fallbackPrompt string) string {
 	for _, prefix := range []string{"Title:", "title:", "Topic:", "topic:", "Subject:", "subject:", "Re:", "re:"} {
 		candidate = strings.TrimPrefix(candidate, prefix)
 	}
-	candidate = strings.Trim(candidate, `"'` + "`" + `“”.!?;: `)
+	candidate = strings.Trim(candidate, `"'`+"`"+`“”.!?;: `)
 
 	// If candidate is empty, fallback to prompt
 	if candidate == "" {
 		candidate = strings.TrimSpace(fallbackPrompt)
 		candidate = strings.ReplaceAll(candidate, "\n", " ")
-		candidate = strings.Trim(candidate, `"'` + "`" + `“”.!?;: `)
+		candidate = strings.Trim(candidate, `"'`+"`"+`“”.!?;: `)
 	}
 
 	// Normalize whitespace
@@ -1826,7 +1994,7 @@ func CleanSessionTitle(aiTitle, fallbackPrompt string) string {
 		if lastSpace := strings.LastIndex(cut, " "); lastSpace > 8 {
 			cut = strings.TrimSpace(cut[:lastSpace])
 		}
-		candidate = strings.Trim(cut, `"'` + "`" + `“”.,!?;: `)
+		candidate = strings.Trim(cut, `"'`+"`"+`“”.,!?;: `)
 		if candidate == "" {
 			candidate = string(runes[:20])
 		}

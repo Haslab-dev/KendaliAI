@@ -25,6 +25,11 @@ import { useAgentStore } from '../store/useAgentStore';
 import { PaneToolbar, PaneToolbarFilters, PaneToolbarActions, StatChip } from '../components/settings/settingsPrimitives';
 import { ProviderConfig, ModelItem, isReasoningModel } from '../types';
 
+// Mirrors the backend capability inference so the UI can badge/highlight
+// image-capable models before the first probe.
+const IMAGE_MODEL_RE = /(gpt-image|dall-e|dalle|imagen|gemini-.*image|flux|stable-diffusion|sdxl|seedream|ideogram|recraft)/i;
+const isImageModelId = (id?: string) => !!id && IMAGE_MODEL_RE.test(id);
+
 interface ExtendedProvider {
   id: string;
   name: string;
@@ -45,6 +50,7 @@ export const ProvidersPane: React.FC = () => {
   const [providers, setProviders] = useState<ExtendedProvider[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [activeDefaultId, setActiveDefaultId] = useState<string | null>(null);
+  const [defaultImageModel, setDefaultImageModel] = useState('');
 
   // Notification Toast
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -82,7 +88,13 @@ export const ProvidersPane: React.FC = () => {
               ? p.models.map((m: any) =>
                   typeof m === 'string'
                     ? { id: m, name: m, enabled: true }
-                    : { id: m.id, name: m.name || m.id, enabled: m.enabled !== false }
+                    : {
+                        id: m.id,
+                        name: m.name || m.id,
+                        enabled: m.enabled !== false,
+                        supportsVision: m.supportsVision,
+                        supportsImageGen: m.supportsImageGen,
+                      }
                 )
               : [];
 
@@ -128,6 +140,60 @@ export const ProvidersPane: React.FC = () => {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    fetch('/api/models/default-image')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.model) setDefaultImageModel(data.model);
+      })
+      .catch(() => {});
+  }, []);
+
+  const imageModels = useMemo(() => {
+    const seen = new Set<string>();
+    const list: { id: string; provider: string }[] = [];
+    for (const p of providers) {
+      if (!p.enabled) continue;
+      for (const m of p.models) {
+        if (!m.enabled || seen.has(m.id)) continue;
+        if (m.supportsImageGen === true || isImageModelId(m.id)) {
+          seen.add(m.id);
+          list.push({ id: m.id, provider: p.name });
+        }
+      }
+    }
+    return list;
+  }, [providers]);
+
+  const saveDefaultImageModel = async (model: string) => {
+    setDefaultImageModel(model);
+    try {
+      await fetch('/api/models/default-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model }),
+      });
+      setToast({
+        type: 'success',
+        message: model ? `Default image model set to ${model}.` : 'Image model set to auto-detect.',
+      });
+    } catch {
+      setToast({ type: 'error', message: 'Failed to save the default image model.' });
+    }
+  };
+
+  const toggleModelCapability = (id: string, capability: 'vision' | 'image') => {
+    setModelsList((prev) =>
+      prev.map((m) => {
+        if (m.id !== id) return m;
+        if (capability === 'vision') {
+          return { ...m, supportsVision: !m.supportsVision };
+        }
+        return { ...m, supportsImageGen: !m.supportsImageGen };
+      })
+    );
+  };
 
   // Open Modal in Add Mode
   const handleOpenAddModal = () => {
@@ -251,12 +317,17 @@ export const ProvidersPane: React.FC = () => {
       }
 
       // Merge remote models with existing models, preserving previously checked state
-      const existingMap = new Map(modelsList.map((m) => [m.id, m.enabled]));
-      const merged: ModelItem[] = remoteModels.map((rm) => ({
-        id: rm.id,
-        name: rm.name || rm.id,
-        enabled: existingMap.has(rm.id) ? existingMap.get(rm.id)! : true,
-      }));
+      const existingMap = new Map(modelsList.map((m) => [m.id, m]));
+      const merged: ModelItem[] = remoteModels.map((rm) => {
+        const prev = existingMap.get(rm.id);
+        return {
+          id: rm.id,
+          name: rm.name || rm.id,
+          enabled: prev ? prev.enabled : true,
+          supportsVision: prev?.supportsVision,
+          supportsImageGen: prev?.supportsImageGen,
+        };
+      });
 
       // Keep any custom models user added that were not returned by remote
       for (const m of modelsList) {
@@ -484,6 +555,34 @@ export const ProvidersPane: React.FC = () => {
           </button>
         </PaneToolbarActions>
       </PaneToolbar>
+
+      {/* Image generation default */}
+      <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3.5 sm:flex-row sm:items-center">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 text-ui-sm font-semibold text-foreground">
+            <Sparkles size={14} className="text-muted-foreground" />
+            Image generation model
+          </div>
+          <div className="mt-0.5 text-ui-xs text-muted-foreground">
+            Used by the <span className="font-mono">generate_image</span> tool when the agent does not pick a model.
+          </div>
+        </div>
+        <select
+          value={defaultImageModel}
+          onChange={(e) => void saveDefaultImageModel(e.target.value)}
+          className="h-9 w-full shrink-0 rounded-lg border border-border bg-card px-2.5 font-mono text-ui-xs text-foreground outline-none focus:border-primary/60 sm:w-64"
+        >
+          <option value="">Auto (first image-capable model)</option>
+          {imageModels.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.id} · {m.provider}
+            </option>
+          ))}
+          {defaultImageModel && !imageModels.some((m) => m.id === defaultImageModel) && (
+            <option value={defaultImageModel}>{defaultImageModel} (not detected)</option>
+          )}
+        </select>
+      </div>
 
       {/* Toast Notification Alert */}
       {toast && (
@@ -1031,6 +1130,42 @@ export const ProvidersPane: React.FC = () => {
                                 Reasoning
                               </span>
                             )}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                toggleModelCapability(m.id, 'vision');
+                              }}
+                              title="Toggle vision (image input) support. Auto-inferred when unset."
+                              className={`text-ui-xs px-1.5 py-0.5 rounded font-bold uppercase shrink-0 transition-colors ${
+                                m.supportsVision === true
+                                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                                  : m.supportsVision === false
+                                  ? 'bg-muted text-muted-foreground'
+                                  : 'border border-dashed border-border text-muted-foreground hover:text-foreground'
+                              }`}
+                            >
+                              Vision
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                toggleModelCapability(m.id, 'image');
+                              }}
+                              title="Toggle image-generation support. Auto-inferred when unset."
+                              className={`text-ui-xs px-1.5 py-0.5 rounded font-bold uppercase shrink-0 transition-colors ${
+                                m.supportsImageGen === true || (m.supportsImageGen === undefined && isImageModelId(m.id))
+                                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300'
+                                  : m.supportsImageGen === false
+                                  ? 'bg-muted text-muted-foreground'
+                                  : 'border border-dashed border-border text-muted-foreground hover:text-foreground'
+                              }`}
+                            >
+                              Image
+                            </button>
                           </div>
                         </div>
 

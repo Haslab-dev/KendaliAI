@@ -29,6 +29,18 @@ func sanitizeWorkspacePath(path string) string {
 	return cleaned
 }
 
+// workspaceFileURL returns the best UI link for a generated file: inline
+// preview for renderable types, download for archives/office documents.
+func workspaceFileURL(relPath string) string {
+	ext := strings.ToLower(filepath.Ext(relPath))
+	switch ext {
+	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".html", ".htm", ".pdf":
+		return fmt.Sprintf("/api/workspace/preview?path=%s", url.QueryEscape(relPath))
+	default:
+		return fmt.Sprintf("/api/workspace/download?path=%s", url.QueryEscape(relPath))
+	}
+}
+
 // resolveToolPath resolves a (possibly relative) tool path against the
 // workspace root and validates it stays inside the sandbox.
 func resolveToolPath(workspaceRoot, path string) (string, error) {
@@ -264,9 +276,9 @@ func DocumentTools(workspaceRoot string) map[string]ToolDef {
 					abs += ".pptx"
 				}
 				var parsed []struct {
-					Title   string    `json:"title"`
-					Bullets []string  `json:"bullets"`
-					Notes   string    `json:"notes"`
+					Title   string   `json:"title"`
+					Bullets []string `json:"bullets"`
+					Notes   string   `json:"notes"`
 				}
 				if err := flexibleJSONArg(args, "slides", &parsed); err != nil {
 					return "error: " + err.Error()
@@ -297,7 +309,7 @@ func VisualTools(workspaceRoot string) map[string]ToolDef {
 	return map[string]ToolDef{
 		"image_generate": {
 			Name:        "image_generate",
-			Description: "Generates a vector image (.svg) offline. Variants: 'poster' (title + subtitle hero), 'card' (title + bullet points), 'chart' (bar chart from items [{label,value}]). Deterministic and crisp at any size.",
+			Description: "Generates an offline vector image (.svg) — no model required. Variants: 'poster' (title + subtitle hero), 'card' (title + bullet points), 'chart' (bar chart from items [{label,value}]). Deterministic and crisp at any size. Use the separate `generate_image` tool when a model-generated raster/photo image is requested.",
 			Signature:   `{"path": "string", "variant": "poster|card|chart", "title": "string", "subtitle": "string", "items": "array of {label, value}", "palette": "violet|ocean|forest|sunset|mono"}`,
 			Category:    "Visual",
 			Execute: func(ctx context.Context, args map[string]interface{}) string {
@@ -336,8 +348,9 @@ func VisualTools(workspaceRoot string) map[string]ToolDef {
 				if relPath == "" || strings.HasPrefix(relPath, "..") {
 					relPath = filepath.Base(abs)
 				}
+				previewURL := workspaceFileURL(relPath)
 				downloadURL := fmt.Sprintf("/api/workspace/download?path=%s", url.QueryEscape(relPath))
-				return fmt.Sprintf("Generated **[%s](%s)** (%s variant, %d bytes). [Download image](%s).", filepath.Base(abs), downloadURL, variant, fileSizeOrZero(abs), downloadURL)
+				return fmt.Sprintf("![%s](%s)\n\nGenerated **[%s](%s)** (%s variant, %d bytes). [Preview](%s) · [Download](%s)", filepath.Base(abs), previewURL, filepath.Base(abs), previewURL, variant, fileSizeOrZero(abs), previewURL, downloadURL)
 			},
 		},
 		"slides_create": {
@@ -370,8 +383,9 @@ func VisualTools(workspaceRoot string) map[string]ToolDef {
 				if relPath == "" || strings.HasPrefix(relPath, "..") {
 					relPath = filepath.Base(abs)
 				}
+				previewURL := workspaceFileURL(relPath)
 				downloadURL := fmt.Sprintf("/api/workspace/download?path=%s", url.QueryEscape(relPath))
-				return fmt.Sprintf("Created presentation **[%s](%s)** — %d slides. [Open or download deck](%s).", filepath.Base(abs), downloadURL, len(parsed), downloadURL)
+				return fmt.Sprintf("Created presentation **[%s](%s)** — %d slides. [Open deck](%s) · [Download](%s).", filepath.Base(abs), previewURL, len(parsed), previewURL, downloadURL)
 			},
 		},
 	}
@@ -485,8 +499,9 @@ func MotionTools(workspaceRoot string) map[string]ToolDef {
 				if relPath == "" || strings.HasPrefix(relPath, "..") {
 					relPath = filepath.Base(abs)
 				}
+				previewURL := workspaceFileURL(relPath)
 				downloadURL := fmt.Sprintf("/api/workspace/download?path=%s", url.QueryEscape(relPath))
-				return fmt.Sprintf("Generated motion animation **[%s](%s)** — %d scenes, %.1fs total. [Open or download motion file](%s).", filepath.Base(abs), downloadURL, len(spec.Scenes), total, downloadURL)
+				return fmt.Sprintf("Generated motion animation **[%s](%s)** — %d scenes, %.1fs total. [Open animation](%s) · [Download](%s).", filepath.Base(abs), previewURL, len(spec.Scenes), total, previewURL, downloadURL)
 			},
 		},
 	}

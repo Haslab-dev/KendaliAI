@@ -324,6 +324,28 @@ func (s *Server) persistEngineAssistant(res agentengine.AssistantResult) {
 	if err := s.store.SaveMessage(msg); err != nil {
 		log.Printf("engine: persist assistant message: %v", err)
 	}
+
+	// The RakitKode engine does not expose token usage, so estimate the
+	// session's context occupancy and report it for the composer gauge.
+	if res.SessionID != "" {
+		model := res.Model
+		if model == "" {
+			model, _ = s.runtime.ResolveDefaultModel()
+		}
+		used, window := gateway.ComputeSessionUsage(s.store, res.SessionID, model)
+		s.bus.Publish(messaging.Event{
+			Type:      messaging.EventAgentUsage,
+			SessionID: res.SessionID,
+			Channel:   "web",
+			Payload: messaging.UsagePayload{
+				SessionID:     res.SessionID,
+				Model:         model,
+				UsedTokens:    used,
+				ContextWindow: window,
+				Percent:       gateway.UsagePercent(used, window),
+			},
+		})
+	}
 }
 
 func writeJSON(w http.ResponseWriter, v interface{}) {

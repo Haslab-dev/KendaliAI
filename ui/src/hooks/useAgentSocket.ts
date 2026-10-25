@@ -28,9 +28,10 @@ let subscriberCount = 0;
 // FLUSH_MS; the rendered result is identical, the update rate is not.
 // ---------------------------------------------------------------------------
 const FLUSH_MS = 80;
-let textBuf = '';
-let thinkBuf = '';
-let bufSessionId: string | null = null;
+type DeltaBuf = { text: string; think: string };
+// One buffer per session: a background turn keeps streaming without leaking
+// into the active conversation, and switching sessions never drops deltas.
+const deltaBufs = new Map<string, DeltaBuf>();
 let flushTimer: any = null;
 let flushSeq = 0;
 
@@ -42,40 +43,53 @@ function scheduleFlush() {
   }, FLUSH_MS);
 }
 
+function bufferDelta(sessionId: string, kind: 'text' | 'think', delta: string) {
+  if (!sessionId) return;
+  const sid = sessionId;
+  const buf = deltaBufs.get(sid) || { text: '', think: '' };
+  if (kind === 'text') buf.text += delta;
+  else buf.think += delta;
+  deltaBufs.set(sid, buf);
+  scheduleFlush();
+}
+
 function flushDeltas() {
-  if (!textBuf && !thinkBuf) return;
+  if (deltaBufs.size === 0) return;
   const store = useAppStore.getState();
   const sessionStore = useSessionStore.getState();
 
-  // User switched session while deltas were in flight: drop them instead of
-  // leaking the tail of one conversation into another.
-  if (bufSessionId && store.activeSessionId && bufSessionId !== store.activeSessionId && sessionStore.activeSessionId && bufSessionId !== sessionStore.activeSessionId) {
-    textBuf = '';
-    thinkBuf = '';
-    return;
-  }
+  for (const [sid, buf] of Array.from(deltaBufs.entries())) {
+    deltaBufs.delete(sid);
+    if (!buf.text && !buf.think) continue;
 
-  if (thinkBuf) {
-    store.appendThinkingDelta(thinkBuf);
-    sessionStore.appendStreamingThoughtDelta(thinkBuf);
-    store.appendLogEvent({
-      id: `delta-flush-${++flushSeq}`,
-      type: 'agent.thinking.delta',
-      sessionId: bufSessionId || undefined,
-      payload: { delta: thinkBuf },
-    } as any);
-    thinkBuf = '';
-  }
-  if (textBuf) {
-    store.appendTextDelta(textBuf);
-    sessionStore.appendStreamingTextDelta(textBuf);
-    store.appendLogEvent({
-      id: `delta-flush-${++flushSeq}`,
-      type: 'agent.text.delta',
-      sessionId: bufSessionId || undefined,
-      payload: { delta: textBuf },
-    } as any);
-    textBuf = '';
+    if (buf.think) {
+      sessionStore.appendStreamingThoughtDelta(sid, buf.think);
+      store.appendLogEvent({
+        id: `delta-flush-${++flushSeq}`,
+        type: 'agent.thinking.delta',
+        sessionId: sid,
+        payload: { delta: buf.think },
+      } as any);
+    }
+    if (buf.text) {
+      sessionStore.appendStreamingTextDelta(sid, buf.text);
+      store.appendLogEvent({
+        id: `delta-flush-${++flushSeq}`,
+        type: 'agent.text.delta',
+        sessionId: sid,
+        payload: { delta: buf.text },
+      } as any);
+    }
+
+    // The legacy app store only renders the active session.
+    const isActive =
+      !store.activeSessionId ||
+      sid === store.activeSessionId ||
+      sid === sessionStore.activeSessionId;
+    if (isActive) {
+      if (buf.think) store.appendThinkingDelta(buf.think);
+      if (buf.text) store.appendTextDelta(buf.text);
+    }
   }
 }
 
@@ -148,7 +162,14 @@ function connectGlobalSocket() {
             if (isCurrentSession && ev.payload) {
               store.appendMessage(ev.payload);
               sessionStore.appendMessage(ev.payload);
-              if (ev.payload.role === 'assistant') {
+            }
+            if (ev.payload?.role === 'assistant' && ev.payload?.sessionId) {
+              // Do not clobber a live stream with an unrelated assistant
+              // message (e.g. a sub-agent report posted mid-turn).
+              const liveStream = sessionStore.streams[ev.payload.sessionId];
+              const isLive = liveStream?.status === 'streaming';
+              const matchesStream = !liveStream?.messageId || liveStream.messageId === ev.payload.id;
+              if (!isLive || matchesStream) {
                 sessionStore.finalizeStreamingMessage(ev.payload);
               }
             }
@@ -183,15 +204,20 @@ function connectGlobalSocket() {
             }
             break;
 
-          case 'agent.started':
-            if (isCurrentSession) {
-              const payload = (typeof ev.payload === 'object' && ev.payload !== null) ? ev.payload : {};
-              const startedAgentId = payload.agentId || ev.agentId || store.activeAgent?.id;
-              const matchedAgent = store.agents.find((a) => a.id === startedAgentId);
-              const startedAgentName = payload.agentName || matchedAgent?.name || store.activeAgent?.name || 'Agent';
-              const startedAvatar = payload.avatar || matchedAgent?.avatar || store.activeAgent?.avatar || 'purple-pebble';
-              const startedModel = payload.model || matchedAgent?.model || store.activeModel;
+          case 'agent.started': {
+            const payload = (typeof ev.payload === 'object' && ev.payload !== null) ? ev.payload : {};
+            const startedAgentId = payload.agentId || ev.agentId || store.activeAgent?.id;
+            const matchedAgent = store.agents.find((a) => a.id === startedAgentId);
+            const startedAgentName = payload.agentName || matchedAgent?.name || store.activeAgent?.name || 'Agent';
+            const startedAvatar = payload.avatar || matchedAgent?.avatar || store.activeAgent?.avatar || 'purple-pebble';
+            const startedModel = payload.model || matchedAgent?.model || store.activeModel;
+            const streamId = 'asst-stream-' + Date.now();
 
+            // Every session gets its own stream, active or not.
+            sessionStore.startStreamingMessage(ev.sessionId, streamId, startedAgentId, startedModel);
+            beginTurnIfAgentTask(ev.sessionId);
+
+            if (isCurrentSession) {
               store.setIsGenerating(true);
               store.setTypingAgent({
                 id: startedAgentId,
@@ -200,20 +226,15 @@ function connectGlobalSocket() {
               });
               store.setThinkingStatus(`${startedAgentName} is typing...`);
               store.startStreamingAssistantMessage(
-                'asst-stream-' + Date.now(),
+                streamId,
                 startedModel,
                 startedAgentId,
                 startedAgentName,
                 startedAvatar
               );
-              sessionStore.startStreamingMessage(
-                'asst-stream-' + Date.now(),
-                startedAgentId,
-                startedModel
-              );
-              beginTurnIfAgentTask(ev.sessionId);
             }
             break;
+          }
 
           case 'agent.thinking':
             if (isCurrentSession) {
@@ -224,33 +245,27 @@ function connectGlobalSocket() {
             break;
 
           case 'agent.thinking.delta':
+            if (ev.payload?.delta) {
+              bufferDelta(ev.sessionId, 'think', ev.payload.delta);
+            }
             if (isCurrentSession) {
               if (!store.isGenerating) store.setIsGenerating(true);
               if (store.thinkingStatus !== 'Reasoning...') store.setThinkingStatus('Reasoning...');
-              if (ev.payload?.delta) {
-                thinkBuf += ev.payload.delta;
-                bufSessionId = ev.sessionId || bufSessionId;
-                scheduleFlush();
-              }
             }
             break;
 
           case 'agent.text.delta':
+            if (ev.payload?.delta) {
+              bufferDelta(ev.sessionId, 'text', ev.payload.delta);
+            }
             if (isCurrentSession) {
               if (!store.isGenerating) store.setIsGenerating(true);
               if (store.thinkingStatus !== 'Responding...') store.setThinkingStatus('Responding...');
-              if (ev.payload?.delta) {
-                textBuf += ev.payload.delta;
-                bufSessionId = ev.sessionId || bufSessionId;
-                scheduleFlush();
-              }
             }
             break;
 
           case 'agent.tool_call':
-            if (isCurrentSession && ev.payload) {
-              store.setIsGenerating(true);
-              store.setThinkingStatus(`Running ${ev.payload.tool}...`);
+            if (ev.payload) {
               const tc = {
                 id: ev.payload.id || 'tc-' + Date.now(),
                 tool: ev.payload.tool,
@@ -258,15 +273,18 @@ function connectGlobalSocket() {
                 status: 'running' as const,
                 output: 'Executing capability in workspace...',
               };
-              store.appendStreamingToolCall(tc);
-              sessionStore.upsertStreamingToolCall(tc);
+              sessionStore.upsertStreamingToolCall(ev.sessionId, tc);
+              if (isCurrentSession) {
+                store.setIsGenerating(true);
+                store.setThinkingStatus(`Running ${ev.payload.tool}...`);
+                store.appendStreamingToolCall(tc);
+              }
             }
             beginTurnIfAgentTask(ev.sessionId);
             break;
 
           case 'agent.tool_result':
-            if (isCurrentSession && ev.payload) {
-              store.setThinkingStatus(`Finished ${ev.payload.tool}`);
+            if (ev.payload) {
               const tcRes: any = {
                 id: ev.payload.id,
                 tool: ev.payload.tool,
@@ -274,8 +292,17 @@ function connectGlobalSocket() {
                 status: (ev.payload.status || 'success') as any,
                 durationMs: ev.payload.durationMs,
               };
-              store.updateStreamingToolResult(tcRes);
-              sessionStore.upsertStreamingToolCall(tcRes);
+              sessionStore.upsertStreamingToolCall(ev.sessionId, tcRes);
+              if (isCurrentSession) {
+                store.setThinkingStatus(`Finished ${ev.payload.tool}`);
+                store.updateStreamingToolResult(tcRes);
+              }
+            }
+            break;
+
+          case 'agent.usage':
+            if (ev.sessionId && ev.payload) {
+              sessionStore.setUsage(ev.sessionId, ev.payload);
             }
             break;
 
@@ -284,12 +311,16 @@ function connectGlobalSocket() {
             if (ev.sessionId) {
               useAgentStore.getState().endTurn(ev.sessionId);
             }
+            if (ev.payload) {
+              // Finalize this session's stream even when it is in the
+              // background; switching back will show the finished content.
+              sessionStore.finalizeStreamingMessage(ev.payload);
+            }
             if (isCurrentSession) {
               store.setIsGenerating(false);
               store.setTypingAgent(null);
               if (ev.payload) {
                 store.finalizeStreamingMessage(ev.payload);
-                sessionStore.finalizeStreamingMessage(ev.payload);
               }
             }
             store.loadSessions();
@@ -297,12 +328,11 @@ function connectGlobalSocket() {
             break;
 
           case 'agent.failed':
+            flushDeltas();
             if (ev.sessionId) {
               useAgentStore.getState().endTurn(ev.sessionId);
             }
-            if (isCurrentSession) {
-              store.setIsGenerating(false);
-              store.setTypingAgent(null);
+            {
               const errContent = `❌ Error: ${ev.payload || 'An unexpected execution error occurred.'}`;
               const errId = ev.id ? `err-${ev.id}` : `err-${ev.sessionId || currentSid || 'cur'}-${Date.now()}`;
               const failMsg = {
@@ -313,8 +343,12 @@ function connectGlobalSocket() {
                 content: errContent,
                 createdAt: Date.now(),
               };
-              store.appendMessage(failMsg);
               sessionStore.finalizeStreamingMessage(failMsg);
+              if (isCurrentSession) {
+                store.setIsGenerating(false);
+                store.setTypingAgent(null);
+                store.appendMessage(failMsg);
+              }
             }
             break;
         }

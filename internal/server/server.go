@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,9 +17,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Haslab-dev/RakitKode/decisions"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	"github.com/Haslab-dev/RakitKode/decisions"
 	"github.com/kendaliai/app/internal/acp"
 	"github.com/kendaliai/app/internal/agent"
 	"github.com/kendaliai/app/internal/agentengine"
@@ -52,12 +53,96 @@ type Server struct {
 	// engine is the embedded RakitKode harness; nil unless engine.kind=rakit.
 	engine       *agentengine.Engine
 	engineBridge *agentengine.Bridge
+
+	// turnCancels tracks the in-flight turn per session. Turns for different
+	// sessions run concurrently; a second send to the same session is
+	// rejected until its turn finishes or is stopped.
+	turnMu      sync.Mutex
+	turnCancels map[string]context.CancelFunc
+
+	// mainSessionMu serializes Main Chat creation/consolidation so switching
+	// agents rapidly can never create duplicates.
+	mainSessionMu sync.Mutex
+}
+
+// beginTurn registers an in-flight turn for a session. It returns false when
+// the session already has a turn running.
+func (s *Server) beginTurn(sessionID string, cancel context.CancelFunc) bool {
+	s.turnMu.Lock()
+	defer s.turnMu.Unlock()
+	if s.turnCancels == nil {
+		s.turnCancels = make(map[string]context.CancelFunc)
+	}
+	if _, ok := s.turnCancels[sessionID]; ok {
+		return false
+	}
+	s.turnCancels[sessionID] = cancel
+	return true
+}
+
+func (s *Server) endTurn(sessionID string) {
+	s.turnMu.Lock()
+	delete(s.turnCancels, sessionID)
+	s.turnMu.Unlock()
+}
+
+func (s *Server) cancelTurn(sessionID string) {
+	s.turnMu.Lock()
+	cancel, ok := s.turnCancels[sessionID]
+	s.turnMu.Unlock()
+	if ok && cancel != nil {
+		cancel()
+	}
+}
+
+func (s *Server) isTurnRunning(sessionID string) bool {
+	s.turnMu.Lock()
+	defer s.turnMu.Unlock()
+	_, ok := s.turnCancels[sessionID]
+	return ok
+}
+
+// setSessionActivity persists and broadcasts the running/idle state of a
+// session so the session list can show live activity.
+func (s *Server) setSessionActivity(sessionID, status string) {
+	sess, err := s.store.GetSession(sessionID)
+	if err != nil || sess == nil {
+		return
+	}
+	if sess.Status == status {
+		return
+	}
+	sess.Status = status
+	if err := s.store.SaveSession(*sess); err != nil {
+		return
+	}
+	s.bus.Publish(messaging.Event{
+		ID:        uuid.New().String(),
+		Type:      messaging.EventSessionUpdated,
+		SessionID: sess.ID,
+		AgentID:   sess.AgentID,
+		Channel:   sess.ChannelID,
+		Payload:   sess,
+		Timestamp: time.Now(),
+	})
 }
 
 func NewServer(db *sql.DB) *Server {
 	bus := messaging.DefaultBus
 	store := gateway.NewStore(db)
 	store.SeedInitialData(config.Cfg)
+	// A turn cannot survive a restart; clear stale running markers.
+	_, _ = db.Exec("UPDATE sessions SET status = 'active' WHERE status = 'running'")
+	store.MarkInterruptedTasks()
+	// Old clients could create several Main Chats per agent; collapse them so
+	// each agent has exactly one before the UI loads.
+	if merged, err := store.ConsolidateDuplicateMainSessions(); err == nil && merged > 0 {
+		log.Printf("🧹 Consolidated %d duplicate Main Chat session(s)", merged)
+	}
+	// Chat attachments live next to the configured object storage.
+	if config.Cfg != nil && strings.TrimSpace(config.Cfg.Storage.LocalPath) != "" {
+		gateway.SetAttachmentsRoot(filepath.Join(config.Cfg.Storage.LocalPath, "attachments"))
+	}
 
 	cwd, _ := os.Getwd()
 	exp := workspace.NewExplorer(cwd)
@@ -298,8 +383,10 @@ func (s *Server) routes() {
 	s.router.HandleFunc("/api/providers/fetch-models", s.handleProviderModels())
 	s.router.HandleFunc("/api/models", s.handleModels())
 	s.router.HandleFunc("/api/models/default", s.handleDefaultModel())
+	s.router.HandleFunc("/api/models/default-image", s.handleDefaultImageModel())
 	s.router.HandleFunc("/api/agents", s.handleAgents())
 	s.router.HandleFunc("/api/sessions", s.handleSessions())
+	s.router.HandleFunc("/api/sessions/main", s.handleMainSession())
 	s.router.HandleFunc("/api/sessions/", s.handleSessionDetail())
 	s.router.HandleFunc("/api/groups", s.handleGroups())
 	s.router.HandleFunc("/api/groups/", s.handleGroupDetail())
@@ -318,6 +405,10 @@ func (s *Server) routes() {
 	s.router.HandleFunc("/api/telegram/auth/", s.handleTelegramAuthAction())
 	s.router.HandleFunc("/api/telegram/agents", s.handleTelegramAgents())
 
+	// Chat attachments (files/images uploaded with a message)
+	s.router.HandleFunc("/api/attachments", s.handleAttachments())
+	s.router.HandleFunc("/api/attachments/", s.handleAttachmentServe())
+
 	// Embedding & Vector RAG
 	s.router.HandleFunc("/api/embedding", s.handleEmbeddingConfig())
 	s.router.HandleFunc("/api/embedding/test", s.handleEmbeddingTest())
@@ -334,6 +425,8 @@ func (s *Server) routes() {
 	s.router.HandleFunc("/api/workspace/tree", s.handleWorkspaceTree())
 	s.router.HandleFunc("/api/workspace/file", s.handleWorkspaceFile())
 	s.router.HandleFunc("/api/workspace/download", s.handleWorkspaceDownload())
+	s.router.HandleFunc("/api/workspace/preview", s.handleWorkspacePreview())
+	s.router.HandleFunc("/api/workspace/meta", s.handleWorkspaceMeta())
 	s.router.HandleFunc("/api/workspace/mkdir", s.handleWorkspaceMkdir())
 
 	// Terminal
@@ -395,11 +488,12 @@ func (s *Server) routes() {
 // --- WebSocket Gateway ---
 
 type WSClientMessage struct {
-	Type      string `json:"type"` // "subscribe", "logs.subscribe", "message.send", "ping"
-	SessionID string `json:"sessionId"`
-	AgentID   string `json:"agentId,omitempty"`
-	Model     string `json:"model,omitempty"`
-	Content   string `json:"content,omitempty"`
+	Type        string               `json:"type"` // "subscribe", "logs.subscribe", "message.send", "ping"
+	SessionID   string               `json:"sessionId"`
+	AgentID     string               `json:"agentId,omitempty"`
+	Model       string               `json:"model,omitempty"`
+	Content     string               `json:"content,omitempty"`
+	Attachments []gateway.Attachment `json:"attachments,omitempty"`
 }
 
 func (s *Server) handleWebSocket() http.HandlerFunc {
@@ -478,18 +572,34 @@ func (s *Server) handleWebSocket() http.HandlerFunc {
 					}(sub)
 				}
 
-				go func(sid, aid, txt, mdl string) {
+				wsAttachments := s.resolveAttachments(msg.SessionID, msg.Attachments)
+				go func(sid, aid, txt, mdl string, atts []gateway.Attachment) {
 					ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 					defer cancel()
-					if s.engine != nil {
-						s.runEngineTurn(sid, aid, txt, "web", mdl)
+					if !s.beginTurn(sid, cancel) {
+						s.bus.Publish(messaging.Event{
+							ID:        uuid.New().String(),
+							Type:      messaging.EventAgentFailed,
+							SessionID: sid,
+							AgentID:   aid,
+							Channel:   "web",
+							Payload:   "This session is already running a turn. Wait for it to finish or stop it.",
+							Timestamp: time.Now(),
+						})
 						return
 					}
-					_, err := s.runtime.ExecuteTurnWithModel(ctx, sid, aid, txt, "web", mdl)
+					defer s.endTurn(sid)
+					s.setSessionActivity(sid, "running")
+					defer s.setSessionActivity(sid, "active")
+					if s.engine != nil {
+						s.runEngineTurn(sid, aid, txt+attachmentPromptSuffix(atts), "web", mdl)
+						return
+					}
+					_, err := s.runtime.ExecuteTurnWithInput(ctx, sid, aid, txt, "web", gateway.TurnInput{Model: mdl, Attachments: atts})
 					if err != nil {
 						log.Printf("Web turn error: %v", err)
 					}
-				}(msg.SessionID, msg.AgentID, msg.Content, msg.Model)
+				}(msg.SessionID, msg.AgentID, msg.Content, msg.Model, wsAttachments)
 
 			case "ping":
 				_ = safeWriteJSON(map[string]string{"type": "pong"})
@@ -751,17 +861,45 @@ func (s *Server) handleProviderModels() http.HandlerFunc {
 			return
 		}
 
-		// If save=true requested and provider exists, update provider models in DB
+		// If save=true requested and provider exists, update provider models in
+		// DB while preserving user toggles (enabled + capability overrides).
 		if (r.URL.Query().Get("save") == "true" || r.URL.Query().Get("persist") == "true") && provID != "" {
 			prov, _ := s.store.GetProvider(provID)
 			if prov != nil {
-				prov.Models = models
+				prov.Models = mergeModelItems(prov.Models, models)
 				_ = s.store.SaveProvider(*prov)
+				models = prov.Models
 			}
 		}
 
 		json.NewEncoder(w).Encode(models)
 	}
+}
+
+// mergeModelItems refreshes the model list from a remote probe without losing
+// the user's enabled flags or explicit capability overrides.
+func mergeModelItems(existing, fetched []gateway.ModelItem) []gateway.ModelItem {
+	prev := make(map[string]gateway.ModelItem, len(existing))
+	for _, m := range existing {
+		prev[m.ID] = m
+	}
+	merged := make([]gateway.ModelItem, 0, len(fetched)+len(existing))
+	seen := make(map[string]bool, len(fetched))
+	for _, m := range fetched {
+		if p, ok := prev[m.ID]; ok {
+			m.Enabled = p.Enabled
+			m.SupportsVision = p.SupportsVision
+			m.SupportsImageGen = p.SupportsImageGen
+		}
+		merged = append(merged, m)
+		seen[m.ID] = true
+	}
+	for _, m := range existing {
+		if !seen[m.ID] {
+			merged = append(merged, m)
+		}
+	}
+	return merged
 }
 
 // --- Models API ---
@@ -805,7 +943,7 @@ func (s *Server) handleModels() http.HandlerFunc {
 				}
 				fetched, fetchErr := gateway.FetchRemoteModels(r.Context(), p.Type, p.Endpoint, p.APIKey)
 				if fetchErr == nil && len(fetched) > 0 {
-					p.Models = fetched
+					p.Models = mergeModelItems(p.Models, fetched)
 					_ = s.store.SaveProvider(*p)
 				}
 			}
@@ -880,6 +1018,41 @@ func (s *Server) handleModels() http.HandlerFunc {
 			DefaultProvider: defaultProvID,
 			Models:          items,
 		})
+	}
+}
+
+// handleDefaultImageModel reads/writes the model used by the generate_image
+// tool. Kept separate from the chat default so text and image models can differ.
+func (s *Server) handleDefaultImageModel() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		current := ""
+		if config.Cfg != nil {
+			current = config.Cfg.DefaultImageModel
+		}
+		switch r.Method {
+		case http.MethodGet:
+			json.NewEncoder(w).Encode(map[string]string{"model": current})
+		case http.MethodPost, http.MethodPut:
+			var payload struct {
+				Model string `json:"model"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				http.Error(w, "invalid request", http.StatusBadRequest)
+				return
+			}
+			if config.Cfg != nil {
+				config.Cfg.DefaultImageModel = strings.TrimSpace(payload.Model)
+				if path := config.ResolveConfigPath(); path != "" {
+					if err := config.Cfg.Save(path); err != nil {
+						log.Printf("default image model: save config: %v", err)
+					}
+				}
+			}
+			json.NewEncoder(w).Encode(map[string]string{"model": payload.Model})
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
 	}
 }
 
@@ -989,18 +1162,42 @@ func (s *Server) handleAgents() http.HandlerFunc {
 				a.ID = strings.ToLower(strings.ReplaceAll(a.Name, " ", "-"))
 			}
 			if existing, _ := s.store.GetAgent(a.ID); existing != nil {
-				if a.Name == "" { a.Name = existing.Name }
-				if a.Role == "" { a.Role = existing.Role }
-				if a.Department == "" { a.Department = existing.Department }
-				if a.Description == "" { a.Description = existing.Description }
-				if a.ProviderID == "" { a.ProviderID = existing.ProviderID }
-				if a.Model == "" { a.Model = existing.Model }
-				if a.SystemPrompt == "" { a.SystemPrompt = existing.SystemPrompt }
-				if len(a.Skills) == 0 { a.Skills = existing.Skills }
-				if len(a.Tools) == 0 { a.Tools = existing.Tools }
-				if len(a.MCP) == 0 { a.MCP = existing.MCP }
-				if a.Avatar == "" { a.Avatar = existing.Avatar }
-				if a.Engine == "" && existing.Engine != "" { a.Engine = existing.Engine }
+				if a.Name == "" {
+					a.Name = existing.Name
+				}
+				if a.Role == "" {
+					a.Role = existing.Role
+				}
+				if a.Department == "" {
+					a.Department = existing.Department
+				}
+				if a.Description == "" {
+					a.Description = existing.Description
+				}
+				if a.ProviderID == "" {
+					a.ProviderID = existing.ProviderID
+				}
+				if a.Model == "" {
+					a.Model = existing.Model
+				}
+				if a.SystemPrompt == "" {
+					a.SystemPrompt = existing.SystemPrompt
+				}
+				if len(a.Skills) == 0 {
+					a.Skills = existing.Skills
+				}
+				if len(a.Tools) == 0 {
+					a.Tools = existing.Tools
+				}
+				if len(a.MCP) == 0 {
+					a.MCP = existing.MCP
+				}
+				if a.Avatar == "" {
+					a.Avatar = existing.Avatar
+				}
+				if a.Engine == "" && existing.Engine != "" {
+					a.Engine = existing.Engine
+				}
 				if a.Engine == "rakit" {
 					a.ACPAgent = ""
 				} else if a.ACPAgent == "" && existing.ACPAgent != "" {
@@ -1165,6 +1362,46 @@ func (s *Server) handleSessions() http.HandlerFunc {
 	}
 }
 
+// handleMainSession returns (and if necessary creates/consolidates) the one
+// permanent Main Chat for an agent.
+func (s *Server) handleMainSession() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet && r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		agentID := strings.TrimSpace(r.URL.Query().Get("agentId"))
+		if r.Method == http.MethodPost {
+			var payload struct {
+				AgentID string `json:"agentId"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&payload)
+			if strings.TrimSpace(payload.AgentID) != "" {
+				agentID = strings.TrimSpace(payload.AgentID)
+			}
+		}
+		if agentID == "" {
+			http.Error(w, "agentId is required", http.StatusBadRequest)
+			return
+		}
+
+		s.mainSessionMu.Lock()
+		sess, err := s.store.EnsureMainSession(agentID)
+		s.mainSessionMu.Unlock()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if sess == nil {
+			http.Error(w, "main session unavailable", http.StatusInternalServerError)
+			return
+		}
+		json.NewEncoder(w).Encode(sess)
+	}
+}
+
 func (s *Server) handleSessionDetail() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -1183,7 +1420,49 @@ func (s *Server) handleSessionDetail() http.HandlerFunc {
 
 		if len(parts) > 1 && parts[1] == "stop" && r.Method == "POST" {
 			s.runtime.StopDiscussion(sessionID)
+			s.cancelTurn(sessionID)
 			json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "stopped": true})
+			return
+		}
+
+		// GET /api/sessions/{sid}/usage — context-window utilization for the
+		// composer gauge (also restores it after a reload / session switch).
+		if len(parts) > 1 && parts[1] == "usage" && r.Method == "GET" {
+			model := ""
+			if sess, _ := s.store.GetSession(sessionID); sess != nil {
+				if sess.Metadata != "" {
+					var meta map[string]interface{}
+					if json.Unmarshal([]byte(sess.Metadata), &meta) == nil {
+						if m, ok := meta["model"].(string); ok {
+							model = m
+						}
+					}
+				}
+				if agentCfg, err := s.store.GetAgent(sess.AgentID); err == nil && agentCfg != nil && model == "" {
+					model = agentCfg.Model
+				}
+			}
+			if model == "" {
+				if msgs, err := s.store.GetSessionMessages(sessionID); err == nil {
+					for i := len(msgs) - 1; i >= 0; i-- {
+						if msgs[i].Role == "assistant" && msgs[i].Model != "" {
+							model = msgs[i].Model
+							break
+						}
+					}
+				}
+			}
+			if model == "" {
+				model, _ = s.runtime.ResolveDefaultModel()
+			}
+			used, window := gateway.ComputeSessionUsage(s.store, sessionID, model)
+			json.NewEncoder(w).Encode(messaging.UsagePayload{
+				SessionID:     sessionID,
+				Model:         model,
+				UsedTokens:    used,
+				ContextWindow: window,
+				Percent:       gateway.UsagePercent(used, window),
+			})
 			return
 		}
 
@@ -1204,17 +1483,19 @@ func (s *Server) handleSessionDetail() http.HandlerFunc {
 		// POST /api/sessions/{sid}/messages — user sends a message, executes turn
 		if len(parts) == 2 && parts[1] == "messages" && r.Method == "POST" {
 			var req struct {
-				Content  string   `json:"content"`
-				AgentID  string   `json:"agentId"`
-				Model    string   `json:"model"`
-				Engine   string   `json:"engine"`
-				ACPAgent string   `json:"acpAgent"`
-				Images   []string `json:"images,omitempty"`
+				Content     string               `json:"content"`
+				AgentID     string               `json:"agentId"`
+				Model       string               `json:"model"`
+				Engine      string               `json:"engine"`
+				ACPAgent    string               `json:"acpAgent"`
+				Images      []string             `json:"images,omitempty"`
+				Attachments []gateway.Attachment `json:"attachments,omitempty"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Content) == "" {
 				http.Error(w, "content is required", http.StatusBadRequest)
 				return
 			}
+			reqAttachments := s.resolveAttachments(sessionID, req.Attachments)
 
 			// Ensure session exists
 			sess, _ := s.store.GetSession(sessionID)
@@ -1226,11 +1507,25 @@ func (s *Server) handleSessionDetail() http.HandlerFunc {
 				targetAgentID = "lutfi"
 			}
 
+			// Register the turn before responding so a second send to the same
+			// session is rejected with 409 instead of racing the first.
+			turnCtx, turnCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			if !s.beginTurn(sessionID, turnCancel) {
+				turnCancel()
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusConflict)
+				json.NewEncoder(w).Encode(map[string]string{"error": "session busy"})
+				return
+			}
+			s.setSessionActivity(sessionID, "running")
+
 			// Execute turn asynchronously. Each executor (acp.Prompt, runEngineTurn, ExecuteTurnWithModel)
 			// handles user message persistence and event publication once.
-			go func(sid, aid, txt, mdl, eng, acpAg string) {
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-				defer cancel()
+			go func(sid, aid, txt, mdl, eng, acpAg string, atts []gateway.Attachment) {
+				ctx := turnCtx
+				defer turnCancel()
+				defer s.endTurn(sid)
+				defer s.setSessionActivity(sid, "active")
 
 				var sessMeta map[string]interface{}
 				if sess != nil && sess.Metadata != "" {
@@ -1332,7 +1627,7 @@ func (s *Server) handleSessionDetail() http.HandlerFunc {
 						return
 					}
 
-					if err := s.acp.Prompt(sid, txt); err != nil {
+					if err := s.acp.Prompt(sid, txt+attachmentPromptSuffix(atts)); err != nil {
 						log.Printf("[ACP] Prompt error for session %s: %v", sid, err)
 						s.bus.Publish(messaging.Event{
 							ID:        uuid.New().String(),
@@ -1353,21 +1648,21 @@ func (s *Server) handleSessionDetail() http.HandlerFunc {
 					for _, as := range s.acp.ListSessions() {
 						if as.ID == sid {
 							_ = s.acp.EnsureSession(sid, as.AgentID, as.CWD, activeModel)
-							_ = s.acp.Prompt(sid, txt)
+							_ = s.acp.Prompt(sid, txt+attachmentPromptSuffix(atts))
 							return
 						}
 					}
 				}
 
 				if s.engine != nil && (sess == nil || sess.Type != "group") {
-					s.runEngineTurn(sid, aid, txt, "web", activeModel)
+					s.runEngineTurn(sid, aid, txt+attachmentPromptSuffix(atts), "web", activeModel)
 					return
 				}
-				_, err := s.runtime.ExecuteTurnWithModel(ctx, sid, aid, txt, "web", activeModel)
+				_, err := s.runtime.ExecuteTurnWithInput(ctx, sid, aid, txt, "web", gateway.TurnInput{Model: activeModel, Attachments: atts})
 				if err != nil {
 					log.Printf("Session %s turn error: %v", sid, err)
 				}
-			}(sessionID, targetAgentID, req.Content, req.Model, req.Engine, req.ACPAgent)
+			}(sessionID, targetAgentID, req.Content, req.Model, req.Engine, req.ACPAgent, reqAttachments)
 
 			w.WriteHeader(http.StatusOK)
 			json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
@@ -2935,92 +3230,181 @@ func (s *Server) handleWorkspaceFile() http.HandlerFunc {
 	}
 }
 
+// workspacePathError carries the HTTP status a workspace path failure maps to.
+type workspacePathError struct {
+	status int
+	msg    string
+}
+
+func (e *workspacePathError) Error() string { return e.msg }
+
+// resolveWorkspacePath normalizes a client-supplied path, confines it to the
+// workspace root, and verifies it points at a regular file.
+func (s *Server) resolveWorkspacePath(requested string) (string, os.FileInfo, error) {
+	if strings.TrimSpace(requested) == "" {
+		return "", nil, &workspacePathError{http.StatusBadRequest, "missing path query param"}
+	}
+
+	base := s.explorer.GetBaseDir()
+	cleaned := strings.TrimSpace(requested)
+	for _, prefix := range []string{
+		"/workspaces/", "workspaces/",
+		"/workspace/", "workspace/",
+		"~/workspaces/", "~/workspace/",
+		"~/",
+	} {
+		if strings.HasPrefix(cleaned, prefix) {
+			cleaned = strings.TrimPrefix(cleaned, prefix)
+			break
+		}
+	}
+
+	fullPath := cleaned
+	if !filepath.IsAbs(fullPath) {
+		fullPath = filepath.Join(base, cleaned)
+	}
+
+	rel, err := filepath.Rel(base, fullPath)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return "", nil, &workspacePathError{http.StatusForbidden, "access denied: path outside workspace"}
+	}
+
+	fi, err := os.Stat(fullPath)
+	if err != nil {
+		return "", nil, &workspacePathError{http.StatusNotFound, "file not found"}
+	}
+	if fi.IsDir() {
+		return "", nil, &workspacePathError{http.StatusBadRequest, "path is a directory"}
+	}
+	return fullPath, fi, nil
+}
+
+func workspaceMimeType(path string) string {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".docx":
+		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+	case ".xlsx":
+		return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+	case ".pptx":
+		return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+	case ".pdf":
+		return "application/pdf"
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".gif":
+		return "image/gif"
+	case ".webp":
+		return "image/webp"
+	case ".svg":
+		return "image/svg+xml"
+	case ".json":
+		return "application/json"
+	case ".txt", ".md", ".csv", ".log":
+		return "text/plain; charset=utf-8"
+	case ".html", ".htm":
+		return "text/html; charset=utf-8"
+	case ".zip":
+		return "application/zip"
+	case ".mp4":
+		return "video/mp4"
+	default:
+		return "application/octet-stream"
+	}
+}
+
+func viewerKindFor(path, mime string) string {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch {
+	case strings.HasPrefix(mime, "image/"):
+		return "image"
+	case ext == ".html" || ext == ".htm":
+		return "html"
+	case ext == ".pdf":
+		return "pdf"
+	case strings.HasPrefix(mime, "text/"):
+		return "text"
+	default:
+		return "other"
+	}
+}
+
 func (s *Server) handleWorkspaceDownload() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		filePath := r.URL.Query().Get("path")
 		if filePath == "" {
 			filePath = r.URL.Query().Get("file")
 		}
-		if filePath == "" {
-			http.Error(w, "missing path query param", http.StatusBadRequest)
-			return
-		}
-
-		base := s.explorer.GetBaseDir()
-
-		// Strip synthetic LLM prefixes
-		cleaned := strings.TrimSpace(filePath)
-		for _, prefix := range []string{
-			"/workspaces/", "workspaces/",
-			"/workspace/", "workspace/",
-			"~/workspaces/", "~/workspace/",
-			"~/",
-		} {
-			if strings.HasPrefix(cleaned, prefix) {
-				cleaned = strings.TrimPrefix(cleaned, prefix)
-				break
-			}
-		}
-
-		fullPath := cleaned
-		if !filepath.IsAbs(fullPath) {
-			fullPath = filepath.Join(base, cleaned)
-		}
-
-		rel, err := filepath.Rel(base, fullPath)
-		if err != nil || strings.HasPrefix(rel, "..") {
-			http.Error(w, "access denied: path outside workspace", http.StatusForbidden)
-			return
-		}
-
-		fi, err := os.Stat(fullPath)
+		fullPath, fi, err := s.resolveWorkspacePath(filePath)
 		if err != nil {
-			http.Error(w, "file not found", http.StatusNotFound)
-			return
-		}
-		if fi.IsDir() {
-			http.Error(w, "cannot download directory", http.StatusBadRequest)
+			status, msg := http.StatusBadRequest, err.Error()
+			if pe, ok := err.(*workspacePathError); ok {
+				status, msg = pe.status, pe.msg
+			}
+			http.Error(w, msg, status)
 			return
 		}
 
-		ext := strings.ToLower(filepath.Ext(fullPath))
-		contentType := "application/octet-stream"
-		switch ext {
-		case ".docx":
-			contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-		case ".xlsx":
-			contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-		case ".pptx":
-			contentType = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-		case ".pdf":
-			contentType = "application/pdf"
-		case ".png":
-			contentType = "image/png"
-		case ".jpg", ".jpeg":
-			contentType = "image/jpeg"
-		case ".gif":
-			contentType = "image/gif"
-		case ".webp":
-			contentType = "image/webp"
-		case ".svg":
-			contentType = "image/svg+xml"
-		case ".json":
-			contentType = "application/json"
-		case ".txt", ".md", ".csv":
-			contentType = "text/plain; charset=utf-8"
-		case ".html":
-			contentType = "text/html; charset=utf-8"
-		case ".zip":
-			contentType = "application/zip"
-		case ".mp4":
-			contentType = "video/mp4"
-		}
-
-		w.Header().Set("Content-Type", contentType)
+		w.Header().Set("Content-Type", workspaceMimeType(fullPath))
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filepath.Base(fullPath)))
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", fi.Size()))
-
 		http.ServeFile(w, r, fullPath)
+	}
+}
+
+// handleWorkspacePreview serves a workspace file inline so images, HTML and
+// PDFs can be displayed in the app viewer instead of downloading.
+func (s *Server) handleWorkspacePreview() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		filePath := r.URL.Query().Get("path")
+		fullPath, _, err := s.resolveWorkspacePath(filePath)
+		if err != nil {
+			status, msg := http.StatusBadRequest, err.Error()
+			if pe, ok := err.(*workspacePathError); ok {
+				status, msg = pe.status, pe.msg
+			}
+			http.Error(w, msg, status)
+			return
+		}
+
+		contentType := workspaceMimeType(fullPath)
+		w.Header().Set("Content-Type", contentType)
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`inline; filename="%s"`, filepath.Base(fullPath)))
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		if strings.HasPrefix(contentType, "text/html") {
+			// Generated HTML is untrusted; the viewer also sandboxes the iframe.
+			w.Header().Set("Content-Security-Policy", "sandbox allow-scripts allow-forms allow-modals allow-popups")
+		}
+		http.ServeFile(w, r, fullPath)
+	}
+}
+
+// handleWorkspaceMeta returns the metadata the viewer needs to pick a mode.
+func (s *Server) handleWorkspaceMeta() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		filePath := r.URL.Query().Get("path")
+		fullPath, fi, err := s.resolveWorkspacePath(filePath)
+		if err != nil {
+			status, msg := http.StatusBadRequest, err.Error()
+			if pe, ok := err.(*workspacePathError); ok {
+				status, msg = pe.status, pe.msg
+			}
+			http.Error(w, msg, status)
+			return
+		}
+		rel, _ := filepath.Rel(s.explorer.GetBaseDir(), fullPath)
+		mimeType := workspaceMimeType(fullPath)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"path":        rel,
+			"name":        filepath.Base(fullPath),
+			"mime":        mimeType,
+			"size":        fi.Size(),
+			"kind":        viewerKindFor(fullPath, mimeType),
+			"previewUrl":  "/api/workspace/preview?path=" + url.QueryEscape(rel),
+			"downloadUrl": "/api/workspace/download?path=" + url.QueryEscape(rel),
+		})
 	}
 }
 
@@ -3316,7 +3700,12 @@ func (s *Server) handleReviewScan() http.HandlerFunc {
 func (s *Server) handleTasks() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		tasks := s.runtime.GetTaskManager().List()
+		mgr := s.runtime.GetTaskManager()
+		if parent := strings.TrimSpace(r.URL.Query().Get("parentSession")); parent != "" {
+			json.NewEncoder(w).Encode(mgr.TasksForParent(parent))
+			return
+		}
+		tasks := mgr.List()
 		json.NewEncoder(w).Encode(tasks)
 	}
 }
@@ -3778,4 +4167,3 @@ func (s *Server) handleDecisionsPredict() http.HandlerFunc {
 		json.NewEncoder(w).Encode(decision)
 	}
 }
-

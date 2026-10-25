@@ -2,10 +2,13 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useProfileStore } from '../../store/useProfileStore';
 import { useSessionStore } from '../../store/useSessionStore';
 import { MarkdownView } from '../MarkdownView';
+import { AttachmentList } from './AttachmentList';
 import { ToolExecutionCard, ToolExecution } from '../agent/ToolBlockViews';
 import { WorkLogList } from '../agent/WorkLog';
 import { ApprovalCard } from '../agentui/ApprovalCard';
 import { AgentTaskInputBar, PromptSubmitOptions } from '../common/AgentTaskInputBar';
+import { SubAgentPanel } from '../SubAgentPanel';
+import { useAppStore } from '../../store/useAppStore';
 import { ProfileBadge } from '../shell/ProfileBadge';
 import { ChatTopControls, MobileDrawerTrigger } from '../shell/ChatTopControls';
 import {
@@ -82,6 +85,20 @@ export const ChatThread: React.FC<ChatThreadProps> = () => {
     streamingToolCalls,
     sendMessage,
   } = useSessionStore();
+  const { tasks, openSubAgentPanel, loadTasks } = useAppStore();
+  const runningSubagents = useMemo(
+    () => tasks.filter((t) => t.parentSessionId === activeSession?.id && t.status === 'running'),
+    [tasks, activeSession?.id]
+  );
+
+  // Fallback poll while sub-agents run (event-driven updates are primary).
+  useEffect(() => {
+    if (runningSubagents.length === 0) return;
+    const timer = setInterval(() => {
+      void loadTasks();
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [runningSubagents.length, loadTasks]);
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [likedMap, setLikedMap] = useState<Record<string, 'up' | 'down'>>({});
@@ -148,6 +165,7 @@ export const ChatThread: React.FC<ChatThreadProps> = () => {
       model: options?.model,
       engine: options?.engineKind,
       acpAgent: options?.engineKind === 'acp' ? options.engineId : undefined,
+      attachments: options?.attachments,
     });
   };
 
@@ -180,11 +198,13 @@ export const ChatThread: React.FC<ChatThreadProps> = () => {
       <ChatTopControls showSessionMenu scrolled={headerScrolled} />
       <ProfileBadge scrolled={headerScrolled} />
 
+      <div className="flex w-full min-h-0 flex-1">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       {/* Messages Scroll Area */}
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-3 sm:px-6 pt-24 pb-4 scrollbar-thin scrollbar-thumb-border"
+        className="flex-1 min-w-0 overflow-y-auto px-3 sm:px-6 pt-24 pb-4 scrollbar-thin scrollbar-thumb-border"
       >
         <div className="chat-content-lane space-y-6">
           {isLoadingMessages && messages.length === 0 ? (
@@ -222,6 +242,7 @@ export const ChatThread: React.FC<ChatThreadProps> = () => {
                       )}
                       {/* User Message Bubble (Muse AI style: vibrant blue pill with white text) */}
                       <div className="group/user-row flex flex-col items-end w-full gap-1">
+                        <AttachmentList attachments={msg.attachments} />
                         <div className="relative max-w-[85%] sm:max-w-[75%] rounded-[20px] rounded-br-[4px] bg-[#0084ff] px-4 py-2.5 text-white shadow-sm select-text">
                           <p className="whitespace-pre-wrap break-words text-ui-sm leading-relaxed [overflow-wrap:anywhere] select-text font-normal">
                             {msg.content}
@@ -462,14 +483,34 @@ export const ChatThread: React.FC<ChatThreadProps> = () => {
         </div>
       </div>
 
+      {runningSubagents.length > 0 && (
+        <div className="w-full shrink-0 px-3 pt-1 sm:px-6">
+          <button
+            type="button"
+            onClick={() => openSubAgentPanel(runningSubagents[0].sessionId)}
+            className="flex w-full items-center gap-2 rounded-lg border border-border/60 bg-card/80 px-3 py-1.5 text-left text-ui-xs text-foreground transition-colors hover:bg-accent"
+          >
+            <Loader2 className="size-3.5 animate-spin text-primary" />
+            <span className="font-medium">
+              {runningSubagents.length} sub-agent{runningSubagents.length > 1 ? 's' : ''} running in parallel
+            </span>
+            <ChevronRight className="ml-auto size-3.5 text-muted-foreground" />
+          </button>
+        </div>
+      )}
+
       {/* Docked Floating Bottom Composer + Approval Card */}
       <div className="pt-2 pb-20 md:pb-5 px-3 sm:px-6 bg-background transition-colors w-full shrink-0">
         {activeSession?.id && <ApprovalCard sessionId={activeSession.id} />}
         <AgentTaskInputBar
           placeholder="Ask for follow-up changes"
-          showContextStrip={true}
           onSubmitPrompt={handleFollowUp}
         />
+      </div>
+      </div>
+
+      {/* Live sub-agent panel (desktop); hidden until a task is focused */}
+      <SubAgentPanel />
       </div>
     </div>
   );

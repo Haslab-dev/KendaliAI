@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useProfileStore } from '../../store/useProfileStore';
 import { useSessionStore, isMainSession } from '../../store/useSessionStore';
 import { useAgentStore } from '../../store/useAgentStore';
+import { useAppStore } from '../../store/useAppStore';
 import { useUIStore } from '../../store/useUIStore';
 import {
   Plus,
@@ -109,8 +110,10 @@ export const SessionsPanel: React.FC = () => {
     sessions: allStoreSessions,
     searchQuery,
     setSearchQuery,
+    streams,
   } = useSessionStore();
 
+  const { tasks } = useAppStore();
   const { rightPanel, closePanels, toggleProfilePanel } = useUIStore();
 
   const [panelTab, setPanelTab] = useState<PanelTab>('active');
@@ -480,7 +483,11 @@ export const SessionsPanel: React.FC = () => {
           ) : (
             filteredSessions.map((sess) => {
               const isActive = activeSessionId === sess.id;
-              const isRunning = sess.status === 'running' || sess.status === 'starting';
+              const isRunning =
+                streams[sess.id]?.status === 'streaming' ||
+                tasks.some((t) => t.sessionId === sess.id && t.status === 'running') ||
+                sess.status === 'running' ||
+                sess.status === 'starting';
               const isPinned = sess.pinned;
               const isSnoozed = (snoozedMap[sess.id] || 0) > Date.now();
               const isArchived = archivedIds.has(sess.id);

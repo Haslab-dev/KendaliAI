@@ -22,6 +22,7 @@ import { SessionsPanel } from './components/shell/SessionsPanel';
 import { ProfilePanel } from './components/shell/ProfilePanel';
 import { BottomNav } from './components/BottomNav';
 import { MobileAgentDrawer } from './components/layout/MobileAgentDrawer';
+import { FileViewer } from './components/viewer/FileViewer';
 
 type AuthState = 'checking' | 'ok' | 'login';
 
@@ -186,6 +187,9 @@ export const App: React.FC = () => {
       {/* 3. Floating right panels (session history & profile) */}
       <SessionsPanel />
       <ProfilePanel />
+
+      {/* Generated-file / image viewer */}
+      <FileViewer />
 
       {/* 4. Mobile Drawer & Mobile Bottom Nav */}
       <MobileAgentDrawer onOpenCreateAgent={() => setIsNewAgentModalOpen(true)} />

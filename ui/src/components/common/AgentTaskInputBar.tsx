@@ -20,6 +20,8 @@ import {
   Cpu,
   Sparkles,
   Mic,
+  Loader2,
+  Paperclip,
 } from 'lucide-react';
 import { cn } from '../../lib/cn';
 import {
@@ -35,6 +37,49 @@ import { useProfileStore } from '../../store/useProfileStore';
 import { useAppStore } from '../../store/useAppStore';
 import { useAgentStore } from '../../store/useAgentStore';
 import { ProviderIcon } from '../agent/ProviderIcon';
+import { Attachment } from '../../types';
+import { COMPOSER_FILL_EVENT } from '../../lib/composerEvents';
+
+export const MAX_ATTACHMENTS = 5;
+export const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+export const MAX_ATTACHMENTS_TOTAL_BYTES = 20 * 1024 * 1024;
+const IMAGE_DOWNSCALE_THRESHOLD = 2 * 1024 * 1024;
+const IMAGE_MAX_DIMENSION = 2048;
+
+export const ATTACHMENT_ACCEPT =
+  'image/*,.pdf,.txt,.md,.csv,.json,.yaml,.yml,.xml,.html,.css,.js,.ts,.tsx,.jsx,.py,.go,.rs,.java,.sql,.log,.docx,.xlsx,.pptx,.zip';
+
+// Downscale large images in the browser so uploads stay fast and vision
+// requests stay within provider limits.
+async function prepareAttachmentFile(file: File): Promise<File> {
+  if (!file.type.startsWith('image/') || file.size <= IMAGE_DOWNSCALE_THRESHOLD) return file;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, IMAGE_MAX_DIMENSION / Math.max(bitmap.width, bitmap.height));
+    const width = Math.max(1, Math.round(bitmap.width * scale));
+    const height = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      bitmap.close?.();
+      return file;
+    }
+    ctx.drawImage(bitmap, 0, 0, width, height);
+    bitmap.close?.();
+    const usePng = file.type === 'image/png';
+    const blob: Blob | null = await new Promise((resolve) =>
+      canvas.toBlob(resolve, usePng ? 'image/png' : 'image/jpeg', 0.88)
+    );
+    if (!blob || blob.size >= file.size) return file;
+    const ext = usePng ? '.png' : '.jpg';
+    const name = file.name.replace(/\.[^.]+$/, '') + ext;
+    return new File([blob], name, { type: usePng ? 'image/png' : 'image/jpeg' });
+  } catch {
+    return file;
+  }
+}
 
 export type AgentExecutionMode = 'ask' | 'code' | 'plan' | 'bypass';
 export type AgentReasoningLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'max';
@@ -137,6 +182,7 @@ export interface PromptSubmitOptions {
   engineKind?: 'native' | 'acp';
   model?: string;
   mode?: AgentExecutionMode;
+  attachments?: Attachment[];
 }
 
 interface AgentTaskInputBarProps {
@@ -145,7 +191,6 @@ interface AgentTaskInputBarProps {
   autoFocus?: boolean;
   onSubmitPrompt?: (prompt: string, options?: PromptSubmitOptions) => void;
   isCompact?: boolean;
-  showContextStrip?: boolean;
   className?: string;
 }
 
@@ -171,10 +216,9 @@ export const AgentTaskInputBar: React.FC<AgentTaskInputBarProps> = ({
   autoFocus = false,
   onSubmitPrompt,
   isCompact = false,
-  showContextStrip = false,
   className,
 }) => {
-  const { sendMessage, isStreaming, stopSession, activeSession, selectSession } = useSessionStore();
+  const { sendMessage, isStreaming, stopSession, activeSession, selectSession, usageBySession } = useSessionStore();
   const { activeAgent, selectedAgentId } = useProfileStore();
   const { availableModels, defaultModel } = useAppStore();
   const { acpAgents, composerTarget, setComposerTarget } = useAgentStore();
@@ -190,7 +234,12 @@ export const AgentTaskInputBar: React.FC<AgentTaskInputBarProps> = ({
   const [isEngineOpen, setIsEngineOpen] = useState(false);
   const [isModelOpen, setIsModelOpen] = useState(false);
   const [isEffortOpen, setIsEffortOpen] = useState(false);
+  const [isUsageOpen, setIsUsageOpen] = useState(false);
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [uploadingAttachments, setUploadingAttachments] = useState(false);
+  const [attachmentError, setAttachmentError] = useState('');
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mobileTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -202,6 +251,30 @@ export const AgentTaskInputBar: React.FC<AgentTaskInputBarProps> = ({
       mobileTextareaRef.current.style.height = `${Math.min(mobileTextareaRef.current.scrollHeight, 120)}px`;
     }
   }, [prompt]);
+
+  // OpenUI `feedback` actions put their text here instead of sending it, so
+  // the user can review, edit, and submit it themselves.
+  useEffect(() => {
+    const handleComposerFill = (event: Event) => {
+      const text = (event as CustomEvent<{ text?: string }>).detail?.text;
+      if (typeof text !== 'string' || !text.trim()) return;
+      setPrompt(text);
+      requestAnimationFrame(() => {
+        const desktop = textareaRef.current;
+        const mobile = mobileTextareaRef.current;
+        // offsetParent is null when the element (or an ancestor) is hidden.
+        const el = desktop && desktop.offsetParent !== null ? desktop : mobile;
+        if (!el) return;
+        el.focus();
+        const len = el.value.length;
+        el.setSelectionRange(len, len);
+        el.style.height = 'auto';
+        el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
+      });
+    };
+    window.addEventListener(COMPOSER_FILL_EVENT, handleComposerFill);
+    return () => window.removeEventListener(COMPOSER_FILL_EVENT, handleComposerFill);
+  }, []);
 
   // Dynamic merged engines: Rakit Kode & ACP's
   const engines: AgentEngineOption[] = useMemo(() => {
@@ -348,10 +421,61 @@ export const AgentTaskInputBar: React.FC<AgentTaskInputBarProps> = ({
     setIsEffortOpen(false);
   };
 
+  const handleFiles = async (incoming: FileList | File[]) => {
+    setAttachmentError('');
+    const list = Array.from(incoming);
+    if (list.length === 0) return;
+
+    if (attachments.length + list.length > MAX_ATTACHMENTS) {
+      setAttachmentError(`You can attach up to ${MAX_ATTACHMENTS} files.`);
+      return;
+    }
+    for (const file of list) {
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        setAttachmentError(`"${file.name}" is larger than 5 MB.`);
+        return;
+      }
+    }
+    const total =
+      attachments.reduce((sum, a) => sum + (a.size || 0), 0) +
+      list.reduce((sum, f) => sum + f.size, 0);
+    if (total > MAX_ATTACHMENTS_TOTAL_BYTES) {
+      setAttachmentError('Attachments exceed the 20 MB total limit.');
+      return;
+    }
+
+    setUploadingAttachments(true);
+    try {
+      const form = new FormData();
+      if (activeSession?.id) form.append('sessionId', activeSession.id);
+      for (const file of list) {
+        form.append('files', await prepareAttachmentFile(file));
+      }
+      const res = await fetch('/api/attachments', { method: 'POST', body: form });
+      if (!res.ok) {
+        const detail = (await res.text()).trim();
+        throw new Error(detail || `Upload failed (${res.status})`);
+      }
+      const uploaded: Attachment[] = await res.json();
+      setAttachments((prev) => [...prev, ...(Array.isArray(uploaded) ? uploaded : [])]);
+    } catch (err: any) {
+      setAttachmentError(err?.message || 'Upload failed');
+    } finally {
+      setUploadingAttachments(false);
+    }
+  };
+
+  const removeAttachment = (id: string) => {
+    setAttachments((prev) => prev.filter((a) => a.id !== id));
+  };
+
   const handleSubmit = async () => {
-    if (!prompt.trim() || isStreaming) return;
+    if (!prompt.trim() || isStreaming || uploadingAttachments) return;
     const text = prompt.trim();
+    const outgoing = attachments;
     setPrompt('');
+    setAttachments([]);
+    setAttachmentError('');
     closeAllMenus();
 
     if (onSubmitPrompt) {
@@ -360,6 +484,7 @@ export const AgentTaskInputBar: React.FC<AgentTaskInputBarProps> = ({
         engineKind: activeEngine.kind,
         model: effectiveModel,
         mode: executionMode,
+        attachments: outgoing,
       });
     } else {
       await sendMessage(text, {
@@ -367,11 +492,22 @@ export const AgentTaskInputBar: React.FC<AgentTaskInputBarProps> = ({
         model: effectiveModel,
         engine: activeEngine.kind,
         acpAgent: activeEngine.kind === 'acp' ? activeEngine.id : undefined,
+        attachments: outgoing,
       });
     }
   };
 
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = e.clipboardData?.files;
+    if (files && files.length > 0) {
+      e.preventDefault();
+      void handleFiles(files);
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Never submit while an IME composition (CJK input) is in progress.
+    if (e.nativeEvent.isComposing) return;
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
@@ -380,20 +516,99 @@ export const AgentTaskInputBar: React.FC<AgentTaskInputBarProps> = ({
 
   const chipSize = isCompact ? 'xs' : 'sm';
 
+  const usage = activeSession?.id ? usageBySession[activeSession.id] : undefined;
+  const usagePercent = Math.max(0, Math.min(100, usage?.percent ?? 0));
+  const usageColor =
+    usagePercent >= 90 ? 'text-red-500' : usagePercent >= 70 ? 'text-amber-500' : 'text-emerald-500';
+  const formatTokens = (n?: number) => {
+    if (!n || n <= 0) return '0';
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`;
+    if (n >= 1_000) return `${(n / 1_000).toFixed(n >= 100_000 ? 0 : 1)}K`;
+    return String(n);
+  };
+
   return (
-    <div className={cn('relative w-full max-w-[var(--chat-content-max-width,46rem)] mx-auto', className)}>
+    <div
+      className={cn('relative w-full max-w-[var(--chat-content-max-width,46rem)] mx-auto', className)}
+      onDragEnter={(e) => {
+        if (Array.from(e.dataTransfer.types || []).includes('Files')) {
+          e.preventDefault();
+          setIsDraggingFiles(true);
+        }
+      }}
+      onDragOver={(e) => {
+        if (Array.from(e.dataTransfer.types || []).includes('Files')) {
+          e.preventDefault();
+        }
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+          setIsDraggingFiles(false);
+        }
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setIsDraggingFiles(false);
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+          void handleFiles(e.dataTransfer.files);
+        }
+      }}
+    >
+      {isDraggingFiles && (
+        <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center rounded-2xl border-2 border-dashed border-primary/60 bg-primary/5 backdrop-blur-[1px]">
+          <span className="flex items-center gap-2 rounded-full bg-card px-3 py-1.5 text-ui-xs font-medium text-foreground shadow-md">
+            <Paperclip className="size-3.5" /> Drop files or images
+          </span>
+        </div>
+      )}
+
       {/* Hidden file input */}
       <input
         type="file"
         ref={fileInputRef}
         className="hidden"
         multiple
+        accept={ATTACHMENT_ACCEPT}
         onChange={(e) => {
           if (e.target.files && e.target.files.length > 0) {
-            setPrompt((prev) => `${prev} [Attached ${e.target.files?.length} file(s)]`);
+            void handleFiles(e.target.files);
           }
+          e.target.value = '';
         }}
       />
+
+      {(attachments.length > 0 || uploadingAttachments || attachmentError) && (
+        <div className="mb-1.5 flex flex-wrap items-center gap-1.5 px-1 sm:px-0">
+          {attachments.map((att) => (
+            <div
+              key={att.id}
+              className="relative flex items-center gap-1.5 rounded-lg border border-border/70 bg-card/90 py-1 pl-1 pr-1.5 text-3xs text-foreground shadow-xs"
+              title={`${att.name} · ${(att.size / 1024).toFixed(0)} KB`}
+            >
+              {att.kind === 'image' ? (
+                <img src={att.url} alt={att.name} className="size-7 rounded object-cover" />
+              ) : (
+                <FileText className="size-3.5 text-muted-foreground" />
+              )}
+              <span className="max-w-[120px] truncate">{att.name}</span>
+              <button
+                type="button"
+                onClick={() => removeAttachment(att.id)}
+                className="flex size-4 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
+                title="Remove attachment"
+              >
+                <X className="size-3" />
+              </button>
+            </div>
+          ))}
+          {uploadingAttachments && (
+            <span className="flex items-center gap-1 text-3xs text-muted-foreground">
+              <Loader2 className="size-3 animate-spin" /> Uploading…
+            </span>
+          )}
+          {attachmentError && <span className="text-3xs text-destructive">{attachmentError}</span>}
+        </div>
+      )}
 
       {/* Stacked top header if provided (e.g. Workspace / General chip in New Task) */}
       {headerNode && (
@@ -421,9 +636,20 @@ export const AgentTaskInputBar: React.FC<AgentTaskInputBarProps> = ({
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder={isStreaming ? 'Thinking…' : placeholder}
           className="flex-1 min-w-0 bg-transparent border-0 font-sans leading-snug text-foreground placeholder:text-muted-foreground/60 focus:outline-none text-sm py-1 resize-none max-h-24"
         />
+
+        {/* Context usage (compact) */}
+        {usage && (
+          <span
+            className={cn('shrink-0 font-mono text-3xs font-semibold tabular-nums', usageColor)}
+            title={`${formatTokens(usage.usedTokens)} / ${formatTokens(usage.contextWindow)} tokens`}
+          >
+            {usagePercent.toFixed(0)}%
+          </span>
+        )}
 
         {/* Send or Stop */}
         {isStreaming ? (
@@ -465,6 +691,7 @@ export const AgentTaskInputBar: React.FC<AgentTaskInputBarProps> = ({
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             placeholder={isStreaming ? 'Keep typing to queue follow-up changes' : placeholder}
             className="w-full resize-none bg-transparent border-0 font-sans leading-relaxed text-foreground placeholder:text-muted-foreground/70 focus:outline-none text-[length:var(--font-size-prompt,0.9375rem)]"
           />
@@ -739,29 +966,68 @@ export const AgentTaskInputBar: React.FC<AgentTaskInputBarProps> = ({
 
           {/* Right Action Cluster: Context Gauge & Send/Stop */}
           <div className="flex items-center gap-2 shrink-0">
-            {/* Context Token Gauge */}
-            <div
-              className="flex items-center justify-center p-1"
-              title="Session context token utilization"
-            >
-              <svg className="size-4 -rotate-90" viewBox="0 0 36 36">
-                <path
-                  className="text-muted/40"
-                  strokeWidth="4"
-                  stroke="currentColor"
-                  fill="none"
-                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                />
-                <path
-                  className="text-emerald-500 transition-all duration-300"
-                  strokeDasharray="28, 100"
-                  strokeWidth="4"
-                  strokeLinecap="round"
-                  stroke="currentColor"
-                  fill="none"
-                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                />
-              </svg>
+            {/* Context Token Gauge — real usage for the active session */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsUsageOpen((v) => !v)}
+                className="flex cursor-pointer items-center justify-center rounded-md p-1 transition-colors hover:bg-foreground/5"
+                title={
+                  usage
+                    ? `Context: ${formatTokens(usage.usedTokens)} / ${formatTokens(usage.contextWindow)} tokens (${usagePercent.toFixed(1)}%)`
+                    : 'Session context token utilization'
+                }
+              >
+                <svg className="size-4 -rotate-90" viewBox="0 0 36 36">
+                  <path
+                    className="text-muted/40"
+                    strokeWidth="4"
+                    stroke="currentColor"
+                    fill="none"
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  />
+                  <path
+                    className={cn(usageColor, 'transition-all duration-300')}
+                    strokeDasharray={`${usagePercent}, 100`}
+                    strokeWidth="4"
+                    strokeLinecap="round"
+                    stroke="currentColor"
+                    fill="none"
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  />
+                </svg>
+              </button>
+
+              {isUsageOpen && (
+                <div className="absolute bottom-full right-0 z-50 mb-2 w-60 rounded-lg border border-border bg-card p-3 shadow-xl">
+                  <div className="flex items-center justify-between text-ui-xs">
+                    <span className="font-medium text-foreground">Context window</span>
+                    <span className={cn('font-mono font-semibold', usageColor)}>
+                      {usagePercent.toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="mt-1.5 flex items-baseline justify-between gap-2 font-mono text-3xs text-muted-foreground">
+                    <span className="truncate">
+                      {formatTokens(usage?.usedTokens)} / {formatTokens(usage?.contextWindow)}
+                    </span>
+                    <span className="shrink-0 truncate">{usage?.model || effectiveModel || 'model'}</span>
+                  </div>
+                  <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted/40">
+                    <div
+                      className={cn(
+                        'h-full rounded-full transition-all duration-300',
+                        usagePercent >= 90 ? 'bg-red-500' : usagePercent >= 70 ? 'bg-amber-500' : 'bg-emerald-500'
+                      )}
+                      style={{ width: `${usagePercent}%` }}
+                    />
+                  </div>
+                  <div className="mt-1.5 text-3xs text-muted-foreground">
+                    {usage
+                      ? 'Approximate context used by this session.'
+                      : 'Usage appears after the first turn.'}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Send / Stop Circular Button */}

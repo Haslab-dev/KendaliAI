@@ -54,7 +54,7 @@ export const MobileAgentDrawer: React.FC<MobileAgentDrawerProps> = ({
     activeSession,
     activeSessionId,
     selectSession,
-    createSessionForAgent,
+    openMainSession,
     createSessionForGroup,
   } = useSessionStore();
 
@@ -113,17 +113,8 @@ export const MobileAgentDrawer: React.FC<MobileAgentDrawerProps> = ({
     setActiveNavTab('chat');
     navigate('agent');
 
-    // Find latest session for this agent or create a fresh one
-    const matching = (sessions || [])
-      .filter((s) => s.agentId === agentId && s.type !== 'group')
-      .sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0));
-
-    if (matching.length > 0) {
-      await selectSession(matching[0].id);
-    } else {
-      const newSid = await createSessionForAgent(agentId);
-      await selectSession(newSid);
-    }
+    // Switching agents always lands on that agent's single Main Chat.
+    await openMainSession(agentId);
   };
 
   const handleSelectGroup = async (group: any) => {

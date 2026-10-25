@@ -33,6 +33,16 @@ type Message struct {
 	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string     `json:"tool_call_id,omitempty"`
 	Name       string     `json:"name,omitempty"`
+	// Images carries inline vision inputs for multimodal providers. Providers
+	// that only accept text ignore it.
+	Images []ImageInput `json:"images,omitempty"`
+}
+
+// ImageInput is one inline image part (base64 payload or remote URL).
+type ImageInput struct {
+	Mime   string `json:"mime,omitempty"`
+	Base64 string `json:"base64,omitempty"`
+	URL    string `json:"url,omitempty"`
 }
 
 // ToolCall is a single native function call requested by the model.

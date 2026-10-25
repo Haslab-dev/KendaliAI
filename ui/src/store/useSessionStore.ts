@@ -3,6 +3,10 @@ import { Session, SessionMessage, ToolCallRecord } from '../types';
 import { useProfileStore } from './useProfileStore';
 import { useAgentStore } from './useAgentStore';
 
+// De-duplicates rapid agent switches: one Main Chat request per agent at a
+// time, even if the rail is clicked repeatedly.
+const mainSessionRequests = new Map<string, Promise<string>>();
+
 /**
  * The agent's Main Chat is the default, undeletable session every agent owns.
  * Flagged via metadata.isMain (with a legacy title fallback).
@@ -18,6 +22,46 @@ export function isMainSession(sess: Session | null | undefined): boolean {
   return (sess.title || '').trim().toLowerCase() === 'main chat';
 }
 
+export interface SessionStreamState {
+  messageId: string | null;
+  agentId?: string;
+  model?: string;
+  content: string;
+  thought: string;
+  toolCalls: ToolCallRecord[];
+  startedAt: number;
+  status: 'streaming' | 'idle';
+}
+
+export interface SessionUsage {
+  usedTokens: number;
+  contextWindow: number;
+  percent: number;
+  model?: string;
+  updatedAt: number;
+}
+
+const EMPTY_STREAM: SessionStreamState = {
+  messageId: null,
+  content: '',
+  thought: '',
+  toolCalls: [],
+  startedAt: 0,
+  status: 'idle',
+};
+
+// Mirrors the active session's stream into the legacy flat fields so existing
+// chat views keep rendering without knowing about the per-session map.
+function streamFields(stream?: SessionStreamState) {
+  return {
+    isStreaming: stream?.status === 'streaming',
+    streamingMessageId: stream?.messageId ?? null,
+    streamingContent: stream?.content ?? '',
+    streamingThought: stream?.thought ?? '',
+    streamingToolCalls: stream?.toolCalls ?? [],
+  };
+}
+
 export interface SessionStoreState {
   sessions: Session[];
   activeSessionId: string | null;
@@ -28,7 +72,12 @@ export interface SessionStoreState {
   messages: SessionMessage[];
   isLoadingMessages: boolean;
 
-  // Live streaming states for current turn
+  // Per-session live streams — every session runs independently, so a turn in
+  // one session never blocks or overwrites another.
+  streams: Record<string, SessionStreamState>;
+  usageBySession: Record<string, SessionUsage>;
+
+  // Mirrors of the active session's stream (kept for existing views)
   isStreaming: boolean;
   streamingMessageId: string | null;
   streamingContent: string;
@@ -56,16 +105,22 @@ export interface SessionStoreState {
   updateSessionMetadata: (sessionId: string, metadata: Record<string, any>) => Promise<void>;
 
   // Chat Turn Actions
-  sendMessage: (content: string, options?: { agentId?: string; images?: string[]; model?: string; engine?: string; acpAgent?: string }) => Promise<void>;
+  sendMessage: (content: string, options?: { agentId?: string; images?: string[]; attachments?: import('../types').Attachment[]; model?: string; engine?: string; acpAgent?: string; sessionId?: string }) => Promise<void>;
   stopSession: (sessionId?: string) => Promise<void>;
 
-  // Streaming Reducers (fed by WebSocket in useAgentSocket)
+  // Context usage
+  setUsage: (sessionId: string, usage: Partial<SessionUsage> & { usedTokens?: number; contextWindow?: number; percent?: number }) => void;
+  loadUsage: (sessionId: string) => Promise<void>;
+
+  // Streaming Reducers (fed by WebSocket in useAgentSocket). sessionId defaults
+  // to the active session when omitted.
   appendMessage: (msg: SessionMessage) => void;
-  startStreamingMessage: (id: string, agentId?: string, model?: string) => void;
-  appendStreamingTextDelta: (delta: string) => void;
-  appendStreamingThoughtDelta: (delta: string) => void;
-  upsertStreamingToolCall: (tc: ToolCallRecord) => void;
+  startStreamingMessage: (sessionId: string | undefined, id: string, agentId?: string, model?: string) => void;
+  appendStreamingTextDelta: (sessionId: string | undefined, delta: string) => void;
+  appendStreamingThoughtDelta: (sessionId: string | undefined, delta: string) => void;
+  upsertStreamingToolCall: (sessionId: string | undefined, tc: ToolCallRecord) => void;
   finalizeStreamingMessage: (msg: SessionMessage) => void;
+  isSessionStreaming: (sessionId?: string | null) => boolean;
 }
 
 export const useSessionStore = create<SessionStoreState>((set, get) => ({
@@ -76,6 +131,9 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
 
   messages: [],
   isLoadingMessages: false,
+
+  streams: {},
+  usageBySession: {},
 
   isStreaming: false,
   streamingMessageId: null,
@@ -132,7 +190,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
 
   selectSession: async (sessionId: string | null) => {
     if (!sessionId) {
-      set({ activeSessionId: null, activeSession: null, messages: [] });
+      set({ activeSessionId: null, activeSession: null, messages: [], ...streamFields(undefined) });
       useAgentStore.getState().setComposerTarget({ kind: 'native', id: 'rakit-kode' });
       return;
     }
@@ -157,7 +215,14 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       }
     }
 
-    set({ activeSessionId: sessionId, activeSession: session, isLoadingMessages: true, messages: [] });
+    set({
+      activeSessionId: sessionId,
+      activeSession: session,
+      isLoadingMessages: true,
+      messages: [],
+      ...streamFields(get().streams[sessionId]),
+    });
+    void get().loadUsage(sessionId);
 
     if (session?.type === 'group' || (session?.metadata && session.metadata.includes('groupId'))) {
       let gId = session.agentId;
@@ -202,18 +267,32 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     }
   },
 
-  openMainSession: async (agentId: string) => {
-    // Open the agent's Main Chat, creating it on first visit.
-    const existing = get().sessions.find(
-      (s) => s.type !== 'group' && s.agentId === agentId && isMainSession(s)
-    );
-    if (existing) {
-      await get().selectSession(existing.id);
-      return existing.id;
-    }
-    const sid = await get().createSessionForAgent(agentId, 'Main Chat');
-    await get().updateSessionMetadata(sid, { isMain: true });
-    return sid;
+  openMainSession: (agentId: string) => {
+    const pending = mainSessionRequests.get(agentId);
+    if (pending) return pending;
+
+    const request = (async () => {
+      // The server owns Main Chat identity: it reuses the existing session,
+      // merges duplicates, and creates one only when the agent has none.
+      const res = await fetch('/api/sessions/main', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId }),
+      });
+      if (!res.ok) {
+        const detail = (await res.text()).trim();
+        throw new Error(detail || 'Failed to open Main Chat');
+      }
+      const session: Session = await res.json();
+      await get().loadSessions();
+      await get().selectSession(session.id);
+      return session.id;
+    })().finally(() => {
+      mainSessionRequests.delete(agentId);
+    });
+
+    mainSessionRequests.set(agentId, request);
+    return request;
   },
 
   createSessionForAgent: async (agentId: string, title?: string, overrides?: { engine?: string; acpAgent?: string; model?: string }) => {
@@ -226,6 +305,9 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     const metadataObj: Record<string, any> = {
       mode: 'agent',
       engine,
+      // Mark Main Chat atomically at creation so a rapid second lookup cannot
+      // miss it and create a duplicate.
+      ...(title === 'Main Chat' ? { isMain: true } : {}),
       ...(acpAgent ? { acpAgent } : {}),
       ...(model ? { model } : {}),
     };
@@ -413,6 +495,10 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
 
   sendMessage: async (content: string, options) => {
     let { activeSessionId, activeSession } = get();
+    if (options?.sessionId && options.sessionId !== activeSessionId) {
+      activeSessionId = options.sessionId;
+      activeSession = get().sessions.find((s) => s.id === options.sessionId) || activeSession;
+    }
     if (!activeSessionId) {
       const { activeGroup, selectedAgentId, activeNavTab } = useProfileStore.getState();
       if (activeNavTab === 'groups' && activeGroup) {
@@ -453,15 +539,27 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       role: 'user',
       content,
       model: chosenModel,
+      attachments: options?.attachments,
       createdAt: Date.now(),
     };
 
+    const targetSessionId = activeSessionId;
+    const isActive = targetSessionId === get().activeSessionId;
+    const stream: SessionStreamState = {
+      messageId: null,
+      agentId: options?.agentId || activeSession?.agentId,
+      model: chosenModel,
+      content: '',
+      thought: '',
+      toolCalls: [],
+      startedAt: Date.now(),
+      status: 'streaming',
+    };
     set((state) => ({
-      messages: [...state.messages, userMsg],
-      isStreaming: true,
-      streamingContent: '',
-      streamingThought: '',
-      streamingToolCalls: [],
+      streams: { ...state.streams, [targetSessionId]: stream },
+      ...(isActive
+        ? { messages: [...state.messages, userMsg], ...streamFields(stream) }
+        : {}),
     }));
 
     // Auto-update session title if it's currently a placeholder or generic group/task name
@@ -503,15 +601,31 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
           engine: chosenEngine,
           acpAgent: chosenAcpAgent,
           images: options?.images,
+          attachments: options?.attachments,
         }),
       });
 
       if (!res.ok) {
-        throw new Error(`Failed to send message: ${res.statusText}`);
+        let detail = res.statusText;
+        try {
+          const body = await res.json();
+          if (body?.error) detail = body.error;
+        } catch {}
+        throw new Error(detail || `Failed to send message: ${res.status}`);
       }
     } catch (err: any) {
       console.error('[useSessionStore] sendMessage error:', err);
-      set({ isStreaming: false });
+      set((state) => {
+        const current = state.streams[targetSessionId];
+        const streams = {
+          ...state.streams,
+          [targetSessionId]: { ...(current || EMPTY_STREAM), status: 'idle' as const },
+        };
+        return {
+          streams,
+          ...(targetSessionId === state.activeSessionId ? streamFields(streams[targetSessionId]) : {}),
+        };
+      });
     }
   },
 
@@ -524,48 +638,142 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     } catch (err) {
       console.error('[useSessionStore] stopSession error:', err);
     } finally {
-      set({ isStreaming: false });
+      set((state) => {
+        const current = state.streams[targetId];
+        const streams = {
+          ...state.streams,
+          [targetId]: { ...(current || EMPTY_STREAM), status: 'idle' as const },
+        };
+        return {
+          streams,
+          ...(targetId === state.activeSessionId ? streamFields(streams[targetId]) : {}),
+        };
+      });
     }
   },
 
-  startStreamingMessage: (id: string, agentId?: string, model?: string) => {
-    set({
-      isStreaming: true,
-      streamingMessageId: id,
-      streamingContent: '',
-      streamingThought: '',
-      streamingToolCalls: [],
+  setUsage: (sessionId, usage) => {
+    if (!sessionId) return;
+    const window = usage.contextWindow ?? get().usageBySession[sessionId]?.contextWindow ?? 0;
+    const used = usage.usedTokens ?? get().usageBySession[sessionId]?.usedTokens ?? 0;
+    const percent = usage.percent ?? (window > 0 ? Math.min(100, (used / window) * 100) : 0);
+    set((state) => ({
+      usageBySession: {
+        ...state.usageBySession,
+        [sessionId]: {
+          usedTokens: used,
+          contextWindow: window,
+          percent,
+          model: usage.model ?? state.usageBySession[sessionId]?.model,
+          updatedAt: Date.now(),
+        },
+      },
+    }));
+  },
+
+  loadUsage: async (sessionId: string) => {
+    if (!sessionId) return;
+    try {
+      const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/usage`);
+      if (!res.ok) return;
+      const data = await res.json();
+      get().setUsage(sessionId, {
+        usedTokens: data.usedTokens ?? 0,
+        contextWindow: data.contextWindow ?? 0,
+        percent: data.percent,
+        model: data.model,
+      });
+    } catch {
+      // Usage is advisory; ignore transient failures.
+    }
+  },
+
+  isSessionStreaming: (sessionId?: string | null) => {
+    const sid = sessionId || get().activeSessionId;
+    if (!sid) return false;
+    return get().streams[sid]?.status === 'streaming';
+  },
+
+  startStreamingMessage: (sessionId: string | undefined, id: string, agentId?: string, model?: string) => {
+    const sid = sessionId || get().activeSessionId;
+    if (!sid) return;
+    set((state) => {
+      const stream: SessionStreamState = {
+        messageId: id,
+        agentId,
+        model,
+        content: '',
+        thought: '',
+        toolCalls: [],
+        startedAt: Date.now(),
+        status: 'streaming',
+      };
+      const streams = { ...state.streams, [sid]: stream };
+      return { streams, ...(sid === state.activeSessionId ? streamFields(stream) : {}) };
     });
   },
 
-  appendStreamingTextDelta: (delta: string) => {
-    set((state) => ({
-      streamingContent: state.streamingContent + delta,
-    }));
-  },
-
-  appendStreamingThoughtDelta: (delta: string) => {
-    set((state) => ({
-      streamingThought: state.streamingThought + delta,
-    }));
-  },
-
-  upsertStreamingToolCall: (tc: ToolCallRecord) => {
+  appendStreamingTextDelta: (sessionId: string | undefined, delta: string) => {
+    const sid = sessionId || get().activeSessionId;
+    if (!sid || !delta) return;
     set((state) => {
-      const existing = state.streamingToolCalls.findIndex((item) => item.id === tc.id);
+      const prev = state.streams[sid];
+      const stream: SessionStreamState = {
+        ...(prev || EMPTY_STREAM),
+        content: (prev?.content || '') + delta,
+        startedAt: prev?.startedAt || Date.now(),
+        status: 'streaming',
+      };
+      const streams = { ...state.streams, [sid]: stream };
+      return { streams, ...(sid === state.activeSessionId ? streamFields(stream) : {}) };
+    });
+  },
+
+  appendStreamingThoughtDelta: (sessionId: string | undefined, delta: string) => {
+    const sid = sessionId || get().activeSessionId;
+    if (!sid || !delta) return;
+    set((state) => {
+      const prev = state.streams[sid];
+      const stream: SessionStreamState = {
+        ...(prev || EMPTY_STREAM),
+        thought: (prev?.thought || '') + delta,
+        startedAt: prev?.startedAt || Date.now(),
+        status: 'streaming',
+      };
+      const streams = { ...state.streams, [sid]: stream };
+      return { streams, ...(sid === state.activeSessionId ? streamFields(stream) : {}) };
+    });
+  },
+
+  upsertStreamingToolCall: (sessionId: string | undefined, tc: ToolCallRecord) => {
+    const sid = sessionId || get().activeSessionId;
+    if (!sid) return;
+    set((state) => {
+      const prev = state.streams[sid] || EMPTY_STREAM;
+      const existing = prev.toolCalls.findIndex((item) => item.id === tc.id);
+      let toolCalls: ToolCallRecord[];
       if (existing >= 0) {
-        const copy = [...state.streamingToolCalls];
-        const existingTc = copy[existing];
-        copy[existing] = {
-          ...existingTc,
-          ...tc,
-          arguments: (tc.arguments && Object.keys(tc.arguments).length > 0)
-            ? tc.arguments
-            : existingTc.arguments,
-        };
-        return { streamingToolCalls: copy };
+        toolCalls = prev.toolCalls.map((item, i) => {
+          if (i !== existing) return item;
+          return {
+            ...item,
+            ...tc,
+            arguments: (tc.arguments && Object.keys(tc.arguments).length > 0)
+              ? tc.arguments
+              : item.arguments,
+          };
+        });
+      } else {
+        toolCalls = [...prev.toolCalls, tc];
       }
-      return { streamingToolCalls: [...state.streamingToolCalls, tc] };
+      const stream: SessionStreamState = {
+        ...prev,
+        toolCalls,
+        startedAt: prev.startedAt || Date.now(),
+        status: 'streaming',
+      };
+      const streams = { ...state.streams, [sid]: stream };
+      return { streams, ...(sid === state.activeSessionId ? streamFields(stream) : {}) };
     });
   },
 
@@ -609,27 +817,50 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   },
 
   finalizeStreamingMessage: (msg: any) => {
-    if (msg?.role === 'user') {
+    if (!msg) return;
+    if (msg.role === 'user') {
       get().appendMessage(msg);
       return;
     }
 
     set((state) => {
-      const activeId = state.activeSessionId;
-      const id = msg.id || state.streamingMessageId || `asst-${Date.now()}`;
-      const content = msg.content !== undefined ? msg.content : state.streamingContent;
-      const thought = msg.thought !== undefined ? msg.thought : state.streamingThought;
+      const sid = msg.sessionId || state.activeSessionId || '';
+      if (!sid) return {};
+      const stream = state.streams[sid];
+      const isActive = sid === state.activeSessionId;
       const finalMsg: SessionMessage = {
-        id,
-        sessionId: msg.sessionId || activeId || '',
-        agentId: msg.agentId,
+        id: msg.id || stream?.messageId || `asst-${Date.now()}`,
+        sessionId: sid,
+        agentId: msg.agentId ?? stream?.agentId,
         channel: msg.channel || 'web',
         role: (msg.role || 'assistant') as any,
-        content,
-        thought,
-        toolCalls: state.streamingToolCalls.length > 0 ? state.streamingToolCalls : msg.toolCalls,
+        content: msg.content !== undefined ? msg.content : (stream?.content || ''),
+        thought: msg.thought !== undefined ? msg.thought : (stream?.thought || ''),
+        toolCalls: (msg.toolCalls && msg.toolCalls.length > 0)
+          ? msg.toolCalls
+          : (stream?.toolCalls || []),
+        tokens: msg.tokens,
+        model: msg.model || stream?.model,
+        attachments: msg.attachments,
         createdAt: msg.createdAt || Date.now(),
       };
+
+      // Keep the finished content in the stream map so switching back to a
+      // session whose turn completed in the background still shows it.
+      const finishedStream: SessionStreamState = {
+        ...(stream || EMPTY_STREAM),
+        messageId: finalMsg.id,
+        content: finalMsg.content,
+        thought: finalMsg.thought || '',
+        toolCalls: finalMsg.toolCalls || [],
+        model: finalMsg.model,
+        status: 'idle',
+      };
+      const streams = { ...state.streams, [sid]: finishedStream };
+
+      if (!isActive) {
+        return { streams };
+      }
 
       const existingIdx = state.messages.findIndex((m) => m.id === finalMsg.id);
       const updatedMessages = existingIdx >= 0
@@ -637,12 +868,9 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
         : [...state.messages, finalMsg];
 
       return {
+        streams,
         messages: updatedMessages,
-        isStreaming: false,
-        streamingMessageId: null,
-        streamingContent: '',
-        streamingThought: '',
-        streamingToolCalls: [],
+        ...streamFields(finishedStream),
       };
     });
   },

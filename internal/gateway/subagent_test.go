@@ -46,11 +46,13 @@ func TestSpawnSubagentValidation(t *testing.T) {
 		t.Fatalf("expected non-empty task error, got: %s", res)
 	}
 
-	// 2. Recursive invocation inside subtask session
+	// 2. Sub-agent invoked from a subtask session is allowed up to the
+	// configured depth; this store-less runtime must fail gracefully instead
+	// of panicking.
 	childSpawnTool := rt.SpawnSubagentTool(SubagentSessionPrefix + "abc12345")
 	res = childSpawnTool.Execute(context.Background(), map[string]interface{}{"task": "do deep work"})
-	if !strings.Contains(res, "cannot be called from within a sub-agent session") {
-		t.Fatalf("expected recursion error, got: %s", res)
+	if !strings.Contains(res, "storage unavailable") {
+		t.Fatalf("expected a graceful storage error, got: %s", res)
 	}
 }
 

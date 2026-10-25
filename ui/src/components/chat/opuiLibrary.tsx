@@ -25,6 +25,16 @@ export const sendPromptAction = defineAction({
   }),
 });
 
+/** Places feedback text into the chat input (without sending) so the user can
+ * review, edit, and submit it themselves. Fired as { type: 'feedback' }. */
+export const feedbackAction = defineAction({
+  name: 'feedback',
+  description: 'Put feedback text into the chat input box for review instead of sending it immediately',
+  params: z.object({
+    text: z.string().describe('Feedback text to place in the chat input'),
+  }),
+});
+
 const toneClass = (tone?: string) => {
   switch (tone) {
     case 'success':
@@ -56,7 +66,7 @@ export const Card = defineComponent({
   component: ({ props }) => {
     const children = useChildren(props.children as unknown[] | undefined);
     return (
-      <div className="my-2 rounded-xl border border-border bg-card/60 p-4 shadow-xs">
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         {props.title && <div className="text-sm font-semibold text-foreground">{props.title}</div>}
         {props.subtitle && <div className="mt-0.5 text-xs text-muted-foreground">{props.subtitle}</div>}
         {children && <div className="mt-3 flex flex-col gap-2">{children}</div>}
@@ -228,12 +238,17 @@ export const Divider = defineComponent({
  * programs always wrap content in a Card surface. */
 export const opuiLibrary = createLibrary({
   components: [Card, Stack, Text, Heading, Metric, Badge, Button, Table, List, Image, Divider],
-  actions: [sendPromptAction],
+  actions: [sendPromptAction, feedbackAction],
   root: 'Card',
 });
 
-/** Map a Renderer ActionEvent onto this app: send chat prompts, open URLs. */
-export function handleOpenUIAction(event: ActionEvent, sendPrompt: (text: string) => void) {
+/** Map a Renderer ActionEvent onto this app: send chat prompts, fill the
+ * composer with feedback, or open URLs. */
+export function handleOpenUIAction(
+  event: ActionEvent,
+  sendPrompt: (text: string) => void,
+  fillInput: (text: string) => void
+) {
   if (event.type === 'open_url') {
     const url = (event.params as { url?: string }).url;
     if (url) window.open(url, '_blank', 'noopener');
@@ -242,6 +257,11 @@ export function handleOpenUIAction(event: ActionEvent, sendPrompt: (text: string
   if (event.type === 'send_prompt') {
     const prompt = (event.params as { prompt?: string }).prompt || event.humanFriendlyMessage;
     if (prompt) sendPrompt(prompt);
+    return;
+  }
+  if (event.type === 'feedback' || event.type === 'fill_input') {
+    const text = (event.params as { text?: string }).text || event.humanFriendlyMessage;
+    if (text) fillInput(text);
     return;
   }
   if (event.type === 'continue_conversation') {

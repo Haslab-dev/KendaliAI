@@ -14,10 +14,10 @@ import (
 // Exact model capacity mapping for prominent foundation models
 var exactModelCapacities = map[string]int{
 	// 1.05M token models
-	"gpt-6-astra":   1050000,
-	"gpt-5-6-luna":  1050000,
-	"gpt-6":         1050000,
-	"gpt-5.6":       1050000,
+	"gpt-6-astra":  1050000,
+	"gpt-5-6-luna": 1050000,
+	"gpt-6":        1050000,
+	"gpt-5.6":      1050000,
 
 	// 1M token models
 	"deepseek-v4-flash":          1000000,
@@ -39,24 +39,24 @@ var exactModelCapacities = map[string]int{
 	"codestral":        256000,
 
 	// 128K token models
-	"gpt-oss-120b":                  128000,
-	"gpt-oss":                       128000,
-	"qwen-3.8-27b":                  128000,
-	"qwen3.7-flash-2026-07-15":      128000,
-	"minimax-m2.7-highspeed":        128000,
+	"gpt-oss-120b":                   128000,
+	"gpt-oss":                        128000,
+	"qwen-3.8-27b":                   128000,
+	"qwen3.7-flash-2026-07-15":       128000,
+	"minimax-m2.7-highspeed":         128000,
 	"nemotron-3.5-lightning-30b-a3b": 128000,
-	"nemotron-3-nano-omni-30b-a3b":  128000,
-	"nemotron-4-340b-instruct":      128000,
-	"mistral-small-latest":          128000,
-	"phi-3.5-moe-instruct":          128000,
-	"deepseek-r1-distill-llama-70b": 128000,
-	"laguna-s-2.1":                  128000,
-	"laguna-xs-2.1":                 128000,
-	"ling-3.0-flash-fin":            128000,
-	"north-mini-code":               128000,
-	"muse-spark-1.3-contributor":    128000,
-	"kira-3.5-flash":                128000,
-	"agnes-2-5-flash":               128000,
+	"nemotron-3-nano-omni-30b-a3b":   128000,
+	"nemotron-4-340b-instruct":       128000,
+	"mistral-small-latest":           128000,
+	"phi-3.5-moe-instruct":           128000,
+	"deepseek-r1-distill-llama-70b":  128000,
+	"laguna-s-2.1":                   128000,
+	"laguna-xs-2.1":                  128000,
+	"ling-3.0-flash-fin":             128000,
+	"north-mini-code":                128000,
+	"muse-spark-1.3-contributor":     128000,
+	"kira-3.5-flash":                 128000,
+	"agnes-2-5-flash":                128000,
 }
 
 // ModelContextCapacity maps models to their maximum input token limits
@@ -125,6 +125,73 @@ func EstimateTokens(text string) int {
 		return 0
 	}
 	return (len(text) + 3) / 4
+}
+
+// attachmentHistoryNote keeps prior-turn attachment names in the transcript
+// without re-sending their bytes to the model.
+func attachmentHistoryNote(m SessionMessage) string {
+	if len(m.Attachments) == 0 {
+		return ""
+	}
+	names := make([]string, 0, len(m.Attachments))
+	for _, a := range m.Attachments {
+		names = append(names, a.Name)
+	}
+	return "\n\n[Attached files: " + strings.Join(names, ", ") + "]"
+}
+
+// EstimateMessagesTokens sums the character-based token estimate for a set of
+// provider messages, including a small per-message overhead.
+func EstimateMessagesTokens(msgs []agent.Message) int {
+	total := 0
+	for _, m := range msgs {
+		total += EstimateTokens(m.Content) + 4
+	}
+	return total
+}
+
+// ComputeSessionUsage estimates how much of the model's context window the
+// session currently occupies. It mirrors the recent-window rule used by
+// AssembleLayeredContext, so the number reported to the composer is close to
+// what the next turn will actually send.
+func ComputeSessionUsage(store *Store, sessionID, model string) (used, window int) {
+	window = ModelContextCapacity(model)
+	if store == nil {
+		return 0, window
+	}
+	history, err := store.GetSessionMessages(sessionID)
+	if err != nil {
+		return 0, window
+	}
+	cfg := ResolveContextConfig(model)
+	// Baseline for the system prompt, persona, skills and tool schemas.
+	used = 2000
+	start := len(history) - cfg.MaxRecentWindow
+	if start < 0 {
+		start = 0
+	}
+	for _, m := range history[start:] {
+		used += EstimateTokens(m.Content) + 4
+	}
+	if window > 0 && used > window {
+		used = window
+	}
+	return used, window
+}
+
+// UsagePercent returns the clamped percentage of the context window in use.
+func UsagePercent(used, window int) float64 {
+	if window <= 0 {
+		return 0
+	}
+	p := float64(used) / float64(window) * 100
+	if p < 0 {
+		return 0
+	}
+	if p > 100 {
+		return 100
+	}
+	return p
 }
 
 // LayeredContextConfig controls context assembly limits
@@ -240,7 +307,7 @@ func AssembleLayeredContext(
 
 			conversationMsgs = append(conversationMsgs, agent.Message{
 				Role:    role,
-				Content: prefix + cleanContent,
+				Content: prefix + cleanContent + attachmentHistoryNote(m),
 			})
 		}
 		return conversationMsgs
@@ -406,7 +473,7 @@ func AssembleLayeredContext(
 
 		conversationMsgs = append(conversationMsgs, agent.Message{
 			Role:    role,
-			Content: prefix + cleanContent,
+			Content: prefix + cleanContent + attachmentHistoryNote(m),
 		})
 	}
 

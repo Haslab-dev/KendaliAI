@@ -56,6 +56,25 @@ storage:
   #   publicUrl: https://cdn.example.com
   #   region: auto
 
+# Chat attachments: files/images uploaded with a message.
+attachments:
+  maxFiles: 5
+  maxFileBytes: 5242880      # 5 MB per file
+  maxTotalBytes: 20971520    # 20 MB per message
+  # allowedMime: [".png", ".jpg", ".pdf", ".md", ".txt"]
+  #   ^ optional extension allowlist; when empty a safe default list is used
+
+# Model used by the generate_image tool when the agent does not specify one.
+# Strongly recommended: gpt-image-1, dall-e-3, imagen-3.0-generate-002, or
+# gemini-2.5-flash-image (must be enabled on a provider in Settings → Providers).
+# defaultImageModel: gpt-image-1
+
+# Sub-agent fan-out limits.
+orchestration:
+  maxSubagentDepth: 2          # how many delegation levels are allowed
+  maxConcurrentSubagents: 6    # sub-agents running at once
+  subagentTimeoutMinutes: 20
+
 # File access permissions. Deny-list takes priority over allow-list.
 # Built-in sensitive patterns (config.yaml, .env, .git/, .ssh/, *.key, *.pem, etc.) are ALWAYS denied.
 permissions:

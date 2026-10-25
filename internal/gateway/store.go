@@ -58,6 +58,10 @@ type ModelItem struct {
 	ID      string `json:"id"`
 	Name    string `json:"name"`
 	Enabled bool   `json:"enabled"`
+	// Capability overrides. When unset they are inferred from the model id
+	// (see InferModelCapabilities).
+	SupportsVision   *bool `json:"supportsVision,omitempty"`
+	SupportsImageGen *bool `json:"supportsImageGen,omitempty"`
 }
 
 type ProviderConfig struct {
@@ -74,28 +78,28 @@ type ProviderConfig struct {
 }
 
 type AgentConfig struct {
-	ID                 string            `json:"id"`
-	Name               string            `json:"name"`
-	Role               string            `json:"role,omitempty"`
-	Department         string            `json:"department,omitempty"`
-	Description        string            `json:"description"`
-	ProviderID         string            `json:"providerId"`
-	Model              string            `json:"model"`
-	SystemPrompt       string            `json:"systemPrompt"`
-	Skills             []string          `json:"skills"`
-	Tools              []string          `json:"tools"`
-	MCP                []string          `json:"mcp"`
-	MemoryScopes       []string          `json:"memoryScopes"`
-	Policy             map[string]string `json:"policy"`
-	Plugins            []string          `json:"plugins,omitempty"`
-	Avatar             string            `json:"avatar"`
-	IsDefault          bool              `json:"isDefault"`
-	Engine             string            `json:"engine,omitempty"`
-	ACPAgent           string            `json:"acpAgent,omitempty"`
-	TelegramConnected  bool              `json:"telegramConnected"`
-	TelegramBot        *TelegramBotConfig `json:"telegramBot,omitempty"`
-	CreatedAt          int64             `json:"createdAt"`
-	UpdatedAt          int64             `json:"updatedAt"`
+	ID                string             `json:"id"`
+	Name              string             `json:"name"`
+	Role              string             `json:"role,omitempty"`
+	Department        string             `json:"department,omitempty"`
+	Description       string             `json:"description"`
+	ProviderID        string             `json:"providerId"`
+	Model             string             `json:"model"`
+	SystemPrompt      string             `json:"systemPrompt"`
+	Skills            []string           `json:"skills"`
+	Tools             []string           `json:"tools"`
+	MCP               []string           `json:"mcp"`
+	MemoryScopes      []string           `json:"memoryScopes"`
+	Policy            map[string]string  `json:"policy"`
+	Plugins           []string           `json:"plugins,omitempty"`
+	Avatar            string             `json:"avatar"`
+	IsDefault         bool               `json:"isDefault"`
+	Engine            string             `json:"engine,omitempty"`
+	ACPAgent          string             `json:"acpAgent,omitempty"`
+	TelegramConnected bool               `json:"telegramConnected"`
+	TelegramBot       *TelegramBotConfig `json:"telegramBot,omitempty"`
+	CreatedAt         int64              `json:"createdAt"`
+	UpdatedAt         int64              `json:"updatedAt"`
 }
 
 type ChatParticipant struct {
@@ -103,7 +107,7 @@ type ChatParticipant struct {
 	ChatID          string `json:"chatId"`
 	ParticipantType string `json:"participantType"` // "agent" or "user"
 	ParticipantID   string `json:"participantId"`
-	Role            string `json:"role"`            // "owner", "member"
+	Role            string `json:"role"` // "owner", "member"
 	JoinedAt        int64  `json:"joinedAt"`
 }
 
@@ -176,7 +180,7 @@ type SessionMessage struct {
 	SessionID        string           `json:"sessionId"`
 	AgentID          string           `json:"agentId,omitempty"`
 	Channel          string           `json:"channel"`
-	Role             string           `json:"role"` // user, assistant, system, tool
+	Role             string           `json:"role"`                 // user, assistant, system, tool
 	SenderType       string           `json:"senderType,omitempty"` // user, agent, routine, system
 	SenderID         string           `json:"senderId,omitempty"`
 	SenderName       string           `json:"senderName,omitempty"`
@@ -190,9 +194,24 @@ type SessionMessage struct {
 	Model            string           `json:"model,omitempty"`
 	// RagSources lists the documents injected as RAG context for this
 	// assistant turn, so the UI can show what grounded the answer.
-	RagSources []RagSource      `json:"ragSources,omitempty"`
+	RagSources []RagSource       `json:"ragSources,omitempty"`
 	Reactions  []MessageReaction `json:"reactions,omitempty"`
-	CreatedAt  int64            `json:"createdAt"`
+	// Attachments are files/images the user attached to this message.
+	Attachments []Attachment `json:"attachments,omitempty"`
+	CreatedAt   int64        `json:"createdAt"`
+}
+
+// Attachment describes an uploaded file bound to a message. Path is the
+// on-disk location (local storage) and URL is the UI-facing endpoint.
+type Attachment struct {
+	ID        string `json:"id"`
+	SessionID string `json:"-"`
+	Name      string `json:"name"`
+	Mime      string `json:"mime"`
+	Kind      string `json:"kind"` // image, pdf, text, other
+	Size      int64  `json:"size"`
+	URL       string `json:"url"`
+	Path      string `json:"path,omitempty"`
 }
 
 type MessageReaction struct {
@@ -485,7 +504,14 @@ func parseModelsJSON(raw string) []ModelItem {
 			if en, ok := m["enabled"].(bool); ok {
 				enabled = en
 			}
-			items = append(items, ModelItem{ID: id, Name: name, Enabled: enabled})
+			item := ModelItem{ID: id, Name: name, Enabled: enabled}
+			if v, ok := m["supportsVision"].(bool); ok {
+				item.SupportsVision = &v
+			}
+			if v, ok := m["supportsImageGen"].(bool); ok {
+				item.SupportsImageGen = &v
+			}
+			items = append(items, item)
 		}
 		if len(items) > 0 {
 			return items
@@ -862,6 +888,194 @@ func (s *Store) DeleteSession(id string) error {
 	return err
 }
 
+// sessionIsMain reports whether a non-group session is an agent's Main Chat.
+// Metadata is authoritative; the title fallback covers older rows created
+// before isMain was written.
+func sessionIsMain(sess Session) bool {
+	if sess.Type == "group" {
+		return false
+	}
+	if strings.TrimSpace(sess.Metadata) != "" {
+		var meta map[string]interface{}
+		if err := json.Unmarshal([]byte(sess.Metadata), &meta); err == nil {
+			if isMain, ok := meta["isMain"].(bool); ok {
+				return isMain
+			}
+		}
+	}
+	// Legacy rows created before isMain was persisted.
+	return strings.EqualFold(strings.TrimSpace(sess.Title), "main chat")
+}
+
+// EnsureMainSession returns the agent's single Main Chat, creating it if
+// needed and merging any duplicate Main Chat sessions into one canonical
+// session. Messages from duplicates are re-parented, never dropped.
+func (s *Store) EnsureMainSession(agentID string) (*Session, error) {
+	return s.resolveMainSession(agentID, true)
+}
+
+// ConsolidateDuplicateMainSessions merges existing duplicate Main Chats for
+// every agent. Runs at startup so old duplicates never reach the UI.
+func (s *Store) ConsolidateDuplicateMainSessions() (int, error) {
+	sessions, err := s.ListSessions()
+	if err != nil {
+		return 0, err
+	}
+	grouped := make(map[string][]Session)
+	for _, sess := range sessions {
+		if sessionIsMain(sess) {
+			grouped[sess.AgentID] = append(grouped[sess.AgentID], sess)
+		}
+	}
+	merged := 0
+	for _, list := range grouped {
+		if len(list) < 2 {
+			continue
+		}
+		if _, err := s.consolidateMainSessions(list); err != nil {
+			return merged, err
+		}
+		merged += len(list) - 1
+	}
+	return merged, nil
+}
+
+func (s *Store) resolveMainSession(agentID string, create bool) (*Session, error) {
+	sessions, err := s.ListSessions()
+	if err != nil {
+		return nil, err
+	}
+	var mains []Session
+	for _, sess := range sessions {
+		if sess.AgentID == agentID && sessionIsMain(sess) {
+			mains = append(mains, sess)
+		}
+	}
+	if len(mains) == 0 {
+		if !create {
+			return nil, nil
+		}
+		return s.createMainSession(agentID)
+	}
+	return s.consolidateMainSessions(mains)
+}
+
+// consolidateMainSessions picks the most recently active Main Chat as the
+// canonical one, moves messages from the rest into it, then deletes the
+// duplicates.
+func (s *Store) consolidateMainSessions(mains []Session) (*Session, error) {
+	if len(mains) == 0 {
+		return nil, fmt.Errorf("no main sessions")
+	}
+	sort.SliceStable(mains, func(i, j int) bool {
+		if mains[i].UpdatedAt != mains[j].UpdatedAt {
+			return mains[i].UpdatedAt > mains[j].UpdatedAt
+		}
+		return mains[i].CreatedAt > mains[j].CreatedAt
+	})
+	canonical := mains[0]
+
+	dupIDs := make([]string, 0, len(mains)-1)
+	for _, sess := range mains[1:] {
+		dupIDs = append(dupIDs, sess.ID)
+	}
+	if len(dupIDs) > 0 {
+		if err := s.mergeSessions(canonical.ID, dupIDs); err != nil {
+			return nil, err
+		}
+	}
+
+	// Make the canonical row unambiguous for future lookups.
+	meta := map[string]interface{}{}
+	if canonical.Metadata != "" {
+		_ = json.Unmarshal([]byte(canonical.Metadata), &meta)
+	}
+	if meta == nil {
+		meta = map[string]interface{}{}
+	}
+	if isMain, _ := meta["isMain"].(bool); !isMain {
+		meta["isMain"] = true
+		if b, err := json.Marshal(meta); err == nil {
+			canonical.Metadata = string(b)
+			if err := s.SaveSession(canonical); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return s.GetSession(canonical.ID)
+}
+
+func (s *Store) createMainSession(agentID string) (*Session, error) {
+	meta := map[string]interface{}{"isMain": true, "mode": "agent"}
+	if agent, err := s.GetAgent(agentID); err == nil && agent != nil {
+		engine := agent.Engine
+		if engine == "" {
+			engine = "rakit"
+		}
+		meta["engine"] = engine
+		if agent.ACPAgent != "" {
+			meta["acpAgent"] = agent.ACPAgent
+		}
+		if agent.Model != "" {
+			meta["model"] = agent.Model
+		}
+	}
+	metadataJSON, _ := json.Marshal(meta)
+	sess := Session{
+		ID:        "main_" + uuid.New().String()[:8],
+		AgentID:   agentID,
+		Title:     "Main Chat",
+		Type:      "direct",
+		ChannelID: "web",
+		UserID:    "default",
+		Status:    "active",
+		Metadata:  string(metadataJSON),
+	}
+	if err := s.SaveSession(sess); err != nil {
+		return nil, err
+	}
+	return s.GetSession(sess.ID)
+}
+
+// mergeSessions re-parents every child row of the duplicates to targetID and
+// deletes the duplicate session rows in one transaction.
+func (s *Store) mergeSessions(targetID string, duplicateIDs []string) error {
+	if len(duplicateIDs) == 0 {
+		return nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(duplicateIDs)), ",")
+	withTarget := make([]interface{}, 0, len(duplicateIDs)+1)
+	withTarget = append(withTarget, targetID)
+	for _, id := range duplicateIDs {
+		withTarget = append(withTarget, id)
+	}
+	withoutTarget := make([]interface{}, 0, len(duplicateIDs))
+	for _, id := range duplicateIDs {
+		withoutTarget = append(withoutTarget, id)
+	}
+
+	if _, err := tx.Exec("UPDATE session_messages SET session_id = ? WHERE session_id IN ("+placeholders+")", withTarget...); err != nil {
+		return err
+	}
+	// Optional references (tables always exist in current schema).
+	_, _ = tx.Exec("UPDATE objects SET session_id = ? WHERE session_id IN ("+placeholders+")", withTarget...)
+	_, _ = tx.Exec("UPDATE documents SET session_id = ? WHERE session_id IN ("+placeholders+")", withTarget...)
+	_, _ = tx.Exec("UPDATE agent_tasks SET session_id = ? WHERE session_id IN ("+placeholders+")", withTarget...)
+	_, _ = tx.Exec("UPDATE agent_tasks SET parent_session_id = ? WHERE parent_session_id IN ("+placeholders+")", withTarget...)
+	_, _ = tx.Exec("DELETE FROM chat_participants WHERE chat_id IN ("+placeholders+")", withoutTarget...)
+	_, _ = tx.Exec("DELETE FROM chat_summaries WHERE chat_id IN ("+placeholders+")", withoutTarget...)
+	if _, err := tx.Exec("DELETE FROM sessions WHERE id IN ("+placeholders+")", withoutTarget...); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // --- Chat Participants CRUD ---
 
 func (s *Store) ListChatParticipants(chatID string) ([]ChatParticipant, error) {
@@ -1121,7 +1335,7 @@ func (s *Store) EnsureDirectChatsForAgents() error {
 
 func (s *Store) GetSessionMessages(sessionID string) ([]SessionMessage, error) {
 	rows, err := s.db.Query(`
-		SELECT id, session_id, agent_id, channel, role, COALESCE(sender_type, 'user'), COALESCE(sender_id, ''), COALESCE(sender_name, ''), COALESCE(sender_avatar, ''), COALESCE(recipient_agent_id, ''), content, thought, tool_calls, tool_call_id, tokens, model, rag_sources, COALESCE(reactions, '[]'), created_at
+		SELECT id, session_id, agent_id, channel, role, COALESCE(sender_type, 'user'), COALESCE(sender_id, ''), COALESCE(sender_name, ''), COALESCE(sender_avatar, ''), COALESCE(recipient_agent_id, ''), content, thought, tool_calls, tool_call_id, tokens, model, rag_sources, COALESCE(reactions, '[]'), COALESCE(attachments, '[]'), created_at
 		FROM session_messages WHERE session_id = ? ORDER BY created_at ASC, id ASC`, sessionID)
 	if err != nil {
 		return nil, err
@@ -1131,9 +1345,9 @@ func (s *Store) GetSessionMessages(sessionID string) ([]SessionMessage, error) {
 	res := make([]SessionMessage, 0)
 	for rows.Next() {
 		var m SessionMessage
-		var toolCallsJSON, toolCallID, model, thought, ragSourcesJSON, reactionsJSON sql.NullString
+		var toolCallsJSON, toolCallID, model, thought, ragSourcesJSON, reactionsJSON, attachmentsJSON sql.NullString
 		var agentID sql.NullString
-		if err := rows.Scan(&m.ID, &m.SessionID, &agentID, &m.Channel, &m.Role, &m.SenderType, &m.SenderID, &m.SenderName, &m.SenderAvatar, &m.RecipientAgentID, &m.Content, &thought, &toolCallsJSON, &toolCallID, &m.Tokens, &model, &ragSourcesJSON, &reactionsJSON, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.SessionID, &agentID, &m.Channel, &m.Role, &m.SenderType, &m.SenderID, &m.SenderName, &m.SenderAvatar, &m.RecipientAgentID, &m.Content, &thought, &toolCallsJSON, &toolCallID, &m.Tokens, &model, &ragSourcesJSON, &reactionsJSON, &attachmentsJSON, &m.CreatedAt); err != nil {
 			return nil, err
 		}
 		if agentID.Valid {
@@ -1157,6 +1371,9 @@ func (s *Store) GetSessionMessages(sessionID string) ([]SessionMessage, error) {
 		if reactionsJSON.Valid && reactionsJSON.String != "" {
 			_ = json.Unmarshal([]byte(reactionsJSON.String), &m.Reactions)
 		}
+		if attachmentsJSON.Valid && attachmentsJSON.String != "" {
+			_ = json.Unmarshal([]byte(attachmentsJSON.String), &m.Attachments)
+		}
 		res = append(res, m)
 	}
 	return res, nil
@@ -1164,12 +1381,12 @@ func (s *Store) GetSessionMessages(sessionID string) ([]SessionMessage, error) {
 
 func (s *Store) GetMessage(messageID string) (*SessionMessage, error) {
 	var m SessionMessage
-	var toolCallsJSON, toolCallID, model, thought, ragSourcesJSON, reactionsJSON sql.NullString
+	var toolCallsJSON, toolCallID, model, thought, ragSourcesJSON, reactionsJSON, attachmentsJSON sql.NullString
 	var agentID sql.NullString
 	row := s.db.QueryRow(`
-		SELECT id, session_id, agent_id, channel, role, COALESCE(sender_type, 'user'), COALESCE(sender_id, ''), COALESCE(sender_name, ''), COALESCE(sender_avatar, ''), COALESCE(recipient_agent_id, ''), content, thought, tool_calls, tool_call_id, tokens, model, rag_sources, COALESCE(reactions, '[]'), created_at
+		SELECT id, session_id, agent_id, channel, role, COALESCE(sender_type, 'user'), COALESCE(sender_id, ''), COALESCE(sender_name, ''), COALESCE(sender_avatar, ''), COALESCE(recipient_agent_id, ''), content, thought, tool_calls, tool_call_id, tokens, model, rag_sources, COALESCE(reactions, '[]'), COALESCE(attachments, '[]'), created_at
 		FROM session_messages WHERE id = ?`, messageID)
-	err := row.Scan(&m.ID, &m.SessionID, &agentID, &m.Channel, &m.Role, &m.SenderType, &m.SenderID, &m.SenderName, &m.SenderAvatar, &m.RecipientAgentID, &m.Content, &thought, &toolCallsJSON, &toolCallID, &m.Tokens, &model, &ragSourcesJSON, &reactionsJSON, &m.CreatedAt)
+	err := row.Scan(&m.ID, &m.SessionID, &agentID, &m.Channel, &m.Role, &m.SenderType, &m.SenderID, &m.SenderName, &m.SenderAvatar, &m.RecipientAgentID, &m.Content, &thought, &toolCallsJSON, &toolCallID, &m.Tokens, &model, &ragSourcesJSON, &reactionsJSON, &attachmentsJSON, &m.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -1193,6 +1410,9 @@ func (s *Store) GetMessage(messageID string) (*SessionMessage, error) {
 	}
 	if reactionsJSON.Valid && reactionsJSON.String != "" {
 		_ = json.Unmarshal([]byte(reactionsJSON.String), &m.Reactions)
+	}
+	if attachmentsJSON.Valid && attachmentsJSON.String != "" {
+		_ = json.Unmarshal([]byte(attachmentsJSON.String), &m.Attachments)
 	}
 	return &m, nil
 }
@@ -1251,11 +1471,15 @@ func (s *Store) SaveMessage(m SessionMessage) error {
 	if len(m.Reactions) == 0 {
 		reactionsJSON = []byte("[]")
 	}
+	attachmentsJSON, _ := json.Marshal(m.Attachments)
+	if len(m.Attachments) == 0 {
+		attachmentsJSON = []byte("[]")
+	}
 
 	_, err := s.db.Exec(`
-		INSERT INTO session_messages (id, session_id, agent_id, channel, role, sender_type, sender_id, sender_name, sender_avatar, recipient_agent_id, content, thought, tool_calls, tool_call_id, tokens, model, rag_sources, reactions, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		m.ID, m.SessionID, m.AgentID, m.Channel, m.Role, m.SenderType, m.SenderID, m.SenderName, m.SenderAvatar, m.RecipientAgentID, m.Content, m.Thought, string(toolCallsJSON), m.ToolCallID, m.Tokens, m.Model, string(ragSourcesJSON), string(reactionsJSON), m.CreatedAt)
+		INSERT INTO session_messages (id, session_id, agent_id, channel, role, sender_type, sender_id, sender_name, sender_avatar, recipient_agent_id, content, thought, tool_calls, tool_call_id, tokens, model, rag_sources, reactions, attachments, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		m.ID, m.SessionID, m.AgentID, m.Channel, m.Role, m.SenderType, m.SenderID, m.SenderName, m.SenderAvatar, m.RecipientAgentID, m.Content, m.Thought, string(toolCallsJSON), m.ToolCallID, m.Tokens, m.Model, string(ragSourcesJSON), string(reactionsJSON), string(attachmentsJSON), m.CreatedAt)
 
 	// Update session updated_at
 	_, _ = s.db.Exec("UPDATE sessions SET updated_at = ? WHERE id = ?", time.Now().Unix(), m.SessionID)
@@ -2165,4 +2389,3 @@ func (s *Store) DeleteAgentGroup(id string) error {
 	_, err := s.db.Exec("DELETE FROM agent_groups WHERE id = ?", id)
 	return err
 }
-

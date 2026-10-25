@@ -5,6 +5,7 @@ import { AlertTriangle } from 'lucide-react';
 import { opuiLibrary, handleOpenUIAction } from './opuiLibrary';
 import { sendSocketMessage } from '../../hooks/useAgentSocket';
 import { useAgentStore } from '../../store/useAgentStore';
+import { fillComposer } from '../../lib/composerEvents';
 
 interface OpenUIBlockProps {
   code: string;
@@ -39,12 +40,14 @@ export const OpenUIBlock: React.FC<OpenUIBlockProps> = ({ code, streaming = fals
   };
 
   return (
-    <div className="my-2 select-text">
+    // Always a white surface (both light and dark mode) so generated UI reads
+    // clearly; the token overrides live in index.css `.opui-surface`.
+    <div className="opui-surface my-2 select-text">
       <Renderer
         response={code}
         library={opuiLibrary}
         isStreaming={streaming}
-        onAction={(event) => handleOpenUIAction(event, sendPrompt)}
+        onAction={(event) => handleOpenUIAction(event, sendPrompt, fillComposer)}
         onError={(errors) => setFailed(errors)}
       />
     </div>

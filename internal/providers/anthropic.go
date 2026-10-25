@@ -37,7 +37,7 @@ func NewAnthropicProvider(apiKey, model, endpoint string) *AnthropicProvider {
 type anthropicContent interface{}
 
 type anthropicBlock struct {
-	Type string `json:"type"` // "text" | "tool_use" | "tool_result"
+	Type string `json:"type"` // "text" | "tool_use" | "tool_result" | "image"
 	// text block
 	Text string `json:"text,omitempty"`
 	// tool_use block
@@ -47,6 +47,14 @@ type anthropicBlock struct {
 	// tool_result block
 	ToolUseID string `json:"tool_use_id,omitempty"`
 	Content   string `json:"content,omitempty"`
+	// image block
+	Source *anthropicImageSource `json:"source,omitempty"`
+}
+
+type anthropicImageSource struct {
+	Type      string `json:"type"` // base64
+	MediaType string `json:"media_type"`
+	Data      string `json:"data"`
 }
 
 type anthropicMessage struct {
@@ -152,6 +160,27 @@ func (p *AnthropicProvider) ChatCompletionWithTools(ctx context.Context, msgs []
 			})
 
 		default:
+			if len(m.Images) > 0 {
+				blocks := make([]anthropicBlock, 0, len(m.Images)+1)
+				if strings.TrimSpace(m.Content) != "" {
+					blocks = append(blocks, anthropicBlock{Type: "text", Text: m.Content})
+				}
+				for _, img := range m.Images {
+					if img.Base64 == "" {
+						continue
+					}
+					mediaType := img.Mime
+					if mediaType == "" {
+						mediaType = "image/png"
+					}
+					blocks = append(blocks, anthropicBlock{
+						Type:   "image",
+						Source: &anthropicImageSource{Type: "base64", MediaType: mediaType, Data: img.Base64},
+					})
+				}
+				apiMsgs = append(apiMsgs, anthropicMessage{Role: role, Content: blocks})
+				continue
+			}
 			apiMsgs = append(apiMsgs, anthropicMessage{Role: role, Content: m.Content})
 		}
 	}

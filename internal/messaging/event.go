@@ -17,6 +17,7 @@ const (
 	EventAgentToolResult    EventType = "agent.tool_result"
 	EventAgentCompleted     EventType = "agent.completed"
 	EventAgentFailed        EventType = "agent.failed"
+	EventAgentUsage         EventType = "agent.usage"
 	EventApprovalRequested  EventType = "approval.requested"
 	EventApprovalGranted    EventType = "approval.granted"
 	EventApprovalDenied     EventType = "approval.denied"
@@ -69,6 +70,19 @@ type TextDeltaPayload struct {
 
 type ThinkingDeltaPayload struct {
 	Delta string `json:"delta"`
+}
+
+// UsagePayload reports how much of a model's context window the session is
+// using. It drives the composer's context gauge and is also served by
+// GET /api/sessions/{id}/usage so the gauge survives a reload.
+type UsagePayload struct {
+	SessionID     string  `json:"sessionId"`
+	Model         string  `json:"model"`
+	UsedTokens    int     `json:"usedTokens"`
+	ContextWindow int     `json:"contextWindow"`
+	Percent       float64 `json:"percent"`
+	InputTokens   int     `json:"inputTokens,omitempty"`
+	OutputTokens  int     `json:"outputTokens,omitempty"`
 }
 
 type ApprovalRequestPayload struct {

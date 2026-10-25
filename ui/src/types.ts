@@ -2,6 +2,8 @@ export interface ModelItem {
   id: string;
   name?: string;
   enabled: boolean;
+  supportsVision?: boolean;
+  supportsImageGen?: boolean;
 }
 
 export interface GlobalModelOption {
@@ -186,6 +188,17 @@ export interface RagSource {
   score?: number;
 }
 
+// A file or image attached to a user message.
+export interface Attachment {
+  id: string;
+  name: string;
+  mime: string;
+  kind: 'image' | 'pdf' | 'text' | 'other' | string;
+  size: number;
+  url: string;
+  path?: string;
+}
+
 export interface SessionMessage {
   id: string;
   sessionId: string;
@@ -203,6 +216,7 @@ export interface SessionMessage {
   toolCallId?: string;
   tokens?: number;
   model?: string;
+  attachments?: Attachment[];
   ragSources?: RagSource[];
   reactions?: MessageReaction[];
   durationMs?: number;
@@ -326,9 +340,10 @@ export interface DocumentItem {
 export interface BackgroundTask {
   id: string;
   sessionId: string;
+  parentSessionId?: string;
   agentId: string;
   title: string;
-  status: 'running' | 'completed' | 'failed' | 'cancelled';
+  status: 'running' | 'queued' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
   startedAt: number;
   finishedAt?: number;
   error?: string;

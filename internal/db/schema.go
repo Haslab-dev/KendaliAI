@@ -345,6 +345,20 @@ var schemaQueries = []string{
 		created_at INTEGER,
 		updated_at INTEGER
 	)`,
+	`CREATE TABLE IF NOT EXISTS agent_tasks (
+		id TEXT PRIMARY KEY,
+		parent_session_id TEXT DEFAULT '',
+		session_id TEXT NOT NULL,
+		agent_id TEXT DEFAULT '',
+		title TEXT DEFAULT '',
+		status TEXT DEFAULT 'running',
+		started_at INTEGER DEFAULT 0,
+		finished_at INTEGER DEFAULT 0,
+		error TEXT DEFAULT '',
+		result TEXT DEFAULT ''
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_agent_tasks_session ON agent_tasks(session_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_agent_tasks_parent ON agent_tasks(parent_session_id)`,
 	`CREATE TABLE IF NOT EXISTS agent_groups (
 		id TEXT PRIMARY KEY,
 		name TEXT NOT NULL,

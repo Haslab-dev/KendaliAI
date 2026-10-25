@@ -20,6 +20,7 @@ import {
 import { useProfileStore } from '../../store/useProfileStore';
 import { useAppStore } from '../../store/useAppStore';
 import { useAgentStore } from '../../store/useAgentStore';
+import { useSessionStore } from '../../store/useSessionStore';
 import { GrokAvatar, GROK_AVATARS, AI_BOT_AVATARS, CLASSIC_SHAPE_AVATARS } from '../GrokAvatar';
 import { cn } from '../../lib/cn';
 import { BUILTIN_AGENT_ENGINES } from '../common/AgentTaskInputBar';
@@ -180,6 +181,8 @@ export const NewAgentModal: React.FC<NewAgentModalProps> = ({ isOpen, onClose })
 
       selectAgent(created.id);
       setActiveNavTab('chat');
+      // New agents land on their permanent Main Chat.
+      void useSessionStore.getState().openMainSession(created.id);
       onClose();
     } catch (err) {
       console.error('Failed to create agent:', err);

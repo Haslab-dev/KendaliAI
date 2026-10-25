@@ -1,6 +1,7 @@
 import React, { useMemo, useEffect, useRef } from 'react';
 import { marked } from 'marked';
 import { OpenUIBlock } from './chat/OpenUIBlock';
+import { useViewerStore } from '../store/useViewerStore';
 
 interface MarkdownViewProps {
   content: string;
@@ -187,17 +188,51 @@ function enhanceMarkdownContainer(el: HTMLDivElement | null) {
 // One stable markdown block. Memoized on its source text: once a block's text
 // stops changing (which is guaranteed for non-tail blocks), neither the parse
 // nor the DOM is touched again.
+// Workspace files, attachments and screenshots open in the in-app viewer
+// instead of forcing a download or a new tab. External links keep the normal
+// target="_blank" behavior applied by enhanceMarkdownContainer.
+const VIEWABLE_HREF_RE = /^\/api\/(workspace\/(download|preview)|attachments\/|computer\/shots\/|browser\/shots\/)/;
+
 const MarkdownBlock = React.memo<{ md: string }>(({ md }) => {
   const html = useMemo(() => parseMarkdown(md), [md]);
   const ref = useRef<HTMLDivElement>(null);
+  const openFromUrl = useViewerStore((s) => s.openFromUrl);
 
   useEffect(() => {
     enhanceMarkdownContainer(ref.current);
   }, [html]);
 
+  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement | null;
+    if (!target) return;
+
+    const img = target.closest('img');
+    if (img) {
+      const src = img.getAttribute('src') || '';
+      // Only in-app assets open in the viewer; external images keep their
+      // normal behavior.
+      if (src.startsWith('/api/')) {
+        e.preventDefault();
+        openFromUrl(src);
+      }
+      return;
+    }
+
+    const anchor = target.closest('a');
+    if (!anchor) return;
+    const href = anchor.getAttribute('href') || '';
+    if (VIEWABLE_HREF_RE.test(href)) {
+      e.preventDefault();
+      e.stopPropagation();
+      const label = (anchor.textContent || '').trim();
+      openFromUrl(href, label && label.length < 120 ? label : undefined);
+    }
+  };
+
   return (
     <div
       ref={ref}
+      onClick={handleClick}
       className="font-sans text-hi break-words select-text text-[length:var(--font-size-interface,15px)] leading-relaxed"
       style={{ fontSize: 'var(--font-size-interface, 15px)' }}
       dangerouslySetInnerHTML={{ __html: html }}

@@ -108,10 +108,36 @@ func convertMessages(msgs []agent.Message) []openai.ChatCompletionMessage {
 			}
 			openAiMsgs = append(openAiMsgs, msg)
 		default:
-			openAiMsgs = append(openAiMsgs, openai.ChatCompletionMessage{
-				Role:    m.Role,
-				Content: m.Content,
-			})
+			msg := openai.ChatCompletionMessage{Role: m.Role, Content: m.Content}
+			if len(m.Images) > 0 {
+				text := m.Content
+				if text == "" {
+					text = "See the attached image(s)."
+				}
+				parts := []openai.ChatMessagePart{
+					{Type: openai.ChatMessagePartTypeText, Text: text},
+				}
+				for _, img := range m.Images {
+					url := img.URL
+					if url == "" && img.Base64 != "" {
+						mimeType := img.Mime
+						if mimeType == "" {
+							mimeType = "image/png"
+						}
+						url = "data:" + mimeType + ";base64," + img.Base64
+					}
+					if url == "" {
+						continue
+					}
+					parts = append(parts, openai.ChatMessagePart{
+						Type:     openai.ChatMessagePartTypeImageURL,
+						ImageURL: &openai.ChatMessageImageURL{URL: url},
+					})
+				}
+				msg.Content = ""
+				msg.MultiContent = parts
+			}
+			openAiMsgs = append(openAiMsgs, msg)
 		}
 	}
 	return openAiMsgs

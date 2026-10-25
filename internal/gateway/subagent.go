@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -49,12 +50,16 @@ func (r *Runtime) spawnSubagent(parentSessionID string, args map[string]interfac
 	if strings.TrimSpace(task) == "" {
 		return "Error: spawn_subagent requires a non-empty 'task' argument."
 	}
-	// One nesting level only: sub-agents work, they don't multiply.
-	if strings.HasPrefix(parentSessionID, SubagentSessionPrefix) {
-		return "Error: spawn_subagent cannot be called from within a sub-agent session."
+	limits := r.orchestrationLimits()
+	parentDepth := r.sessionSubagentDepth(parentSessionID)
+	if parentDepth >= limits.MaxSubagentDepth {
+		return fmt.Sprintf("Error: sub-agent depth limit reached (%d). Complete this task directly instead of delegating further.", limits.MaxSubagentDepth)
 	}
 	if r.taskMgr == nil {
 		return "Error: task manager unavailable."
+	}
+	if r.store == nil {
+		return "Error: sub-agent storage unavailable."
 	}
 
 	requested := stringArg(args, "agent")
@@ -76,18 +81,24 @@ func (r *Runtime) spawnSubagent(parentSessionID string, args map[string]interfac
 		Title:    title,
 		Avatar:   subAgentAvatar,
 		Status:   "active",
-		Metadata: fmt.Sprintf(`{"parentSession":%q,"kind":"subagent"}`, parentSessionID),
+		Metadata: fmt.Sprintf(`{"parentSession":%q,"kind":"subagent","depth":%d}`, parentSessionID, parentDepth+1),
 	}); err != nil {
 		log.Printf("spawn_subagent: session save failed: %v", err)
 		return "Error: failed to create sub-agent session."
 	}
 
 	// cancel doubles as the timeout and the banner's Cancel button action.
-	subCtx, cancel := context.WithTimeout(context.Background(), subagentTimeout)
-	bgTask := r.taskMgr.Register(subSessionID, subAgentID, title, cancel)
+	timeout := time.Duration(limits.SubagentTimeoutMinutes) * time.Minute
+	subCtx, cancel := context.WithTimeout(context.Background(), timeout)
+	bgTask := r.taskMgr.Register(subSessionID, subAgentID, title, cancel, parentSessionID)
 
 	go func() {
 		defer cancel()
+		// Wait for a concurrency slot; extra sub-agents queue rather than fail.
+		if r.subagentSem != nil {
+			r.subagentSem <- struct{}{}
+			defer func() { <-r.subagentSem }()
+		}
 		result, err := r.ExecuteTurnWithModel(subCtx, subSessionID, subAgentID, prompt, "subagent", "")
 		if err != nil {
 			if subCtx.Err() != nil {
@@ -317,6 +328,98 @@ func (r *Runtime) resolveSubagentAgent(requested, task string) (string, string, 
 		return agents[0].ID, agents[0].Name, agents[0].Avatar
 	}
 	return "assistant", "Sub-Agent", "purple-pebble"
+}
+
+// sessionSubagentDepth returns how deep a session sits in the delegation tree.
+func (r *Runtime) sessionSubagentDepth(sessionID string) int {
+	if r.store == nil {
+		return 0
+	}
+	sess, err := r.store.GetSession(sessionID)
+	if err != nil || sess == nil || sess.Metadata == "" {
+		return 0
+	}
+	var meta map[string]interface{}
+	if err := json.Unmarshal([]byte(sess.Metadata), &meta); err != nil {
+		return 0
+	}
+	if d, ok := meta["depth"].(float64); ok {
+		return int(d)
+	}
+	return 0
+}
+
+// SubagentStatusTool lets the orchestrator inspect delegated runs without
+// polling the chat transcript.
+func (r *Runtime) SubagentStatusTool(parentSessionID string) agent.ToolDef {
+	return agent.ToolDef{
+		Name:        "subagent_status",
+		Description: "List the sub-agents you delegated (status, task id, title) or inspect one by task_id. Use this instead of asking the user to wait.",
+		Signature:   `{"task_id": "string - optional; omit to list every delegated task"}`,
+		Category:    "orchestration",
+		Execute: func(ctx context.Context, args map[string]interface{}) string {
+			if r.taskMgr == nil {
+				return "Error: task manager unavailable."
+			}
+			taskID := stringArg(args, "task_id")
+			if taskID != "" {
+				t := r.taskMgr.Get(taskID)
+				if t == nil || t.ParentSessionID != parentSessionID {
+					return "Error: task not found for this session."
+				}
+				out, _ := json.Marshal(t)
+				return string(out)
+			}
+			tasks := r.taskMgr.TasksForParent(parentSessionID)
+			if len(tasks) == 0 {
+				return "No sub-agents have been delegated from this session."
+			}
+			type summary struct {
+				ID        string `json:"id"`
+				Title     string `json:"title"`
+				Status    string `json:"status"`
+				AgentID   string `json:"agentId"`
+				StartedAt int64  `json:"startedAt"`
+				Error     string `json:"error,omitempty"`
+			}
+			items := make([]summary, 0, len(tasks))
+			for _, t := range tasks {
+				items = append(items, summary{
+					ID: t.ID, Title: t.Title, Status: t.Status, AgentID: t.AgentID,
+					StartedAt: t.StartedAt, Error: t.Error,
+				})
+			}
+			out, _ := json.Marshal(items)
+			return string(out)
+		},
+	}
+}
+
+// CancelSubagentTool stops a delegated run.
+func (r *Runtime) CancelSubagentTool(parentSessionID string) agent.ToolDef {
+	return agent.ToolDef{
+		Name:        "cancel_subagent",
+		Description: "Cancel a running sub-agent task by task_id.",
+		Signature:   `{"task_id": "string - the task id returned by spawn_subagent"}`,
+		Category:    "orchestration",
+		Execute: func(ctx context.Context, args map[string]interface{}) string {
+			if r.taskMgr == nil {
+				return "Error: task manager unavailable."
+			}
+			taskID := stringArg(args, "task_id")
+			if taskID == "" {
+				return "Error: cancel_subagent requires 'task_id'."
+			}
+			t := r.taskMgr.Get(taskID)
+			if t == nil || t.ParentSessionID != parentSessionID {
+				return "Error: task not found for this session."
+			}
+			if err := r.taskMgr.Cancel(taskID); err != nil {
+				return "Error: " + err.Error()
+			}
+			return fmt.Sprintf("Sub-agent task %s cancelled.", taskID)
+		},
+	}
 }
 
 func containsAny(s string, subs ...string) bool {

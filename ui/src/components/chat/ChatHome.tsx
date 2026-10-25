@@ -55,6 +55,7 @@ export const ChatHome: React.FC = () => {
       model: chosenModel,
       engine: engineKind,
       acpAgent,
+      attachments: options?.attachments,
     });
   };
 
@@ -113,8 +114,10 @@ export const ChatHome: React.FC = () => {
                     onClick={() => {
                       selectAgent(ag.id);
                       setIsDropdownOpen(false);
-                      useSessionStore.getState().selectSession(null);
                       useAgentStore.getState().setComposerTarget({ kind: 'native', id: 'rakit-kode' });
+                      // Switching agents opens the shared Main Chat instead of
+                      // spawning a fresh "Main Chat" session.
+                      void useSessionStore.getState().openMainSession(ag.id);
                     }}
                     className={cn(
                       'flex min-h-7 w-full cursor-pointer items-center justify-between rounded-lg px-2 py-1.5 text-left text-ui-xs transition-colors',

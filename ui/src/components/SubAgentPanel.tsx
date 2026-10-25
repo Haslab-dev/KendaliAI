@@ -60,7 +60,10 @@ export const SubAgentPanel: React.FC = () => {
   };
 
   return (
-    <div className="animate-in fade-in hidden h-full w-[380px] shrink-0 flex-col border-l border-border/70 bg-card lg:flex xl:w-[420px]">
+    <div
+      className="animate-in fade-in hidden h-full shrink-0 flex-col border-l border-border/70 bg-card pb-20 md:pb-5 lg:flex"
+      style={{ width: 'min(44vw, var(--chat-content-max-width, 46rem))' }}
+    >
       {/* Header */}
       <div className="flex shrink-0 select-none items-center gap-2.5 border-b border-border/60 px-3.5 py-2.5">
         <GrokAvatar id={agent?.avatar || subagentPanelSession?.agentId || 'purple-pebble'} size={30} />
@@ -151,7 +154,7 @@ const PanelMessage: React.FC<{ msg: SessionMessage; senderName: string; isWorkin
     return (
       <div className="flex justify-end">
         <div
-          className="max-w-[88%] whitespace-pre-wrap break-words rounded-2xl bg-foreground px-3 py-2 text-ui-sm leading-relaxed text-background"
+          className="max-w-[88%] whitespace-pre-wrap break-words [overflow-wrap:anywhere] rounded-2xl bg-foreground px-3 py-2 text-ui-sm leading-relaxed text-background"
           style={{ borderRadius: '1rem 1rem 0.25rem 1rem' }}
         >
           {msg.content}
@@ -179,7 +182,7 @@ const PanelMessage: React.FC<{ msg: SessionMessage; senderName: string; isWorkin
       {msg.toolCalls && msg.toolCalls.length > 0 && <WorkLogList toolCalls={msg.toolCalls} />}
 
       {msg.content && (
-        <div className="rounded-2xl border border-border/60 bg-muted/60 px-3 py-2.5">
+        <div className="min-w-0 break-words rounded-2xl border border-border/60 bg-muted/60 px-3 py-2.5">
           <MarkdownView content={msg.content} isStreaming={msg.id.startsWith('panel-stream-')} />
         </div>
       )}

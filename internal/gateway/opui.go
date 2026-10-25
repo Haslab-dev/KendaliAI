@@ -85,10 +85,14 @@ Grammar rules (OpenUI Lang) — follow them EXACTLY:
   - Text(content) · Heading(content, level) · Divider()
   - Metric(label, value, trend) — trend "up" | "down" | "flat"
   - Badge(text, tone) — tone "default" | "success" | "warning" | "danger"
-  - Button(label, action) — action is @send_prompt("text to send back to chat")
+  - Button(label, action) — action is @send_prompt("text to send back to chat") or @feedback("text to place in the chat input for review")
   - Table(headers, rows) — Table(["Team","Goals"], [["Spain","1"],["Argentina","0"]])
   - List(items) · Image(url, alt)
-- Functions start with @. The only action is @send_prompt("...").
+- Functions start with @. Actions:
+  - @send_prompt("...") sends the text immediately as the next user message.
+  - @feedback("...") places the text in the chat input box WITHOUT sending, so
+    the user can review/edit it. Use it for feedback, corrections, ratings and
+    anything the user should confirm before submitting.
 - If ANY earlier message in this conversation shows an opui block written
   differently (e.g. "title:"/"children:" named props or "(Component ...)"
   parenthesized calls), that format is INVALID — never imitate it. Only the

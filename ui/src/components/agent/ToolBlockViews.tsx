@@ -13,8 +13,10 @@ import {
   Copy,
   Check,
   FileText,
+  ExternalLink,
 } from 'lucide-react';
 import { highlightCodeLine, highlightTerminalLine, highlightTerminalCommand } from '../../lib/diff-highlight';
+import { useViewerStore } from '../../store/useViewerStore';
 import { parseTwoFilesDiff } from '../diff/DiffViewer';
 import { WorkLogRow, WorkLogDetails, WorkLogStatusGlyph, type WorkLogStatus } from './WorkLog';
 import { cn } from '../../lib/cn';
@@ -322,12 +324,45 @@ export function ToolReadBlock({ content, ext }: { content: string; ext?: string 
 
 export function ToolTerminalBlock({ command, output }: { command: string; output: string }) {
   const [showAll, setShowAll] = useState(false);
+  const openFromUrl = useViewerStore((s) => s.openFromUrl);
   const lines = useMemo(() => (output || '').split('\n'), [output]);
   const isLong = lines.length > 30;
   const visible = isLong && !showAll ? lines.slice(0, 20) : lines;
 
+  // Generated files referenced by the tool output become previewable cards
+  // instead of raw JSON/markdown text.
+  const generatedUrl = useMemo(() => {
+    const shot = output?.match(/\/api\/(?:computer|browser)\/shots\/[^\s)"'<>\\]+/);
+    if (shot) return shot[0];
+    const file = output?.match(/\/api\/workspace\/(?:preview|download)\?path=[^\s)"'<>\\]+/);
+    return file ? file[0] : '';
+  }, [output]);
+  const isImageFile = /\.(png|jpe?g|gif|webp|svg|bmp)(&|$|\?)/i.test(generatedUrl) || /\/shots\//.test(generatedUrl);
+
   return (
     <div className="mt-1.5 ml-6 max-h-80 overflow-y-auto rounded-xl border border-border/50 bg-card/90 p-3 font-mono text-ui-xs select-text scrollbar-thin">
+      {generatedUrl && (
+        <div className="mb-2 border-b border-border/40 pb-2">
+          {isImageFile ? (
+            <button
+              type="button"
+              onClick={() => openFromUrl(generatedUrl)}
+              className="block overflow-hidden rounded-lg border border-border/60 bg-black/5"
+              title="Open preview"
+            >
+              <img src={generatedUrl} alt="Generated file" loading="lazy" className="max-h-56 max-w-full object-contain" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => openFromUrl(generatedUrl)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-surface px-2 py-1 text-2xs font-sans font-medium text-foreground hover:bg-accent"
+            >
+              <ExternalLink className="size-3" /> Open generated file
+            </button>
+          )}
+        </div>
+      )}
       {command && command !== '{}' && (
         <div className="pb-1.5 font-semibold text-foreground whitespace-pre-wrap break-all">
           {highlightTerminalCommand(command)}
